@@ -13,5 +13,8 @@ $router->post('/login', [AuthController::class, 'login']);
 $router->get('/logout', [AuthController::class, 'logout']);
 
 $router->get('/samba/usuarios', [SambaController::class, 'usuarios']);
+$router->get('/samba/usuarios/senha', [SambaController::class, 'alterarSenhaForm']);
+$router->post('/samba/usuarios/senha', [SambaController::class, 'alterarSenha']);
+$router->get('/samba/usuarios/desativar', [SambaController::class, 'desativar']);
 
 $router->get('/auditoria', [AuditoriaController::class, 'index']);

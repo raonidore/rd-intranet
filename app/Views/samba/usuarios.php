@@ -67,8 +67,8 @@ ob_start();
 
                         <td class="text-end">
                             <?= Button::outline('Editar', '#', 'pencil', 'primary') ?>
-                            <?= Button::outline('Alterar senha', '#', 'key', 'secondary') ?>
-                            <?= Button::outline('Desativar', '#', 'lock', 'warning') ?>
+                            <?= Button::outline('Alterar senha', url('/samba/usuarios/senha?id=' . $u['id']), 'key', 'secondary') ?>
+                            <?= Button::outline('Desativar', url('/samba/usuarios/desativar?id=' . $u['id']), 'lock', 'warning') ?>
                             <?= Button::outline('Excluir', '#', 'trash', 'danger') ?>
                         </td>
                     </tr>
