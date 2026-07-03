@@ -1,5 +1,8 @@
 <?php
-session_start();
+
+require_once __DIR__ . '/../vendor/autoload.php';
+
+\App\Core\Application::boot();
 
 require_once __DIR__ . '/../config/db.php';
 

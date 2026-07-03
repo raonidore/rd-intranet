@@ -1,0 +1,11 @@
+{
+    "name": "rdtecnologia/rd-intranet",
+    "description": "RD Intranet - Plataforma administrativa da RD Tecnologia",
+    "type": "project",
+    "autoload": {
+        "psr-4": {
+            "App\\": "app/"
+        }
+    },
+    "require": {}
+}
