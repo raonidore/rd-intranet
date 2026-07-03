@@ -15,7 +15,7 @@ class SambaUsuarioRepository
     }
 
     /**
-     * Lista todos os usuários Samba.
+     * Lista todos os usuários.
      */
     public function listar(): array
     {
@@ -25,7 +25,7 @@ class SambaUsuarioRepository
             ORDER BY nome
         ");
 
-        return $stmt->fetchAll();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /**
@@ -42,7 +42,7 @@ class SambaUsuarioRepository
 
         $stmt->execute([$id]);
 
-        $usuario = $stmt->fetch();
+        $usuario = $stmt->fetch(PDO::FETCH_ASSOC);
 
         return $usuario ?: null;
     }
@@ -61,7 +61,7 @@ class SambaUsuarioRepository
 
         $stmt->execute([$login]);
 
-        $usuario = $stmt->fetch();
+        $usuario = $stmt->fetch(PDO::FETCH_ASSOC);
 
         return $usuario ?: null;
     }
@@ -84,7 +84,47 @@ class SambaUsuarioRepository
     }
 
     /**
-     * Conta o total de usuários.
+     * Atualiza os dados do usuário.
+     */
+    public function atualizar(
+        int $id,
+        string $nome,
+        string $departamento,
+        bool $ssh
+    ): bool {
+
+        $stmt = $this->pdo->prepare("
+            UPDATE samba_usuarios
+               SET nome = ?,
+                   departamento = ?,
+                   ssh = ?
+             WHERE id = ?
+        ");
+
+        return $stmt->execute([
+            $nome,
+            $departamento,
+            $ssh ? 1 : 0,
+            $id
+        ]);
+    }
+
+    /**
+     * Remove o usuário do banco.
+     */
+    public function excluir(int $id): bool
+    {
+        $stmt = $this->pdo->prepare("
+            DELETE
+              FROM samba_usuarios
+             WHERE id = ?
+        ");
+
+        return $stmt->execute([$id]);
+    }
+
+    /**
+     * Total de usuários.
      */
     public function contarTotal(): int
     {
@@ -94,30 +134,42 @@ class SambaUsuarioRepository
     }
 
     /**
-     * Conta usuários ativos.
+     * Usuários ativos.
      */
     public function contarAtivos(): int
     {
         return (int)$this->pdo
             ->query("
                 SELECT COUNT(*)
-                FROM samba_usuarios
-                WHERE status = 'ativo'
+                  FROM samba_usuarios
+                 WHERE status='ativo'
             ")
             ->fetchColumn();
     }
 
     /**
-     * Conta usuários com SSH habilitado.
+     * Usuários com SSH.
      */
     public function contarComSSH(): int
     {
         return (int)$this->pdo
             ->query("
                 SELECT COUNT(*)
-                FROM samba_usuarios
-                WHERE ssh = 1
+                  FROM samba_usuarios
+                 WHERE ssh = 1
             ")
             ->fetchColumn();
+    }
+
+    /**
+     * Departamentos cadastrados.
+     */
+    public function departamentos(): array
+    {
+        return [
+            'ti' => 'TI',
+            'financeiro' => 'Financeiro',
+            'cobranca' => 'Cobrança'
+        ];
     }
 }

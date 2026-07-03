@@ -15,11 +15,15 @@ class SambaController extends Controller
         $this->service = new SambaService();
     }
 
+    /**
+     * Lista usuários Samba.
+     */
     public function usuarios(): void
     {
         AuthMiddleware::check();
 
         $usuarios = $this->service->listarUsuarios();
+
         $dashboard = $this->service->dashboard();
 
         $this->view('samba/usuarios', [
@@ -30,11 +34,15 @@ class SambaController extends Controller
         ]);
     }
 
+    /**
+     * Formulário para alterar senha.
+     */
     public function alterarSenhaForm(): void
     {
         AuthMiddleware::check();
 
         $id = (int)($_GET['id'] ?? 0);
+
         $usuario = $this->service->buscarUsuario($id);
 
         if (!$usuario) {
@@ -47,6 +55,9 @@ class SambaController extends Controller
         ]);
     }
 
+    /**
+     * Executa alteração de senha.
+     */
     public function alterarSenha(): void
     {
         AuthMiddleware::check();
@@ -55,12 +66,66 @@ class SambaController extends Controller
         $senha = $_POST['senha'] ?? '';
         $confirmacao = $_POST['confirmacao'] ?? '';
 
-        $this->service->alterarSenha($id, $senha, $confirmacao);
+        $this->service->alterarSenha(
+            $id,
+            $senha,
+            $confirmacao
+        );
 
         header('Location: ' . url('/samba/usuarios'));
         exit;
     }
 
+    /**
+     * Formulário de edição.
+     */
+    public function editarForm(): void
+    {
+        AuthMiddleware::check();
+
+        $id = (int)($_GET['id'] ?? 0);
+
+        $usuario = $this->service->buscarUsuario($id);
+
+        if (!$usuario) {
+            header('Location: ' . url('/samba/usuarios'));
+            exit;
+        }
+
+        $departamentos = $this->service->departamentos();
+
+        $this->view('samba/editar', [
+            'usuarioSamba' => $usuario,
+            'departamentos' => $departamentos
+        ]);
+    }
+
+    /**
+     * Salva edição.
+     */
+    public function editar(): void
+    {
+        AuthMiddleware::check();
+
+        $id = (int)($_POST['id'] ?? 0);
+        $nome = trim($_POST['nome'] ?? '');
+        $departamento = $_POST['departamento'] ?? '';
+        $ssh = ($_POST['ssh'] ?? '0') === '1';
+
+        $this->service->editarUsuario(
+            $id,
+            $nome,
+            $departamento,
+            $ssh
+        );
+
+        header('Location: ' . url('/samba/usuarios'));
+        exit;
+    }
+
+    /**
+     * Desativa usuário.
+     */
     public function desativar(): void
     {
         AuthMiddleware::check();
@@ -68,6 +133,42 @@ class SambaController extends Controller
         $id = (int)($_GET['id'] ?? 0);
 
         $this->service->desativarUsuario($id);
+
+        header('Location: ' . url('/samba/usuarios'));
+        exit;
+    }
+
+    /**
+     * Tela de confirmação de exclusão.
+     */
+    public function excluirForm(): void
+    {
+        AuthMiddleware::check();
+
+        $id = (int)($_GET['id'] ?? 0);
+
+        $usuario = $this->service->buscarUsuario($id);
+
+        if (!$usuario) {
+            header('Location: ' . url('/samba/usuarios'));
+            exit;
+        }
+
+        $this->view('samba/excluir', [
+            'usuarioSamba' => $usuario
+        ]);
+    }
+
+    /**
+     * Executa exclusão.
+     */
+    public function excluir(): void
+    {
+        AuthMiddleware::check();
+
+        $id = (int)($_POST['id'] ?? 0);
+
+        $this->service->excluirUsuario($id);
 
         header('Location: ' . url('/samba/usuarios'));
         exit;

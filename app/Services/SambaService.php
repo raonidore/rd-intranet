@@ -7,17 +7,25 @@ use App\Repositories\SambaUsuarioRepository;
 class SambaService
 {
     private SambaUsuarioRepository $repository;
+    private LinuxService $linux;
 
     public function __construct()
     {
         $this->repository = new SambaUsuarioRepository();
+        $this->linux = new LinuxService();
     }
 
+    /**
+     * Lista usuários.
+     */
     public function listarUsuarios(): array
     {
         return $this->repository->listar();
     }
 
+    /**
+     * Dados do dashboard.
+     */
     public function dashboard(): array
     {
         return [
@@ -28,105 +36,229 @@ class SambaService
         ];
     }
 
+    /**
+     * Busca usuário.
+     */
     public function buscarUsuario(int $id): ?array
     {
         return $this->repository->buscarPorId($id);
     }
 
-    public function alterarSenha(int $id, string $senha, string $confirmacao): void
+    /**
+     * Departamentos.
+     */
+    public function departamentos(): array
     {
+        return $this->repository->departamentos();
+    }
+
+    /**
+     * Altera senha Samba.
+     */
+    public function alterarSenha(
+        int $id,
+        string $senha,
+        string $confirmacao
+    ): void {
+
         $usuario = $this->buscarUsuario($id);
 
         if (!$usuario) {
-            NotificationService::error('Usuário Samba não encontrado.');
-            return;
-        }
-
-        if ($senha === '' || $confirmacao === '') {
-            NotificationService::error('Informe a nova senha e a confirmação.');
+            NotificationService::error("Usuário não encontrado.");
             return;
         }
 
         if ($senha !== $confirmacao) {
-            NotificationService::error('A senha e a confirmação não conferem.');
+            NotificationService::error("As senhas não conferem.");
             return;
         }
 
-        $linux = new LinuxService();
-
-        $resultado = $linux->executarScript(
+        $resultado = $this->linux->executarScript(
             '/opt/rdtecnologia/scripts/altera_senha_samba_web.sh',
-            [$usuario['login'], $senha]
+            [
+                $usuario['login'],
+                $senha
+            ]
         );
 
         if ($resultado['success']) {
+
             AuditService::registrar(
                 'Samba',
                 'Alteração de senha',
-                'Senha Samba alterada para o usuário '.$usuario['login'].'.'
+                'Senha alterada para '.$usuario['login']
             );
 
             NotificationService::success(
-                'Senha do usuário '.$usuario['login'].' alterada com sucesso.',
+                'Senha alterada com sucesso.',
                 $resultado['output']
             );
+
         } else {
-            AuditService::registrar(
-                'Samba',
-                'Falha ao alterar senha',
-                'Falha ao alterar senha Samba do usuário '.$usuario['login'].'.'
-            );
 
             NotificationService::error(
-                'Erro ao alterar senha do usuário '.$usuario['login'].'.',
+                'Erro ao alterar senha.',
                 $resultado['output']
             );
         }
     }
 
+    /**
+     * Desativa usuário.
+     */
     public function desativarUsuario(int $id): void
     {
         $usuario = $this->buscarUsuario($id);
 
         if (!$usuario) {
-            NotificationService::error('Usuário Samba não encontrado.');
+            NotificationService::error('Usuário não encontrado.');
             return;
         }
 
         if ($usuario['login'] === 'ti') {
-            NotificationService::error('O usuário administrativo principal não pode ser desativado.');
+            NotificationService::error(
+                'O usuário administrativo principal não pode ser desativado.'
+            );
             return;
         }
 
-        $linux = new LinuxService();
-
-        $resultado = $linux->executarScript(
+        $resultado = $this->linux->executarScript(
             '/opt/rdtecnologia/scripts/desativa_usuario_samba_web.sh',
-            [$usuario['login']]
+            [
+                $usuario['login']
+            ]
         );
 
         if ($resultado['success']) {
-            $this->repository->atualizarStatus($id, 'desativado');
+
+            $this->repository->atualizarStatus(
+                $id,
+                'desativado'
+            );
 
             AuditService::registrar(
                 'Samba',
-                'Desativação de usuário',
-                'Usuário '.$usuario['login'].' foi desativado.'
+                'Desativação',
+                'Usuário '.$usuario['login'].' desativado.'
             );
 
             NotificationService::success(
-                'Usuário '.$usuario['login'].' desativado com sucesso.',
+                'Usuário desativado com sucesso.',
                 $resultado['output']
             );
+
         } else {
-            AuditService::registrar(
-                'Samba',
-                'Falha ao desativar usuário',
-                'Falha ao desativar o usuário '.$usuario['login'].'.'
-            );
 
             NotificationService::error(
-                'Erro ao desativar o usuário '.$usuario['login'].'.',
+                'Erro ao desativar usuário.',
+                $resultado['output']
+            );
+        }
+    }
+
+    /**
+     * Atualiza dados do usuário.
+     */
+    public function editarUsuario(
+        int $id,
+        string $nome,
+        string $departamento,
+        bool $ssh
+    ): void {
+
+        $usuario = $this->buscarUsuario($id);
+
+        if (!$usuario) {
+            NotificationService::error('Usuário não encontrado.');
+            return;
+        }
+
+        $resultado = $this->linux->executarScript(
+            '/opt/rdtecnologia/scripts/edita_usuario_samba_web.sh',
+            [
+                $usuario['login'],
+                $nome,
+                $departamento,
+                $ssh ? 'sim' : 'nao'
+            ]
+        );
+
+        if ($resultado['success']) {
+
+            $this->repository->atualizar(
+                $id,
+                $nome,
+                $departamento,
+                $ssh
+            );
+
+            AuditService::registrar(
+                'Samba',
+                'Edição',
+                'Usuário '.$usuario['login'].' atualizado.'
+            );
+
+            NotificationService::success(
+                'Usuário atualizado com sucesso.',
+                $resultado['output']
+            );
+
+        } else {
+
+            NotificationService::error(
+                'Erro ao atualizar usuário.',
+                $resultado['output']
+            );
+        }
+    }
+
+    /**
+     * Exclui usuário.
+     */
+    public function excluirUsuario(int $id): void
+    {
+        $usuario = $this->buscarUsuario($id);
+
+        if (!$usuario) {
+            NotificationService::error('Usuário não encontrado.');
+            return;
+        }
+
+        if ($usuario['login'] === 'ti') {
+
+            NotificationService::error(
+                'O usuário administrativo principal não pode ser excluído.'
+            );
+
+            return;
+        }
+
+        $resultado = $this->linux->executarScript(
+            '/opt/rdtecnologia/scripts/exclui_usuario_samba_web.sh',
+            [
+                $usuario['login']
+            ]
+        );
+
+        if ($resultado['success']) {
+
+            $this->repository->excluir($id);
+
+            AuditService::registrar(
+                'Samba',
+                'Exclusão',
+                'Usuário '.$usuario['login'].' removido.'
+            );
+
+            NotificationService::success(
+                'Usuário excluído com sucesso.',
+                $resultado['output']
+            );
+
+        } else {
+
+            NotificationService::error(
+                'Erro ao excluir usuário.',
                 $resultado['output']
             );
         }
