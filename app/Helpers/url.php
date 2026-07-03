@@ -1,12 +1,14 @@
 <?php
 
+use App\Services\ConfigService;
+
 function url(string $path = ''): string
 {
-    $base = '/rd.intranet';
+    $base = ConfigService::get('base_url', '/rd.intranet');
 
     if ($path === '') {
         return $base;
     }
 
-    return $base . '/' . ltrim($path, '/');
+    return rtrim($base, '/') . '/' . ltrim($path, '/');
 }

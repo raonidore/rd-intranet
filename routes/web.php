@@ -1,6 +1,7 @@
 <?php
 
 use App\Controllers\AuthController;
+use App\Controllers\AuditoriaController;
 use App\Controllers\DashboardController;
 use App\Controllers\SambaController;
 
@@ -12,3 +13,5 @@ $router->post('/login', [AuthController::class, 'login']);
 $router->get('/logout', [AuthController::class, 'logout']);
 
 $router->get('/samba/usuarios', [SambaController::class, 'usuarios']);
+
+$router->get('/auditoria', [AuditoriaController::class, 'index']);
