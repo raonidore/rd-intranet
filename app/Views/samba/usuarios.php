@@ -1,5 +1,6 @@
 <?php
 
+use App\Components\Alert;
 use App\Components\Avatar;
 use App\Components\Badge;
 use App\Components\Button;
@@ -15,24 +16,7 @@ ob_start();
     <?= StatCard::make('Compartilhamentos', 3) ?>
 </div>
 
-<?php if (isset($_SESSION['flash_msg'])): ?>
-    <div class="alert alert-<?= $_SESSION['flash_tipo'] === 'success' ? 'success' : 'danger' ?> shadow-sm">
-        <div class="d-flex justify-content-between align-items-start">
-            <div>
-                <strong>
-                    <?= $_SESSION['flash_tipo'] === 'success' ? 'Operação concluída com sucesso.' : 'Falha na operação.' ?>
-                </strong><br>
-                <?= htmlspecialchars($_SESSION['flash_msg']) ?>
-            </div>
-
-            <?php if (isset($_SESSION['flash_tecnico'])): ?>
-                <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalDetalhes">
-                    <i class="bi bi-terminal"></i> Detalhes técnicos
-                </button>
-            <?php endif; ?>
-        </div>
-    </div>
-<?php endif; ?>
+<?= Alert::flash() ?>
 
 <div class="card border-0 shadow-sm">
     <div class="card-header bg-white d-flex justify-content-between align-items-center">
@@ -71,7 +55,6 @@ ob_start();
                         </td>
 
                         <td><?= htmlspecialchars($u['login']) ?></td>
-
                         <td><?= Badge::departamento($u['departamento']) ?></td>
 
                         <td>
@@ -95,26 +78,7 @@ ob_start();
     </div>
 </div>
 
-<?php if (isset($_SESSION['flash_tecnico'])): ?>
-<div class="modal fade" id="modalDetalhes" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Detalhes técnicos da operação</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-
-            <div class="modal-body">
-                <pre class="bg-dark text-light p-3 rounded"><?= htmlspecialchars($_SESSION['flash_tecnico']) ?></pre>
-            </div>
-        </div>
-    </div>
-</div>
-<?php endif; ?>
-
 <?php
-unset($_SESSION['flash_msg'], $_SESSION['flash_tipo'], $_SESSION['flash_tecnico']);
-
 $conteudo = ob_get_clean();
 $titulo = 'Usuários Samba';
 

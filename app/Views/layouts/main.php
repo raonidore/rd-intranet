@@ -59,15 +59,15 @@ $titulo = $titulo ?? 'RD Intranet';
         <small class="text-secondary">Painel Administrativo</small>
     </div>
 
-    <a href="/rd.intranet/dashboard.php"><i class="bi bi-speedometer2 me-2"></i> Dashboard</a>
-    <a href="/rd.intranet/samba_usuarios.php"><i class="bi bi-people me-2"></i> Usuários Samba</a>
+    <a href="/rd.intranet/dashboard"><i class="bi bi-speedometer2 me-2"></i> Dashboard</a>
+    <a href="/rd.intranet/samba/usuarios"><i class="bi bi-people me-2"></i> Usuários Samba</a>
     <a href="#"><i class="bi bi-folder2-open me-2"></i> Compartilhamentos</a>
     <a href="#"><i class="bi bi-shield-lock me-2"></i> Permissões</a>
     <a href="#"><i class="bi bi-journal-text me-2"></i> Auditoria</a>
     <a href="#"><i class="bi bi-hdd-network me-2"></i> Servidores</a>
     <a href="#"><i class="bi bi-diagram-3 me-2"></i> VPN</a>
     <a href="#"><i class="bi bi-database-check me-2"></i> Backup</a>
-    <a href="/rd.intranet/logout.php"><i class="bi bi-box-arrow-right me-2"></i> Sair</a>
+    <a href="/rd.intranet/logout"><i class="bi bi-box-arrow-right me-2"></i> Sair</a>
 </div>
 
 <div class="content">
