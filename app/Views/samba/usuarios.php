@@ -1,75 +1,18 @@
 <?php
+
+use App\Components\Avatar;
+use App\Components\Badge;
+use App\Components\Button;
+use App\Components\StatCard;
+
 ob_start();
-
-function iniciais($nome) {
-    $partes = preg_split('/\s+/', trim($nome));
-    $ini = '';
-
-    foreach ($partes as $p) {
-        if ($p !== '') {
-            $ini .= mb_strtoupper(mb_substr($p, 0, 1));
-        }
-        if (mb_strlen($ini) >= 2) break;
-    }
-
-    return $ini ?: '?';
-}
-
-function nomeDepartamento($dep) {
-    return match ($dep) {
-        'ti' => 'TI',
-        'financeiro' => 'Financeiro',
-        'cobranca' => 'Cobrança',
-        default => 'Indefinido'
-    };
-}
-
-function badgeDepartamento($dep) {
-    return match ($dep) {
-        'ti' => 'primary',
-        'financeiro' => 'success',
-        'cobranca' => 'warning',
-        default => 'secondary'
-    };
-}
 ?>
 
 <div class="row mb-4">
-    <div class="col-md-3">
-        <div class="card border-0 shadow-sm">
-            <div class="card-body">
-                <small class="text-muted">Total de usuários</small>
-                <h3><?= $total ?></h3>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-md-3">
-        <div class="card border-0 shadow-sm">
-            <div class="card-body">
-                <small class="text-muted">Ativos</small>
-                <h3><?= $ativos ?></h3>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-md-3">
-        <div class="card border-0 shadow-sm">
-            <div class="card-body">
-                <small class="text-muted">Com SSH</small>
-                <h3><?= $sshTotal ?></h3>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-md-3">
-        <div class="card border-0 shadow-sm">
-            <div class="card-body">
-                <small class="text-muted">Compartilhamentos</small>
-                <h3>3</h3>
-            </div>
-        </div>
-    </div>
+    <?= StatCard::make('Total de usuários', $total) ?>
+    <?= StatCard::make('Ativos', $ativos) ?>
+    <?= StatCard::make('Com SSH', $sshTotal) ?>
+    <?= StatCard::make('Compartilhamentos', 3) ?>
 </div>
 
 <?php if (isset($_SESSION['flash_msg'])): ?>
@@ -98,9 +41,7 @@ function badgeDepartamento($dep) {
             <small class="text-muted">Usuários Linux/Samba registrados na RD Intranet</small>
         </div>
 
-        <a href="/rd.intranet/samba_usuario_novo.php" class="btn btn-primary">
-            <i class="bi bi-plus-lg"></i> Novo usuário
-        </a>
+        <?= Button::primary('Novo usuário', '/rd.intranet/samba_usuario_novo.php', 'plus-lg') ?>
     </div>
 
     <div class="card-body">
@@ -121,7 +62,7 @@ function badgeDepartamento($dep) {
                     <tr>
                         <td>
                             <div class="d-flex align-items-center gap-3">
-                                <div class="avatar"><?= htmlspecialchars(iniciais($u['nome'])) ?></div>
+                                <?= Avatar::initials($u['nome']) ?>
                                 <div>
                                     <strong><?= htmlspecialchars($u['nome']) ?></strong><br>
                                     <small class="text-muted">UID <?= htmlspecialchars($u['uid_linux'] ?? '-') ?></small>
@@ -131,37 +72,21 @@ function badgeDepartamento($dep) {
 
                         <td><?= htmlspecialchars($u['login']) ?></td>
 
-                        <td>
-                            <span class="badge text-bg-<?= badgeDepartamento($u['departamento']) ?>">
-                                <?= htmlspecialchars(nomeDepartamento($u['departamento'])) ?>
-                            </span>
-                        </td>
+                        <td><?= Badge::departamento($u['departamento']) ?></td>
 
                         <td>
                             <?= (int)$u['ssh'] === 1
-                                ? '<span class="badge text-bg-success">Sim</span>'
-                                : '<span class="badge text-bg-secondary">Não</span>' ?>
+                                ? Badge::make('Sim', 'success')
+                                : Badge::make('Não', 'secondary') ?>
                         </td>
 
-                        <td>
-                            <?= $u['status'] === 'ativo'
-                                ? '<span class="badge text-bg-success">Ativo</span>'
-                                : '<span class="badge text-bg-danger">Desativado</span>' ?>
-                        </td>
+                        <td><?= Badge::status($u['status']) ?></td>
 
                         <td class="text-end">
-                            <a href="#" class="btn btn-sm btn-outline-primary" title="Editar">
-                                <i class="bi bi-pencil"></i>
-                            </a>
-                            <a href="#" class="btn btn-sm btn-outline-secondary" title="Alterar senha">
-                                <i class="bi bi-key"></i>
-                            </a>
-                            <a href="#" class="btn btn-sm btn-outline-warning" title="Desativar">
-                                <i class="bi bi-lock"></i>
-                            </a>
-                            <a href="#" class="btn btn-sm btn-outline-danger" title="Excluir">
-                                <i class="bi bi-trash"></i>
-                            </a>
+                            <?= Button::outline('Editar', '#', 'pencil', 'primary') ?>
+                            <?= Button::outline('Alterar senha', '#', 'key', 'secondary') ?>
+                            <?= Button::outline('Desativar', '#', 'lock', 'warning') ?>
+                            <?= Button::outline('Excluir', '#', 'trash', 'danger') ?>
                         </td>
                     </tr>
                 <?php endforeach; ?>
