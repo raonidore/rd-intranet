@@ -1,13 +1,15 @@
 <?php
+
 require_once __DIR__ . '/../app/bootstrap.php';
+
+use App\Models\SambaUsuario;
 
 auth_required();
 
-$stmt = $pdo->query("SELECT * FROM samba_usuarios ORDER BY nome");
-$usuarios = $stmt->fetchAll();
+$usuarios = SambaUsuario::listar();
 
-$total = count($usuarios);
-$ativos = count(array_filter($usuarios, fn($u) => $u['status'] === 'ativo'));
-$sshTotal = count(array_filter($usuarios, fn($u) => (int)$u['ssh'] === 1));
+$total = SambaUsuario::contarTotal();
+$ativos = SambaUsuario::contarAtivos();
+$sshTotal = SambaUsuario::contarComSsh();
 
 view('samba/usuarios', compact('usuarios', 'total', 'ativos', 'sshTotal'));
