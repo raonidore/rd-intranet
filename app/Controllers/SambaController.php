@@ -3,23 +3,33 @@
 namespace App\Controllers;
 
 use App\Core\Controller;
-use App\Models\SambaUsuario;
+use App\Services\SambaService;
 
 class SambaController extends Controller
 {
+    private SambaService $service;
+
+    public function __construct()
+    {
+        $this->service = new SambaService();
+    }
+
     public function usuarios(): void
     {
-        $usuarios = SambaUsuario::listar();
+        $usuarios = $this->service->listarUsuarios();
 
-        $total = SambaUsuario::contarTotal();
-        $ativos = SambaUsuario::contarAtivos();
-        $sshTotal = SambaUsuario::contarComSsh();
+        $dashboard = $this->service->dashboard();
 
-        $this->view('samba/usuarios', compact(
-            'usuarios',
-            'total',
-            'ativos',
-            'sshTotal'
-        ));
+        $this->view('samba/usuarios', [
+
+            'usuarios' => $usuarios,
+
+            'total' => $dashboard['total'],
+
+            'ativos' => $dashboard['ativos'],
+
+            'sshTotal' => $dashboard['ssh'],
+
+        ]);
     }
 }
