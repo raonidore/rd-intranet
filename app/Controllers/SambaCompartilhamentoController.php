@@ -15,9 +15,6 @@ class SambaCompartilhamentoController extends Controller
         $this->service = new SambaCompartilhamentoService();
     }
 
-    /**
-     * Lista os compartilhamentos Samba.
-     */
     public function index(): void
     {
         AuthMiddleware::check();
@@ -32,5 +29,37 @@ class SambaCompartilhamentoController extends Controller
             'lixeira' => $dashboard['lixeira'],
             'bloqueioExtensoes' => $dashboard['bloqueio_extensoes'],
         ]);
+    }
+
+    public function novoForm(): void
+    {
+        AuthMiddleware::check();
+
+        $this->view('samba/compartilhamento_novo');
+    }
+
+    public function novo(): void
+    {
+        AuthMiddleware::check();
+
+        $nome = trim($_POST['nome'] ?? '');
+        $descricao = trim($_POST['descricao'] ?? '');
+        $grupo = strtolower(trim($_POST['grupo'] ?? ''));
+        $caminho = trim($_POST['caminho'] ?? '');
+
+        $dados = [
+            'nome' => $nome,
+            'descricao' => $descricao,
+            'grupo' => $grupo,
+            'caminho' => $caminho,
+            'somente_leitura' => isset($_POST['somente_leitura']) ? 1 : 0,
+            'lixeira' => isset($_POST['lixeira']) ? 1 : 0,
+            'bloqueio_extensoes' => isset($_POST['bloqueio_extensoes']) ? 1 : 0,
+        ];
+
+        $this->service->criar($dados);
+
+        header('Location: ' . url('/samba/compartilhamentos'));
+        exit;
     }
 }

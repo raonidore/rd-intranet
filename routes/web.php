@@ -25,6 +25,8 @@ $router->get('/samba/usuarios/excluir', [SambaController::class, 'excluirForm'])
 $router->post('/samba/usuarios/excluir', [SambaController::class, 'excluir']);
 
 $router->get('/samba/compartilhamentos', [SambaCompartilhamentoController::class, 'index']);
+$router->get('/samba/compartilhamentos/novo', [SambaCompartilhamentoController::class, 'novoForm']);
+$router->post('/samba/compartilhamentos/novo', [SambaCompartilhamentoController::class, 'novo']);
 
 $router->get('/infraestrutura/servicos', [InfrastructureController::class, 'servicos']);
 $router->get('/infraestrutura/servicos/reiniciar', [InfrastructureController::class, 'reiniciar']);

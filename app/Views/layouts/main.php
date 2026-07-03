@@ -61,7 +61,7 @@ $titulo = $titulo ?? 'RD Intranet';
 
     <a href="<?= url('/dashboard') ?>"><i class="bi bi-speedometer2 me-2"></i> Dashboard</a>
     <a href="<?= url('/samba/usuarios') ?>"><i class="bi bi-people me-2"></i> Usuários Samba</a>
-    <a href="#"><i class="bi bi-folder2-open me-2"></i> Compartilhamentos</a>
+    <a href="<?= url('/samba/compartilhamentos') ?>"><i class="bi bi-folder2-open me-2"></i> Compartilhamentos</a>
     <a href="#"><i class="bi bi-shield-lock me-2"></i> Permissões</a>
     <a href="#"><i class="bi bi-journal-text me-2"></i> Auditoria</a>
     <a href="#"><i class="bi bi-hdd-network me-2"></i> Servidores</a>
