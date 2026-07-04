@@ -1,0 +1,60 @@
+:root{
+
+    --rd-primary:#2563eb;
+    --rd-success:#16a34a;
+    --rd-warning:#f59e0b;
+    --rd-danger:#dc2626;
+
+    --rd-bg:#f5f7fb;
+
+    --rd-card-radius:16px;
+
+    --rd-shadow:
+        0 8px 20px rgba(0,0,0,.06);
+
+}
+
+body{
+
+    background:var(--rd-bg);
+
+}
+
+.rd-card{
+
+    border-radius:var(--rd-card-radius);
+
+    box-shadow:var(--rd-shadow);
+
+    transition:.25s;
+
+}
+
+.rd-card:hover{
+
+    transform:translateY(-2px);
+
+    box-shadow:
+        0 14px 28px rgba(0,0,0,.09);
+
+}
+
+.rd-section{
+
+    margin-bottom:24px;
+
+}
+
+.rd-title{
+
+    font-weight:700;
+
+}
+
+.rd-value{
+
+    font-size:2rem;
+
+    font-weight:700;
+
+}

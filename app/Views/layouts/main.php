@@ -10,6 +10,7 @@ $titulo = $titulo ?? 'RD Intranet';
 
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="<?= url('/assets/css/rd-ui.css') ?>">
 
     <style>
         body { background:#f4f6f9; }

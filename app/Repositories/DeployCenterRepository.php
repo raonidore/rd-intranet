@@ -30,12 +30,37 @@ class DeployCenterRepository
         return $item ?: null;
     }
 
+    public function listarPendentes(): array
+    {
+        $stmt = $this->pdo->query("
+            SELECT *
+            FROM deploy_pendencias
+            ORDER BY criado_em DESC
+        ");
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function pendencias(string $modulo): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT *
+            FROM deploy_pendencias
+            WHERE modulo = ?
+            ORDER BY criado_em DESC
+        ");
+
+        $stmt->execute([$modulo]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function marcarPendente(string $modulo): void
     {
         $stmt = $this->pdo->prepare("
             UPDATE configuracao_deploy
-               SET alteracoes_pendentes = 1
-             WHERE modulo = ?
+            SET alteracoes_pendentes = 1
+            WHERE modulo = ?
         ");
 
         $stmt->execute([$modulo]);
@@ -51,21 +76,9 @@ class DeployCenterRepository
 
         $stmt = $this->pdo->prepare("
             INSERT INTO deploy_pendencias
-            (
-                modulo,
-                tipo,
-                referencia,
-                descricao,
-                usuario
-            )
+            (modulo, tipo, referencia, descricao, usuario)
             VALUES
-            (
-                :modulo,
-                :tipo,
-                :referencia,
-                :descricao,
-                :usuario
-            )
+            (:modulo, :tipo, :referencia, :descricao, :usuario)
         ");
 
         $stmt->execute([
@@ -77,25 +90,10 @@ class DeployCenterRepository
         ]);
     }
 
-    public function pendencias(string $modulo): array
-    {
-        $stmt = $this->pdo->prepare("
-            SELECT *
-            FROM deploy_pendencias
-            WHERE modulo = ?
-            ORDER BY id DESC
-        ");
-
-        $stmt->execute([$modulo]);
-
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-
     public function limparPendencias(string $modulo): void
     {
         $stmt = $this->pdo->prepare("
-            DELETE
-            FROM deploy_pendencias
+            DELETE FROM deploy_pendencias
             WHERE modulo = ?
         ");
 
@@ -108,11 +106,11 @@ class DeployCenterRepository
 
         $stmt = $this->pdo->prepare("
             UPDATE configuracao_deploy
-               SET alteracoes_pendentes = 0,
-                   ultimo_deploy = NOW(),
-                   ultimo_backup = ?,
-                   ultimo_usuario = ?
-             WHERE modulo = ?
+            SET alteracoes_pendentes = 0,
+                ultimo_deploy = NOW(),
+                ultimo_backup = ?,
+                ultimo_usuario = ?
+            WHERE modulo = ?
         ");
 
         $stmt->execute([
