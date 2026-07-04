@@ -85,7 +85,9 @@ $titulo = $titulo ?? 'RD Intranet';
     <a href="<?= url('/samba/diagnostico') ?>">
         <i class="bi bi-activity me-2"></i> Diagnóstico
     </a>
-
+    <a href="<?= url('/samba/lixeira') ?>">
+        <i class="bi bi-trash3 me-2"></i> Lixeira Administrativa
+    </a>
     <a href="<?= url('/deploy') ?>">
         <i class="bi bi-rocket-takeoff me-2"></i> Central de Configurações
     </a>

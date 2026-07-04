@@ -9,6 +9,7 @@ use App\Controllers\SambaActionController;
 use App\Controllers\SambaCompartilhamentoController;
 use App\Controllers\SambaController;
 use App\Controllers\SambaDiagnosticoController;
+use App\Controllers\SambaLixeiraController;
 
 $router->get('/', [DashboardController::class, 'index']);
 $router->get('/dashboard', [DashboardController::class, 'index']);
@@ -38,6 +39,9 @@ $router->get('/samba/compartilhamentos/seguranca', [SambaCompartilhamentoControl
 $router->post('/samba/compartilhamentos/seguranca', [SambaCompartilhamentoController::class, 'segurancaSalvar']);
 $router->get('/samba/compartilhamentos/excluir', [SambaCompartilhamentoController::class, 'excluirForm']);
 $router->post('/samba/compartilhamentos/excluir', [SambaCompartilhamentoController::class, 'excluir']);
+$router->get('/samba/lixeira', [SambaLixeiraController::class, 'index']);
+$router->post('/samba/lixeira/restaurar', [SambaLixeiraController::class, 'restaurar']);
+$router->post('/samba/lixeira/excluir', [SambaLixeiraController::class, 'excluir']);
 
 $router->get('/samba/diagnostico', [SambaDiagnosticoController::class, 'index']);
 $router->post('/samba/actions/importar-compartilhamento', [SambaActionController::class, 'importarCompartilhamento']);
