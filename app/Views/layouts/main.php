@@ -75,6 +75,10 @@ $titulo = $titulo ?? 'RD Intranet';
 
     <div class="menu-section">Samba</div>
 
+    <a href="<?= url('/samba/dashboard') ?>">
+        <i class="bi bi-speedometer2 me-2"></i> Dashboard Samba
+    </a>
+
     <a href="<?= url('/samba/usuarios') ?>">
         <i class="bi bi-people me-2"></i> Usuários
     </a>

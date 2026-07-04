@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../vendor/autoload.php';
 
 \App\Core\Application::boot();
+\App\Core\Bootstrap\CoreBootstrap::boot();
 
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/Helpers/url.php';
