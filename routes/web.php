@@ -5,8 +5,10 @@ use App\Controllers\AuditoriaController;
 use App\Controllers\DashboardController;
 use App\Controllers\DeployCenterController;
 use App\Controllers\InfrastructureController;
+use App\Controllers\SambaActionController;
 use App\Controllers\SambaCompartilhamentoController;
 use App\Controllers\SambaController;
+use App\Controllers\SambaDiagnosticoController;
 
 $router->get('/', [DashboardController::class, 'index']);
 $router->get('/dashboard', [DashboardController::class, 'index']);
@@ -36,6 +38,10 @@ $router->get('/samba/compartilhamentos/seguranca', [SambaCompartilhamentoControl
 $router->post('/samba/compartilhamentos/seguranca', [SambaCompartilhamentoController::class, 'segurancaSalvar']);
 $router->get('/samba/compartilhamentos/excluir', [SambaCompartilhamentoController::class, 'excluirForm']);
 $router->post('/samba/compartilhamentos/excluir', [SambaCompartilhamentoController::class, 'excluir']);
+
+$router->get('/samba/diagnostico', [SambaDiagnosticoController::class, 'index']);
+$router->post('/samba/actions/importar-compartilhamento', [SambaActionController::class, 'importarCompartilhamento']);
+$router->post('/samba/actions/mover-pasta-lixeira', [SambaActionController::class, 'moverPastaParaLixeira']);
 
 $router->get('/infraestrutura/servicos', [InfrastructureController::class, 'servicos']);
 $router->get('/infraestrutura/servicos/reiniciar', [InfrastructureController::class, 'reiniciar']);
