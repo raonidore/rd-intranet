@@ -4,7 +4,7 @@ namespace App\Core\Samba;
 
 class SambaConfigWriter
 {
-    private string $tempFile = '/tmp/rd_smb.conf';
+    private string $tempFile = '/etc/samba/rd/tmp/shares.conf.tmp';
 
     public function writeTemp(string $config): string
     {

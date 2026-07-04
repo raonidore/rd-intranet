@@ -6,7 +6,8 @@ class SambaConfigGenerator
 {
     public function generate(array $shares): string
     {
-        $config = SambaTemplate::global();
+        $config = "# Arquivo gerado pela RD Intranet\n";
+        $config .= "# Não edite manualmente. Altere pela interface web.\n\n";
 
         foreach ($shares as $share) {
             if (($share['status'] ?? 'ativo') !== 'ativo') {

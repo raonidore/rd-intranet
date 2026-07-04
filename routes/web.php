@@ -3,6 +3,7 @@
 use App\Controllers\AuthController;
 use App\Controllers\AuditoriaController;
 use App\Controllers\DashboardController;
+use App\Controllers\DeployCenterController;
 use App\Controllers\InfrastructureController;
 use App\Controllers\SambaCompartilhamentoController;
 use App\Controllers\SambaController;
@@ -27,10 +28,21 @@ $router->post('/samba/usuarios/excluir', [SambaController::class, 'excluir']);
 $router->get('/samba/compartilhamentos', [SambaCompartilhamentoController::class, 'index']);
 $router->get('/samba/compartilhamentos/novo', [SambaCompartilhamentoController::class, 'novoForm']);
 $router->post('/samba/compartilhamentos/novo', [SambaCompartilhamentoController::class, 'novo']);
+$router->get('/samba/compartilhamentos/editar', [SambaCompartilhamentoController::class, 'editarForm']);
+$router->post('/samba/compartilhamentos/editar', [SambaCompartilhamentoController::class, 'editar']);
+$router->get('/samba/compartilhamentos/usuarios', [SambaCompartilhamentoController::class, 'usuariosForm']);
+$router->post('/samba/compartilhamentos/usuarios', [SambaCompartilhamentoController::class, 'usuariosSalvar']);
+$router->get('/samba/compartilhamentos/seguranca', [SambaCompartilhamentoController::class, 'segurancaForm']);
+$router->post('/samba/compartilhamentos/seguranca', [SambaCompartilhamentoController::class, 'segurancaSalvar']);
+$router->get('/samba/compartilhamentos/excluir', [SambaCompartilhamentoController::class, 'excluirForm']);
+$router->post('/samba/compartilhamentos/excluir', [SambaCompartilhamentoController::class, 'excluir']);
 
 $router->get('/infraestrutura/servicos', [InfrastructureController::class, 'servicos']);
 $router->get('/infraestrutura/servicos/reiniciar', [InfrastructureController::class, 'reiniciar']);
 $router->get('/infraestrutura/servicos/recarregar', [InfrastructureController::class, 'recarregar']);
 $router->get('/infraestrutura/servicos/logs', [InfrastructureController::class, 'logs']);
+
+$router->get('/deploy', [DeployCenterController::class, 'index']);
+$router->get('/deploy/samba/aplicar', [DeployCenterController::class, 'aplicarSamba']);
 
 $router->get('/auditoria', [AuditoriaController::class, 'index']);

@@ -45,19 +45,179 @@ class SambaCompartilhamentoController extends Controller
         $nome = trim($_POST['nome'] ?? '');
         $descricao = trim($_POST['descricao'] ?? '');
         $grupo = strtolower(trim($_POST['grupo'] ?? ''));
-        $caminho = trim($_POST['caminho'] ?? '');
+
+        $pasta = preg_replace('/[^A-Za-z0-9_-]/', '', $nome);
 
         $dados = [
             'nome' => $nome,
             'descricao' => $descricao,
             'grupo' => $grupo,
-            'caminho' => $caminho,
+            'caminho' => '/srv/samba/Compartilhamentos/' . $pasta,
             'somente_leitura' => isset($_POST['somente_leitura']) ? 1 : 0,
             'lixeira' => isset($_POST['lixeira']) ? 1 : 0,
             'bloqueio_extensoes' => isset($_POST['bloqueio_extensoes']) ? 1 : 0,
         ];
 
         $this->service->criar($dados);
+
+        header('Location: ' . url('/samba/compartilhamentos'));
+        exit;
+    }
+
+    /*
+     |---------------------------------------------------------
+     | Editar
+     |---------------------------------------------------------
+     */
+
+    public function editarForm(): void
+    {
+        AuthMiddleware::check();
+
+        $id = (int)($_GET['id'] ?? 0);
+
+        $compartilhamento = $this->service->buscar($id);
+
+        if (!$compartilhamento) {
+            header('Location: ' . url('/samba/compartilhamentos'));
+            exit;
+        }
+
+        $this->view('samba/compartilhamento_editar', [
+            'compartilhamento' => $compartilhamento
+        ]);
+    }
+
+    public function editar(): void
+    {
+        AuthMiddleware::check();
+
+        $id = (int)($_POST['id'] ?? 0);
+
+        $dados = [
+            'nome' => trim($_POST['nome']),
+            'descricao' => trim($_POST['descricao']),
+            'grupo' => trim($_POST['grupo']),
+            'caminho' => trim($_POST['caminho']),
+        ];
+
+        $this->service->editar($id, $dados);
+
+        header('Location: ' . url('/samba/compartilhamentos'));
+        exit;
+    }
+
+    /*
+     |---------------------------------------------------------
+     | Usuários autorizados
+     |---------------------------------------------------------
+     */
+
+    public function usuariosForm(): void
+    {
+        AuthMiddleware::check();
+
+        $id = (int)($_GET['id'] ?? 0);
+
+        $compartilhamento = $this->service->buscar($id);
+
+        if (!$compartilhamento) {
+            header('Location: ' . url('/samba/compartilhamentos'));
+            exit;
+        }
+
+        $this->view('samba/compartilhamento_usuarios', [
+            'compartilhamento' => $compartilhamento,
+            'usuarios' => $this->service->usuariosDisponiveis(),
+            'autorizados' => $this->service->usuariosAutorizados($id)
+        ]);
+    }
+
+    public function usuariosSalvar(): void
+    {
+        AuthMiddleware::check();
+
+        $id = (int)($_POST['id'] ?? 0);
+
+        $this->service->salvarUsuarios($id, $_POST);
+
+        header('Location: ' . url('/samba/compartilhamentos'));
+        exit;
+    }
+
+    /*
+     |---------------------------------------------------------
+     | Segurança
+     |---------------------------------------------------------
+     */
+
+    public function segurancaForm(): void
+    {
+        AuthMiddleware::check();
+
+        $id = (int)($_GET['id'] ?? 0);
+
+        $compartilhamento = $this->service->buscar($id);
+
+        if (!$compartilhamento) {
+            header('Location: ' . url('/samba/compartilhamentos'));
+            exit;
+        }
+
+        $this->view('samba/compartilhamento_seguranca', [
+            'compartilhamento' => $compartilhamento
+        ]);
+    }
+
+    public function segurancaSalvar(): void
+    {
+        AuthMiddleware::check();
+
+        $id = (int)($_POST['id'] ?? 0);
+
+        $dados = [
+            'somente_leitura' => isset($_POST['somente_leitura']) ? 1 : 0,
+            'lixeira' => isset($_POST['lixeira']) ? 1 : 0,
+            'bloqueio_extensoes' => isset($_POST['bloqueio_extensoes']) ? 1 : 0,
+        ];
+
+        $this->service->atualizarSeguranca($id, $dados);
+
+        header('Location: ' . url('/samba/compartilhamentos'));
+        exit;
+    }
+
+    /*
+     |---------------------------------------------------------
+     | Excluir
+     |---------------------------------------------------------
+     */
+
+    public function excluirForm(): void
+    {
+        AuthMiddleware::check();
+
+        $id = (int)($_GET['id'] ?? 0);
+
+        $compartilhamento = $this->service->buscar($id);
+
+        if (!$compartilhamento) {
+            header('Location: ' . url('/samba/compartilhamentos'));
+            exit;
+        }
+
+        $this->view('samba/compartilhamento_excluir', [
+            'compartilhamento' => $compartilhamento
+        ]);
+    }
+
+    public function excluir(): void
+    {
+        AuthMiddleware::check();
+
+        $id = (int)($_POST['id'] ?? 0);
+
+        $this->service->excluir($id);
 
         header('Location: ' . url('/samba/compartilhamentos'));
         exit;

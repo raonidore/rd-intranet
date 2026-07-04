@@ -64,6 +64,7 @@ $titulo = $titulo ?? 'RD Intranet';
     <a href="<?= url('/samba/compartilhamentos') ?>"><i class="bi bi-folder2-open me-2"></i> Compartilhamentos</a>
     <a href="#"><i class="bi bi-shield-lock me-2"></i> Permissões</a>
     <a href="#"><i class="bi bi-journal-text me-2"></i> Auditoria</a>
+    <a href="<?= url('/deploy') ?>"><i class="bi bi-rocket-takeoff me-2"></i> Deploy Center</a>
     <a href="#"><i class="bi bi-hdd-network me-2"></i> Servidores</a>
     <a href="#"><i class="bi bi-diagram-3 me-2"></i> VPN</a>
     <a href="#"><i class="bi bi-database-check me-2"></i> Backup</a>

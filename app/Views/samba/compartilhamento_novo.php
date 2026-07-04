@@ -4,9 +4,7 @@ ob_start();
 
 <div class="card border-0 shadow-sm">
     <div class="card-header bg-white">
-        <h5 class="mb-0">
-            <i class="bi bi-folder-plus"></i> Novo Compartilhamento
-        </h5>
+        <h5 class="mb-0"><i class="bi bi-folder-plus"></i> Novo Compartilhamento</h5>
         <small class="text-muted">Crie uma nova pasta compartilhada no Samba.</small>
     </div>
 
@@ -15,7 +13,7 @@ ob_start();
 
             <div class="mb-3">
                 <label class="form-label">Nome do compartilhamento</label>
-                <input type="text" name="nome" class="form-control" placeholder="Ex: RH" required>
+                <input type="text" id="nome" name="nome" class="form-control" placeholder="Ex: RH" required>
             </div>
 
             <div class="mb-3">
@@ -25,14 +23,13 @@ ob_start();
 
             <div class="mb-3">
                 <label class="form-label">Grupo Linux</label>
-                <input type="text" name="grupo" class="form-control" placeholder="Ex: rh" required>
+                <input type="text" id="grupo" name="grupo" class="form-control" placeholder="Ex: rh" required>
             </div>
 
             <div class="mb-3">
                 <label class="form-label">Caminho</label>
-                <input type="text" name="caminho" class="form-control"
-                       value="/srv/samba/Compartilhamentos/" required>
-                <small class="text-muted">Use sempre /srv/samba/Compartilhamentos/NOME</small>
+                <input type="text" id="caminho" name="caminho" class="form-control" required>
+                <small class="text-muted">Gerado automaticamente em /srv/samba/Compartilhamentos/NOME</small>
             </div>
 
             <div class="form-check mb-2">
@@ -51,15 +48,39 @@ ob_start();
             </div>
 
             <button type="submit" class="btn btn-primary">
-                <i class="bi bi-save"></i> Criar Compartilhamento
+                <i class="bi bi-rocket"></i> Criar e aplicar no Samba
             </button>
 
-            <a href="<?= url('/samba/compartilhamentos') ?>" class="btn btn-secondary">
-                Voltar
-            </a>
+            <a href="<?= url('/samba/compartilhamentos') ?>" class="btn btn-secondary">Voltar</a>
         </form>
     </div>
 </div>
+
+<script>
+function normalizarGrupo(texto) {
+    return texto
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '')
+        .trim();
+}
+
+function normalizarPasta(texto) {
+    return texto
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^A-Za-z0-9_-]+/g, '')
+        .trim();
+}
+
+document.getElementById('nome').addEventListener('input', function () {
+    const nome = this.value;
+    const grupo = normalizarGrupo(nome);
+    const pasta = normalizarPasta(nome);
+
+    document.getElementById('grupo').value = grupo;
+    document.getElementById('caminho').value = '/srv/samba/Compartilhamentos/' + pasta;
+});
+</script>
 
 <?php
 $conteudo = ob_get_clean();

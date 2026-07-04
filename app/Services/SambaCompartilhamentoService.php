@@ -3,15 +3,18 @@
 namespace App\Services;
 
 use App\Repositories\SambaCompartilhamentoRepository;
+use App\Repositories\SambaUsuarioRepository;
 
 class SambaCompartilhamentoService
 {
     private SambaCompartilhamentoRepository $repository;
+    private SambaUsuarioRepository $usuarioRepository;
     private LinuxService $linux;
 
     public function __construct()
     {
         $this->repository = new SambaCompartilhamentoRepository();
+        $this->usuarioRepository = new SambaUsuarioRepository();
         $this->linux = new LinuxService();
     }
 
@@ -35,6 +38,16 @@ class SambaCompartilhamentoService
         return $this->repository->buscarPorId($id);
     }
 
+    public function usuariosDisponiveis(): array
+    {
+        return $this->usuarioRepository->listar();
+    }
+
+    public function usuariosAutorizados(int $id): array
+    {
+        return $this->repository->usuariosAutorizados($id);
+    }
+
     public function criar(array $dados): bool
     {
         if ($this->repository->buscarPorNome($dados['nome'])) {
@@ -44,7 +57,11 @@ class SambaCompartilhamentoService
 
         $resultadoLinux = $this->linux->executarScript(
             '/opt/rdtecnologia/scripts/cria_compartilhamento_samba_web.sh',
-            [$dados['nome'], $dados['caminho'], $dados['grupo']]
+            [
+                $dados['nome'],
+                $dados['caminho'],
+                $dados['grupo']
+            ]
         );
 
         if (!$resultadoLinux['success']) {
@@ -54,24 +71,150 @@ class SambaCompartilhamentoService
 
         $this->repository->criar($dados);
 
-        $deploy = new SambaConfigDeployService();
-        $resultadoDeploy = $deploy->deploy();
-
-        if (!$resultadoDeploy['success']) {
-            NotificationService::error('Compartilhamento criado, mas houve erro no deploy do Samba.', $resultadoDeploy['output']);
-            return false;
-        }
+        (new DeployCenterService())->marcarPendente(
+            'samba',
+            'Compartilhamento',
+            $dados['nome'],
+            'Novo compartilhamento criado: '.$dados['nome'].' em '.$dados['caminho'].'.'
+        );
 
         AuditService::registrar(
             'Samba',
             'Criar Compartilhamento',
-            'Compartilhamento '.$dados['nome'].' criado e aplicado ao smb.conf.'
+            'Compartilhamento '.$dados['nome'].' criado e aguardando deploy.'
         );
 
         NotificationService::success(
-            'Compartilhamento criado e aplicado ao Samba com sucesso.',
-            $resultadoLinux['output']."\n\n".$resultadoDeploy['output']
+            'Compartilhamento criado com sucesso. A configuração ainda precisa ser aplicada no Deploy Center.',
+            $resultadoLinux['output']
         );
+
+        return true;
+    }
+
+    public function editar(int $id, array $dados): bool
+    {
+        $compartilhamento = $this->buscar($id);
+
+        if (!$compartilhamento) {
+            NotificationService::error('Compartilhamento não encontrado.');
+            return false;
+        }
+
+        $this->repository->atualizar($id, $dados);
+
+        (new DeployCenterService())->marcarPendente(
+            'samba',
+            'Compartilhamento',
+            $dados['nome'],
+            'Compartilhamento atualizado: '.$dados['nome'].'.'
+        );
+
+        AuditService::registrar(
+            'Samba',
+            'Editar Compartilhamento',
+            'Compartilhamento '.$compartilhamento['nome'].' atualizado.'
+        );
+
+        NotificationService::success('Compartilhamento atualizado. Alterações pendentes para deploy.');
+
+        return true;
+    }
+
+    public function atualizarSeguranca(int $id, array $dados): bool
+    {
+        $compartilhamento = $this->buscar($id);
+
+        if (!$compartilhamento) {
+            NotificationService::error('Compartilhamento não encontrado.');
+            return false;
+        }
+
+        $this->repository->atualizarSeguranca($id, $dados);
+
+        (new DeployCenterService())->marcarPendente(
+            'samba',
+            'Segurança',
+            $compartilhamento['nome'],
+            'Políticas de segurança atualizadas para '.$compartilhamento['nome'].'.'
+        );
+
+        AuditService::registrar(
+            'Samba',
+            'Segurança Compartilhamento',
+            'Segurança do compartilhamento '.$compartilhamento['nome'].' atualizada.'
+        );
+
+        NotificationService::success('Segurança atualizada. Alterações pendentes para deploy.');
+
+        return true;
+    }
+
+    public function salvarUsuarios(int $id, array $post): bool
+    {
+        $compartilhamento = $this->buscar($id);
+
+        if (!$compartilhamento) {
+            NotificationService::error('Compartilhamento não encontrado.');
+            return false;
+        }
+
+        $usuarios = [];
+
+        foreach (($post['usuarios'] ?? []) as $usuarioId => $permissoes) {
+            $usuarios[] = [
+                'usuario_id' => (int)$usuarioId,
+                'leitura' => isset($permissoes['leitura']) ? 1 : 0,
+                'escrita' => isset($permissoes['escrita']) ? 1 : 0,
+                'exclusao' => isset($permissoes['exclusao']) ? 1 : 0,
+            ];
+        }
+
+        $this->repository->salvarUsuariosAutorizados($id, $usuarios);
+
+        (new DeployCenterService())->marcarPendente(
+            'samba',
+            'Usuários',
+            $compartilhamento['nome'],
+            'Usuários autorizados atualizados para '.$compartilhamento['nome'].'.'
+        );
+
+        AuditService::registrar(
+            'Samba',
+            'Usuários Compartilhamento',
+            'Usuários do compartilhamento '.$compartilhamento['nome'].' atualizados.'
+        );
+
+        NotificationService::success('Usuários autorizados atualizados. Alterações pendentes para deploy.');
+
+        return true;
+    }
+
+    public function excluir(int $id): bool
+    {
+        $compartilhamento = $this->buscar($id);
+
+        if (!$compartilhamento) {
+            NotificationService::error('Compartilhamento não encontrado.');
+            return false;
+        }
+
+        $this->repository->excluir($id);
+
+        (new DeployCenterService())->marcarPendente(
+            'samba',
+            'Compartilhamento',
+            $compartilhamento['nome'],
+            'Compartilhamento removido: '.$compartilhamento['nome'].'.'
+        );
+
+        AuditService::registrar(
+            'Samba',
+            'Excluir Compartilhamento',
+            'Compartilhamento '.$compartilhamento['nome'].' removido do cadastro.'
+        );
+
+        NotificationService::success('Compartilhamento removido do cadastro. Alterações pendentes para deploy.');
 
         return true;
     }

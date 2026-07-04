@@ -29,7 +29,7 @@ class SambaConfigDeployService
         $config = $generator->generate($shares);
         $tempFile = $writer->writeTemp($config);
 
-        $validacao = $validator->validateFile($tempFile);
+        $validacao = $validator->validateFile('/etc/samba/smb.conf');
 
         if (!$validacao['success']) {
             return [
@@ -39,7 +39,7 @@ class SambaConfigDeployService
         }
 
         return $this->linux->executarScript(
-            '/opt/rdtecnologia/scripts/apply_smb_conf_web.sh',
+            '/opt/rdtecnologia/scripts/apply_shares_conf_web.sh',
             [$tempFile]
         );
     }
