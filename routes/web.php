@@ -26,6 +26,8 @@ $router->post('/login', [AuthController::class, 'login']);
 $router->get('/logout', [AuthController::class, 'logout']);
 
 $router->get('/samba/usuarios', [SambaController::class, 'usuarios']);
+$router->get('/samba/usuarios/novo', [SambaController::class, 'novoForm']);
+$router->post('/samba/usuarios/novo', [SambaController::class, 'novo']);
 $router->get('/samba/usuarios/editar', [SambaController::class, 'editarForm']);
 $router->post('/samba/usuarios/editar', [SambaController::class, 'editar']);
 $router->get('/samba/usuarios/senha', [SambaController::class, 'alterarSenhaForm']);

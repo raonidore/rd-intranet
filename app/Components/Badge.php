@@ -20,11 +20,6 @@ class Badge
 
     public static function departamento(string $departamento): string
     {
-        return match ($departamento) {
-            'ti' => self::make('TI', 'primary'),
-            'financeiro' => self::make('Financeiro', 'success'),
-            'cobranca' => self::make('Cobrança', 'warning'),
-            default => self::make('Indefinido', 'secondary')
-        };
+        return self::make(htmlspecialchars($departamento), 'secondary');
     }
 }

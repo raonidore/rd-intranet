@@ -35,9 +35,9 @@ class SambaService
         return $this->repository->buscarPorId($id);
     }
 
-    public function departamentos(): array
+    public function gruposDisponiveis(): array
     {
-        return $this->repository->departamentos();
+        return $this->repository->gruposEmUso();
     }
 
     public function alterarSenha(int $id, string $senha, string $confirmacao): void
@@ -118,6 +118,33 @@ class SambaService
         }
     }
 
+    public function criarUsuario(string $nome, string $login, string $grupo, bool $ssh, string $senha): bool
+    {
+        if ($this->repository->buscarPorLogin($login)) {
+            NotificationService::error('Já existe um usuário com este login.');
+            return false;
+        }
+
+        $resultado = $this->linux->executarScript(
+            '/opt/rdtecnologia/scripts/cria_usuario_web.sh',
+            [$nome, $login, $grupo, $ssh ? 'sim' : 'nao', $senha]
+        );
+
+        if (!$resultado['success']) {
+            NotificationService::error('Erro ao criar usuário no sistema.', $resultado['output']);
+            return false;
+        }
+
+        $uid = trim($this->linux->executar("id -u " . escapeshellarg($login))['output']);
+
+        $this->repository->criar($nome, $login, $grupo, $ssh, $uid !== '' ? (int)$uid : null);
+
+        AuditService::registrar('Samba', 'Criação', 'Usuário '.$login.' criado.');
+        NotificationService::success('Usuário criado com sucesso.', $resultado['output']);
+
+        return true;
+    }
+
     public function editarUsuario(int $id, string $nome, string $departamento, bool $ssh): void
     {
         $usuario = $this->buscarUsuario($id);
@@ -129,7 +156,7 @@ class SambaService
 
         $resultado = $this->linux->executarScript(
             '/opt/rdtecnologia/scripts/edita_usuario_samba_web.sh',
-            [$usuario['login'], $nome, $departamento, $ssh ? 'sim' : 'nao']
+            [$usuario['login'], $nome, $departamento, $ssh ? 'sim' : 'nao', $usuario['departamento']]
         );
 
         if ($resultado['success']) {

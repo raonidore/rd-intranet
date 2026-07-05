@@ -38,14 +38,15 @@ ob_start();
             </div>
 
             <div class="mb-3">
-                <label class="form-label">Departamento</label>
-                <select name="departamento" class="form-select" required>
-                    <?php foreach ($departamentos as $chave => $nome): ?>
-                        <option value="<?= htmlspecialchars($chave) ?>" <?= $usuarioSamba['departamento'] === $chave ? 'selected' : '' ?>>
-                            <?= htmlspecialchars($nome) ?>
-                        </option>
+                <label class="form-label">Grupo</label>
+                <input type="text" name="departamento" class="form-control" list="grupos-existentes"
+                       value="<?= htmlspecialchars($usuarioSamba['departamento']) ?>" required>
+                <datalist id="grupos-existentes">
+                    <?php foreach ($grupos as $grupo): ?>
+                        <option value="<?= htmlspecialchars($grupo) ?>">
                     <?php endforeach; ?>
-                </select>
+                </datalist>
+                <small class="text-muted">Grupo Linux do usuário. Escolha um já existente ou digite um novo (é criado automaticamente).</small>
             </div>
 
             <div class="mb-3">

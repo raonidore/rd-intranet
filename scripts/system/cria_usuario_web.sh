@@ -11,17 +11,18 @@ if [[ ! "$LOGIN" =~ ^[a-z0-9]+$ ]]; then
   exit 1
 fi
 
-case "$GRUPO" in
-  ti|financeiro|cobranca) ;;
-  *)
-    echo "Grupo inválido"
-    exit 1
-    ;;
-esac
+if [[ ! "$GRUPO" =~ ^[a-z][a-z0-9_-]*$ ]]; then
+  echo "Grupo inválido"
+  exit 1
+fi
 
 if id "$LOGIN" >/dev/null 2>&1; then
   echo "Usuário já existe"
   exit 1
+fi
+
+if ! getent group "$GRUPO" >/dev/null; then
+  groupadd "$GRUPO"
 fi
 
 if [ "$SSH" = "sim" ]; then

@@ -47,7 +47,7 @@ ob_start();
             </small>
         </div>
 
-        <a href="<?= url('/samba_usuario_novo.php') ?>" class="btn btn-primary">
+        <a href="<?= url('/samba/usuarios/novo') ?>" class="btn btn-primary">
             <i class="bi bi-plus-lg"></i> Novo usuário
         </a>
     </div>

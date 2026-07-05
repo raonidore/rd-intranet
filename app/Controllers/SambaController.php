@@ -30,6 +30,31 @@ class SambaController extends Controller
         ]);
     }
 
+    public function novoForm(): void
+    {
+        AuthMiddleware::checkModulo('samba_usuarios');
+
+        $this->view('samba/novo', [
+            'grupos' => $this->service->gruposDisponiveis(),
+        ]);
+    }
+
+    public function novo(): void
+    {
+        AuthMiddleware::checkModulo('samba_usuarios');
+
+        $this->service->criarUsuario(
+            trim($_POST['nome'] ?? ''),
+            strtolower(trim($_POST['login'] ?? '')),
+            trim($_POST['grupo'] ?? ''),
+            ($_POST['ssh'] ?? 'nao') === 'sim',
+            $_POST['senha'] ?? ''
+        );
+
+        header('Location: ' . url('/samba/usuarios'));
+        exit;
+    }
+
     public function alterarSenhaForm(): void
     {
         AuthMiddleware::checkModulo('samba_usuarios');
@@ -75,7 +100,7 @@ class SambaController extends Controller
 
         $this->view('samba/editar', [
             'usuarioSamba' => $usuario,
-            'departamentos' => $this->service->departamentos()
+            'grupos' => $this->service->gruposDisponiveis()
         ]);
     }
 

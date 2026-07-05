@@ -67,6 +67,21 @@ class SambaUsuarioRepository
     }
 
     /**
+     * Cria um novo usuário.
+     */
+    public function criar(string $nome, string $login, string $departamento, bool $ssh, ?int $uidLinux): int
+    {
+        $stmt = $this->pdo->prepare("
+            INSERT INTO samba_usuarios (nome, login, departamento, ssh, uid_linux, status)
+            VALUES (?, ?, ?, ?, ?, 'ativo')
+        ");
+
+        $stmt->execute([$nome, $login, $departamento, $ssh ? 1 : 0, $uidLinux]);
+
+        return (int)$this->pdo->lastInsertId();
+    }
+
+    /**
      * Atualiza o status do usuário.
      */
     public function atualizarStatus(int $id, string $status): bool
@@ -162,14 +177,17 @@ class SambaUsuarioRepository
     }
 
     /**
-     * Departamentos cadastrados.
+     * Grupos em uso hoje por compartilhamentos (são os que fazem sentido
+     * atribuir a um usuário, já que só eles dão acesso a algum caminho real).
      */
-    public function departamentos(): array
+    public function gruposEmUso(): array
     {
-        return [
-            'ti' => 'TI',
-            'financeiro' => 'Financeiro',
-            'cobranca' => 'Cobrança'
-        ];
+        $stmt = $this->pdo->query("
+            SELECT DISTINCT grupo
+              FROM samba_compartilhamentos
+             ORDER BY grupo
+        ");
+
+        return $stmt->fetchAll(PDO::FETCH_COLUMN);
     }
 }

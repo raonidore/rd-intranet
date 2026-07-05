@@ -33,11 +33,10 @@ done
 
 echo ""
 echo "### GRUPOS"
-getent group ti
-getent group financeiro
-getent group cobranca
-getent group rh
-getent group juridico
+find /srv/samba/Compartilhamentos -maxdepth 1 -mindepth 1 -type d | while read dir; do
+  grupo=$(stat -c '%G' "$dir" 2>/dev/null)
+  getent group "$grupo"
+done | sort -u
 
 echo ""
 echo "### LOGS_RECENTES"
