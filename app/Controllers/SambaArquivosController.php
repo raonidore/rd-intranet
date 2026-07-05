@@ -49,6 +49,17 @@ class SambaArquivosController extends Controller
         return shell_exec($cmd . ' 2>/dev/null') ?? '';
     }
 
+    /** Limpa qualquer output acidental (warnings com display_errors=1) e envia JSON puro */
+    private function jsonResponse(array $data): void
+    {
+        while (ob_get_level()) {
+            ob_end_clean();
+        }
+        header('Content-Type: application/json');
+        header('Cache-Control: no-cache');
+        echo json_encode($data);
+    }
+
     private function jsonOutput(string $script, array $args): array
     {
         $out    = trim($this->scriptOutput($script, $args));
@@ -263,22 +274,24 @@ class SambaArquivosController extends Controller
     // ── Listar só diretórios (para o folder picker) ───────────────────────
     public function listarDirs(): void
     {
+        ob_start();
         AuthMiddleware::check();
-        header('Content-Type: application/json');
 
         $rel  = $this->validarRel($_GET['path'] ?? '');
-        if ($rel === null) { echo json_encode(['error' => 'Caminho inválido']); return; }
+        if ($rel === null) {
+            $this->jsonResponse(['error' => 'Caminho inválido']); return;
+        }
 
         $raw  = trim($this->scriptOutput('/opt/rdtecnologia/scripts/lista_arquivos_samba_web.sh', [$rel]));
         $list = json_decode($raw, true);
 
         if (!is_array($list) || isset($list['error'])) {
-            echo json_encode(['error' => $list['error'] ?? 'Erro ao listar']); return;
+            $this->jsonResponse(['error' => $list['error'] ?? 'Erro ao listar']); return;
         }
 
         $dirs = array_values(array_filter($list, fn($i) => $i['type'] === 'dir'));
 
-        echo json_encode([
+        $this->jsonResponse([
             'path' => $rel,
             'dirs' => array_map(fn($d) => [
                 'name' => $d['name'],
