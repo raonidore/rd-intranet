@@ -102,6 +102,9 @@ $titulo = $titulo ?? 'RD Intranet';
     <a href="<?= url('/deploy') ?>">
         <i class="bi bi-rocket-takeoff me-2"></i> Central de Configurações
     </a>
+    <a href="<?= url('/samba/configuracao') ?>">
+        <i class="bi bi-sliders me-2"></i> Config. Global Samba
+    </a>
 
     <div class="menu-section">Infraestrutura</div>
 

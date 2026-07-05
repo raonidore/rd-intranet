@@ -4,6 +4,7 @@ use App\Controllers\AuthController;
 use App\Controllers\AuditoriaController;
 use App\Controllers\DashboardController;
 use App\Controllers\DeployCenterController;
+use App\Controllers\SambaConfiguracaoController;
 use App\Controllers\InfrastructureController;
 use App\Controllers\SambaActionController;
 use App\Controllers\SambaCompartilhamentoController;
@@ -76,5 +77,9 @@ $router->get('/infraestrutura/servicos/logs', [InfrastructureController::class, 
 $router->get('/deploy', [DeployCenterController::class, 'index']);
 $router->get('/deploy/samba/aplicar', [DeployCenterController::class, 'aplicarSamba']);
 $router->post('/deploy/configuracoes', [DeployCenterController::class, 'salvarConfiguracoes']);
+
+$router->get('/samba/configuracao', [SambaConfiguracaoController::class, 'index']);
+$router->post('/samba/configuracao/salvar', [SambaConfiguracaoController::class, 'salvar']);
+$router->post('/samba/configuracao/restaurar', [SambaConfiguracaoController::class, 'restaurarBackup']);
 
 $router->get('/auditoria', [AuditoriaController::class, 'index']);

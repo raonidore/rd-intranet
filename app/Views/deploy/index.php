@@ -7,15 +7,56 @@ $pendente = (int)($samba['alteracoes_pendentes'] ?? 0) === 1;
 
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">
+        <h4>🚀 Deploy Center</h4>
+        <small class="text-muted">Central de Deploy e Configurações da RD Intranet</small>
+    </div>
+</div>
 
-        <h4>
-            🚀 Deploy Center
-        </h4>
-
-        <small class="text-muted">
-            Central de Deploy da RD Intranet
-        </small>
-
+<!-- Ferramentas rápidas -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <a href="<?= url('/samba/configuracao') ?>" class="card border-0 shadow-sm text-decoration-none h-100" style="border-radius:12px">
+            <div class="card-body d-flex align-items-center gap-3">
+                <i class="bi bi-sliders display-6 text-primary"></i>
+                <div>
+                    <div class="fw-semibold">Config. Global</div>
+                    <small class="text-muted">smb.conf [global]</small>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-3">
+        <a href="<?= url('/samba/compartilhamentos') ?>" class="card border-0 shadow-sm text-decoration-none h-100" style="border-radius:12px">
+            <div class="card-body d-flex align-items-center gap-3">
+                <i class="bi bi-folder2-open display-6 text-warning"></i>
+                <div>
+                    <div class="fw-semibold">Compartilhamentos</div>
+                    <small class="text-muted">Shares do Samba</small>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-3">
+        <a href="<?= url('/samba/usuarios') ?>" class="card border-0 shadow-sm text-decoration-none h-100" style="border-radius:12px">
+            <div class="card-body d-flex align-items-center gap-3">
+                <i class="bi bi-people display-6 text-success"></i>
+                <div>
+                    <div class="fw-semibold">Usuários Samba</div>
+                    <small class="text-muted">Contas e senhas</small>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-3">
+        <a href="<?= url('/samba/monitor') ?>" class="card border-0 shadow-sm text-decoration-none h-100" style="border-radius:12px">
+            <div class="card-body d-flex align-items-center gap-3">
+                <i class="bi bi-display display-6 text-info"></i>
+                <div>
+                    <div class="fw-semibold">Monitor</div>
+                    <small class="text-muted">Sessões em tempo real</small>
+                </div>
+            </div>
+        </a>
     </div>
 </div>
 
