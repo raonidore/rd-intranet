@@ -71,5 +71,6 @@ $router->get('/infraestrutura/servicos/logs', [InfrastructureController::class, 
 
 $router->get('/deploy', [DeployCenterController::class, 'index']);
 $router->get('/deploy/samba/aplicar', [DeployCenterController::class, 'aplicarSamba']);
+$router->post('/deploy/configuracoes', [DeployCenterController::class, 'salvarConfiguracoes']);
 
 $router->get('/auditoria', [AuditoriaController::class, 'index']);

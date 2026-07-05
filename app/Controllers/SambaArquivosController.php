@@ -4,13 +4,29 @@ namespace App\Controllers;
 
 use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
+use App\Services\ConfigService;
 
 class SambaArquivosController extends Controller
 {
-    private const BASE_PATH    = '/srv/samba/Compartilhamentos';
-    private const MAX_UPLOAD   = 100 * 1024 * 1024; // 100 MB
-    private const EDITABLE_EXT = ['txt', 'csv', 'conf', 'cfg', 'ini', 'log', 'sh', 'md',
-                                   'xml', 'json', 'html', 'css', 'js', 'php', 'py', 'sql'];
+    private const BASE_PATH  = '/srv/samba/Compartilhamentos';
+    private const MAX_UPLOAD = 100 * 1024 * 1024;
+    private const EXT_DEFAULT = 'txt,csv,log,conf,cfg,ini,xml,json,html,css,js,php,py,sql,sh,md';
+
+    private static function extConfig(): array
+    {
+        static $cache = null;
+        if ($cache !== null) return $cache;
+
+        $toArr = static fn(string $v): array =>
+            array_values(array_filter(array_map('trim', explode(',', strtolower($v)))));
+
+        $cache = [
+            'visualizar' => $toArr(ConfigService::get('samba_arquivos_ext_visualizar', self::EXT_DEFAULT)),
+            'editar'     => $toArr(ConfigService::get('samba_arquivos_ext_editar',     self::EXT_DEFAULT)),
+        ];
+
+        return $cache;
+    }
 
     // ── Validação de caminho ─────────────────────────────────────────────
     private function validarRel(string $rel): ?string
@@ -75,7 +91,8 @@ class SambaArquivosController extends Controller
                 'modified' => $item['modified'] ? date('d/m/Y H:i', $item['modified']) : '-',
                 'ext'      => $ext,
                 'icon'     => $this->icon($item['type'], $ext),
-                'editable' => $item['type'] === 'file' && in_array($ext, self::EDITABLE_EXT),
+                'viewable' => $item['type'] === 'file' && in_array($ext, self::extConfig()['visualizar']),
+                'editable' => $item['type'] === 'file' && in_array($ext, self::extConfig()['editar']),
                 'path'     => $itemPath,
             ];
         }, $list);
@@ -144,8 +161,8 @@ class SambaArquivosController extends Controller
         }
 
         $ext = strtolower(pathinfo($rel, PATHINFO_EXTENSION));
-        if (!in_array($ext, self::EDITABLE_EXT)) {
-            echo json_encode(['success' => false, 'message' => 'Tipo de arquivo não editável.']); return;
+        if (!in_array($ext, self::extConfig()['visualizar'])) {
+            echo json_encode(['success' => false, 'message' => 'Tipo de arquivo não permitido para visualização.']); return;
         }
 
         $content = $this->scriptOutput('/opt/rdtecnologia/scripts/ler_arquivo_samba_web.sh', [$rel]);
@@ -164,8 +181,8 @@ class SambaArquivosController extends Controller
         }
 
         $ext = strtolower(pathinfo($rel, PATHINFO_EXTENSION));
-        if (!in_array($ext, self::EDITABLE_EXT)) {
-            echo json_encode(['success' => false, 'message' => 'Tipo de arquivo não editável.']); return;
+        if (!in_array($ext, self::extConfig()['editar'])) {
+            echo json_encode(['success' => false, 'message' => 'Tipo de arquivo não permitido para edição.']); return;
         }
 
         $tmpfile = tempnam('/tmp', 'samba_edit_');

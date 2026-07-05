@@ -9,6 +9,21 @@ function formatBytes(int $bytes): string {
 }
 ?>
 
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/monokai.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/css/css.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/php/php.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/sql/sql.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/shell/shell.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/markdown/markdown.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/properties/properties.min.js"></script>
+
 <style>
 .fm-card { border:0; border-radius:14px; box-shadow:0 4px 14px rgba(0,0,0,.06); }
 .fm-breadcrumb { background:#f1f5f9; border-radius:8px; padding:8px 14px; }
@@ -124,16 +139,20 @@ function formatBytes(int $bytes): string {
                                class="btn btn-sm btn-outline-primary" title="Download">
                                 <i class="bi bi-download"></i>
                             </a>
-                            <?php if ($f['editable']): ?>
+                            <?php if ($f['viewable'] ?? false): ?>
                             <button class="btn btn-sm btn-outline-info btn-view-text"
                                 data-path="<?= htmlspecialchars($f['path']) ?>"
                                 data-name="<?= htmlspecialchars($f['name']) ?>"
+                                data-ext="<?= htmlspecialchars($f['ext']) ?>"
                                 title="Visualizar">
                                 <i class="bi bi-eye"></i>
                             </button>
+                            <?php endif; ?>
+                            <?php if ($f['editable'] ?? false): ?>
                             <button class="btn btn-sm btn-outline-secondary btn-edit"
                                 data-path="<?= htmlspecialchars($f['path']) ?>"
                                 data-name="<?= htmlspecialchars($f['name']) ?>"
+                                data-ext="<?= htmlspecialchars($f['ext']) ?>"
                                 title="Editar">
                                 <i class="bi bi-pencil"></i>
                             </button>
@@ -221,8 +240,8 @@ function formatBytes(int $bytes): string {
                 <h5 class="modal-title"><i class="bi bi-pencil me-2"></i><span id="editor-title"></span></h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body p-2">
-                <textarea class="form-control editor-textarea" id="editor-content" spellcheck="false"></textarea>
+            <div class="modal-body p-0" style="overflow:hidden">
+                <textarea id="editor-content" style="display:none"></textarea>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
@@ -275,11 +294,11 @@ function formatBytes(int $bytes): string {
                 </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body p-0" style="overflow:auto">
+            <div class="modal-body p-0" style="overflow:hidden">
                 <div id="texto-loading" class="text-center text-muted py-5" style="display:none">
                     <div class="spinner-border spinner-border-sm me-2"></div>Carregando...
                 </div>
-                <pre id="texto-content" style="margin:0;padding:16px;font-size:13px;line-height:1.6;min-height:100%;background:#fafafa;border:0;white-space:pre-wrap;word-break:break-word"></pre>
+                <div id="texto-cm-viewer"></div>
             </div>
         </div>
     </div>
@@ -467,39 +486,68 @@ function formatBytes(int $bytes): string {
         document.getElementById('renomear-input').value = '';
     });
 
+    // ── CodeMirror helpers ───────────────────────────────────────────────
+    function getCmMode(ext) {
+        var modes = {
+            'js':'javascript','json':'application/json',
+            'php':'application/x-httpd-php',
+            'py':'python',
+            'sql':'text/x-sql',
+            'sh':'shell','conf':'shell','cfg':'shell',
+            'xml':'xml',
+            'html':'htmlmixed',
+            'css':'css',
+            'md':'markdown',
+            'ini':'text/x-properties','properties':'text/x-properties',
+        };
+        return modes[ext] || 'text/plain';
+    }
+
+    var editorCm  = null;
+    var viewerCm  = null;
+    var editorExt = '';
+
     // ── Visualizar Texto ──────────────────────────────────────────────────
     document.addEventListener('click', async function(e) {
         var btn = e.target.closest('.btn-view-text');
         if (!btn) return;
-        var path = btn.dataset.path;
-        var name = btn.dataset.name;
-        var preEl    = document.getElementById('texto-content');
+        var path     = btn.dataset.path;
+        var name     = btn.dataset.name;
+        var ext      = (btn.dataset.ext || name.split('.').pop()).toLowerCase();
         var loadEl   = document.getElementById('texto-loading');
         var titleEl  = document.getElementById('texto-title');
         document.getElementById('texto-download-link').href = '<?= url('/samba/arquivos/download') ?>?path=' + encodeURIComponent(path);
         document.getElementById('texto-download-link').setAttribute('download', name);
-        document.getElementById('texto-edit-link').href = '#';
         document.getElementById('texto-edit-link').onclick = function() {
             bootstrap.Modal.getInstance(document.getElementById('modalTexto')).hide();
-            document.querySelector('.btn-edit[data-path="' + path.replace(/"/g,'\\"') + '"]')?.click();
+            setTimeout(function() { document.querySelector('.btn-edit[data-path="' + path.replace(/"/g,'\\"') + '"]')?.click(); }, 300);
         };
         titleEl.textContent = name;
-        preEl.textContent   = '';
         loadEl.style.display = 'block';
+        var container = document.getElementById('texto-cm-viewer');
+        container.innerHTML = '';
+        if (viewerCm) { try { viewerCm.toTextArea(); } catch(x){} viewerCm = null; }
         bootstrap.Modal.getOrCreateInstance(document.getElementById('modalTexto')).show();
         try {
             var res  = await fetch(URL_LER + '?path=' + encodeURIComponent(path));
             var data = await res.json();
             loadEl.style.display = 'none';
-            preEl.textContent = data.success ? data.content : ('Erro: ' + data.message);
+            var content = data.success ? data.content : ('Erro: ' + data.message);
+            viewerCm = CodeMirror(container, {
+                value: content, mode: getCmMode(ext),
+                theme: 'monokai', lineNumbers: true,
+                readOnly: true, lineWrapping: true,
+                autofocus: false,
+            });
+            viewerCm.setSize('100%', 'calc(85vh - 90px)');
         } catch(ex) {
             loadEl.style.display = 'none';
-            preEl.textContent = 'Erro ao carregar o arquivo.';
+            container.textContent = 'Erro ao carregar o arquivo.';
         }
     });
 
     document.getElementById('modalTexto').addEventListener('hidden.bs.modal', function() {
-        document.getElementById('texto-content').textContent = '';
+        if (viewerCm) { try { viewerCm.setValue(''); } catch(x){} }
     });
 
     // ── Visualizar PDF ───────────────────────────────────────────────────
@@ -526,20 +574,42 @@ function formatBytes(int $bytes): string {
         var btn = e.target.closest('.btn-edit');
         if (!btn) return;
         editorPath = btn.dataset.path;
+        editorExt  = (btn.dataset.ext || btn.dataset.name.split('.').pop()).toLowerCase();
         document.getElementById('editor-title').textContent = btn.dataset.name;
-        document.getElementById('editor-content').value = 'Carregando...';
         bootstrap.Modal.getOrCreateInstance(document.getElementById('modalEditor')).show();
         try {
-            var res = await fetch(URL_LER + '?path=' + encodeURIComponent(editorPath));
+            var res  = await fetch(URL_LER + '?path=' + encodeURIComponent(editorPath));
             var data = await res.json();
-            document.getElementById('editor-content').value = data.success ? data.content : ('Erro: ' + data.message);
-        } catch(e) {
-            document.getElementById('editor-content').value = 'Erro ao carregar arquivo.';
+            var content = data.success ? data.content : ('Erro: ' + data.message);
+            if (editorCm) {
+                editorCm.setValue(content);
+                editorCm.setOption('mode', getCmMode(editorExt));
+                editorCm.clearHistory();
+                editorCm.refresh();
+            } else {
+                document.getElementById('editor-content').value = content;
+            }
+        } catch(ex) {
+            var fallback = 'Erro ao carregar arquivo.';
+            if (editorCm) editorCm.setValue(fallback);
+            else document.getElementById('editor-content').value = fallback;
         }
     });
 
+    document.getElementById('modalEditor').addEventListener('shown.bs.modal', function() {
+        if (!editorCm) {
+            editorCm = CodeMirror.fromTextArea(document.getElementById('editor-content'), {
+                theme: 'monokai', lineNumbers: true, lineWrapping: true,
+            });
+            editorCm.setSize('100%', 'calc(85vh - 130px)');
+        }
+        editorCm.setOption('mode', getCmMode(editorExt));
+        editorCm.refresh();
+        editorCm.focus();
+    });
+
     document.getElementById('btn-salvar-editor').addEventListener('click', async function() {
-        var content = document.getElementById('editor-content').value;
+        var content = editorCm ? editorCm.getValue() : document.getElementById('editor-content').value;
         try {
             var fd = new FormData(); fd.append('path', editorPath); fd.append('content', content);
             var res = await fetch(URL_SALVAR, {method:'POST', body:fd});
