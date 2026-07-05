@@ -46,19 +46,23 @@ class SambaGrupoService
             ];
         }
 
-        $stmtShares = $this->pdo->query("SELECT nome, grupo FROM samba_compartilhamentos ORDER BY nome");
+        $stmtShares = $this->pdo->query("SELECT id, nome, grupo FROM samba_compartilhamentos ORDER BY nome");
         foreach ($stmtShares->fetchAll(PDO::FETCH_ASSOC) as $row) {
-            $grupos[$row['grupo']]['compartilhamentos'][] = $row['nome'];
+            $grupos[$row['grupo']]['compartilhamentos'][] = [
+                'id' => $row['id'],
+                'nome' => $row['nome'],
+            ];
         }
 
         $stmtUsers = $this->pdo->query("
-            SELECT nome, login, departamento
+            SELECT id, nome, login, departamento
             FROM samba_usuarios
             WHERE status = 'ativo'
             ORDER BY nome
         ");
         foreach ($stmtUsers->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $grupos[$row['departamento']]['usuarios'][] = [
+                'id' => $row['id'],
                 'nome' => $row['nome'],
                 'login' => $row['login'],
             ];

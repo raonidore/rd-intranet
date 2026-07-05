@@ -27,6 +27,7 @@ ob_start();
                     <th>Grupo</th>
                     <th>Compartilhamentos</th>
                     <th>Usuários</th>
+                    <th class="text-end">Ações</th>
                 </tr>
             </thead>
             <tbody>
@@ -37,8 +38,11 @@ ob_start();
                             <?php if (empty($g['compartilhamentos'])): ?>
                                 <span class="text-muted">Nenhum</span>
                             <?php else: ?>
-                                <?php foreach ($g['compartilhamentos'] as $nome): ?>
-                                    <span class="badge text-bg-secondary"><?= htmlspecialchars($nome) ?></span>
+                                <?php foreach ($g['compartilhamentos'] as $c): ?>
+                                    <a href="<?= url('/samba/compartilhamentos/editar?id=' . $c['id']) ?>"
+                                       class="badge text-bg-secondary text-decoration-none">
+                                        <?= htmlspecialchars($c['nome']) ?>
+                                    </a>
                                 <?php endforeach; ?>
                             <?php endif; ?>
                         </td>
@@ -47,10 +51,45 @@ ob_start();
                                 <span class="text-muted">Nenhum</span>
                             <?php else: ?>
                                 <?php foreach ($g['usuarios'] as $u): ?>
-                                    <span class="badge text-bg-light border" title="<?= htmlspecialchars($u['login']) ?>">
+                                    <a href="<?= url('/samba/usuarios/editar?id=' . $u['id']) ?>"
+                                       class="badge text-bg-light border text-decoration-none" title="<?= htmlspecialchars($u['login']) ?>">
                                         <?= htmlspecialchars($u['nome']) ?>
-                                    </span>
+                                    </a>
                                 <?php endforeach; ?>
+                            <?php endif; ?>
+                        </td>
+                        <td class="text-end">
+                            <?php if (empty($g['compartilhamentos']) && empty($g['usuarios'])): ?>
+                                <span class="text-muted">-</span>
+                            <?php else: ?>
+                                <div class="dropdown">
+                                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                        <i class="bi bi-three-dots"></i>
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end">
+                                        <?php if (!empty($g['compartilhamentos'])): ?>
+                                            <li><h6 class="dropdown-header">Editar compartilhamento</h6></li>
+                                            <?php foreach ($g['compartilhamentos'] as $c): ?>
+                                                <li>
+                                                    <a class="dropdown-item" href="<?= url('/samba/compartilhamentos/editar?id=' . $c['id']) ?>">
+                                                        <i class="bi bi-folder2-open"></i> <?= htmlspecialchars($c['nome']) ?>
+                                                    </a>
+                                                </li>
+                                            <?php endforeach; ?>
+                                        <?php endif; ?>
+                                        <?php if (!empty($g['usuarios'])): ?>
+                                            <?php if (!empty($g['compartilhamentos'])): ?><li><hr class="dropdown-divider"></li><?php endif; ?>
+                                            <li><h6 class="dropdown-header">Editar usuário</h6></li>
+                                            <?php foreach ($g['usuarios'] as $u): ?>
+                                                <li>
+                                                    <a class="dropdown-item" href="<?= url('/samba/usuarios/editar?id=' . $u['id']) ?>">
+                                                        <i class="bi bi-person"></i> <?= htmlspecialchars($u['nome']) ?>
+                                                    </a>
+                                                </li>
+                                            <?php endforeach; ?>
+                                        <?php endif; ?>
+                                    </ul>
+                                </div>
                             <?php endif; ?>
                         </td>
                     </tr>

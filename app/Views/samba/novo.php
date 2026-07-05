@@ -14,7 +14,7 @@ ob_start();
     </div>
 
     <div class="card-body">
-        <form method="post" action="<?= url('/samba/usuarios/novo') ?>">
+        <form method="post" action="<?= url('/samba/usuarios/novo') ?>" id="formNovoUsuario">
             <div class="mb-3">
                 <label class="form-label">Nome completo</label>
                 <input type="text" name="nome" class="form-control" required>
@@ -27,13 +27,19 @@ ob_start();
 
             <div class="mb-3">
                 <label class="form-label">Grupo</label>
-                <input type="text" name="grupo" class="form-control" list="grupos-existentes" required>
-                <datalist id="grupos-existentes">
+                <select name="grupo" id="grupo_select" class="form-select" onchange="rdAlternarNovoGrupo(this)" required>
+                    <option value="" disabled selected>Selecione...</option>
                     <?php foreach ($grupos as $grupo): ?>
-                        <option value="<?= htmlspecialchars($grupo) ?>">
+                        <option value="<?= htmlspecialchars($grupo) ?>"><?= htmlspecialchars($grupo) ?></option>
                     <?php endforeach; ?>
-                </datalist>
-                <small class="text-muted">Grupo Linux do usuário. Escolha um já existente ou digite um novo (é criado automaticamente).</small>
+                    <option value="__novo__">+ Novo grupo (digitar)</option>
+                </select>
+
+                <div id="bloco_novo_grupo" class="mt-2" style="display:none">
+                    <input type="text" id="grupo_texto" class="form-control" placeholder="Nome do novo grupo">
+                </div>
+
+                <small class="text-muted">Grupo Linux do usuário. Escolha um já existente na lista ou "+ Novo grupo" para criar um (o grupo é criado automaticamente no sistema).</small>
             </div>
 
             <div class="mb-3">
@@ -59,6 +65,28 @@ ob_start();
         </form>
     </div>
 </div>
+
+<script>
+function rdAlternarNovoGrupo(select) {
+    document.getElementById('bloco_novo_grupo').style.display = select.value === '__novo__' ? '' : 'none';
+}
+
+document.getElementById('formNovoUsuario').addEventListener('submit', function (e) {
+    const select = document.getElementById('grupo_select');
+
+    if (select.value === '__novo__') {
+        const digitado = document.getElementById('grupo_texto').value.trim().toLowerCase();
+
+        if (!digitado) {
+            e.preventDefault();
+            alert('Digite o nome do novo grupo.');
+            return;
+        }
+
+        select.add(new Option(digitado, digitado, true, true));
+    }
+});
+</script>
 
 <?php
 $conteudo = ob_get_clean();

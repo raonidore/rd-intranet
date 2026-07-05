@@ -23,7 +23,7 @@ ob_start();
             </div>
         </div>
 
-        <form method="post" action="<?= url('/samba/usuarios/editar') ?>">
+        <form method="post" action="<?= url('/samba/usuarios/editar') ?>" id="formEditarUsuario">
             <input type="hidden" name="id" value="<?= htmlspecialchars($usuarioSamba['id']) ?>">
 
             <div class="mb-3">
@@ -39,14 +39,24 @@ ob_start();
 
             <div class="mb-3">
                 <label class="form-label">Grupo</label>
-                <input type="text" name="departamento" class="form-control" list="grupos-existentes"
-                       value="<?= htmlspecialchars($usuarioSamba['departamento']) ?>" required>
-                <datalist id="grupos-existentes">
+                <select name="departamento" id="grupo_select" class="form-select" onchange="rdAlternarNovoGrupo(this)">
+                    <?php $grupoAtual = $usuarioSamba['departamento']; ?>
                     <?php foreach ($grupos as $grupo): ?>
-                        <option value="<?= htmlspecialchars($grupo) ?>">
+                        <option value="<?= htmlspecialchars($grupo) ?>" <?= $grupoAtual === $grupo ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($grupo) ?>
+                        </option>
                     <?php endforeach; ?>
-                </datalist>
-                <small class="text-muted">Grupo Linux do usuário. Escolha um já existente ou digite um novo (é criado automaticamente).</small>
+                    <option value="__novo__" <?= !in_array($grupoAtual, $grupos, true) ? 'selected' : '' ?>>
+                        + Novo grupo (digitar)
+                    </option>
+                </select>
+
+                <div id="bloco_novo_grupo" class="mt-2" style="<?= in_array($grupoAtual, $grupos, true) ? 'display:none' : '' ?>">
+                    <input type="text" id="grupo_texto" class="form-control" placeholder="Nome do novo grupo"
+                           value="<?= !in_array($grupoAtual, $grupos, true) ? htmlspecialchars($grupoAtual) : '' ?>">
+                </div>
+
+                <small class="text-muted">Grupo Linux do usuário. Escolha um já existente na lista ou "+ Novo grupo" para criar um (o grupo é criado automaticamente no sistema).</small>
             </div>
 
             <div class="mb-3">
@@ -67,6 +77,28 @@ ob_start();
         </form>
     </div>
 </div>
+
+<script>
+function rdAlternarNovoGrupo(select) {
+    document.getElementById('bloco_novo_grupo').style.display = select.value === '__novo__' ? '' : 'none';
+}
+
+document.getElementById('formEditarUsuario').addEventListener('submit', function (e) {
+    const select = document.getElementById('grupo_select');
+
+    if (select.value === '__novo__') {
+        const digitado = document.getElementById('grupo_texto').value.trim().toLowerCase();
+
+        if (!digitado) {
+            e.preventDefault();
+            alert('Digite o nome do novo grupo.');
+            return;
+        }
+
+        select.add(new Option(digitado, digitado, true, true));
+    }
+});
+</script>
 
 <?php
 $conteudo = ob_get_clean();
