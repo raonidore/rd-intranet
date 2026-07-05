@@ -260,6 +260,65 @@ class SambaArquivosController extends Controller
         ));
     }
 
+    // ── Listar só diretórios (para o folder picker) ───────────────────────
+    public function listarDirs(): void
+    {
+        AuthMiddleware::check();
+        header('Content-Type: application/json');
+
+        $rel  = $this->validarRel($_GET['path'] ?? '');
+        if ($rel === null) { echo json_encode(['error' => 'Caminho inválido']); return; }
+
+        $raw  = trim($this->scriptOutput('/opt/rdtecnologia/scripts/lista_arquivos_samba_web.sh', [$rel]));
+        $list = json_decode($raw, true);
+
+        if (!is_array($list) || isset($list['error'])) {
+            echo json_encode(['error' => $list['error'] ?? 'Erro ao listar']); return;
+        }
+
+        $dirs = array_values(array_filter($list, fn($i) => $i['type'] === 'dir'));
+
+        echo json_encode([
+            'path' => $rel,
+            'dirs' => array_map(fn($d) => [
+                'name' => $d['name'],
+                'path' => $rel ? $rel . '/' . $d['name'] : $d['name'],
+            ], $dirs),
+        ]);
+    }
+
+    // ── Copiar ────────────────────────────────────────────────────────────
+    public function copiar(): void
+    {
+        AuthMiddleware::check();
+        header('Content-Type: application/json');
+
+        $src     = $this->validarRel($_POST['src']      ?? '');
+        $destDir = $this->validarRel($_POST['dest_dir'] ?? '');
+
+        if ($src === null || $destDir === null) {
+            echo json_encode(['success' => false, 'message' => 'Caminho inválido.']); return;
+        }
+
+        echo json_encode($this->jsonOutput('/opt/rdtecnologia/scripts/copiar_arquivo_samba_web.sh', [$src, $destDir]));
+    }
+
+    // ── Mover ─────────────────────────────────────────────────────────────
+    public function mover(): void
+    {
+        AuthMiddleware::check();
+        header('Content-Type: application/json');
+
+        $src     = $this->validarRel($_POST['src']      ?? '');
+        $destDir = $this->validarRel($_POST['dest_dir'] ?? '');
+
+        if ($src === null || $destDir === null) {
+            echo json_encode(['success' => false, 'message' => 'Caminho inválido.']); return;
+        }
+
+        echo json_encode($this->jsonOutput('/opt/rdtecnologia/scripts/mover_arquivo_samba_web.sh', [$src, $destDir]));
+    }
+
     // ── Criar novo arquivo ────────────────────────────────────────────────
     public function criarArquivo(): void
     {

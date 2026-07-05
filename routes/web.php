@@ -60,6 +60,9 @@ $router->get('/samba/arquivos/visualizar', [SambaArquivosController::class, 'vis
 $router->get('/samba/arquivos/ler', [SambaArquivosController::class, 'ler']);
 $router->post('/samba/arquivos/salvar', [SambaArquivosController::class, 'salvar']);
 $router->post('/samba/arquivos/upload', [SambaArquivosController::class, 'upload']);
+$router->get('/samba/arquivos/listar-dirs', [SambaArquivosController::class, 'listarDirs']);
+$router->post('/samba/arquivos/copiar', [SambaArquivosController::class, 'copiar']);
+$router->post('/samba/arquivos/mover', [SambaArquivosController::class, 'mover']);
 $router->post('/samba/arquivos/excluir', [SambaArquivosController::class, 'excluir']);
 $router->post('/samba/arquivos/renomear', [SambaArquivosController::class, 'renomear']);
 $router->post('/samba/arquivos/criar', [SambaArquivosController::class, 'criarArquivo']);

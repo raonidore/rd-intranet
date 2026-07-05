@@ -167,6 +167,18 @@ function formatBytes(int $bytes): string {
                             title="Renomear">
                             <i class="bi bi-pencil-square"></i>
                         </button>
+                        <button class="btn btn-sm btn-outline-secondary btn-copiar"
+                            data-path="<?= htmlspecialchars($f['path']) ?>"
+                            data-name="<?= htmlspecialchars($f['name']) ?>"
+                            title="Copiar para...">
+                            <i class="bi bi-copy"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary btn-mover"
+                            data-path="<?= htmlspecialchars($f['path']) ?>"
+                            data-name="<?= htmlspecialchars($f['name']) ?>"
+                            title="Mover para...">
+                            <i class="bi bi-arrows-move"></i>
+                        </button>
                         <button class="btn btn-sm btn-outline-danger btn-excluir"
                             data-path="<?= htmlspecialchars($f['path']) ?>"
                             data-name="<?= htmlspecialchars($f['name']) ?>"
@@ -280,6 +292,42 @@ function formatBytes(int $bytes): string {
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
                 <button type="button" class="btn btn-primary btn-sm" id="btn-salvar-editor">
                     <i class="bi bi-floppy me-1"></i>Salvar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Copiar / Mover -->
+<div class="modal fade" id="modalCopiarMover" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="cm-titulo"><i class="bi bi-copy me-2"></i>Copiar para...</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted mb-2" style="font-size:13px">
+                    <span id="cm-acao-label">Copiando</span>:
+                    <strong id="cm-src-nome"></strong>
+                </p>
+                <nav aria-label="breadcrumb" class="mb-2">
+                    <ol class="breadcrumb mb-0" id="cm-breadcrumb" style="font-size:13px"></ol>
+                </nav>
+                <div id="cm-folder-list" style="max-height:280px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px">
+                    <div class="text-center text-muted py-3" id="cm-loading">
+                        <div class="spinner-border spinner-border-sm me-1"></div> Carregando...
+                    </div>
+                </div>
+                <div class="mt-2 p-2 bg-light rounded d-flex align-items-center gap-2" style="font-size:12px">
+                    <i class="bi bi-folder-fill text-warning"></i>
+                    Destino: <strong id="cm-dest-label">Compartilhamentos</strong>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm" id="btn-confirmar-cm">
+                    <i class="bi bi-check me-1"></i><span id="cm-btn-label">Copiar aqui</span>
                 </button>
             </div>
         </div>
@@ -531,6 +579,115 @@ function formatBytes(int $bytes): string {
     const URL_RENOMEAR  = '<?= url('/samba/arquivos/renomear') ?>';
 
     let renomearPath = '';
+
+    // ── Copiar / Mover ───────────────────────────────────────────────────
+    const URL_LISTAR_DIRS = '<?= url('/samba/arquivos/listar-dirs') ?>';
+    const URL_COPIAR      = '<?= url('/samba/arquivos/copiar') ?>';
+    const URL_MOVER       = '<?= url('/samba/arquivos/mover') ?>';
+
+    var cmAction  = '';   // 'copiar' | 'mover'
+    var cmSrcPath = '';
+    var cmPickerPath = '';
+
+    async function cmCarregarPasta(path) {
+        cmPickerPath = path;
+        var listEl = document.getElementById('cm-folder-list');
+        var loadEl = document.getElementById('cm-loading');
+        listEl.innerHTML = '';
+        loadEl.style.display = 'block';
+        listEl.appendChild(loadEl);
+
+        // Breadcrumb
+        var bc = document.getElementById('cm-breadcrumb');
+        bc.innerHTML = '';
+        var crumbs = [{ name: 'Compartilhamentos', path: '' }];
+        if (path) {
+            var acc = '';
+            path.split('/').forEach(function(p) {
+                if (!p) return;
+                acc = acc ? acc + '/' + p : p;
+                crumbs.push({ name: p, path: acc });
+            });
+        }
+        crumbs.forEach(function(c, i) {
+            var li = document.createElement('li');
+            li.className = 'breadcrumb-item' + (i === crumbs.length - 1 ? ' active' : '');
+            if (i < crumbs.length - 1) {
+                li.innerHTML = '<a href="#" data-path="' + esc(c.path) + '">' + esc(c.name) + '</a>';
+                li.querySelector('a').addEventListener('click', function(e) { e.preventDefault(); cmCarregarPasta(c.path); });
+            } else {
+                li.textContent = c.name;
+            }
+            bc.appendChild(li);
+        });
+
+        // Destino label
+        document.getElementById('cm-dest-label').textContent = path ? path.split('/').pop() : 'Compartilhamentos';
+
+        try {
+            var res  = await fetch(URL_LISTAR_DIRS + '?path=' + encodeURIComponent(path));
+            var data = await res.json();
+            loadEl.style.display = 'none';
+
+            if (data.error) {
+                listEl.innerHTML = '<div class="text-danger p-3 small">' + esc(data.error) + '</div>';
+                return;
+            }
+
+            if (!data.dirs.length) {
+                listEl.innerHTML = '<div class="text-muted p-3 small"><i class="bi bi-folder2 me-1"></i>Nenhuma subpasta</div>';
+                return;
+            }
+
+            data.dirs.forEach(function(d) {
+                var item = document.createElement('div');
+                item.className = 'p-2 border-bottom d-flex align-items-center gap-2 cm-folder-item';
+                item.style.cssText = 'cursor:pointer;transition:.15s';
+                item.innerHTML = '<i class="bi bi-folder-fill text-warning"></i><span>' + esc(d.name) + '</span><i class="bi bi-chevron-right ms-auto text-muted"></i>';
+                item.addEventListener('mouseenter', function() { item.style.background = '#f8fafc'; });
+                item.addEventListener('mouseleave', function() { item.style.background = ''; });
+                item.addEventListener('click', function() { cmCarregarPasta(d.path); });
+                listEl.appendChild(item);
+            });
+        } catch(e) {
+            listEl.innerHTML = '<div class="text-danger p-3 small">Erro ao carregar pastas.</div>';
+        }
+    }
+
+    function cmAbrir(action, path, name) {
+        cmAction  = action;
+        cmSrcPath = path;
+        document.getElementById('cm-titulo').innerHTML =
+            (action === 'copiar' ? '<i class="bi bi-copy me-2"></i>Copiar para...' : '<i class="bi bi-arrows-move me-2"></i>Mover para...');
+        document.getElementById('cm-acao-label').textContent = action === 'copiar' ? 'Copiando' : 'Movendo';
+        document.getElementById('cm-src-nome').textContent = name;
+        document.getElementById('cm-btn-label').textContent = action === 'copiar' ? 'Copiar aqui' : 'Mover aqui';
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalCopiarMover')).show();
+        cmCarregarPasta('');
+    }
+
+    document.addEventListener('click', function(e) {
+        var bc = e.target.closest('.btn-copiar');
+        if (bc) { cmAbrir('copiar', bc.dataset.path, bc.dataset.name); return; }
+        var bm = e.target.closest('.btn-mover');
+        if (bm) { cmAbrir('mover', bm.dataset.path, bm.dataset.name); }
+    });
+
+    document.getElementById('btn-confirmar-cm').addEventListener('click', async function() {
+        var url = cmAction === 'copiar' ? URL_COPIAR : URL_MOVER;
+        try {
+            var fd = new FormData();
+            fd.append('src',      cmSrcPath);
+            fd.append('dest_dir', cmPickerPath);
+            var res  = await fetch(url, { method: 'POST', body: fd });
+            var data = await res.json();
+            showToast(data.message, data.success);
+            if (data.success) {
+                bootstrap.Modal.getInstance(document.getElementById('modalCopiarMover')).hide();
+                if (cmAction === 'mover') setTimeout(function() { location.reload(); }, 700);
+            }
+        } catch(e) { showToast('Erro ao executar operação.', false); }
+    });
 
     // ── Renomear ─────────────────────────────────────────────────────────
     document.addEventListener('click', function(e) {
