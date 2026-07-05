@@ -87,6 +87,9 @@ $titulo = $titulo ?? 'RD Intranet';
         <i class="bi bi-folder2-open me-2"></i> Compartilhamentos
     </a>
 
+    <a href="<?= url('/samba/monitor') ?>">
+        <i class="bi bi-display me-2"></i> Monitor
+    </a>
     <a href="<?= url('/samba/diagnostico') ?>">
         <i class="bi bi-activity me-2"></i> Diagnóstico
     </a>

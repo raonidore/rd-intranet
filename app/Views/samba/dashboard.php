@@ -185,6 +185,7 @@ $inconsistencias = count($shares['orfaos_linux']) + count($shares['ausentes_linu
                     <th>Compartilhamento</th>
                     <th>Banco</th>
                     <th>Linux</th>
+                    <th>Tamanho</th>
                     <th>Estado</th>
                 </tr>
             </thead>
@@ -194,6 +195,7 @@ $inconsistencias = count($shares['orfaos_linux']) + count($shares['ausentes_linu
                         <td><?= htmlspecialchars($s['nome']) ?></td>
                         <td><span class="badge bg-success">OK</span></td>
                         <td><span class="badge bg-success">OK</span></td>
+                        <td><?= htmlspecialchars($s['linux']['tamanho'] ?? 'N/A') ?></td>
                         <td>Sincronizado</td>
                     </tr>
                 <?php endforeach; ?>
@@ -203,6 +205,7 @@ $inconsistencias = count($shares['orfaos_linux']) + count($shares['ausentes_linu
                         <td><?= htmlspecialchars($p['nome']) ?></td>
                         <td><span class="badge bg-secondary">Ausente</span></td>
                         <td><span class="badge bg-warning text-dark">Existe</span></td>
+                        <td><?= htmlspecialchars($p['tamanho'] ?? 'N/A') ?></td>
                         <td>Pasta órfã</td>
                     </tr>
                 <?php endforeach; ?>
@@ -212,6 +215,7 @@ $inconsistencias = count($shares['orfaos_linux']) + count($shares['ausentes_linu
                         <td><?= htmlspecialchars($c['nome']) ?></td>
                         <td><span class="badge bg-success">OK</span></td>
                         <td><span class="badge bg-danger">Ausente</span></td>
+                        <td>-</td>
                         <td>Compartilhamento sem pasta</td>
                     </tr>
                 <?php endforeach; ?>

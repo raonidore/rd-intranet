@@ -112,14 +112,15 @@ class SambaDiagnosticoService
                 continue;
             }
 
-            [$nome, $path, $owner, $grupo, $modo] = array_pad(explode('|', $linha), 5, '');
+            [$nome, $path, $owner, $grupo, $modo, $tamanho] = array_pad(explode('|', $linha), 6, '');
 
             $pastas[] = [
-                'nome' => $nome,
-                'path' => $path,
-                'owner' => $owner,
-                'grupo' => $grupo,
-                'modo' => $modo,
+                'nome'    => trim($nome),
+                'path'    => trim($path),
+                'owner'   => trim($owner),
+                'grupo'   => trim($grupo),
+                'modo'    => trim($modo),
+                'tamanho' => trim($tamanho) ?: '-',
             ];
         }
 
