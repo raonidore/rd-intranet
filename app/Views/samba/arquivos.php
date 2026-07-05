@@ -314,11 +314,7 @@ function formatBytes(int $bytes): string {
                 <nav aria-label="breadcrumb" class="mb-2">
                     <ol class="breadcrumb mb-0" id="cm-breadcrumb" style="font-size:13px"></ol>
                 </nav>
-                <div id="cm-folder-list" style="max-height:280px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px">
-                    <div class="text-center text-muted py-3" id="cm-loading">
-                        <div class="spinner-border spinner-border-sm me-1"></div> Carregando...
-                    </div>
-                </div>
+                <div id="cm-folder-list" style="max-height:280px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px"></div>
                 <div class="mt-2 p-2 bg-light rounded d-flex align-items-center gap-2" style="font-size:12px">
                     <i class="bi bi-folder-fill text-warning"></i>
                     Destino: <strong id="cm-dest-label">Compartilhamentos</strong>
@@ -589,15 +585,7 @@ function formatBytes(int $bytes): string {
     var cmSrcPath = '';
     var cmPickerPath = '';
 
-    async function cmCarregarPasta(path) {
-        cmPickerPath = path;
-        var listEl = document.getElementById('cm-folder-list');
-        var loadEl = document.getElementById('cm-loading');
-        listEl.innerHTML = '';
-        loadEl.style.display = 'block';
-        listEl.appendChild(loadEl);
-
-        // Breadcrumb
+    function cmBreadcrumb(path) {
         var bc = document.getElementById('cm-breadcrumb');
         bc.innerHTML = '';
         var crumbs = [{ name: 'Compartilhamentos', path: '' }];
@@ -613,44 +601,67 @@ function formatBytes(int $bytes): string {
             var li = document.createElement('li');
             li.className = 'breadcrumb-item' + (i === crumbs.length - 1 ? ' active' : '');
             if (i < crumbs.length - 1) {
-                li.innerHTML = '<a href="#" data-path="' + esc(c.path) + '">' + esc(c.name) + '</a>';
+                li.innerHTML = '<a href="#">' + esc(c.name) + '</a>';
                 li.querySelector('a').addEventListener('click', function(e) { e.preventDefault(); cmCarregarPasta(c.path); });
             } else {
                 li.textContent = c.name;
             }
             bc.appendChild(li);
         });
-
-        // Destino label
         document.getElementById('cm-dest-label').textContent = path ? path.split('/').pop() : 'Compartilhamentos';
+    }
+
+    async function cmCarregarPasta(path) {
+        cmPickerPath = path;
+        cmBreadcrumb(path);
+
+        var listEl = document.getElementById('cm-folder-list');
+        listEl.innerHTML = '<div class="text-center text-muted py-3"><div class="spinner-border spinner-border-sm me-2"></div>Carregando...</div>';
 
         try {
             var res  = await fetch(URL_LISTAR_DIRS + '?path=' + encodeURIComponent(path));
             var data = await res.json();
-            loadEl.style.display = 'none';
 
             if (data.error) {
-                listEl.innerHTML = '<div class="text-danger p-3 small">' + esc(data.error) + '</div>';
+                listEl.innerHTML = '<div class="text-danger p-3 small"><i class="bi bi-exclamation-circle me-1"></i>' + esc(data.error) + '</div>';
                 return;
             }
 
-            if (!data.dirs.length) {
-                listEl.innerHTML = '<div class="text-muted p-3 small"><i class="bi bi-folder2 me-1"></i>Nenhuma subpasta</div>';
+            listEl.innerHTML = '';
+
+            // Botão "Subir" se não estiver na raiz
+            if (path) {
+                var parent = path.indexOf('/') !== -1 ? path.substring(0, path.lastIndexOf('/')) : '';
+                var upItem = document.createElement('div');
+                upItem.className = 'p-2 border-bottom d-flex align-items-center gap-2';
+                upItem.style.cssText = 'cursor:pointer;transition:background .15s;color:#6b7280';
+                upItem.innerHTML = '<i class="bi bi-arrow-up-circle text-secondary"></i><span>.. Subir</span>';
+                upItem.addEventListener('mouseenter', function() { upItem.style.background = '#f1f5f9'; });
+                upItem.addEventListener('mouseleave', function() { upItem.style.background = ''; });
+                upItem.addEventListener('click', function() { cmCarregarPasta(parent); });
+                listEl.appendChild(upItem);
+            }
+
+            if (!data.dirs || !data.dirs.length) {
+                var emptyEl = document.createElement('div');
+                emptyEl.className = 'text-muted p-3 small';
+                emptyEl.innerHTML = '<i class="bi bi-folder2 me-1"></i>Nenhuma subpasta aqui';
+                listEl.appendChild(emptyEl);
                 return;
             }
 
             data.dirs.forEach(function(d) {
                 var item = document.createElement('div');
-                item.className = 'p-2 border-bottom d-flex align-items-center gap-2 cm-folder-item';
-                item.style.cssText = 'cursor:pointer;transition:.15s';
-                item.innerHTML = '<i class="bi bi-folder-fill text-warning"></i><span>' + esc(d.name) + '</span><i class="bi bi-chevron-right ms-auto text-muted"></i>';
+                item.className = 'p-2 border-bottom d-flex align-items-center gap-2';
+                item.style.cssText = 'cursor:pointer;transition:background .15s';
+                item.innerHTML = '<i class="bi bi-folder-fill text-warning"></i><span class="flex-grow-1">' + esc(d.name) + '</span><i class="bi bi-chevron-right text-muted" style="font-size:11px"></i>';
                 item.addEventListener('mouseenter', function() { item.style.background = '#f8fafc'; });
                 item.addEventListener('mouseleave', function() { item.style.background = ''; });
                 item.addEventListener('click', function() { cmCarregarPasta(d.path); });
                 listEl.appendChild(item);
             });
-        } catch(e) {
-            listEl.innerHTML = '<div class="text-danger p-3 small">Erro ao carregar pastas.</div>';
+        } catch(ex) {
+            listEl.innerHTML = '<div class="text-danger p-3 small"><i class="bi bi-exclamation-circle me-1"></i>Erro ao carregar pastas.</div>';
         }
     }
 
@@ -662,9 +673,13 @@ function formatBytes(int $bytes): string {
         document.getElementById('cm-acao-label').textContent = action === 'copiar' ? 'Copiando' : 'Movendo';
         document.getElementById('cm-src-nome').textContent = name;
         document.getElementById('cm-btn-label').textContent = action === 'copiar' ? 'Copiar aqui' : 'Mover aqui';
-        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalCopiarMover')).show();
-        cmCarregarPasta('');
+        var modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalCopiarMover'));
+        modal.show();
     }
+
+    document.getElementById('modalCopiarMover').addEventListener('shown.bs.modal', function() {
+        cmCarregarPasta('');
+    });
 
     document.addEventListener('click', function(e) {
         var bc = e.target.closest('.btn-copiar');
