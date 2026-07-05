@@ -19,7 +19,7 @@ $titulo = $titulo ?? 'RD Intranet';
         body { background:#f4f6f9; }
         .sidebar {
             width:260px;
-            min-height:100vh;
+            height:100vh;
             position:fixed;
             left:0;
             top:0;
