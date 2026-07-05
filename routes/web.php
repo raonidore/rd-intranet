@@ -12,6 +12,7 @@ use App\Controllers\SambaDiagnosticoController;
 use App\Controllers\SambaLixeiraController;
 use App\Controllers\SambaDashboardController;
 use App\Controllers\SambaMonitorController;
+use App\Controllers\SambaArquivosController;
 
 $router->get('/', [DashboardController::class, 'index']);
 $router->get('/dashboard', [DashboardController::class, 'index']);
@@ -52,6 +53,14 @@ $router->get('/samba/dashboard', [SambaDashboardController::class, 'index']);
 $router->get('/samba/monitor', [SambaMonitorController::class, 'index']);
 $router->get('/samba/monitor/api', [SambaMonitorController::class, 'api']);
 $router->post('/samba/monitor/encerrar', [SambaMonitorController::class, 'encerrar']);
+
+$router->get('/samba/arquivos', [SambaArquivosController::class, 'index']);
+$router->get('/samba/arquivos/download', [SambaArquivosController::class, 'download']);
+$router->get('/samba/arquivos/ler', [SambaArquivosController::class, 'ler']);
+$router->post('/samba/arquivos/salvar', [SambaArquivosController::class, 'salvar']);
+$router->post('/samba/arquivos/upload', [SambaArquivosController::class, 'upload']);
+$router->post('/samba/arquivos/excluir', [SambaArquivosController::class, 'excluir']);
+$router->post('/samba/arquivos/pasta', [SambaArquivosController::class, 'criarPasta']);
 
 $router->get('/infraestrutura/servicos', [InfrastructureController::class, 'servicos']);
 $router->get('/infraestrutura/servicos/reiniciar', [InfrastructureController::class, 'reiniciar']);
