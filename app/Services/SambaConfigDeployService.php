@@ -26,8 +26,8 @@ class SambaConfigDeployService
         $writer = new SambaConfigWriter();
         $validator = new SambaValidator();
 
-        $config = $generator->generate($shares);
-        $tempFile = $writer->writeTemp($config);
+        $gerado = $generator->generate($shares);
+        $tempFile = $writer->writeTemp($gerado['conteudo']);
 
         $validacao = $validator->validateFile('/etc/samba/smb.conf');
 
@@ -38,9 +38,17 @@ class SambaConfigDeployService
             ];
         }
 
-        return $this->linux->executarScript(
+        $resultado = $this->linux->executarScript(
             '/opt/rdtecnologia/scripts/apply_shares_conf_web.sh',
             [$tempFile]
         );
+
+        if (!empty($gerado['ignorados'])) {
+            $resultado['output'] = "Compartilhamentos ignorados (grupo inexistente no sistema):\n"
+                . implode("\n", $gerado['ignorados'])
+                . "\n\n" . $resultado['output'];
+        }
+
+        return $resultado;
     }
 }

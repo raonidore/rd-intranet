@@ -63,4 +63,18 @@ class LinuxService
 
         return $grupos;
     }
+
+    /**
+     * Verifica se um grupo Linux existe.
+     */
+    public function grupoExiste(string $grupo): bool
+    {
+        exec(
+            "getent group " . escapeshellarg($grupo) . " >/dev/null 2>&1",
+            $o,
+            $ret
+        );
+
+        return $ret === 0;
+    }
 }

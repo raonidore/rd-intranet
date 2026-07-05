@@ -101,6 +101,18 @@ class SambaCompartilhamentoService
             return false;
         }
 
+        if ($dados['grupo'] !== $compartilhamento['grupo']) {
+            $resultadoLinux = $this->linux->executarScript(
+                '/opt/rdtecnologia/scripts/altera_grupo_compartilhamento_web.sh',
+                [$compartilhamento['caminho'], $dados['grupo']]
+            );
+
+            if (!$resultadoLinux['success']) {
+                NotificationService::error('Erro ao alterar o grupo no sistema.', $resultadoLinux['output']);
+                return false;
+            }
+        }
+
         $this->repository->atualizar($id, $dados);
 
         (new DeployCenterService())->marcarPendente(
