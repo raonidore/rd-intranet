@@ -540,6 +540,7 @@ function formatBytes(int $bytes): string {
                 autofocus: false,
             });
             viewerCm.setSize('100%', 'calc(85vh - 90px)');
+            setTimeout(function() { viewerCm.refresh(); }, 50);
         } catch(ex) {
             loadEl.style.display = 'none';
             container.textContent = 'Erro ao carregar o arquivo.';
@@ -548,6 +549,10 @@ function formatBytes(int $bytes): string {
 
     document.getElementById('modalTexto').addEventListener('hidden.bs.modal', function() {
         if (viewerCm) { try { viewerCm.setValue(''); } catch(x){} }
+    });
+
+    document.getElementById('modalTexto').addEventListener('shown.bs.modal', function() {
+        if (viewerCm) { viewerCm.refresh(); }
     });
 
     // ── Visualizar PDF ───────────────────────────────────────────────────
