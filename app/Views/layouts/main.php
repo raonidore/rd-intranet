@@ -138,6 +138,39 @@ $titulo = $titulo ?? 'RD Intranet';
     </a>
     <?php endif; ?>
 
+    <?php if (
+        PermissionService::temAcesso('apache_dashboard') ||
+        PermissionService::temAcesso('apache_sites') ||
+        PermissionService::temAcesso('apache_modulos') ||
+        PermissionService::temAcesso('apache_config')
+    ): ?>
+    <div class="menu-section">Apache</div>
+
+    <?php if (PermissionService::temAcesso('apache_dashboard')): ?>
+    <a href="<?= url('/apache/dashboard') ?>">
+        <i class="bi bi-speedometer2 me-2"></i> Dashboard Apache
+    </a>
+    <?php endif; ?>
+
+    <?php if (PermissionService::temAcesso('apache_sites')): ?>
+    <a href="<?= url('/apache/sites') ?>">
+        <i class="bi bi-globe me-2"></i> Sites
+    </a>
+    <?php endif; ?>
+
+    <?php if (PermissionService::temAcesso('apache_modulos')): ?>
+    <a href="<?= url('/apache/modulos') ?>">
+        <i class="bi bi-puzzle me-2"></i> Módulos
+    </a>
+    <?php endif; ?>
+
+    <?php if (PermissionService::temAcesso('apache_config')): ?>
+    <a href="<?= url('/apache/configuracao') ?>">
+        <i class="bi bi-sliders me-2"></i> Config. Global Apache
+    </a>
+    <?php endif; ?>
+    <?php endif; ?>
+
     <div class="menu-section">Infraestrutura</div>
 
     <?php if (PermissionService::temAcesso('infra_servidor')): ?>

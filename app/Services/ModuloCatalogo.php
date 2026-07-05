@@ -17,6 +17,10 @@ class ModuloCatalogo
         'samba_config' => ['label' => 'Config. Global Samba', 'grupo' => 'Samba'],
         'infra_servidor' => ['label' => 'Servidor', 'grupo' => 'Infraestrutura'],
         'infra_servicos' => ['label' => 'Serviços', 'grupo' => 'Infraestrutura'],
+        'apache_dashboard' => ['label' => 'Dashboard Apache', 'grupo' => 'Apache'],
+        'apache_sites' => ['label' => 'Sites (VirtualHosts)', 'grupo' => 'Apache'],
+        'apache_modulos' => ['label' => 'Módulos Apache', 'grupo' => 'Apache'],
+        'apache_config' => ['label' => 'Config. Global Apache', 'grupo' => 'Apache'],
         'auditoria' => ['label' => 'Auditoria', 'grupo' => 'Segurança'],
     ];
 

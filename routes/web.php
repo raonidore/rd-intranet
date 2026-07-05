@@ -18,6 +18,10 @@ use App\Controllers\SambaMonitorController;
 use App\Controllers\SambaArquivosController;
 use App\Controllers\UserController;
 use App\Controllers\SambaGrupoController;
+use App\Controllers\ApacheController;
+use App\Controllers\ApacheSiteController;
+use App\Controllers\ApacheModuloController;
+use App\Controllers\ApacheConfiguracaoController;
 
 $router->get('/', [DashboardController::class, 'index']);
 $router->get('/dashboard', [DashboardController::class, 'index']);
@@ -100,6 +104,21 @@ $router->post('/deploy/configuracoes', [DeployCenterController::class, 'salvarCo
 $router->get('/samba/configuracao', [SambaConfiguracaoController::class, 'index']);
 $router->post('/samba/configuracao/salvar', [SambaConfiguracaoController::class, 'salvar']);
 $router->post('/samba/configuracao/restaurar', [SambaConfiguracaoController::class, 'restaurarBackup']);
+
+$router->get('/apache/dashboard', [ApacheController::class, 'dashboard']);
+
+$router->get('/apache/sites', [ApacheSiteController::class, 'index']);
+$router->get('/apache/sites/ver', [ApacheSiteController::class, 'ver']);
+$router->post('/apache/sites/habilitar', [ApacheSiteController::class, 'habilitar']);
+$router->post('/apache/sites/desabilitar', [ApacheSiteController::class, 'desabilitar']);
+
+$router->get('/apache/modulos', [ApacheModuloController::class, 'index']);
+$router->post('/apache/modulos/habilitar', [ApacheModuloController::class, 'habilitar']);
+$router->post('/apache/modulos/desabilitar', [ApacheModuloController::class, 'desabilitar']);
+
+$router->get('/apache/configuracao', [ApacheConfiguracaoController::class, 'index']);
+$router->post('/apache/configuracao/salvar', [ApacheConfiguracaoController::class, 'salvar']);
+$router->post('/apache/configuracao/restaurar', [ApacheConfiguracaoController::class, 'restaurarBackup']);
 
 $router->get('/auditoria', [AuditoriaController::class, 'index']);
 
