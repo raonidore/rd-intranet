@@ -90,6 +90,12 @@ $titulo = $titulo ?? 'RD Intranet';
     </a>
     <?php endif; ?>
 
+    <?php if (PermissionService::temAcesso('samba_grupos')): ?>
+    <a href="<?= url('/samba/grupos') ?>">
+        <i class="bi bi-collection me-2"></i> Grupos
+    </a>
+    <?php endif; ?>
+
     <?php if (PermissionService::temAcesso('samba_compartilhamentos')): ?>
     <a href="<?= url('/samba/compartilhamentos') ?>">
         <i class="bi bi-folder2-open me-2"></i> Compartilhamentos

@@ -8,11 +8,13 @@ class SambaService
 {
     private SambaUsuarioRepository $repository;
     private LinuxService $linux;
+    private SambaGrupoService $grupoService;
 
     public function __construct()
     {
         $this->repository = new SambaUsuarioRepository();
         $this->linux = new LinuxService();
+        $this->grupoService = new SambaGrupoService();
     }
 
     public function listarUsuarios(): array
@@ -37,7 +39,7 @@ class SambaService
 
     public function gruposDisponiveis(): array
     {
-        return $this->repository->gruposEmUso();
+        return $this->grupoService->listarNomes();
     }
 
     public function alterarSenha(int $id, string $senha, string $confirmacao): void

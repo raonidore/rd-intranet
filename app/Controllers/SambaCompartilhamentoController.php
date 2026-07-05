@@ -5,14 +5,17 @@ namespace App\Controllers;
 use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
 use App\Services\SambaCompartilhamentoService;
+use App\Services\SambaGrupoService;
 
 class SambaCompartilhamentoController extends Controller
 {
     private SambaCompartilhamentoService $service;
+    private SambaGrupoService $grupoService;
 
     public function __construct()
     {
         $this->service = new SambaCompartilhamentoService();
+        $this->grupoService = new SambaGrupoService();
     }
 
     public function index(): void
@@ -35,7 +38,9 @@ class SambaCompartilhamentoController extends Controller
     {
         AuthMiddleware::checkModulo('samba_compartilhamentos');
 
-        $this->view('samba/compartilhamento_novo');
+        $this->view('samba/compartilhamento_novo', [
+            'grupos' => $this->grupoService->listarNomes(),
+        ]);
     }
 
     public function novo(): void
@@ -84,7 +89,8 @@ class SambaCompartilhamentoController extends Controller
         }
 
         $this->view('samba/compartilhamento_editar', [
-            'compartilhamento' => $compartilhamento
+            'compartilhamento' => $compartilhamento,
+            'grupos' => $this->grupoService->listarNomes(),
         ]);
     }
 

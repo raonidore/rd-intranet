@@ -17,6 +17,7 @@ use App\Controllers\SambaDashboardController;
 use App\Controllers\SambaMonitorController;
 use App\Controllers\SambaArquivosController;
 use App\Controllers\UserController;
+use App\Controllers\SambaGrupoController;
 
 $router->get('/', [DashboardController::class, 'index']);
 $router->get('/dashboard', [DashboardController::class, 'index']);
@@ -28,6 +29,7 @@ $router->get('/logout', [AuthController::class, 'logout']);
 $router->get('/samba/usuarios', [SambaController::class, 'usuarios']);
 $router->get('/samba/usuarios/novo', [SambaController::class, 'novoForm']);
 $router->post('/samba/usuarios/novo', [SambaController::class, 'novo']);
+$router->get('/samba/grupos', [SambaGrupoController::class, 'index']);
 $router->get('/samba/usuarios/editar', [SambaController::class, 'editarForm']);
 $router->post('/samba/usuarios/editar', [SambaController::class, 'editar']);
 $router->get('/samba/usuarios/senha', [SambaController::class, 'alterarSenhaForm']);

@@ -7,6 +7,7 @@ class ModuloCatalogo
     private const MODULOS = [
         'samba_dashboard' => ['label' => 'Dashboard Samba', 'grupo' => 'Samba'],
         'samba_usuarios' => ['label' => 'Usuários Samba', 'grupo' => 'Samba'],
+        'samba_grupos' => ['label' => 'Grupos Samba', 'grupo' => 'Samba'],
         'samba_compartilhamentos' => ['label' => 'Compartilhamentos', 'grupo' => 'Samba'],
         'samba_monitor' => ['label' => 'Monitor', 'grupo' => 'Samba'],
         'samba_arquivos' => ['label' => 'Arquivos', 'grupo' => 'Samba'],

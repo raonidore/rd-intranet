@@ -22,7 +22,13 @@
 
             <div class="mb-3">
                 <label class="form-label">Grupo Linux</label>
-                <input type="text" name="grupo" class="form-control" value="<?= htmlspecialchars($compartilhamento['grupo']) ?>" required>
+                <input type="text" name="grupo" class="form-control" list="grupos-existentes" value="<?= htmlspecialchars($compartilhamento['grupo']) ?>" required>
+                <datalist id="grupos-existentes">
+                    <?php foreach ($grupos as $grupo): ?>
+                        <option value="<?= htmlspecialchars($grupo) ?>">
+                    <?php endforeach; ?>
+                </datalist>
+                <small class="text-muted">Trocar o grupo re-aplica o dono da pasta no sistema (chown) ao salvar.</small>
             </div>
 
             <div class="mb-4">

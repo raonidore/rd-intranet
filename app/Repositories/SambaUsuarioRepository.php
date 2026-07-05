@@ -176,18 +176,4 @@ class SambaUsuarioRepository
             ->fetchColumn();
     }
 
-    /**
-     * Grupos em uso hoje por compartilhamentos (são os que fazem sentido
-     * atribuir a um usuário, já que só eles dão acesso a algum caminho real).
-     */
-    public function gruposEmUso(): array
-    {
-        $stmt = $this->pdo->query("
-            SELECT DISTINCT grupo
-              FROM samba_compartilhamentos
-             ORDER BY grupo
-        ");
-
-        return $stmt->fetchAll(PDO::FETCH_COLUMN);
-    }
 }

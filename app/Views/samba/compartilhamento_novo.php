@@ -23,7 +23,13 @@ ob_start();
 
             <div class="mb-3">
                 <label class="form-label">Grupo Linux</label>
-                <input type="text" id="grupo" name="grupo" class="form-control" placeholder="Ex: rh" required>
+                <input type="text" id="grupo" name="grupo" class="form-control" list="grupos-existentes" placeholder="Ex: rh" required>
+                <datalist id="grupos-existentes">
+                    <?php foreach ($grupos as $grupo): ?>
+                        <option value="<?= htmlspecialchars($grupo) ?>">
+                    <?php endforeach; ?>
+                </datalist>
+                <small class="text-muted">Se escolher um grupo já existente, o compartilhamento passa a ser acessado por quem já está nele. Se digitar um nome novo, o grupo é criado automaticamente.</small>
             </div>
 
             <div class="mb-3">
