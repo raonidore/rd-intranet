@@ -15,7 +15,7 @@ class SambaMonitorService
         $smbdata = json_decode($jsonRaw, true) ?? [];
 
         return [
-            'generated_at'  => date('Y-m-d H:i:s'),
+            'generated_at'  => date('d/m/Y H:i:s'),
             'sessions'      => $this->parseSessions($smbdata),
             'shares_ativos' => $this->parseShares($smbdata),
             'open_files'    => $this->parseOpenFiles($smbdata),

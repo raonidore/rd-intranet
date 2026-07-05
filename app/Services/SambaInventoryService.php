@@ -24,7 +24,7 @@ class SambaInventoryService
         $diagnostico = $this->diagnostico->executar();
 
         return [
-            'generated_at' => date('Y-m-d H:i:s'),
+            'generated_at' => date('d/m/Y H:i:s'),
             'services' => $diagnostico['servicos'],
             'shares' => $diagnostico['comparacao'],
             'folders' => $diagnostico['pastas'],

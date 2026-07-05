@@ -35,7 +35,7 @@ $pendente = (int)($samba['alteracoes_pendentes'] ?? 0) === 1;
 
                     <strong>
 
-                        <?= $samba['ultimo_deploy'] ?? 'Nunca' ?>
+                        <?= isset($samba['ultimo_deploy']) && $samba['ultimo_deploy'] ? date('d/m/Y H:i:s', strtotime($samba['ultimo_deploy'])) : 'Nunca' ?>
 
                     </strong>
 
@@ -47,7 +47,7 @@ $pendente = (int)($samba['alteracoes_pendentes'] ?? 0) === 1;
 
                     <strong>
 
-                        <?= $samba['ultimo_backup'] ?? '-' ?>
+                        <?= isset($samba['ultimo_backup']) && $samba['ultimo_backup'] ? date('d/m/Y H:i:s', strtotime($samba['ultimo_backup'])) : '-' ?>
 
                     </strong>
 
