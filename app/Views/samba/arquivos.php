@@ -408,6 +408,12 @@ function formatBytes(int $bytes): string {
 (function() {
     const PATH_ATUAL = '<?= addslashes($pathAtual) ?>';
     const URL_UPLOAD = '<?= url('/samba/arquivos/upload') ?>';
+
+    function esc(str) {
+        var d = document.createElement('div');
+        d.textContent = (str == null || str === '') ? '' : String(str);
+        return d.innerHTML;
+    }
     const URL_EXCLUIR = '<?= url('/samba/arquivos/excluir') ?>';
     const URL_PASTA = '<?= url('/samba/arquivos/pasta') ?>';
     const URL_LER = '<?= url('/samba/arquivos/ler') ?>';
