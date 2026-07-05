@@ -125,6 +125,12 @@ function formatBytes(int $bytes): string {
                                 <i class="bi bi-download"></i>
                             </a>
                             <?php if ($f['editable']): ?>
+                            <button class="btn btn-sm btn-outline-info btn-view-text"
+                                data-path="<?= htmlspecialchars($f['path']) ?>"
+                                data-name="<?= htmlspecialchars($f['name']) ?>"
+                                title="Visualizar">
+                                <i class="bi bi-eye"></i>
+                            </button>
                             <button class="btn btn-sm btn-outline-secondary btn-edit"
                                 data-path="<?= htmlspecialchars($f['path']) ?>"
                                 data-name="<?= htmlspecialchars($f['name']) ?>"
@@ -245,6 +251,35 @@ function formatBytes(int $bytes): string {
                 <button type="button" class="btn btn-primary btn-sm" id="btn-confirmar-renomear">
                     <i class="bi bi-check me-1"></i>Renomear
                 </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Visualizador Texto -->
+<div class="modal fade" id="modalTexto" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" style="max-width:88vw">
+        <div class="modal-content" style="height:85vh">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0">
+                    <i class="bi bi-file-earmark-text me-2 text-secondary"></i>
+                    <span id="texto-title"></span>
+                </h6>
+                <div class="d-flex gap-2 align-items-center ms-auto me-2">
+                    <a id="texto-download-link" href="#" class="btn btn-sm btn-outline-primary" download>
+                        <i class="bi bi-download me-1"></i>Download
+                    </a>
+                    <a id="texto-edit-link" href="#" class="btn btn-sm btn-outline-secondary">
+                        <i class="bi bi-pencil me-1"></i>Editar
+                    </a>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0" style="overflow:auto">
+                <div id="texto-loading" class="text-center text-muted py-5" style="display:none">
+                    <div class="spinner-border spinner-border-sm me-2"></div>Carregando...
+                </div>
+                <pre id="texto-content" style="margin:0;padding:16px;font-size:13px;line-height:1.6;min-height:100%;background:#fafafa;border:0;white-space:pre-wrap;word-break:break-word"></pre>
             </div>
         </div>
     </div>
@@ -430,6 +465,41 @@ function formatBytes(int $bytes): string {
 
     document.getElementById('modalRenomear').addEventListener('hidden.bs.modal', function() {
         document.getElementById('renomear-input').value = '';
+    });
+
+    // ── Visualizar Texto ──────────────────────────────────────────────────
+    document.addEventListener('click', async function(e) {
+        var btn = e.target.closest('.btn-view-text');
+        if (!btn) return;
+        var path = btn.dataset.path;
+        var name = btn.dataset.name;
+        var preEl    = document.getElementById('texto-content');
+        var loadEl   = document.getElementById('texto-loading');
+        var titleEl  = document.getElementById('texto-title');
+        document.getElementById('texto-download-link').href = '<?= url('/samba/arquivos/download') ?>?path=' + encodeURIComponent(path);
+        document.getElementById('texto-download-link').setAttribute('download', name);
+        document.getElementById('texto-edit-link').href = '#';
+        document.getElementById('texto-edit-link').onclick = function() {
+            bootstrap.Modal.getInstance(document.getElementById('modalTexto')).hide();
+            document.querySelector('.btn-edit[data-path="' + path.replace(/"/g,'\\"') + '"]')?.click();
+        };
+        titleEl.textContent = name;
+        preEl.textContent   = '';
+        loadEl.style.display = 'block';
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalTexto')).show();
+        try {
+            var res  = await fetch(URL_LER + '?path=' + encodeURIComponent(path));
+            var data = await res.json();
+            loadEl.style.display = 'none';
+            preEl.textContent = data.success ? data.content : ('Erro: ' + data.message);
+        } catch(ex) {
+            loadEl.style.display = 'none';
+            preEl.textContent = 'Erro ao carregar o arquivo.';
+        }
+    });
+
+    document.getElementById('modalTexto').addEventListener('hidden.bs.modal', function() {
+        document.getElementById('texto-content').textContent = '';
     });
 
     // ── Visualizar PDF ───────────────────────────────────────────────────
