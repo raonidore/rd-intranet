@@ -19,7 +19,7 @@ class SambaConfiguracaoController extends Controller
 
     public function index(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_config');
 
         $this->view('samba/configuracao', [
             'config'  => $this->service->lerConfigAtual(),
@@ -30,7 +30,7 @@ class SambaConfiguracaoController extends Controller
 
     public function salvar(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_config');
 
         $params  = $this->extrairParametros($_POST);
         $resultado = $this->service->aplicar($params);
@@ -48,7 +48,7 @@ class SambaConfiguracaoController extends Controller
 
     public function restaurarBackup(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_config');
         header('Content-Type: application/json');
 
         $arquivo  = trim($_POST['arquivo'] ?? '');

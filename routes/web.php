@@ -16,6 +16,7 @@ use App\Controllers\SambaLixeiraController;
 use App\Controllers\SambaDashboardController;
 use App\Controllers\SambaMonitorController;
 use App\Controllers\SambaArquivosController;
+use App\Controllers\UserController;
 
 $router->get('/', [DashboardController::class, 'index']);
 $router->get('/dashboard', [DashboardController::class, 'index']);
@@ -95,3 +96,15 @@ $router->post('/samba/configuracao/salvar', [SambaConfiguracaoController::class,
 $router->post('/samba/configuracao/restaurar', [SambaConfiguracaoController::class, 'restaurarBackup']);
 
 $router->get('/auditoria', [AuditoriaController::class, 'index']);
+
+$router->get('/administracao/usuarios', [UserController::class, 'index']);
+$router->get('/administracao/usuarios/novo', [UserController::class, 'novoForm']);
+$router->post('/administracao/usuarios/novo', [UserController::class, 'novo']);
+$router->get('/administracao/usuarios/editar', [UserController::class, 'editarForm']);
+$router->post('/administracao/usuarios/editar', [UserController::class, 'editar']);
+$router->get('/administracao/usuarios/senha', [UserController::class, 'senhaForm']);
+$router->post('/administracao/usuarios/senha', [UserController::class, 'senha']);
+$router->get('/administracao/usuarios/ativar', [UserController::class, 'ativar']);
+$router->get('/administracao/usuarios/desativar', [UserController::class, 'desativar']);
+$router->get('/administracao/usuarios/excluir', [UserController::class, 'excluirForm']);
+$router->post('/administracao/usuarios/excluir', [UserController::class, 'excluir']);

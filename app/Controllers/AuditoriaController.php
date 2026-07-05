@@ -10,7 +10,7 @@ class AuditoriaController extends Controller
 {
     public function index(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('auditoria');
 
         $service = new AuditoriaService();
 

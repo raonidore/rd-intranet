@@ -17,7 +17,7 @@ class SambaDiagnosticoController extends Controller
 
     public function index(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_diagnostico');
 
         $diagnostico = $this->service->executar();
         $achadosLogs = $this->service->interpretarLogs($diagnostico['logs']);

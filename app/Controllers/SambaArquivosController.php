@@ -70,7 +70,7 @@ class SambaArquivosController extends Controller
     // ── Listagem ─────────────────────────────────────────────────────────
     public function index(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_arquivos');
 
         $rel = $this->validarRel($_GET['path'] ?? '');
         if ($rel === null) {
@@ -119,7 +119,7 @@ class SambaArquivosController extends Controller
     // ── Download ─────────────────────────────────────────────────────────
     public function download(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_arquivos');
 
         $rel = $this->validarRel($_GET['path'] ?? '');
         if ($rel === null) {
@@ -138,7 +138,7 @@ class SambaArquivosController extends Controller
     // ── Visualizar PDF ────────────────────────────────────────────────────
     public function visualizar(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_arquivos');
 
         $rel = $this->validarRel($_GET['path'] ?? '');
         if ($rel === null) {
@@ -163,7 +163,7 @@ class SambaArquivosController extends Controller
     // ── Ler conteúdo (para editor) ────────────────────────────────────────
     public function ler(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_arquivos');
         header('Content-Type: application/json');
 
         $rel = $this->validarRel($_GET['path'] ?? '');
@@ -183,7 +183,7 @@ class SambaArquivosController extends Controller
     // ── Salvar texto editado ──────────────────────────────────────────────
     public function salvar(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_arquivos');
         header('Content-Type: application/json');
 
         $rel = $this->validarRel($_POST['path'] ?? '');
@@ -207,7 +207,7 @@ class SambaArquivosController extends Controller
     // ── Upload ────────────────────────────────────────────────────────────
     public function upload(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_arquivos');
         header('Content-Type: application/json');
 
         $rel = $this->validarRel($_POST['path'] ?? '');
@@ -241,7 +241,7 @@ class SambaArquivosController extends Controller
     // ── Excluir ───────────────────────────────────────────────────────────
     public function excluir(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_arquivos');
         header('Content-Type: application/json');
 
         $rel = $this->validarRel($_POST['path'] ?? '');
@@ -255,7 +255,7 @@ class SambaArquivosController extends Controller
     // ── Renomear ──────────────────────────────────────────────────────────
     public function renomear(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_arquivos');
         header('Content-Type: application/json');
 
         $rel      = $this->validarRel($_POST['path'] ?? '');
@@ -275,7 +275,7 @@ class SambaArquivosController extends Controller
     public function listarDirs(): void
     {
         ob_start();
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_arquivos');
 
         $rel  = $this->validarRel($_GET['path'] ?? '');
         if ($rel === null) {
@@ -303,7 +303,7 @@ class SambaArquivosController extends Controller
     // ── Copiar ────────────────────────────────────────────────────────────
     public function copiar(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_arquivos');
         header('Content-Type: application/json');
 
         $src     = $this->validarRel($_POST['src']      ?? '');
@@ -319,7 +319,7 @@ class SambaArquivosController extends Controller
     // ── Mover ─────────────────────────────────────────────────────────────
     public function mover(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_arquivos');
         header('Content-Type: application/json');
 
         $src     = $this->validarRel($_POST['src']      ?? '');
@@ -335,7 +335,7 @@ class SambaArquivosController extends Controller
     // ── Criar novo arquivo ────────────────────────────────────────────────
     public function criarArquivo(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_arquivos');
         header('Content-Type: application/json');
 
         $dirAtual = $this->validarRel($_POST['path'] ?? '');
@@ -360,7 +360,7 @@ class SambaArquivosController extends Controller
     // ── Criar pasta ───────────────────────────────────────────────────────
     public function criarPasta(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_arquivos');
         header('Content-Type: application/json');
 
         $dirAtual = $this->validarRel($_POST['path'] ?? '');

@@ -17,7 +17,7 @@ class SambaLixeiraController extends Controller
 
     public function index(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_lixeira');
 
         $this->view('samba/lixeira', [
             'itens' => $this->service->listar()
@@ -26,7 +26,7 @@ class SambaLixeiraController extends Controller
 
     public function restaurar(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_lixeira');
 
         $this->service->restaurar($_POST['nome'] ?? '');
 
@@ -36,7 +36,7 @@ class SambaLixeiraController extends Controller
 
     public function excluir(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_lixeira');
 
         $this->service->excluirDefinitivo($_POST['nome'] ?? '');
 

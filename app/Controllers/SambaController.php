@@ -17,7 +17,7 @@ class SambaController extends Controller
 
     public function usuarios(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_usuarios');
 
         $usuarios = $this->service->listarUsuarios();
         $dashboard = $this->service->dashboard();
@@ -32,7 +32,7 @@ class SambaController extends Controller
 
     public function alterarSenhaForm(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_usuarios');
 
         $id = (int)($_GET['id'] ?? 0);
         $usuario = $this->service->buscarUsuario($id);
@@ -49,7 +49,7 @@ class SambaController extends Controller
 
     public function alterarSenha(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_usuarios');
 
         $this->service->alterarSenha(
             (int)($_POST['id'] ?? 0),
@@ -63,7 +63,7 @@ class SambaController extends Controller
 
     public function editarForm(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_usuarios');
 
         $id = (int)($_GET['id'] ?? 0);
         $usuario = $this->service->buscarUsuario($id);
@@ -81,7 +81,7 @@ class SambaController extends Controller
 
     public function editar(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_usuarios');
 
         $this->service->editarUsuario(
             (int)($_POST['id'] ?? 0),
@@ -96,7 +96,7 @@ class SambaController extends Controller
 
     public function desativar(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_usuarios');
 
         $this->service->desativarUsuario((int)($_GET['id'] ?? 0));
 
@@ -106,7 +106,7 @@ class SambaController extends Controller
 
     public function ativar(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_usuarios');
 
         $this->service->ativarUsuario((int)($_GET['id'] ?? 0));
 
@@ -116,7 +116,7 @@ class SambaController extends Controller
 
     public function excluirForm(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_usuarios');
 
         $id = (int)($_GET['id'] ?? 0);
         $usuario = $this->service->buscarUsuario($id);
@@ -133,7 +133,7 @@ class SambaController extends Controller
 
     public function excluir(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_usuarios');
 
         $this->service->excluirUsuario((int)($_POST['id'] ?? 0));
 

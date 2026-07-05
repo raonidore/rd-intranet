@@ -17,7 +17,7 @@ class SambaCompartilhamentoController extends Controller
 
     public function index(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_compartilhamentos');
 
         $compartilhamentos = $this->service->listar();
         $dashboard = $this->service->dashboard();
@@ -33,14 +33,14 @@ class SambaCompartilhamentoController extends Controller
 
     public function novoForm(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_compartilhamentos');
 
         $this->view('samba/compartilhamento_novo');
     }
 
     public function novo(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_compartilhamentos');
 
         $nome = trim($_POST['nome'] ?? '');
         $descricao = trim($_POST['descricao'] ?? '');
@@ -72,7 +72,7 @@ class SambaCompartilhamentoController extends Controller
 
     public function editarForm(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_compartilhamentos');
 
         $id = (int)($_GET['id'] ?? 0);
 
@@ -90,7 +90,7 @@ class SambaCompartilhamentoController extends Controller
 
     public function editar(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_compartilhamentos');
 
         $id = (int)($_POST['id'] ?? 0);
 
@@ -115,7 +115,7 @@ class SambaCompartilhamentoController extends Controller
 
     public function usuariosForm(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_compartilhamentos');
 
         $id = (int)($_GET['id'] ?? 0);
 
@@ -135,7 +135,7 @@ class SambaCompartilhamentoController extends Controller
 
     public function usuariosSalvar(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_compartilhamentos');
 
         $id = (int)($_POST['id'] ?? 0);
 
@@ -153,7 +153,7 @@ class SambaCompartilhamentoController extends Controller
 
     public function segurancaForm(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_compartilhamentos');
 
         $id = (int)($_GET['id'] ?? 0);
 
@@ -171,7 +171,7 @@ class SambaCompartilhamentoController extends Controller
 
     public function segurancaSalvar(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_compartilhamentos');
 
         $id = (int)($_POST['id'] ?? 0);
 
@@ -195,7 +195,7 @@ class SambaCompartilhamentoController extends Controller
 
     public function excluirForm(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_compartilhamentos');
 
         $id = (int)($_GET['id'] ?? 0);
 
@@ -213,7 +213,7 @@ class SambaCompartilhamentoController extends Controller
 
     public function excluir(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_compartilhamentos');
 
         $id = (int)($_POST['id'] ?? 0);
 

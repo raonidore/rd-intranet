@@ -19,7 +19,7 @@ class SambaActionController extends Controller
 
     public function importarCompartilhamento(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_diagnostico');
 
         $payload = [
             'nome' => $_POST['nome'] ?? '',
@@ -38,7 +38,7 @@ class SambaActionController extends Controller
 
     public function moverPastaParaLixeira(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_diagnostico');
 
         $payload = [
             'nome' => $_POST['nome'] ?? '',

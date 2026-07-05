@@ -10,7 +10,7 @@ class SambaDashboardController extends Controller
 {
     public function index(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_dashboard');
 
         $inventory = (new SambaInventoryService())->snapshot();
 

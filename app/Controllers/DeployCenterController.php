@@ -20,7 +20,7 @@ class DeployCenterController extends Controller
 
     public function index(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('deploy');
 
         $samba      = $this->service->status('samba');
         $pendencias = $this->service->pendencias('samba');
@@ -37,7 +37,7 @@ class DeployCenterController extends Controller
 
     public function salvarConfiguracoes(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('deploy');
         header('Content-Type: application/json');
 
         $sanitize = static function (string $raw): string {
@@ -56,7 +56,7 @@ class DeployCenterController extends Controller
 
     public function aplicarSamba(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('deploy');
 
         $this->service->aplicarSamba();
 

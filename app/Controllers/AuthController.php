@@ -34,11 +34,15 @@ class AuthController extends Controller
 
         if ($usuario && password_verify($senha, $usuario['senha_hash'])) {
 
+            $stmtModulos = $pdo->prepare("SELECT modulo FROM usuario_modulos WHERE usuario_id = ?");
+            $stmtModulos->execute([$usuario['id']]);
+
             $_SESSION['usuario'] = [
                 'id'      => $usuario['id'],
                 'nome'    => $usuario['nome'],
                 'login'   => $usuario['login'],
-                'perfil'  => $usuario['perfil']
+                'perfil'  => $usuario['perfil'],
+                'modulos' => $stmtModulos->fetchAll(\PDO::FETCH_COLUMN)
             ];
 
             AuditService::registrar(

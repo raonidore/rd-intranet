@@ -19,7 +19,7 @@ class InfrastructureController extends Controller
 
     public function servicos(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('infra_servicos');
 
         $servicos = [];
 
@@ -38,7 +38,7 @@ class InfrastructureController extends Controller
 
     public function reiniciar(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('infra_servicos');
 
         $servico = $_GET['service'] ?? '';
 
@@ -50,7 +50,7 @@ class InfrastructureController extends Controller
 
     public function recarregar(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('infra_servicos');
 
         $servico = $_GET['service'] ?? '';
 
@@ -62,7 +62,7 @@ class InfrastructureController extends Controller
 
     public function logs(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('infra_servicos');
 
         $servico = $_GET['service'] ?? '';
 
@@ -76,7 +76,7 @@ class InfrastructureController extends Controller
 
     public function servicosConfigurar(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('infra_servicos');
 
         $this->view('infrastructure/servicos_configurar', [
             'catalogo' => $this->serviceManager->catalogoDisponivel(),
@@ -85,7 +85,7 @@ class InfrastructureController extends Controller
 
     public function servicosSalvar(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('infra_servicos');
 
         $selecionados = $_POST['unidades'] ?? [];
 

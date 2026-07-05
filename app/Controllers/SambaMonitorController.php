@@ -10,7 +10,7 @@ class SambaMonitorController extends Controller
 {
     public function index(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_monitor');
 
         $monitor = (new SambaMonitorService())->snapshot();
 
@@ -21,7 +21,7 @@ class SambaMonitorController extends Controller
 
     public function api(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_monitor');
 
         header('Content-Type: application/json');
         header('Cache-Control: no-cache');
@@ -31,7 +31,7 @@ class SambaMonitorController extends Controller
 
     public function encerrar(): void
     {
-        AuthMiddleware::check();
+        AuthMiddleware::checkModulo('samba_monitor');
 
         header('Content-Type: application/json');
 
