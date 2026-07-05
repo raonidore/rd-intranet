@@ -24,7 +24,6 @@ foreach ($autorizados as $a) {
                         <th>Login</th>
                         <th>Leitura</th>
                         <th>Escrita</th>
-                        <th>Exclusão</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -41,14 +40,11 @@ foreach ($autorizados as $a) {
                             <td>
                                 <input type="checkbox" name="usuarios[<?= $u['id'] ?>][escrita]" <?= $perm && (int)$perm['escrita'] ? 'checked' : '' ?>>
                             </td>
-
-                            <td>
-                                <input type="checkbox" name="usuarios[<?= $u['id'] ?>][exclusao]" <?= $perm && (int)$perm['exclusao'] ? 'checked' : '' ?>>
-                            </td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
             </table>
+            <small class="text-muted">Escrita já inclui poder apagar (a lixeira do compartilhamento sempre registra a exclusão, então não há um nível separado só de "excluir").</small>
 
             <button class="btn btn-primary"><i class="bi bi-save"></i> Salvar usuários</button>
             <a href="<?= url('/samba/compartilhamentos') ?>" class="btn btn-secondary">Voltar</a>

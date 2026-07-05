@@ -130,9 +130,28 @@ class SambaCompartilhamentoRepository
     public function usuariosAutorizados(int $compartilhamentoId): array
     {
         $stmt = $this->pdo->prepare("
-            SELECT usuario_id, leitura, escrita, exclusao
+            SELECT usuario_id, leitura, escrita
             FROM samba_compartilhamento_usuarios
             WHERE compartilhamento_id = ?
+        ");
+
+        $stmt->execute([$compartilhamentoId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Usuários autorizados com login (join com samba_usuarios), para gerar
+     * o "valid users" do smb.conf e a ACL real do compartilhamento.
+     */
+    public function usuariosAutorizadosComLogin(int $compartilhamentoId): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT su.login, cu.leitura, cu.escrita
+            FROM samba_compartilhamento_usuarios cu
+            JOIN samba_usuarios su ON su.id = cu.usuario_id
+            WHERE cu.compartilhamento_id = ?
+              AND su.status = 'ativo'
         ");
 
         $stmt->execute([$compartilhamentoId]);
@@ -151,8 +170,8 @@ class SambaCompartilhamentoRepository
 
         $insert = $this->pdo->prepare("
             INSERT INTO samba_compartilhamento_usuarios
-            (compartilhamento_id, usuario_id, leitura, escrita, exclusao)
-            VALUES (?, ?, ?, ?, ?)
+            (compartilhamento_id, usuario_id, leitura, escrita)
+            VALUES (?, ?, ?, ?)
         ");
 
         foreach ($usuarios as $usuario) {
@@ -161,7 +180,6 @@ class SambaCompartilhamentoRepository
                 $usuario['usuario_id'],
                 $usuario['leitura'],
                 $usuario['escrita'],
-                $usuario['exclusao'],
             ]);
         }
     }

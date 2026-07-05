@@ -172,14 +172,35 @@ class SambaCompartilhamentoService
         }
 
         $usuarios = [];
+        $tokensAcl = [];
 
         foreach (($post['usuarios'] ?? []) as $usuarioId => $permissoes) {
+            $leitura = isset($permissoes['leitura']) ? 1 : 0;
+            $escrita = isset($permissoes['escrita']) ? 1 : 0;
+
             $usuarios[] = [
                 'usuario_id' => (int)$usuarioId,
-                'leitura' => isset($permissoes['leitura']) ? 1 : 0,
-                'escrita' => isset($permissoes['escrita']) ? 1 : 0,
-                'exclusao' => isset($permissoes['exclusao']) ? 1 : 0,
+                'leitura' => $leitura,
+                'escrita' => $escrita,
             ];
+
+            if ($leitura || $escrita) {
+                $usuarioSamba = $this->usuarioRepository->buscarPorId((int)$usuarioId);
+
+                if ($usuarioSamba) {
+                    $tokensAcl[] = "{$usuarioSamba['login']}:{$leitura}:{$escrita}";
+                }
+            }
+        }
+
+        $resultadoAcl = $this->linux->executarScript(
+            '/opt/rdtecnologia/scripts/aplicar_acl_compartilhamento_web.sh',
+            array_merge([$compartilhamento['nome'], $compartilhamento['grupo']], $tokensAcl)
+        );
+
+        if (!$resultadoAcl['success']) {
+            NotificationService::error('Erro ao aplicar permissões no sistema.', $resultadoAcl['output']);
+            return false;
         }
 
         $this->repository->salvarUsuariosAutorizados($id, $usuarios);

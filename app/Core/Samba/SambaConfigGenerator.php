@@ -2,15 +2,18 @@
 
 namespace App\Core\Samba;
 
+use App\Repositories\SambaCompartilhamentoRepository;
 use App\Services\LinuxService;
 
 class SambaConfigGenerator
 {
     private LinuxService $linux;
+    private SambaCompartilhamentoRepository $repository;
 
-    public function __construct(?LinuxService $linux = null)
+    public function __construct(?LinuxService $linux = null, ?SambaCompartilhamentoRepository $repository = null)
     {
         $this->linux = $linux ?? new LinuxService();
+        $this->repository = $repository ?? new SambaCompartilhamentoRepository();
     }
 
     /**
@@ -38,7 +41,12 @@ class SambaConfigGenerator
                 continue;
             }
 
-            $config .= SambaTemplate::share($share);
+            $autorizados = array_column(
+                $this->repository->usuariosAutorizadosComLogin((int)$share['id']),
+                'login'
+            );
+
+            $config .= SambaTemplate::share($share, $autorizados);
         }
 
         return [

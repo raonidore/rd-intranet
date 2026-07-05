@@ -52,14 +52,17 @@ class SambaTemplate
 CONF;
     }
 
-    public static function share(array $share): string
+    public static function share(array $share, array $usuariosAutorizados = []): string
     {
         $nome = $share['nome'];
         $path = $share['caminho'];
         $grupo = $share['grupo'] ?? $share['grupo_linux'] ?? '';
         $readOnly = ((int)($share['somente_leitura'] ?? 0) === 1) ? 'yes' : 'no';
 
-        $validUsers = "@{$grupo} @ti";
+        // svc_acl_admin precisa conseguir conectar em todo compartilhamento para
+        // gerenciar a ACL via smbcacls (SeDiskOperatorPrivilege não dispensa
+        // "valid users" -- é uma checagem separada, feita antes do tree-connect).
+        $validUsers = trim("@{$grupo} @ti svc_acl_admin " . implode(' ', $usuariosAutorizados));
 
         $config = <<<CONF
 
@@ -70,6 +73,8 @@ CONF;
 
    valid users = $validUsers
    force group = $grupo
+
+   admin users = svc_acl_admin
 
    create mask = 0660
    directory mask = 2770
