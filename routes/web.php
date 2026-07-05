@@ -61,6 +61,7 @@ $router->get('/samba/arquivos/ler', [SambaArquivosController::class, 'ler']);
 $router->post('/samba/arquivos/salvar', [SambaArquivosController::class, 'salvar']);
 $router->post('/samba/arquivos/upload', [SambaArquivosController::class, 'upload']);
 $router->post('/samba/arquivos/excluir', [SambaArquivosController::class, 'excluir']);
+$router->post('/samba/arquivos/renomear', [SambaArquivosController::class, 'renomear']);
 $router->post('/samba/arquivos/pasta', [SambaArquivosController::class, 'criarPasta']);
 
 $router->get('/infraestrutura/servicos', [InfrastructureController::class, 'servicos']);

@@ -107,11 +107,19 @@ function formatBytes(int $bytes): string {
                         <?php endif; ?>
                     </td>
                     <td class="text-muted" style="font-size:13px">
-                        <?= $f['type'] === 'dir' ? '<i class="bi bi-folder2"></i>' : htmlspecialchars(formatBytes($f['size'])) ?>
+                        <?= htmlspecialchars(formatBytes($f['size'])) ?>
                     </td>
                     <td class="text-muted" style="font-size:13px"><?= htmlspecialchars($f['modified']) ?></td>
                     <td class="text-end fm-actions">
                         <?php if ($f['type'] === 'file'): ?>
+                            <?php if ($f['ext'] === 'pdf'): ?>
+                            <button class="btn btn-sm btn-outline-danger btn-view-pdf"
+                                data-path="<?= htmlspecialchars($f['path']) ?>"
+                                data-name="<?= htmlspecialchars($f['name']) ?>"
+                                title="Visualizar PDF">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                            <?php endif; ?>
                             <a href="<?= url('/samba/arquivos/download?path=' . urlencode($f['path'])) ?>"
                                class="btn btn-sm btn-outline-primary" title="Download">
                                 <i class="bi bi-download"></i>
@@ -125,6 +133,12 @@ function formatBytes(int $bytes): string {
                             </button>
                             <?php endif; ?>
                         <?php endif; ?>
+                        <button class="btn btn-sm btn-outline-secondary btn-renomear"
+                            data-path="<?= htmlspecialchars($f['path']) ?>"
+                            data-name="<?= htmlspecialchars($f['name']) ?>"
+                            title="Renomear">
+                            <i class="bi bi-pencil-square"></i>
+                        </button>
                         <button class="btn btn-sm btn-outline-danger btn-excluir"
                             data-path="<?= htmlspecialchars($f['path']) ?>"
                             data-name="<?= htmlspecialchars($f['name']) ?>"
@@ -209,6 +223,51 @@ function formatBytes(int $bytes): string {
                 <button type="button" class="btn btn-primary btn-sm" id="btn-salvar-editor">
                     <i class="bi bi-floppy me-1"></i>Salvar
                 </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Renomear -->
+<div class="modal fade" id="modalRenomear" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Renomear</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <label class="form-label text-muted" style="font-size:12px" id="renomear-label"></label>
+                <input type="text" class="form-control" id="renomear-input" placeholder="Novo nome">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm" id="btn-confirmar-renomear">
+                    <i class="bi bi-check me-1"></i>Renomear
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Visualizador PDF -->
+<div class="modal fade" id="modalPdf" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" style="max-width:90vw">
+        <div class="modal-content" style="height:90vh">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0">
+                    <i class="bi bi-file-earmark-pdf text-danger me-2"></i>
+                    <span id="pdf-title"></span>
+                </h6>
+                <div class="d-flex gap-2 align-items-center ms-auto me-2">
+                    <a id="pdf-download-link" href="#" class="btn btn-sm btn-outline-primary" download>
+                        <i class="bi bi-download me-1"></i>Download
+                    </a>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0" style="flex:1;overflow:hidden">
+                <iframe id="pdf-frame" src="" style="width:100%;height:100%;border:0;display:block"></iframe>
             </div>
         </div>
     </div>
@@ -330,6 +389,66 @@ function formatBytes(int $bytes): string {
 
     document.getElementById('nova-pasta-nome').addEventListener('keydown', function(e) {
         if (e.key === 'Enter') document.getElementById('btn-criar-pasta').click();
+    });
+
+    const URL_RENOMEAR  = '<?= url('/samba/arquivos/renomear') ?>';
+
+    let renomearPath = '';
+
+    // ── Renomear ─────────────────────────────────────────────────────────
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.btn-renomear');
+        if (!btn) return;
+        renomearPath = btn.dataset.path;
+        document.getElementById('renomear-label').textContent = btn.dataset.name;
+        var input = document.getElementById('renomear-input');
+        input.value = btn.dataset.name;
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalRenomear')).show();
+        setTimeout(function() { input.select(); }, 300);
+    });
+
+    document.getElementById('btn-confirmar-renomear').addEventListener('click', async function() {
+        var novoNome = document.getElementById('renomear-input').value.trim();
+        if (!novoNome) return;
+        try {
+            var fd = new FormData();
+            fd.append('path', renomearPath);
+            fd.append('nome', novoNome);
+            var res  = await fetch(URL_RENOMEAR, { method: 'POST', body: fd });
+            var data = await res.json();
+            showToast(data.message, data.success);
+            if (data.success) {
+                bootstrap.Modal.getInstance(document.getElementById('modalRenomear')).hide();
+                setTimeout(function() { location.reload(); }, 600);
+            }
+        } catch(e) { showToast('Erro ao renomear.', false); }
+    });
+
+    document.getElementById('renomear-input').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') document.getElementById('btn-confirmar-renomear').click();
+    });
+
+    document.getElementById('modalRenomear').addEventListener('hidden.bs.modal', function() {
+        document.getElementById('renomear-input').value = '';
+    });
+
+    // ── Visualizar PDF ───────────────────────────────────────────────────
+    const URL_VISUALIZAR = '<?= url('/samba/arquivos/visualizar') ?>';
+
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.btn-view-pdf');
+        if (!btn) return;
+        var path = btn.dataset.path;
+        var name = btn.dataset.name;
+        var url  = URL_VISUALIZAR + '?path=' + encodeURIComponent(path);
+        document.getElementById('pdf-title').textContent = name;
+        document.getElementById('pdf-frame').src = url;
+        document.getElementById('pdf-download-link').href = '<?= url('/samba/arquivos/download') ?>?path=' + encodeURIComponent(path);
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalPdf')).show();
+    });
+
+    document.getElementById('modalPdf').addEventListener('hidden.bs.modal', function() {
+        document.getElementById('pdf-frame').src = '';
     });
 
     // ── Editor ───────────────────────────────────────────────────────────

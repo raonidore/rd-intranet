@@ -224,6 +224,25 @@ class SambaArquivosController extends Controller
         echo json_encode($this->jsonOutput('/opt/rdtecnologia/scripts/excluir_arquivo_samba_web.sh', [$rel]));
     }
 
+    // ── Renomear ──────────────────────────────────────────────────────────
+    public function renomear(): void
+    {
+        AuthMiddleware::check();
+        header('Content-Type: application/json');
+
+        $rel      = $this->validarRel($_POST['path'] ?? '');
+        $novoNome = trim($_POST['nome'] ?? '');
+
+        if ($rel === null || $novoNome === '' || preg_match('/[<>:"\/\\\\|?*\x00-\x1f]/', $novoNome)) {
+            echo json_encode(['success' => false, 'message' => 'Nome inválido.']); return;
+        }
+
+        echo json_encode($this->jsonOutput(
+            '/opt/rdtecnologia/scripts/renomear_arquivo_samba_web.sh',
+            [$rel, $novoNome]
+        ));
+    }
+
     // ── Criar pasta ───────────────────────────────────────────────────────
     public function criarPasta(): void
     {
