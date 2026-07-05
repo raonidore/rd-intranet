@@ -107,6 +107,31 @@ class SambaArquivosController extends Controller
         exit;
     }
 
+    // ── Visualizar PDF ────────────────────────────────────────────────────
+    public function visualizar(): void
+    {
+        AuthMiddleware::check();
+
+        $rel = $this->validarRel($_GET['path'] ?? '');
+        if ($rel === null) {
+            http_response_code(400); exit('Caminho inválido.');
+        }
+
+        $ext = strtolower(pathinfo($rel, PATHINFO_EXTENSION));
+        if ($ext !== 'pdf') {
+            http_response_code(415); exit('Tipo de arquivo não suportado para visualização.');
+        }
+
+        $name = basename($rel);
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: inline; filename="' . rawurlencode($name) . '"');
+        header('Cache-Control: no-store');
+        header('X-Frame-Options: SAMEORIGIN');
+
+        passthru('sudo /opt/rdtecnologia/scripts/ler_arquivo_samba_web.sh ' . escapeshellarg($rel) . ' 2>/dev/null');
+        exit;
+    }
+
     // ── Ler conteúdo (para editor) ────────────────────────────────────────
     public function ler(): void
     {

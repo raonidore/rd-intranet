@@ -56,6 +56,7 @@ $router->post('/samba/monitor/encerrar', [SambaMonitorController::class, 'encerr
 
 $router->get('/samba/arquivos', [SambaArquivosController::class, 'index']);
 $router->get('/samba/arquivos/download', [SambaArquivosController::class, 'download']);
+$router->get('/samba/arquivos/visualizar', [SambaArquivosController::class, 'visualizar']);
 $router->get('/samba/arquivos/ler', [SambaArquivosController::class, 'ler']);
 $router->post('/samba/arquivos/salvar', [SambaArquivosController::class, 'salvar']);
 $router->post('/samba/arquivos/upload', [SambaArquivosController::class, 'upload']);
