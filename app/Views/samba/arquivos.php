@@ -79,6 +79,9 @@ function formatBytes(int $bytes): string {
         <button class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#modalNovaPasta">
             <i class="bi bi-folder-plus me-1"></i>Nova pasta
         </button>
+        <button class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#modalNovoArquivo">
+            <i class="bi bi-file-earmark-plus me-1"></i>Novo arquivo
+        </button>
     </div>
 </div>
 
@@ -232,6 +235,36 @@ function formatBytes(int $bytes): string {
     </div>
 </div>
 
+<!-- Modal Novo Arquivo -->
+<div class="modal fade" id="modalNovoArquivo" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" style="max-width:88vw">
+        <div class="modal-content" style="height:85vh">
+            <div class="modal-header py-2">
+                <h5 class="modal-title"><i class="bi bi-file-earmark-plus me-2"></i>Novo arquivo</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0 d-flex flex-column" style="overflow:hidden">
+                <div class="p-2 border-bottom bg-light d-flex align-items-center gap-2">
+                    <span class="text-muted" style="font-size:13px;white-space:nowrap">Nome do arquivo:</span>
+                    <input type="text" class="form-control form-control-sm" id="novo-arquivo-nome"
+                        placeholder="ex: relatorio.txt ou config.php" style="max-width:320px">
+                    <small class="text-muted" id="novo-arquivo-ext-hint"></small>
+                </div>
+                <div style="flex:1;overflow:hidden">
+                    <textarea id="novo-arquivo-content" style="display:none"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm" id="btn-salvar-novo-arquivo">
+                    <i class="bi bi-floppy me-1"></i>Criar e salvar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Novo Arquivo -->
 <!-- Modal Editor -->
 <div class="modal fade" id="modalEditor" tabindex="-1">
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
@@ -443,6 +476,56 @@ function formatBytes(int $bytes): string {
 
     document.getElementById('nova-pasta-nome').addEventListener('keydown', function(e) {
         if (e.key === 'Enter') document.getElementById('btn-criar-pasta').click();
+    });
+
+    // ── Novo arquivo ─────────────────────────────────────────────────────
+    const URL_CRIAR = '<?= url('/samba/arquivos/criar') ?>';
+    var novoCm = null;
+
+    document.getElementById('modalNovoArquivo').addEventListener('shown.bs.modal', function() {
+        if (!novoCm) {
+            novoCm = CodeMirror.fromTextArea(document.getElementById('novo-arquivo-content'), {
+                theme: 'monokai', lineNumbers: true, lineWrapping: true,
+            });
+            novoCm.setSize('100%', 'calc(85vh - 110px)');
+        }
+        novoCm.setOption('mode', 'text/plain');
+        novoCm.refresh();
+        novoCm.focus();
+        document.getElementById('novo-arquivo-nome').focus();
+    });
+
+    document.getElementById('modalNovoArquivo').addEventListener('hidden.bs.modal', function() {
+        document.getElementById('novo-arquivo-nome').value = '';
+        document.getElementById('novo-arquivo-ext-hint').textContent = '';
+        if (novoCm) novoCm.setValue('');
+    });
+
+    document.getElementById('novo-arquivo-nome').addEventListener('input', function() {
+        var ext = this.value.split('.').pop().toLowerCase();
+        var mode = getCmMode(ext);
+        if (novoCm) novoCm.setOption('mode', mode);
+        var hint = document.getElementById('novo-arquivo-ext-hint');
+        hint.textContent = (mode !== 'text/plain' && ext !== this.value) ? '(' + mode + ')' : '';
+    });
+
+    document.getElementById('btn-salvar-novo-arquivo').addEventListener('click', async function() {
+        var nome = document.getElementById('novo-arquivo-nome').value.trim();
+        if (!nome) { showToast('Informe o nome do arquivo.', false); return; }
+        var content = novoCm ? novoCm.getValue() : '';
+        try {
+            var fd = new FormData();
+            fd.append('path', PATH_ATUAL);
+            fd.append('nome', nome);
+            fd.append('content', content);
+            var res  = await fetch(URL_CRIAR, { method: 'POST', body: fd });
+            var data = await res.json();
+            showToast(data.message, data.success);
+            if (data.success) {
+                bootstrap.Modal.getInstance(document.getElementById('modalNovoArquivo')).hide();
+                setTimeout(function() { location.reload(); }, 600);
+            }
+        } catch(e) { showToast('Erro ao criar arquivo.', false); }
     });
 
     const URL_RENOMEAR  = '<?= url('/samba/arquivos/renomear') ?>';

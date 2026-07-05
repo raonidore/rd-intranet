@@ -260,6 +260,31 @@ class SambaArquivosController extends Controller
         ));
     }
 
+    // ── Criar novo arquivo ────────────────────────────────────────────────
+    public function criarArquivo(): void
+    {
+        AuthMiddleware::check();
+        header('Content-Type: application/json');
+
+        $dirAtual = $this->validarRel($_POST['path'] ?? '');
+        $nome     = trim($_POST['nome'] ?? '');
+
+        if ($dirAtual === null || $nome === '' || preg_match('/[<>:"\/\\\\|?*\x00-\x1f]/', $nome)) {
+            echo json_encode(['success' => false, 'message' => 'Nome de arquivo inválido.']); return;
+        }
+
+        $rel     = $dirAtual ? $dirAtual . '/' . $nome : $nome;
+        $content = $_POST['content'] ?? '';
+
+        $tmpfile = tempnam('/tmp', 'samba_new_');
+        file_put_contents($tmpfile, $content);
+
+        $result = $this->jsonOutput('/opt/rdtecnologia/scripts/salvar_arquivo_samba_web.sh', [$tmpfile, $rel]);
+        @unlink($tmpfile);
+
+        echo json_encode($result);
+    }
+
     // ── Criar pasta ───────────────────────────────────────────────────────
     public function criarPasta(): void
     {
