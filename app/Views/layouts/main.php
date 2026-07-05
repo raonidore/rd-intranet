@@ -108,6 +108,10 @@ $titulo = $titulo ?? 'RD Intranet';
 
     <div class="menu-section">Infraestrutura</div>
 
+    <a href="<?= url('/infraestrutura/servidor') ?>">
+        <i class="bi bi-hdd-rack me-2"></i> Servidor
+    </a>
+
     <a href="<?= url('/infraestrutura/servicos') ?>">
         <i class="bi bi-hdd-network me-2"></i> Serviços
     </a>

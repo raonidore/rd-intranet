@@ -6,6 +6,8 @@ use App\Controllers\DashboardController;
 use App\Controllers\DeployCenterController;
 use App\Controllers\SambaConfiguracaoController;
 use App\Controllers\InfrastructureController;
+use App\Controllers\ServerController;
+use App\Controllers\NetworkController;
 use App\Controllers\SambaActionController;
 use App\Controllers\SambaCompartilhamentoController;
 use App\Controllers\SambaController;
@@ -69,10 +71,20 @@ $router->post('/samba/arquivos/renomear', [SambaArquivosController::class, 'reno
 $router->post('/samba/arquivos/criar', [SambaArquivosController::class, 'criarArquivo']);
 $router->post('/samba/arquivos/pasta', [SambaArquivosController::class, 'criarPasta']);
 
+$router->get('/infraestrutura/servidor', [ServerController::class, 'index']);
+$router->get('/infraestrutura/servidor/api', [ServerController::class, 'api']);
+
+$router->get('/infraestrutura/servidor/rede/editar', [NetworkController::class, 'editarForm']);
+$router->post('/infraestrutura/servidor/rede/aplicar', [NetworkController::class, 'aplicar']);
+$router->post('/infraestrutura/servidor/rede/confirmar', [NetworkController::class, 'confirmar']);
+$router->get('/infraestrutura/servidor/rede/status', [NetworkController::class, 'status']);
+
 $router->get('/infraestrutura/servicos', [InfrastructureController::class, 'servicos']);
 $router->get('/infraestrutura/servicos/reiniciar', [InfrastructureController::class, 'reiniciar']);
 $router->get('/infraestrutura/servicos/recarregar', [InfrastructureController::class, 'recarregar']);
 $router->get('/infraestrutura/servicos/logs', [InfrastructureController::class, 'logs']);
+$router->get('/infraestrutura/servicos/configurar', [InfrastructureController::class, 'servicosConfigurar']);
+$router->post('/infraestrutura/servicos/configurar', [InfrastructureController::class, 'servicosSalvar']);
 
 $router->get('/deploy', [DeployCenterController::class, 'index']);
 $router->get('/deploy/samba/aplicar', [DeployCenterController::class, 'aplicarSamba']);

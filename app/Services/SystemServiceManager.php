@@ -4,6 +4,9 @@ namespace App\Services;
 
 class SystemServiceManager
 {
+    private const CHAVE_CONFIG = 'servicos_gerenciados';
+    private const PADRAO = ['smbd', 'apache2', 'mariadb', 'ssh'];
+
     private LinuxService $linux;
 
     public function __construct()
@@ -49,12 +52,92 @@ class SystemServiceManager
 
     public function listarServicos(): array
     {
-        return [
-            'samba' => 'Samba',
-            'apache' => 'Apache',
-            'mariadb' => 'MariaDB',
-            'ssh' => 'SSH'
-        ];
+        $unidades = $this->unidadesGerenciadas();
+        $servicos = [];
+
+        foreach ($unidades as $unidade) {
+            $servicos[$unidade] = $this->nomeAmigavel($unidade);
+        }
+
+        return $servicos;
+    }
+
+    /**
+     * Todas as unidades .service instaladas no sistema, para a tela de seleção.
+     */
+    public function catalogoDisponivel(): array
+    {
+        $resultado  = $this->linux->executar("systemctl list-unit-files --type=service --no-legend --plain 2>/dev/null");
+        $gerenciadas = $this->unidadesGerenciadas();
+
+        $catalogo = [];
+        foreach (explode("\n", trim($resultado['output'])) as $linha) {
+            $linha = trim($linha);
+            if ($linha === '') continue;
+
+            $partes = preg_split('/\s+/', $linha);
+            $unidade = preg_replace('/\.service$/', '', $partes[0] ?? '');
+            if ($unidade === '' || str_contains($unidade, '@')) continue;
+
+            $catalogo[] = [
+                'unidade'    => $unidade,
+                'nome'       => $this->nomeAmigavel($unidade),
+                'gerenciado' => in_array($unidade, $gerenciadas, true),
+            ];
+        }
+
+        usort($catalogo, fn($a, $b) => strcmp($a['unidade'], $b['unidade']));
+
+        return $catalogo;
+    }
+
+    /**
+     * Persiste a seleção de serviços gerenciados, validando contra as unidades reais do sistema.
+     */
+    public function salvarSelecao(array $unidadesEscolhidas): bool
+    {
+        $validas = array_column($this->catalogoDisponivel(), 'unidade');
+
+        $selecao = array_values(array_intersect($unidadesEscolhidas, $validas));
+
+        $efetiva = !empty($selecao) ? $selecao : self::PADRAO;
+
+        $resultado = $this->linux->executarScript(
+            '/opt/rdtecnologia/scripts/salvar_permitidos_web.sh',
+            $efetiva
+        );
+
+        if (!$resultado['success']) {
+            return false;
+        }
+
+        ConfigService::set(self::CHAVE_CONFIG, json_encode($selecao));
+
+        return true;
+    }
+
+    private function unidadesGerenciadas(): array
+    {
+        $bruto = ConfigService::get(self::CHAVE_CONFIG);
+
+        if ($bruto === null || $bruto === '') {
+            return self::PADRAO;
+        }
+
+        $decodificado = json_decode($bruto, true);
+
+        return is_array($decodificado) && !empty($decodificado) ? $decodificado : self::PADRAO;
+    }
+
+    private function nomeAmigavel(string $unidade): string
+    {
+        $resultado = $this->linux->executar(
+            "systemctl show " . escapeshellarg($unidade) . ".service --property=Description --value 2>/dev/null"
+        );
+
+        $descricao = trim($resultado['output']);
+
+        return $descricao !== '' ? $descricao : $unidade;
     }
 
     public function reiniciar(string $service): void

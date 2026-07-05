@@ -5,6 +5,8 @@ namespace App\Controllers;
 use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
 use App\Services\SystemServiceManager;
+use App\Services\AuditService;
+use App\Services\NotificationService;
 
 class InfrastructureController extends Controller
 {
@@ -70,5 +72,33 @@ class InfrastructureController extends Controller
             'servico' => $servico,
             'logs' => $logs
         ]);
+    }
+
+    public function servicosConfigurar(): void
+    {
+        AuthMiddleware::check();
+
+        $this->view('infrastructure/servicos_configurar', [
+            'catalogo' => $this->serviceManager->catalogoDisponivel(),
+        ]);
+    }
+
+    public function servicosSalvar(): void
+    {
+        AuthMiddleware::check();
+
+        $selecionados = $_POST['unidades'] ?? [];
+
+        $sucesso = $this->serviceManager->salvarSelecao(is_array($selecionados) ? $selecionados : []);
+
+        if ($sucesso) {
+            AuditService::registrar('Serviços', 'Configurar', 'Lista de serviços gerenciados atualizada.');
+            NotificationService::success('Serviços gerenciados atualizados com sucesso.');
+        } else {
+            NotificationService::error('Não foi possível salvar a lista de serviços gerenciados.');
+        }
+
+        header('Location: ' . url('/infraestrutura/servicos'));
+        exit;
     }
 }

@@ -30,13 +30,18 @@ function serviceIcon(string $service): string
 <?= Alert::flash() ?>
 
 <div class="card border-0 shadow-sm mb-4">
-    <div class="card-body">
-        <h5 class="mb-1">
-            <i class="bi bi-hdd-network"></i> Serviços do Servidor
-        </h5>
-        <small class="text-muted">
-            Monitore e administre serviços essenciais do Ubuntu Server.
-        </small>
+    <div class="card-body d-flex justify-content-between align-items-center">
+        <div>
+            <h5 class="mb-1">
+                <i class="bi bi-hdd-network"></i> Serviços do Servidor
+            </h5>
+            <small class="text-muted">
+                Monitore e administre serviços essenciais do Ubuntu Server.
+            </small>
+        </div>
+        <a href="<?= url('/infraestrutura/servicos/configurar') ?>" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-ui-checks"></i> Configurar serviços
+        </a>
     </div>
 </div>
 
