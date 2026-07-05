@@ -30,6 +30,8 @@ $router->get('/samba/usuarios', [SambaController::class, 'usuarios']);
 $router->get('/samba/usuarios/novo', [SambaController::class, 'novoForm']);
 $router->post('/samba/usuarios/novo', [SambaController::class, 'novo']);
 $router->get('/samba/grupos', [SambaGrupoController::class, 'index']);
+$router->get('/samba/grupos/renomear', [SambaGrupoController::class, 'renomearForm']);
+$router->post('/samba/grupos/renomear', [SambaGrupoController::class, 'renomear']);
 $router->get('/samba/usuarios/editar', [SambaController::class, 'editarForm']);
 $router->post('/samba/usuarios/editar', [SambaController::class, 'editar']);
 $router->get('/samba/usuarios/senha', [SambaController::class, 'alterarSenhaForm']);
