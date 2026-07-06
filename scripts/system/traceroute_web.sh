@@ -14,7 +14,7 @@ if [[ ! "$DESTINO" =~ $RE_HOST ]] && [[ ! "$DESTINO" =~ $RE_IPV4 ]] && [[ ! "$DE
 fi
 
 if command -v traceroute >/dev/null 2>&1; then
-  timeout 20 traceroute -m 15 -q 1 -w 2 -- "$DESTINO" 2>&1
+  timeout 25 traceroute -m 30 -q 1 -w 2 -- "$DESTINO" 2>&1
 else
-  timeout 20 tracepath -m 15 -- "$DESTINO" 2>&1
+  timeout 25 tracepath -m 30 -- "$DESTINO" 2>&1
 fi
