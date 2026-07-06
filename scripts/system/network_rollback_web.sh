@@ -15,4 +15,6 @@ fi
 netplan generate >/dev/null 2>&1
 netplan apply >/dev/null 2>&1
 
+rm -f /etc/rd-intranet/.rede-deadline
+
 logger -t rd-netplan "Rollback automatico de rede executado (alteracao nao confirmada dentro do prazo)."

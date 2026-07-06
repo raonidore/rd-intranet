@@ -75,19 +75,18 @@ class NetworkConfigService
     public function statusRollback(): array
     {
         $resultado = $this->linux->executar(
-            "systemctl show rd-netplan-rollback.timer --property=ActiveState,NextElapseUSecRealtime --value 2>/dev/null"
+            "systemctl is-active rd-netplan-rollback.timer 2>/dev/null"
         );
 
-        $linhas  = explode("\n", trim($resultado['output']));
-        $estado  = $linhas[0] ?? '';
-        $proximo = $linhas[1] ?? '';
-
-        if ($estado !== 'active' || $proximo === '' || $proximo === 'n/a') {
+        if (trim($resultado['output']) !== 'active') {
             return ['pendente' => false, 'segundos_restantes' => 0];
         }
 
-        $timestamp = strtotime($proximo);
-        $restante  = $timestamp ? max(0, $timestamp - time()) : 0;
+        // --on-active do systemd-run cria timer monotônico: as propriedades
+        // NextElapseUSec* não dão um timestamp absoluto confiável de forma
+        // simples, então o prazo é gravado à parte por network_aplicar_web.sh.
+        $deadline = @file_get_contents('/etc/rd-intranet/.rede-deadline');
+        $restante = $deadline !== false ? max(0, (int)trim($deadline) - time()) : 0;
 
         return ['pendente' => $restante > 0, 'segundos_restantes' => $restante];
     }

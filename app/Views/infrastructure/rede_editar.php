@@ -23,7 +23,7 @@ $ipAtual = $atual['ipv4'][0] ?? '';
             &nbsp;|&nbsp; MAC: <code><?= htmlspecialchars($atual['mac']) ?></code>
         </span>
     </div>
-    <a href="<?= url('/infraestrutura/servidor') ?>" class="btn btn-outline-secondary">
+    <a href="<?= url('/infraestrutura/rede') ?>" class="btn btn-outline-secondary">
         <i class="bi bi-arrow-left"></i> Voltar
     </a>
 </div>

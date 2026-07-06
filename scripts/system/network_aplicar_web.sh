@@ -80,6 +80,15 @@ netplan apply
 systemctl stop rd-netplan-rollback.timer >/dev/null 2>&1
 systemctl reset-failed rd-netplan-rollback >/dev/null 2>&1
 
+# prazo gravado em arquivo (timestamp absoluto) -- consultar propriedades do
+# systemd-run pra descobrir "quanto falta" e fragil: --on-active cria um timer
+# MONOTONICO, cuja info de proximo disparo vem em NextElapseUSecMonotonic (uma
+# duracao relativa ao boot), nao em NextElapseUSecRealtime (isso e so pra
+# timers de calendario). Um arquivo com o timestamp absoluto e muito mais
+# simples de checar depois.
+mkdir -p /etc/rd-intranet
+echo "$(($(date +%s) + 120))" > /etc/rd-intranet/.rede-deadline
+
 systemd-run --unit=rd-netplan-rollback --on-active=120 \
   /opt/rdtecnologia/scripts/network_rollback_web.sh "$CONFIG" "$BACKUP" >/dev/null 2>&1
 

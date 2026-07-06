@@ -24,6 +24,10 @@ $abrirApache = $rdSecaoAtiva(['/apache']);
 $abrirInfraestrutura = $rdSecaoAtiva(['/infraestrutura']);
 $abrirSamba = $rdSecaoAtiva(['/samba', '/deploy']);
 $abrirSeguranca = $rdSecaoAtiva(['/auditoria', '/administracao']);
+
+$abrirHardware = $rdSecaoAtiva(['/infraestrutura/hardware']);
+$abrirRede = $rdSecaoAtiva(['/infraestrutura/rede', '/infraestrutura/servidor/rede']);
+$abrirInfraServicos = $rdSecaoAtiva(['/infraestrutura/servicos']);
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -88,6 +92,12 @@ $abrirSeguranca = $rdSecaoAtiva(['/auditoria', '/administracao']);
         .menu-toggle[aria-expanded="true"] { color:#fff; }
         .menu-toggle .chevron { transition:transform .2s ease; font-size:10px; }
         .menu-toggle[aria-expanded="true"] .chevron { transform:rotate(90deg); }
+        .menu-toggle-sub {
+            font-size:10px;
+            padding:8px 12px 8px 22px;
+            margin:2px 12px 2px 12px;
+        }
+        .menu-sub a { padding-left:34px; font-size:13px; }
         .content {
             margin-left:260px;
             padding:28px;
@@ -157,7 +167,10 @@ $abrirSeguranca = $rdSecaoAtiva(['/auditoria', '/administracao']);
     <?php endif; ?>
 
     <?php
-    $temInfra = PermissionService::temAcesso('infra_servidor') || PermissionService::temAcesso('infra_servicos');
+    $temInfra = PermissionService::temAcesso('infra_servidor')
+        || PermissionService::temAcesso('infra_hardware')
+        || PermissionService::temAcesso('infra_rede')
+        || PermissionService::temAcesso('infra_servicos');
     ?>
     <?php if ($temInfra): ?>
     <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuInfra"
@@ -166,16 +179,64 @@ $abrirSeguranca = $rdSecaoAtiva(['/auditoria', '/administracao']);
         <i class="bi bi-chevron-right chevron"></i>
     </button>
     <div class="collapse <?= $abrirInfraestrutura ? 'show' : '' ?>" id="menuInfra">
-        <?php if (PermissionService::temAcesso('infra_servicos')): ?>
-        <a href="<?= url('/infraestrutura/servicos') ?>" class="<?= $uriAtual === '/infraestrutura/servicos' ? 'active' : '' ?>">
-            <i class="bi bi-hdd-network me-2"></i> Serviços
-        </a>
-        <?php endif; ?>
-
         <?php if (PermissionService::temAcesso('infra_servidor')): ?>
         <a href="<?= url('/infraestrutura/servidor') ?>" class="<?= $uriAtual === '/infraestrutura/servidor' ? 'active' : '' ?>">
             <i class="bi bi-hdd-rack me-2"></i> Servidor
         </a>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('infra_hardware')): ?>
+        <button class="menu-toggle menu-toggle-sub" type="button" data-bs-toggle="collapse" data-bs-target="#menuHardware"
+                aria-expanded="<?= $abrirHardware ? 'true' : 'false' ?>">
+            <span><i class="bi bi-cpu me-2"></i>Hardware</span>
+            <i class="bi bi-chevron-right chevron"></i>
+        </button>
+        <div class="collapse menu-sub <?= $abrirHardware ? 'show' : '' ?>" id="menuHardware">
+            <a href="<?= url('/infraestrutura/hardware') ?>" class="<?= $uriAtual === '/infraestrutura/hardware' ? 'active' : '' ?>">
+                <i class="bi bi-motherboard me-2"></i> CPU / RAM / Disco / Temp.
+            </a>
+        </div>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('infra_rede')): ?>
+        <button class="menu-toggle menu-toggle-sub" type="button" data-bs-toggle="collapse" data-bs-target="#menuNetwork"
+                aria-expanded="<?= $abrirRede ? 'true' : 'false' ?>">
+            <span><i class="bi bi-diagram-2 me-2"></i>Network</span>
+            <i class="bi bi-chevron-right chevron"></i>
+        </button>
+        <div class="collapse menu-sub <?= $abrirRede ? 'show' : '' ?>" id="menuNetwork">
+            <a href="<?= url('/infraestrutura/rede') ?>" class="<?= $uriAtual === '/infraestrutura/rede' ? 'active' : '' ?>">
+                <i class="bi bi-ethernet me-2"></i> Interfaces
+            </a>
+            <a href="<?= url('/infraestrutura/rede/rotas') ?>" class="<?= $uriAtual === '/infraestrutura/rede/rotas' ? 'active' : '' ?>">
+                <i class="bi bi-signpost-split me-2"></i> Rotas
+            </a>
+            <a href="<?= url('/infraestrutura/rede/arp') ?>" class="<?= $uriAtual === '/infraestrutura/rede/arp' ? 'active' : '' ?>">
+                <i class="bi bi-list-ul me-2"></i> ARP
+            </a>
+            <a href="<?= url('/infraestrutura/rede/ping') ?>" class="<?= $uriAtual === '/infraestrutura/rede/ping' ? 'active' : '' ?>">
+                <i class="bi bi-broadcast me-2"></i> Ping
+            </a>
+            <a href="<?= url('/infraestrutura/rede/traceroute') ?>" class="<?= $uriAtual === '/infraestrutura/rede/traceroute' ? 'active' : '' ?>">
+                <i class="bi bi-signpost me-2"></i> Traceroute
+            </a>
+            <a href="<?= url('/infraestrutura/rede/trafego') ?>" class="<?= $uriAtual === '/infraestrutura/rede/trafego' ? 'active' : '' ?>">
+                <i class="bi bi-speedometer me-2"></i> Tráfego de Banda
+            </a>
+        </div>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('infra_servicos')): ?>
+        <button class="menu-toggle menu-toggle-sub" type="button" data-bs-toggle="collapse" data-bs-target="#menuInfraServicos"
+                aria-expanded="<?= $abrirInfraServicos ? 'true' : 'false' ?>">
+            <span><i class="bi bi-hdd-network me-2"></i>Serviços</span>
+            <i class="bi bi-chevron-right chevron"></i>
+        </button>
+        <div class="collapse menu-sub <?= $abrirInfraServicos ? 'show' : '' ?>" id="menuInfraServicos">
+            <a href="<?= url('/infraestrutura/servicos') ?>" class="<?= $uriAtual === '/infraestrutura/servicos' ? 'active' : '' ?>">
+                <i class="bi bi-hdd-network me-2"></i> Serviços do Sistema
+            </a>
+        </div>
         <?php endif; ?>
     </div>
     <?php endif; ?>

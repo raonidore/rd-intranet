@@ -22,6 +22,9 @@ use App\Controllers\ApacheController;
 use App\Controllers\ApacheSiteController;
 use App\Controllers\ApacheModuloController;
 use App\Controllers\ApacheConfiguracaoController;
+use App\Controllers\HardwareController;
+use App\Controllers\NetworkRouteController;
+use App\Controllers\NetworkToolsController;
 
 $router->get('/', [DashboardController::class, 'index']);
 $router->get('/dashboard', [DashboardController::class, 'index']);
@@ -89,6 +92,31 @@ $router->get('/infraestrutura/servidor/rede/editar', [NetworkController::class, 
 $router->post('/infraestrutura/servidor/rede/aplicar', [NetworkController::class, 'aplicar']);
 $router->post('/infraestrutura/servidor/rede/confirmar', [NetworkController::class, 'confirmar']);
 $router->get('/infraestrutura/servidor/rede/status', [NetworkController::class, 'status']);
+
+$router->get('/infraestrutura/hardware', [HardwareController::class, 'index']);
+$router->get('/infraestrutura/hardware/api', [HardwareController::class, 'api']);
+
+$router->get('/infraestrutura/rede', [NetworkController::class, 'index']);
+$router->get('/infraestrutura/rede/api', [NetworkController::class, 'api']);
+
+$router->get('/infraestrutura/rede/arp', [NetworkToolsController::class, 'arp']);
+
+$router->get('/infraestrutura/rede/ping', [NetworkToolsController::class, 'pingForm']);
+$router->post('/infraestrutura/rede/ping', [NetworkToolsController::class, 'pingExecutar']);
+
+$router->get('/infraestrutura/rede/traceroute', [NetworkToolsController::class, 'tracerouteForm']);
+$router->post('/infraestrutura/rede/traceroute', [NetworkToolsController::class, 'tracerouteExecutar']);
+
+$router->get('/infraestrutura/rede/trafego', [NetworkToolsController::class, 'trafego']);
+$router->get('/infraestrutura/rede/trafego/api', [NetworkToolsController::class, 'trafegoApi']);
+
+$router->get('/infraestrutura/rede/rotas', [NetworkRouteController::class, 'index']);
+$router->get('/infraestrutura/rede/rotas/novo', [NetworkRouteController::class, 'novoForm']);
+$router->post('/infraestrutura/rede/rotas/novo', [NetworkRouteController::class, 'novo']);
+$router->post('/infraestrutura/rede/rotas/confirmar', [NetworkRouteController::class, 'confirmar']);
+$router->get('/infraestrutura/rede/rotas/status', [NetworkRouteController::class, 'status']);
+$router->post('/infraestrutura/rede/rotas/excluir', [NetworkRouteController::class, 'excluir']);
+$router->post('/infraestrutura/rede/rotas/testar', [NetworkRouteController::class, 'testar']);
 
 $router->get('/infraestrutura/servicos', [InfrastructureController::class, 'servicos']);
 $router->get('/infraestrutura/servicos/reiniciar', [InfrastructureController::class, 'reiniciar']);

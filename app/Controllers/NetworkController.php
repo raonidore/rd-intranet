@@ -5,6 +5,7 @@ namespace App\Controllers;
 use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
 use App\Services\NetworkConfigService;
+use App\Services\ServerInfoService;
 use App\Services\AuditService;
 
 class NetworkController extends Controller
@@ -16,14 +17,33 @@ class NetworkController extends Controller
         $this->service = new NetworkConfigService();
     }
 
+    public function index(): void
+    {
+        AuthMiddleware::checkModulo('infra_rede');
+
+        $this->view('infrastructure/rede_interfaces', [
+            'interfaces' => (new ServerInfoService())->snapshot()['rede']['interfaces'],
+        ]);
+    }
+
+    public function api(): void
+    {
+        AuthMiddleware::checkModulo('infra_rede');
+
+        header('Content-Type: application/json');
+        header('Cache-Control: no-cache');
+
+        echo json_encode(['interfaces' => (new ServerInfoService())->snapshot()['rede']['interfaces']]);
+    }
+
     public function editarForm(): void
     {
-        AuthMiddleware::checkModulo('infra_servidor');
+        AuthMiddleware::checkModulo('infra_rede');
 
         $interface = $_GET['interface'] ?? '';
 
         if (!in_array($interface, $this->service->interfacesValidas(), true)) {
-            header('Location: ' . url('/infraestrutura/servidor'));
+            header('Location: ' . url('/infraestrutura/rede'));
             exit;
         }
 
@@ -35,7 +55,7 @@ class NetworkController extends Controller
 
     public function aplicar(): void
     {
-        AuthMiddleware::checkModulo('infra_servidor');
+        AuthMiddleware::checkModulo('infra_rede');
         header('Content-Type: application/json');
 
         $interface = $_POST['interface'] ?? '';
@@ -55,7 +75,7 @@ class NetworkController extends Controller
 
     public function confirmar(): void
     {
-        AuthMiddleware::checkModulo('infra_servidor');
+        AuthMiddleware::checkModulo('infra_rede');
         header('Content-Type: application/json');
 
         $resultado = $this->service->confirmar();
@@ -69,7 +89,7 @@ class NetworkController extends Controller
 
     public function status(): void
     {
-        AuthMiddleware::checkModulo('infra_servidor');
+        AuthMiddleware::checkModulo('infra_rede');
         header('Content-Type: application/json');
 
         echo json_encode($this->service->statusRollback());
