@@ -78,6 +78,65 @@ class NetworkToolsService
         return $this->linux->executarScript('/opt/rdtecnologia/scripts/traceroute_web.sh', [$destino]);
     }
 
+    /**
+     * Converte a saída crua do traceroute -A (uma linha de texto por salto)
+     * em uma lista estruturada [ttl, host, ip, as, ms, timeout] pra tabela.
+     */
+    public function parsearTraceroute(string $output): array
+    {
+        $saltos = [];
+
+        foreach (explode("\n", $output) as $linha) {
+            $linha = rtrim($linha);
+
+            if ($linha === '' || !preg_match('/^\s*\d+\s/', $linha)) {
+                continue;
+            }
+
+            if (preg_match('/^\s*(\d+)\s+\*\s*$/', $linha, $m)) {
+                $saltos[] = [
+                    'ttl' => (int)$m[1],
+                    'host' => null,
+                    'ip' => null,
+                    'as' => null,
+                    'ms' => null,
+                    'timeout' => true,
+                ];
+                continue;
+            }
+
+            if (preg_match('/^\s*(\d+)\s+(\S+)\s+\(([^)]+)\)\s+\[([^\]]*)\]\s+([\d.]+)\s*ms/', $linha, $m)) {
+                $as = $m[4] === '*' || $m[4] === '' ? null : $m[4];
+
+                $saltos[] = [
+                    'ttl' => (int)$m[1],
+                    'host' => $m[2] === $m[3] ? null : $m[2],
+                    'ip' => $m[3],
+                    'as' => $as,
+                    'ms' => (float)$m[5],
+                    'timeout' => false,
+                ];
+                continue;
+            }
+
+            // Linha reconhecida (começa com numero) mas em formato
+            // inesperado (ex: sem -A funcionando) -- guarda mesmo assim.
+            if (preg_match('/^\s*(\d+)\s+(.*)$/', $linha, $m)) {
+                $saltos[] = [
+                    'ttl' => (int)$m[1],
+                    'host' => null,
+                    'ip' => null,
+                    'as' => null,
+                    'ms' => null,
+                    'timeout' => false,
+                    'bruto' => trim($m[2]),
+                ];
+            }
+        }
+
+        return $saltos;
+    }
+
     public function trafegoInterfaces(): array
     {
         $interfaces = (new ServerInfoService())->snapshot()['rede']['interfaces'];

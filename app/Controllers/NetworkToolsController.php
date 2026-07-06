@@ -48,7 +48,7 @@ class NetworkToolsController extends Controller
     {
         AuthMiddleware::checkModulo('infra_rede');
 
-        $this->view('infrastructure/rede_traceroute', ['destino' => '', 'resultado' => null]);
+        $this->view('infrastructure/rede_traceroute', ['destino' => '', 'resultado' => null, 'saltos' => [], 'cabecalho' => '']);
     }
 
     public function tracerouteExecutar(): void
@@ -60,7 +60,21 @@ class NetworkToolsController extends Controller
 
         AuditService::registrar('Rede', 'Traceroute', "Traceroute para {$destino}.");
 
-        $this->view('infrastructure/rede_traceroute', ['destino' => $destino, 'resultado' => $resultado]);
+        $saltos = [];
+        $cabecalho = '';
+
+        if ($resultado['success']) {
+            $linhas = explode("\n", trim($resultado['output']));
+            $cabecalho = $linhas[0] ?? '';
+            $saltos = $this->service->parsearTraceroute($resultado['output']);
+        }
+
+        $this->view('infrastructure/rede_traceroute', [
+            'destino' => $destino,
+            'resultado' => $resultado,
+            'saltos' => $saltos,
+            'cabecalho' => $cabecalho,
+        ]);
     }
 
     public function trafego(): void
