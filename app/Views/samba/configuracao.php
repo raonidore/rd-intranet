@@ -1,6 +1,8 @@
 <?php
 ob_start();
 
+use App\Components\Alert;
+
 // Helper: valor atual do campo (do smb.conf lido)
 function cfgVal(array $config, string $key, string $default = ''): string {
     return htmlspecialchars($config[$key] ?? $default);
@@ -31,16 +33,7 @@ function cfgName(string $key): string {
 </div>
 
 <!-- Notificações PHP -->
-<?php if ($notif = App\Services\NotificationService::consumir()): ?>
-    <div class="alert alert-<?= htmlspecialchars($notif['tipo']) ?> d-flex gap-3 align-items-start">
-        <div>
-            <strong><?= htmlspecialchars($notif['mensagem']) ?></strong>
-            <?php if (!empty($notif['detalhe'])): ?>
-                <pre class="mt-2 mb-0 small" style="white-space:pre-wrap"><?= htmlspecialchars($notif['detalhe']) ?></pre>
-            <?php endif; ?>
-        </div>
-    </div>
-<?php endif; ?>
+<?= Alert::flash() ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
