@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Repositories\SambaUsuarioRepository;
+use App\Repositories\SambaCompartilhamentoRepository;
 
 class SambaService
 {
@@ -28,7 +29,7 @@ class SambaService
             'total' => $this->repository->contarTotal(),
             'ativos' => $this->repository->contarAtivos(),
             'ssh' => $this->repository->contarComSSH(),
-            'compartilhamentos' => 3
+            'compartilhamentos' => (new SambaCompartilhamentoRepository())->contarTotal(),
         ];
     }
 
