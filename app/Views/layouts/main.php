@@ -21,6 +21,7 @@ $rdSecaoAtiva = function (array $prefixos) use ($uriAtual): bool {
 };
 
 $abrirApache = $rdSecaoAtiva(['/apache']);
+$abrirBancoDados = $rdSecaoAtiva(['/banco-dados']);
 $abrirInfraestrutura = $rdSecaoAtiva(['/infraestrutura']);
 $abrirSamba = $rdSecaoAtiva(['/samba', '/deploy']);
 $abrirSeguranca = $rdSecaoAtiva(['/auditoria', '/administracao']);
@@ -166,11 +167,28 @@ $abrirInfraServicos = $rdSecaoAtiva(['/infraestrutura/servicos']);
     </div>
     <?php endif; ?>
 
+    <?php if (PermissionService::temAcesso('bd_mysql')): ?>
+    <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuBancoDados"
+            aria-expanded="<?= $abrirBancoDados ? 'true' : 'false' ?>">
+        <span><i class="bi bi-database me-2"></i>Banco de Dados</span>
+        <i class="bi bi-chevron-right chevron"></i>
+    </button>
+    <div class="collapse <?= $abrirBancoDados ? 'show' : '' ?>" id="menuBancoDados">
+        <a href="<?= url('/banco-dados/conexoes') ?>" class="<?= $uriAtual === '/banco-dados/conexoes' || str_starts_with($uriAtual, '/banco-dados/console') ? 'active' : '' ?>">
+            <i class="bi bi-hdd-stack me-2"></i> Conexões / Console
+        </a>
+    </div>
+    <?php endif; ?>
+
     <?php
     $temInfra = PermissionService::temAcesso('infra_servidor')
         || PermissionService::temAcesso('infra_hardware')
         || PermissionService::temAcesso('infra_rede')
-        || PermissionService::temAcesso('infra_servicos');
+        || PermissionService::temAcesso('infra_servicos')
+        || PermissionService::temAcesso('infra_cron')
+        || PermissionService::temAcesso('infra_iptables')
+        || PermissionService::temAcesso('infra_certificado')
+        || PermissionService::temAcesso('infra_dependencias');
     ?>
     <?php if ($temInfra): ?>
     <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuInfra"
@@ -223,6 +241,9 @@ $abrirInfraServicos = $rdSecaoAtiva(['/infraestrutura/servicos']);
             <a href="<?= url('/infraestrutura/rede/trafego') ?>" class="<?= $uriAtual === '/infraestrutura/rede/trafego' ? 'active' : '' ?>">
                 <i class="bi bi-speedometer me-2"></i> Tráfego de Banda
             </a>
+            <a href="<?= url('/infraestrutura/rede/trafego/historico') ?>" class="<?= $uriAtual === '/infraestrutura/rede/trafego/historico' ? 'active' : '' ?>">
+                <i class="bi bi-bar-chart-line me-2"></i> Histórico de Tráfego
+            </a>
         </div>
         <?php endif; ?>
 
@@ -238,6 +259,30 @@ $abrirInfraServicos = $rdSecaoAtiva(['/infraestrutura/servicos']);
             </a>
         </div>
         <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('infra_cron')): ?>
+        <a href="<?= url('/infraestrutura/cron') ?>" class="<?= str_starts_with($uriAtual, '/infraestrutura/cron') ? 'active' : '' ?>">
+            <i class="bi bi-clock-history me-2"></i> Cron
+        </a>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('infra_iptables')): ?>
+        <a href="<?= url('/infraestrutura/iptables') ?>" class="<?= str_starts_with($uriAtual, '/infraestrutura/iptables') ? 'active' : '' ?>">
+            <i class="bi bi-hdd-network me-2"></i> Firewall
+        </a>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('infra_certificado')): ?>
+        <a href="<?= url('/infraestrutura/certificado') ?>" class="<?= str_starts_with($uriAtual, '/infraestrutura/certificado') ? 'active' : '' ?>">
+            <i class="bi bi-shield-lock me-2"></i> Certificado Digital
+        </a>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('infra_dependencias')): ?>
+        <a href="<?= url('/infraestrutura/dependencias') ?>" class="<?= str_starts_with($uriAtual, '/infraestrutura/dependencias') ? 'active' : '' ?>">
+            <i class="bi bi-clipboard2-check me-2"></i> Dependências
+        </a>
+        <?php endif; ?>
     </div>
     <?php endif; ?>
 
@@ -247,6 +292,12 @@ $abrirInfraServicos = $rdSecaoAtiva(['/infraestrutura/servicos']);
         <i class="bi bi-chevron-right chevron"></i>
     </button>
     <div class="collapse <?= $abrirSamba ? 'show' : '' ?>" id="menuSamba">
+        <?php if (PermissionService::temAcesso('samba_dashboard')): ?>
+        <a href="<?= url('/samba/dashboard') ?>" class="<?= $uriAtual === '/samba/dashboard' ? 'active' : '' ?>">
+            <i class="bi bi-speedometer2 me-2"></i> Dashboard Samba
+        </a>
+        <?php endif; ?>
+
         <?php if (PermissionService::temAcesso('samba_arquivos')): ?>
         <a href="<?= url('/samba/arquivos') ?>" class="<?= $uriAtual === '/samba/arquivos' ? 'active' : '' ?>">
             <i class="bi bi-folder2-open me-2"></i> Arquivos
@@ -268,12 +319,6 @@ $abrirInfraServicos = $rdSecaoAtiva(['/infraestrutura/servicos']);
         <?php if (PermissionService::temAcesso('samba_config')): ?>
         <a href="<?= url('/samba/configuracao') ?>" class="<?= $uriAtual === '/samba/configuracao' ? 'active' : '' ?>">
             <i class="bi bi-sliders me-2"></i> Config. Global
-        </a>
-        <?php endif; ?>
-
-        <?php if (PermissionService::temAcesso('samba_dashboard')): ?>
-        <a href="<?= url('/samba/dashboard') ?>" class="<?= $uriAtual === '/samba/dashboard' ? 'active' : '' ?>">
-            <i class="bi bi-speedometer2 me-2"></i> Dashboard Samba
         </a>
         <?php endif; ?>
 

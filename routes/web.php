@@ -25,6 +25,12 @@ use App\Controllers\ApacheConfiguracaoController;
 use App\Controllers\HardwareController;
 use App\Controllers\NetworkRouteController;
 use App\Controllers\NetworkToolsController;
+use App\Controllers\DbConexaoController;
+use App\Controllers\DbConsoleController;
+use App\Controllers\CronController;
+use App\Controllers\IptablesController;
+use App\Controllers\CertificadoController;
+use App\Controllers\DependenciaController;
 
 $router->get('/', [DashboardController::class, 'index']);
 $router->get('/dashboard', [DashboardController::class, 'index']);
@@ -109,6 +115,7 @@ $router->post('/infraestrutura/rede/traceroute', [NetworkToolsController::class,
 
 $router->get('/infraestrutura/rede/trafego', [NetworkToolsController::class, 'trafego']);
 $router->get('/infraestrutura/rede/trafego/api', [NetworkToolsController::class, 'trafegoApi']);
+$router->get('/infraestrutura/rede/trafego/historico', [NetworkToolsController::class, 'historico']);
 
 $router->get('/infraestrutura/rede/rotas', [NetworkRouteController::class, 'index']);
 $router->get('/infraestrutura/rede/rotas/novo', [NetworkRouteController::class, 'novoForm']);
@@ -124,6 +131,52 @@ $router->get('/infraestrutura/servicos/recarregar', [InfrastructureController::c
 $router->get('/infraestrutura/servicos/logs', [InfrastructureController::class, 'logs']);
 $router->get('/infraestrutura/servicos/configurar', [InfrastructureController::class, 'servicosConfigurar']);
 $router->post('/infraestrutura/servicos/configurar', [InfrastructureController::class, 'servicosSalvar']);
+
+$router->get('/infraestrutura/cron', [CronController::class, 'index']);
+$router->get('/infraestrutura/cron/novo', [CronController::class, 'novoForm']);
+$router->post('/infraestrutura/cron/novo', [CronController::class, 'novo']);
+$router->get('/infraestrutura/cron/editar', [CronController::class, 'editarForm']);
+$router->post('/infraestrutura/cron/editar', [CronController::class, 'editar']);
+$router->get('/infraestrutura/cron/excluir', [CronController::class, 'excluirForm']);
+$router->post('/infraestrutura/cron/excluir', [CronController::class, 'excluir']);
+$router->get('/infraestrutura/cron/ativar', [CronController::class, 'ativar']);
+$router->get('/infraestrutura/cron/desativar', [CronController::class, 'desativar']);
+$router->post('/infraestrutura/cron/executar', [CronController::class, 'executarAgora']);
+$router->get('/infraestrutura/cron/logs', [CronController::class, 'logs']);
+
+$router->get('/infraestrutura/iptables', [IptablesController::class, 'index']);
+$router->get('/infraestrutura/iptables/ao-vivo', [IptablesController::class, 'aoVivo']);
+$router->get('/infraestrutura/iptables/ao-vivo/contadores', [IptablesController::class, 'contadores']);
+$router->get('/infraestrutura/iptables/status', [IptablesController::class, 'status']);
+$router->get('/infraestrutura/iptables/logs', [IptablesController::class, 'logsRegra']);
+$router->post('/infraestrutura/iptables/confirmar', [IptablesController::class, 'confirmar']);
+$router->post('/infraestrutura/iptables/reverter', [IptablesController::class, 'reverterAgora']);
+
+$router->get('/infraestrutura/iptables/novo', [IptablesController::class, 'novoForm']);
+$router->post('/infraestrutura/iptables/novo', [IptablesController::class, 'novo']);
+$router->get('/infraestrutura/iptables/editar', [IptablesController::class, 'editarForm']);
+$router->post('/infraestrutura/iptables/editar', [IptablesController::class, 'editar']);
+$router->get('/infraestrutura/iptables/excluir', [IptablesController::class, 'excluirForm']);
+$router->post('/infraestrutura/iptables/excluir', [IptablesController::class, 'excluir']);
+$router->get('/infraestrutura/iptables/ativar', [IptablesController::class, 'ativar']);
+$router->get('/infraestrutura/iptables/desativar', [IptablesController::class, 'desativar']);
+$router->get('/infraestrutura/iptables/mover', [IptablesController::class, 'mover']);
+$router->post('/infraestrutura/iptables/politica', [IptablesController::class, 'politicaSalvar']);
+
+$router->get('/infraestrutura/iptables/templates', [IptablesController::class, 'templates']);
+$router->get('/infraestrutura/iptables/templates/form', [IptablesController::class, 'templateForm']);
+$router->post('/infraestrutura/iptables/templates/aplicar', [IptablesController::class, 'templateAplicar']);
+
+$router->get('/infraestrutura/certificado', [CertificadoController::class, 'index']);
+$router->get('/infraestrutura/certificado/autoassinado', [CertificadoController::class, 'autoassinadoForm']);
+$router->post('/infraestrutura/certificado/autoassinado', [CertificadoController::class, 'autoassinadoGerar']);
+$router->get('/infraestrutura/certificado/letsencrypt', [CertificadoController::class, 'letsencryptForm']);
+$router->post('/infraestrutura/certificado/letsencrypt', [CertificadoController::class, 'letsencryptAplicar']);
+$router->get('/infraestrutura/certificado/importar', [CertificadoController::class, 'importarForm']);
+$router->post('/infraestrutura/certificado/importar', [CertificadoController::class, 'importarSalvar']);
+
+$router->get('/infraestrutura/dependencias', [DependenciaController::class, 'index']);
+$router->post('/infraestrutura/dependencias/instalar', [DependenciaController::class, 'instalar']);
 
 $router->get('/deploy', [DeployCenterController::class, 'index']);
 $router->get('/deploy/samba/aplicar', [DeployCenterController::class, 'aplicarSamba']);
@@ -161,3 +214,39 @@ $router->get('/administracao/usuarios/ativar', [UserController::class, 'ativar']
 $router->get('/administracao/usuarios/desativar', [UserController::class, 'desativar']);
 $router->get('/administracao/usuarios/excluir', [UserController::class, 'excluirForm']);
 $router->post('/administracao/usuarios/excluir', [UserController::class, 'excluir']);
+
+$router->get('/banco-dados/conexoes', [DbConexaoController::class, 'index']);
+$router->get('/banco-dados/conexoes/novo', [DbConexaoController::class, 'novoForm']);
+$router->post('/banco-dados/conexoes/novo', [DbConexaoController::class, 'novo']);
+$router->get('/banco-dados/conexoes/editar', [DbConexaoController::class, 'editarForm']);
+$router->post('/banco-dados/conexoes/editar', [DbConexaoController::class, 'editar']);
+$router->get('/banco-dados/conexoes/senha', [DbConexaoController::class, 'senhaForm']);
+$router->post('/banco-dados/conexoes/senha', [DbConexaoController::class, 'senha']);
+$router->get('/banco-dados/conexoes/ativar', [DbConexaoController::class, 'ativar']);
+$router->get('/banco-dados/conexoes/desativar', [DbConexaoController::class, 'desativar']);
+$router->get('/banco-dados/conexoes/excluir', [DbConexaoController::class, 'excluirForm']);
+$router->post('/banco-dados/conexoes/excluir', [DbConexaoController::class, 'excluir']);
+$router->post('/banco-dados/conexoes/testar', [DbConexaoController::class, 'testar']);
+
+$router->get('/banco-dados/console', [DbConsoleController::class, 'bancos']);
+$router->get('/banco-dados/console/tabelas', [DbConsoleController::class, 'tabelas']);
+$router->get('/banco-dados/console/estrutura', [DbConsoleController::class, 'estrutura']);
+$router->get('/banco-dados/console/estrutura/coluna/nova', [DbConsoleController::class, 'colunaNovaForm']);
+$router->post('/banco-dados/console/estrutura/coluna/nova', [DbConsoleController::class, 'colunaNova']);
+$router->get('/banco-dados/console/estrutura/coluna/editar', [DbConsoleController::class, 'colunaEditarForm']);
+$router->post('/banco-dados/console/estrutura/coluna/editar', [DbConsoleController::class, 'colunaEditar']);
+$router->post('/banco-dados/console/estrutura/coluna/remover', [DbConsoleController::class, 'colunaRemover']);
+$router->post('/banco-dados/console/sql-rapido', [DbConsoleController::class, 'sqlExecutarAjax']);
+$router->get('/banco-dados/console/dados', [DbConsoleController::class, 'dados']);
+$router->get('/banco-dados/console/dados/inserir', [DbConsoleController::class, 'dadosInserirForm']);
+$router->post('/banco-dados/console/dados/inserir', [DbConsoleController::class, 'dadosInserir']);
+$router->get('/banco-dados/console/dados/editar', [DbConsoleController::class, 'dadosEditarForm']);
+$router->post('/banco-dados/console/dados/editar', [DbConsoleController::class, 'dadosEditar']);
+$router->post('/banco-dados/console/dados/celula', [DbConsoleController::class, 'dadosAtualizarCelula']);
+$router->post('/banco-dados/console/dados/excluir', [DbConsoleController::class, 'dadosExcluir']);
+$router->post('/banco-dados/console/dados/duplicar', [DbConsoleController::class, 'dadosDuplicar']);
+$router->get('/banco-dados/console/dados/exportar', [DbConsoleController::class, 'dadosExportar']);
+$router->get('/banco-dados/console/arvore', [DbConsoleController::class, 'arvoreTabelas']);
+$router->get('/banco-dados/console/arvore/bancos', [DbConsoleController::class, 'arvoreBancos']);
+$router->get('/banco-dados/console/sql', [DbConsoleController::class, 'sqlForm']);
+$router->post('/banco-dados/console/sql', [DbConsoleController::class, 'sqlExecutar']);

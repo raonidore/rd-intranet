@@ -19,10 +19,15 @@ class ModuloCatalogo
         'infra_hardware' => ['label' => 'Hardware', 'grupo' => 'Infraestrutura'],
         'infra_rede' => ['label' => 'Network', 'grupo' => 'Infraestrutura'],
         'infra_servicos' => ['label' => 'Serviços', 'grupo' => 'Infraestrutura'],
+        'infra_cron' => ['label' => 'Cron', 'grupo' => 'Infraestrutura'],
+        'infra_iptables' => ['label' => 'Firewall (iptables)', 'grupo' => 'Infraestrutura'],
+        'infra_certificado' => ['label' => 'Certificado Digital', 'grupo' => 'Infraestrutura'],
+        'infra_dependencias' => ['label' => 'Checklist de Dependências', 'grupo' => 'Infraestrutura'],
         'apache_dashboard' => ['label' => 'Dashboard Apache', 'grupo' => 'Apache'],
         'apache_sites' => ['label' => 'Sites (VirtualHosts)', 'grupo' => 'Apache'],
         'apache_modulos' => ['label' => 'Módulos Apache', 'grupo' => 'Apache'],
         'apache_config' => ['label' => 'Config. Global Apache', 'grupo' => 'Apache'],
+        'bd_mysql' => ['label' => 'MySQL/MariaDB', 'grupo' => 'Banco de Dados'],
         'auditoria' => ['label' => 'Auditoria', 'grupo' => 'Segurança'],
     ];
 
