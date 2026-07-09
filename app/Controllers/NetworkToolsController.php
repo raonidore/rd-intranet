@@ -5,6 +5,7 @@ namespace App\Controllers;
 use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
 use App\Services\NetworkToolsService;
+use App\Services\TrafegoHistoricoService;
 use App\Services\AuditService;
 
 class NetworkToolsController extends Controller
@@ -94,6 +95,19 @@ class NetworkToolsController extends Controller
         echo json_encode([
             'timestamp' => microtime(true),
             'interfaces' => $this->service->trafegoInterfaces(),
+        ]);
+    }
+
+    public function historico(): void
+    {
+        AuthMiddleware::checkModulo('infra_rede');
+
+        $dias = (int)($_GET['dias'] ?? 30);
+        $dias = $dias > 0 && $dias <= 365 ? $dias : 30;
+
+        $this->view('infrastructure/rede_trafego_historico', [
+            'dias' => $dias,
+            'consumo' => (new TrafegoHistoricoService())->consumoDiario($dias),
         ]);
     }
 }

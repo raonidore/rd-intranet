@@ -239,11 +239,15 @@ class ServerInfoService
         foreach ($interfaces as $nome => &$dados) {
             $rx = (int)trim(@file_get_contents("/sys/class/net/{$nome}/statistics/rx_bytes") ?: '0');
             $tx = (int)trim(@file_get_contents("/sys/class/net/{$nome}/statistics/tx_bytes") ?: '0');
+            $rxPacotes = (int)trim(@file_get_contents("/sys/class/net/{$nome}/statistics/rx_packets") ?: '0');
+            $txPacotes = (int)trim(@file_get_contents("/sys/class/net/{$nome}/statistics/tx_packets") ?: '0');
 
-            $dados['rx_bytes'] = $rx;
-            $dados['tx_bytes'] = $tx;
-            $dados['rx_fmt']   = $this->formatBytes($rx);
-            $dados['tx_fmt']   = $this->formatBytes($tx);
+            $dados['rx_bytes']   = $rx;
+            $dados['tx_bytes']   = $tx;
+            $dados['rx_fmt']     = $this->formatBytes($rx);
+            $dados['tx_fmt']     = $this->formatBytes($tx);
+            $dados['rx_packets'] = $rxPacotes;
+            $dados['tx_packets'] = $txPacotes;
         }
         unset($dados);
 

@@ -14,6 +14,19 @@ $servicos = $info['servicos'];
 $interfacesUp = count(array_filter($rede['interfaces'], fn($i) => $i['estado'] === 'up'));
 $interfacesTotal = count($rede['interfaces']);
 
+$interfacesTrafego = array_filter($rede['interfaces'], fn($i) => $i['nome'] !== 'lo');
+$totalRxBytes = array_sum(array_column($interfacesTrafego, 'rx_bytes'));
+$totalTxBytes = array_sum(array_column($interfacesTrafego, 'tx_bytes'));
+
+function formatBytesInfra(int $bytes): string
+{
+    if ($bytes <= 0) return '0 B';
+    $unidades = ['B', 'KB', 'MB', 'GB', 'TB'];
+    $i = (int)floor(log($bytes, 1024));
+    $i = min($i, count($unidades) - 1);
+    return round($bytes / (1024 ** $i), 1) . ' ' . $unidades[$i];
+}
+
 function corSaudeInfra(int $pct): string
 {
     return $pct >= 90 ? '#22c55e' : ($pct >= 70 ? '#f59e0b' : '#ef4444');
@@ -92,7 +105,7 @@ function corPercentualInfra(float $p): string
 </div>
 
 <div class="row g-3">
-    <div class="col-md-4">
+    <div class="col-lg-3 col-md-6">
         <a href="<?= url('/infraestrutura/hardware') ?>" class="tech-card">
             <div class="accent" style="background:#22c55e"></div>
             <div class="card-body">
@@ -170,6 +183,34 @@ function corPercentualInfra(float $p): string
                 <div class="stat-mini-row">
                     <span class="tech-label mb-0">Com falha</span>
                     <span class="tech-num" style="font-size:16px; color:<?= $servicos['falharam'] > 0 ? '#ef4444' : '#94a3b8' ?>"><?= (int)$servicos['falharam'] ?></span>
+                </div>
+            </div>
+        </a>
+    </div>
+
+    <div class="col-lg-3 col-md-6">
+        <a href="<?= url('/infraestrutura/rede/trafego/historico') ?>" class="tech-card">
+            <div class="accent" style="background:#f59e0b"></div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <div>
+                        <div class="tech-label">Infraestrutura</div>
+                        <h5 class="mb-0"><i class="bi bi-bar-chart-line me-1"></i> Tráfego</h5>
+                    </div>
+                    <span class="pulse-dot online"></span>
+                </div>
+
+                <div class="stat-mini-row">
+                    <span class="tech-label mb-0"><i class="bi bi-arrow-down-circle me-1"></i> Download</span>
+                    <span class="tech-num" style="font-size:16px; color:#22c55e"><?= formatBytesInfra($totalRxBytes) ?></span>
+                </div>
+                <div class="stat-mini-row">
+                    <span class="tech-label mb-0"><i class="bi bi-arrow-up-circle me-1"></i> Upload</span>
+                    <span class="tech-num" style="font-size:16px; color:#06b6d4"><?= formatBytesInfra($totalTxBytes) ?></span>
+                </div>
+                <div class="stat-mini-row">
+                    <span class="tech-label mb-0">Histórico</span>
+                    <span style="font-size:12px">Ver consumo por dia</span>
                 </div>
             </div>
         </a>
