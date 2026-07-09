@@ -92,10 +92,10 @@ use App\Components\Alert;
 (function () {
     const TESTAR_URL = '<?= url('/infraestrutura/rede/rotas/testar') ?>';
     const EXCLUIR_URL = '<?= url('/infraestrutura/rede/rotas/excluir') ?>';
-    const modalTeste = new bootstrap.Modal(document.getElementById('modalTeste'));
 
     document.querySelectorAll('.btn-testar').forEach(function (btn) {
         btn.addEventListener('click', async function () {
+            const modalTeste = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalTeste'));
             document.getElementById('modal-teste-output').textContent = 'Executando...';
             modalTeste.show();
             try {
