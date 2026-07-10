@@ -1,9 +1,13 @@
 <?php
 
+use App\Components\Alert;
+
 ob_start();
 
 $pendente = (int)($samba['alteracoes_pendentes'] ?? 0) === 1;
 ?>
+
+<?= Alert::flash() ?>
 
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">
