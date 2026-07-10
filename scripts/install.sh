@@ -61,7 +61,11 @@ apt-get install -y -qq git php-cli php-mysql php-xml php-mbstring unzip curl
 if [ -d "$REPO_DIR/.git" ]; then
   echo "Ja existe um checkout em $REPO_DIR, pulando clone."
 else
-  mkdir -p "$(dirname "$REPO_DIR")"
+  # /var/www e do root; REPO_DIR precisa existir e ja pertencer ao
+  # REPO_USER *antes* do clone, senao o "sudo -u" abaixo nao consegue
+  # nem criar o diretorio.
+  mkdir -p "$REPO_DIR"
+  chown "$REPO_USER:$REPO_USER" "$REPO_DIR"
   sudo -u "$REPO_USER" git clone --branch "$REPO_BRANCH" "$REPO_URL" "$REPO_DIR"
 fi
 
