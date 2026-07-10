@@ -44,7 +44,11 @@ O script (`scripts/install.sh`) faz, nessa ordem:
    — uma lista só, não duplicada aqui.
 4. Cria `/opt/rdtecnologia/{scripts,logs}` e sincroniza
    `scripts/system/*.sh` pra lá (mesmo mecanismo usado depois de cada
-   atualização, ver `scripts/sync-system-scripts.sh`).
+   atualização, ver `scripts/sync-system-scripts.sh`). Em seguida roda os
+   scripts de setup que criam conta/chave/serviço privilegiado (ACL do
+   Samba, chave de criptografia do Console SQL, persistência de
+   iptables/rotas extras) — de propósito fora do sudoers automático do
+   `www-data`, então precisam ser chamados aqui explicitamente.
 5. Cria o banco `rd_intranet`, o usuário do MySQL (senha aleatória, exibida
    só uma vez no final) e `app/Config/database.php` a partir do
    `app/Config/database.example.php`.

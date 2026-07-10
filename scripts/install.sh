@@ -107,6 +107,16 @@ chmod 1777 /var/log/rd-intranet-cron
 bash "$REPO_DIR/scripts/sync-system-scripts.sh"
 
 # ---------------------------------------------------------------------
+# 4.1) Passos de setup que criam conta/chave/servico privilegiado -- de
+#      proposito FORA do sudoers automatico do www-data (nao terminam em
+#      _web.sh), entao o install.sh precisa rodar cada um explicitamente.
+#      Todos idempotentes.
+# ---------------------------------------------------------------------
+for SETUP in setup_acl_admin setup_db_secret_key setup_iptables_persistencia setup_rotas_extras; do
+  bash "$REPO_DIR/scripts/system/${SETUP}.sh"
+done
+
+# ---------------------------------------------------------------------
 # 5) Banco de dados
 # ---------------------------------------------------------------------
 if [ -f "$REPO_DIR/app/Config/database.php" ]; then
