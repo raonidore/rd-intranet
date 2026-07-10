@@ -82,7 +82,13 @@ foreach (App\Services\DependenciaCatalogo::itens() as $i) { echo $i["pacote"] . 
 ')
 echo "Instalando pacotes: $PACOTES"
 # shellcheck disable=SC2086
-apt-get install -y -qq $PACOTES composer
+# mariadb-server nao vem do catalogo de dependencias porque aquela lista e
+# so o cliente (usado pelo Console SQL pra conectar em bancos externos) --
+# o servidor local, que guarda os dados da propria aplicacao, so entra
+# numa instalacao nova mesmo.
+apt-get install -y -qq $PACOTES composer mariadb-server
+
+systemctl enable --now mariadb >/dev/null
 
 # ---------------------------------------------------------------------
 # 4) Estrutura fora do repo usada pelos scripts root (ver
