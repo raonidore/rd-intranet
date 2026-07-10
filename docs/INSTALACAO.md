@@ -52,10 +52,15 @@ O script (`scripts/install.sh`) faz, nessa ordem:
 5. Cria o banco `rd_intranet`, o usuário do MySQL (senha aleatória, exibida
    só uma vez no final) e `app/Config/database.php` a partir do
    `app/Config/database.example.php`.
-6. Roda `composer install` e carrega `database/schema.sql` (o estado atual
-   completo do banco — não é o histórico de `database/migrations/`, que
-   tem `ALTER TABLE`s não seguros de reaplicar do zero), marca essas
-   migrations como já aplicadas e cria o usuário admin padrão (login
+6. Roda `composer install`, gera o `[global]` do `smb.conf` (mesmo template
+   da tela Samba > Config. Global) com `include = /etc/samba/shares.conf`
+   e cria esse `shares.conf` vazio — sem isso, aplicar compartilhamentos
+   pela tela Deploy falha com `NT_STATUS_BAD_NETWORK_NAME` mesmo o
+   compartilhamento existindo no banco. Carrega `database/schema.sql` (o
+   estado atual completo do banco — não é o histórico de
+   `database/migrations/`, que tem `ALTER TABLE`s não seguros de reaplicar
+   do zero), marca essas migrations como já aplicadas e cria o usuário
+   admin padrão (login
    `admin`, senha `rd.intranet`) — só se ainda não existir nenhum admin.
 7. Libera `www-data` via sudo (sem senha) pra rodar qualquer script já
    publicado em `/opt/rdtecnologia/scripts/*.sh` — arquivo novo, sem

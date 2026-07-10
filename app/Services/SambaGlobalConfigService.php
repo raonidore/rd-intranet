@@ -43,7 +43,7 @@ class SambaGlobalConfigService
             'icone'  => 'bi-diagram-3',
             'campos' => [
                 ['key' => 'interfaces', 'label' => 'Interfaces de rede', 'tipo' => 'text',
-                 'help' => 'Interfaces que o Samba irá escutar (ex: lo enp6s18). Separar por espaço.'],
+                 'help' => 'Interfaces que o Samba irá escutar (ex: lo eth0). Deixe vazio para escutar em todas.'],
                 ['key' => 'bind interfaces only', 'label' => 'Apenas interfaces listadas', 'tipo' => 'select',
                  'opcoes' => ['yes' => 'Sim — Escutar somente as interfaces listadas', 'no' => 'Não — Escutar em todas'],
                  'help' => 'Recomendado "Sim" em servidores com múltiplas interfaces'],

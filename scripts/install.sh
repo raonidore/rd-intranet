@@ -151,6 +151,13 @@ mysql "$DB_NOME" < "$REPO_DIR/database/schema.sql"
 # ---------------------------------------------------------------------
 sudo -u "$REPO_USER" composer install --no-dev --optimize-autoloader --no-interaction --working-dir="$REPO_DIR"
 
+# smb.conf [global] + include de shares.conf -- depende do autoload do
+# composer (usa App\Core\Samba\SambaTemplate::global(), mesmo template da
+# tela Samba > Config. Global). Sem isso, "Deploy > Aplicar Samba" falha e
+# nenhum compartilhamento fica acessivel de verdade pela rede
+# (NT_STATUS_BAD_NETWORK_NAME), mesmo ja existindo no banco.
+bash "$REPO_DIR/scripts/system/setup_samba_base.sh" "$REPO_DIR"
+
 php -r '
 require "vendor/autoload.php";
 $pdo = App\Core\Database::connection();

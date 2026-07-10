@@ -9,14 +9,10 @@ class SambaTemplate
         return <<<CONF
 [global]
    workgroup = WORKGROUP
-   server string = SMB PMPE
-   netbios name = SMB-PMPE
+   server string = RD Intranet
    security = user
 
    map to guest = Never
-
-   interfaces = lo enp6s18
-   bind interfaces only = yes
 
    log file = /var/log/samba/%m.log
    max log size = 10000
