@@ -9,10 +9,13 @@
 # (mesmo template de App\Core\Samba\SambaTemplate::global(), usado
 # tambem pela tela Samba > Config. Global -- fonte unica, nao duplicada
 # aqui) + 'include = /etc/samba/shares.conf', o proprio shares.conf
-# (comeca vazio, a tela de Compartilhamentos que preenche depois) e o
-# diretorio de backup dos deploys de compartilhamentos. Sem isso, a tela
-# de Deploy > Aplicar Samba falha silenciosamente e nenhum
-# compartilhamento fica de fato acessivel via rede (NT_STATUS_BAD_NETWORK_NAME).
+# (comeca vazio, a tela de Compartilhamentos que preenche depois), o
+# diretorio de backup dos deploys de compartilhamentos e o diretorio de
+# tmp onde o PHP (www-data) escreve o shares.conf gerado antes do script
+# root aplicar (App\Core\Samba\SambaConfigWriter). Sem isso, a tela de
+# Deploy > Aplicar Samba falha ("Arquivo temporário não encontrado" ou
+# NT_STATUS_BAD_NETWORK_NAME) e nenhum compartilhamento fica de fato
+# acessivel via rede.
 #
 # Idempotente: so mexe no que ainda nao existe.
 
@@ -26,6 +29,10 @@ fi
 REPO_DIR="${1:?uso: setup_samba_base.sh <repo_dir>}"
 
 mkdir -p /etc/samba/rd/backups
+
+mkdir -p /etc/samba/rd/tmp
+chown root:www-data /etc/samba/rd/tmp
+chmod 775 /etc/samba/rd/tmp
 
 if [ ! -f /etc/samba/shares.conf ]; then
   printf '# Arquivo gerado pela RD Intranet\n# Nao edite manualmente. Altere pela interface web.\n' > /etc/samba/shares.conf

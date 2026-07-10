@@ -27,7 +27,15 @@ class SambaConfigDeployService
         $validator = new SambaValidator();
 
         $gerado = $generator->generate($shares);
-        $tempFile = $writer->writeTemp($gerado['conteudo']);
+
+        try {
+            $tempFile = $writer->writeTemp($gerado['conteudo']);
+        } catch (\RuntimeException $e) {
+            return [
+                'success' => false,
+                'output' => $e->getMessage(),
+            ];
+        }
 
         $validacao = $validator->validateFile('/etc/samba/smb.conf');
 
