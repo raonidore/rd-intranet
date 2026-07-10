@@ -143,6 +143,10 @@ class AtualizacaoService
                 : (' Erro ao aplicar migrations: ' . $migracao['erro']);
         }
 
+        if ($sucesso) {
+            $this->garantirCronTrafego();
+        }
+
         $commitDepois = $this->commitAtual();
 
         $this->repo->registrar('aplicar', $commitAntes, $commitDepois, $sucesso, $saida, $usuarioId);
@@ -188,6 +192,36 @@ class AtualizacaoService
         );
 
         return $resultado;
+    }
+
+    /**
+     * Garante que o cron nativo de coleta de trafego de rede existe --
+     * mesma logica de scripts/install.sh, so que reaplicada a cada
+     * atualizacao (idempotente: nao cria duplicado se o comando ja
+     * existir). Cobre o caso de um servidor que ainda nao tinha esse job
+     * quando foi instalado.
+     */
+    private function garantirCronTrafego(): void
+    {
+        $comandoTrafego = '/usr/bin/php ' . $this->repoDir() . '/scripts/system/coletar_trafego.php';
+
+        $stmt = \App\Core\Database::connection()->prepare(
+            'SELECT COUNT(*) FROM cron_jobs WHERE comando = ?'
+        );
+        $stmt->execute([$comandoTrafego]);
+
+        if ((int)$stmt->fetchColumn() > 0) {
+            return;
+        }
+
+        (new CronService())->criar([
+            'nome' => 'Coleta de tráfego de rede',
+            'descricao' => 'Grava snapshot de RX/TX (bytes e pacotes) por interface para o histórico de tráfego (Infraestrutura > Network > Tráfego > Histórico).',
+            'expressao' => '*/5 * * * *',
+            'usuario_execucao' => 'www-data',
+            'comando' => $comandoTrafego,
+            'ativo' => true,
+        ]);
     }
 
     private function executarScript(string $script, array $parametros = []): array

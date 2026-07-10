@@ -2,12 +2,17 @@
 # atualizar_aplicar_web.sh
 #
 # Busca e aplica (fast-forward apenas) a atualizacao mais recente de
-# origin/main, sincroniza os scripts de sistema e reinstala dependencias do
-# composer se o composer.lock mudou. Nunca faz reset/force -- se a arvore
-# local nao puder avancar em fast-forward (historico divergente), falha e
-# nao mexe em nada, pra nao arriscar perder trabalho local no servidor.
-# Le e escreve o codigo como o dono do checkout ('sudo -u'), nunca como
-# root direto, pra nao acabar deixando arquivo root-owned no meio do repo.
+# origin/main, sincroniza os scripts de sistema, reinstala dependencias do
+# composer se o composer.lock mudou e reaplica os passos de setup
+# idempotentes que o install.sh tambem roda (setup_acl_admin,
+# setup_db_secret_key, setup_iptables_persistencia, setup_rotas_extras,
+# setup_samba_base) -- assim qualquer diretorio/config/servico que uma
+# atualizacao passe a exigir se reconcilia sozinho, sem precisar de SSH.
+# Nunca faz reset/force -- se a arvore local nao puder avancar em
+# fast-forward (historico divergente), falha e nao mexe em nada, pra nao
+# arriscar perder trabalho local no servidor. Le e escreve o codigo como o
+# dono do checkout ('sudo -u'), nunca como root direto, pra nao acabar
+# deixando arquivo root-owned no meio do repo.
 
 set -u
 
@@ -48,6 +53,20 @@ if [ -f composer.lock ] && [ "$LOCK_ANTES" != "$LOCK_DEPOIS" ] && command -v com
     echo "{\"success\":false,\"message\":\"Codigo atualizado, mas falhou ao instalar dependencias do composer: ${SAIDA_COMPOSER//\"/\\\"}\"}"
     exit 1
   fi
+fi
+
+for SETUP in setup_acl_admin setup_db_secret_key setup_iptables_persistencia setup_rotas_extras; do
+  SAIDA_SETUP=$(bash "$REPO_DIR/scripts/system/${SETUP}.sh" 2>&1)
+  if [ $? -ne 0 ]; then
+    echo "{\"success\":false,\"message\":\"Codigo atualizado, mas falhou em ${SETUP}.sh: ${SAIDA_SETUP//\"/\\\"}\"}"
+    exit 1
+  fi
+done
+
+SAIDA_SAMBA=$(bash "$REPO_DIR/scripts/system/setup_samba_base.sh" "$REPO_DIR" 2>&1)
+if [ $? -ne 0 ]; then
+  echo "{\"success\":false,\"message\":\"Codigo atualizado, mas falhou ao preparar base do Samba: ${SAIDA_SAMBA//\"/\\\"}\"}"
+  exit 1
 fi
 
 echo '{"success":true,"message":"Atualizacao aplicada com sucesso."}'
