@@ -1,0 +1,202 @@
+<?php
+
+namespace App\Services;
+
+use App\Repositories\AtualizacaoRepository;
+
+class AtualizacaoService
+{
+    private const SCRIPT_VERIFICAR = '/opt/rdtecnologia/scripts/atualizar_verificar_web.sh';
+    private const SCRIPT_APLICAR = '/opt/rdtecnologia/scripts/atualizar_aplicar_web.sh';
+    private const SCRIPT_REVERTER = '/opt/rdtecnologia/scripts/atualizar_reverter_web.sh';
+    private const BRANCH = 'main';
+
+    private LinuxService $linux;
+    private AtualizacaoRepository $repo;
+    private MigrationService $migrations;
+
+    public function __construct()
+    {
+        $this->linux = new LinuxService();
+        $this->repo = new AtualizacaoRepository();
+        $this->migrations = new MigrationService();
+    }
+
+    public function commitAtual(): ?string
+    {
+        return $this->git('rev-parse HEAD');
+    }
+
+    public function commitRemoto(): ?string
+    {
+        return $this->git('rev-parse origin/' . self::BRANCH);
+    }
+
+    /**
+     * Commits que existem em origin/main e ainda nao em HEAD, mais recente
+     * primeiro. So le refs locais (sem rede) -- reflete o estado de acordo
+     * com o ultimo fetch feito por verificar()/aplicar().
+     *
+     * @return array<int, array{hash: string, autor: string, data: string, assunto: string}>
+     */
+    public function commitsPendentes(): array
+    {
+        $formato = "%H\t%an\t%ad\t%s";
+        $resultado = $this->linux->executar(
+            $this->gitPrefixo()
+            . ' log HEAD..origin/' . self::BRANCH
+            . ' --date=iso --format=' . escapeshellarg($formato)
+        );
+
+        if (!$resultado['success'] || trim($resultado['output']) === '') {
+            return [];
+        }
+
+        $commits = [];
+        foreach (explode("\n", trim($resultado['output'])) as $linha) {
+            $partes = explode("\t", $linha, 4);
+            if (count($partes) < 4) continue;
+
+            $commits[] = [
+                'hash' => $partes[0],
+                'autor' => $partes[1],
+                'data' => $partes[2],
+                'assunto' => $partes[3],
+            ];
+        }
+
+        return $commits;
+    }
+
+    public function podeReverter(): bool
+    {
+        return $this->repo->ultimoSucesso('aplicar') !== null;
+    }
+
+    public function historico(int $limite = 20): array
+    {
+        return $this->repo->listar($limite);
+    }
+
+    /**
+     * @return array{success: bool, message: string}
+     */
+    public function verificar(): array
+    {
+        $resultado = $this->executarScript(self::SCRIPT_VERIFICAR);
+
+        ConfigService::set('atualizacao_verificado_em', date('Y-m-d H:i:s'));
+        ConfigService::set('atualizacao_ultimo_erro', $resultado['success'] ? '' : $resultado['message']);
+
+        return $resultado;
+    }
+
+    /**
+     * @return array{success: bool, message: string, commit_antes: ?string, commit_depois: ?string}
+     */
+    public function aplicar(?int $usuarioId): array
+    {
+        $commitAntes = $this->commitAtual();
+
+        $resultado = $this->executarScript(self::SCRIPT_APLICAR);
+        $sucesso = $resultado['success'];
+        $saida = $resultado['message'];
+
+        if ($sucesso) {
+            $migracao = $this->migrations->aplicar();
+            $sucesso = $migracao['success'];
+
+            $saida .= $migracao['success']
+                ? (' ' . (empty($migracao['aplicadas'])
+                    ? 'Nenhuma migration pendente.'
+                    : 'Migrations aplicadas: ' . implode(', ', $migracao['aplicadas']) . '.'))
+                : (' Erro ao aplicar migrations: ' . $migracao['erro']);
+        }
+
+        $commitDepois = $this->commitAtual();
+
+        $this->repo->registrar('aplicar', $commitAntes, $commitDepois, $sucesso, $saida, $usuarioId);
+
+        ConfigService::set('atualizacao_verificado_em', date('Y-m-d H:i:s'));
+        ConfigService::set('atualizacao_ultimo_erro', $sucesso ? '' : $saida);
+
+        return [
+            'success' => $sucesso,
+            'message' => $saida,
+            'commit_antes' => $commitAntes,
+            'commit_depois' => $commitDepois,
+        ];
+    }
+
+    /**
+     * Reverte para o commit_antes da ultima atualizacao aplicada com
+     * sucesso. Nao aceita nenhum commit vindo de fora do proprio historico
+     * de atualizacoes do sistema.
+     *
+     * @return array{success: bool, message: string}
+     */
+    public function reverter(?int $usuarioId): array
+    {
+        $ultimo = $this->repo->ultimoSucesso('aplicar');
+
+        if (!$ultimo || !$ultimo['commit_antes']) {
+            return ['success' => false, 'message' => 'Não há uma atualização aplicada para reverter.'];
+        }
+
+        $commitAntesRevert = $this->commitAtual();
+        $alvo = $ultimo['commit_antes'];
+
+        $resultado = $this->executarScript(self::SCRIPT_REVERTER, [$alvo]);
+
+        $this->repo->registrar(
+            'reverter',
+            $commitAntesRevert,
+            $resultado['success'] ? $alvo : null,
+            $resultado['success'],
+            $resultado['message'],
+            $usuarioId
+        );
+
+        return $resultado;
+    }
+
+    private function executarScript(string $script, array $parametros = []): array
+    {
+        $resultado = $this->linux->executarScript($script, $parametros);
+        $dados = json_decode(trim($resultado['output']), true);
+
+        if (is_array($dados) && isset($dados['success'])) {
+            return ['success' => (bool)$dados['success'], 'message' => (string)($dados['message'] ?? '')];
+        }
+
+        // sudo pode falhar antes do script rodar (ex: sudoers nao liberado
+        // ainda) -- nesse caso a saida nao vai ser JSON valido.
+        return ['success' => false, 'message' => $resultado['output']];
+    }
+
+    private function git(string $args): ?string
+    {
+        $resultado = $this->linux->executar($this->gitPrefixo() . ' ' . $args);
+
+        return $resultado['success'] ? trim($resultado['output']) : null;
+    }
+
+    /**
+     * 'safe.directory' evita o "detected dubious ownership" do git: o
+     * checkout pertence ao usuario dono do deploy (ex: 'ti'), e o PHP roda
+     * como www-data -- sem isso, todo comando de leitura abaixo falharia
+     * silenciosamente (git recusa a rodar em repo de outro dono por
+     * padrao desde a CVE-2022-24765).
+     */
+    private function gitPrefixo(): string
+    {
+        $dir = $this->repoDir();
+
+        return 'git -c ' . escapeshellarg('safe.directory=' . $dir) . ' -C ' . escapeshellarg($dir);
+    }
+
+    private function repoDir(): string
+    {
+        return realpath(__DIR__ . '/../..');
+    }
+}

@@ -31,6 +31,7 @@ use App\Controllers\CronController;
 use App\Controllers\IptablesController;
 use App\Controllers\CertificadoController;
 use App\Controllers\DependenciaController;
+use App\Controllers\AtualizacaoController;
 
 $router->get('/', [DashboardController::class, 'index']);
 $router->get('/dashboard', [DashboardController::class, 'index']);
@@ -214,6 +215,12 @@ $router->get('/administracao/usuarios/ativar', [UserController::class, 'ativar']
 $router->get('/administracao/usuarios/desativar', [UserController::class, 'desativar']);
 $router->get('/administracao/usuarios/excluir', [UserController::class, 'excluirForm']);
 $router->post('/administracao/usuarios/excluir', [UserController::class, 'excluir']);
+
+$router->get('/administracao/atualizacoes', [AtualizacaoController::class, 'index']);
+$router->post('/administracao/atualizacoes/verificar', [AtualizacaoController::class, 'verificar']);
+$router->post('/administracao/atualizacoes/aplicar', [AtualizacaoController::class, 'aplicar']);
+$router->post('/administracao/atualizacoes/reverter', [AtualizacaoController::class, 'reverter']);
+$router->post('/administracao/atualizacoes/checagem-diaria', [AtualizacaoController::class, 'checagemDiaria']);
 
 $router->get('/banco-dados/conexoes', [DbConexaoController::class, 'index']);
 $router->get('/banco-dados/conexoes/novo', [DbConexaoController::class, 'novoForm']);

@@ -14,6 +14,8 @@ if (!$comando) {
     echo "  make:repository NomeRepository\n";
     echo "  make:job NomeJob\n";
     echo "  make:module NomeModulo\n";
+    echo "  migrate                 Aplica as migrations pendentes em database/migrations/\n";
+    echo "  atualizacao:verificar   Busca origin/main e atualiza o cache de 'há atualização?'\n";
     exit;
 }
 
@@ -90,6 +92,35 @@ switch ($comando) {
                 echo "Criado diretório: {$dir}\n";
             }
         }
+        break;
+
+    case 'migrate':
+        $resultado = (new \App\Services\MigrationService())->aplicar();
+
+        foreach ($resultado['aplicadas'] as $arquivo) {
+            echo "Aplicada: {$arquivo}\n";
+        }
+
+        if (!$resultado['success']) {
+            echo "Erro: {$resultado['erro']}\n";
+            exit(1);
+        }
+
+        if (empty($resultado['aplicadas'])) {
+            echo "Nada a aplicar, banco já está em dia.\n";
+        }
+
+        break;
+
+    case 'atualizacao:verificar':
+        $resultado = (new \App\Services\AtualizacaoService())->verificar();
+
+        echo ($resultado['success'] ? 'OK: ' : 'ERRO: ') . $resultado['message'] . "\n";
+
+        if (!$resultado['success']) {
+            exit(1);
+        }
+
         break;
 
     default:

@@ -370,8 +370,11 @@ $abrirInfraServicos = $rdSecaoAtiva(['/infraestrutura/servicos']);
         <?php endif; ?>
 
         <?php if (PermissionService::ehAdmin()): ?>
-        <a href="<?= url('/administracao/usuarios') ?>" class="<?= str_starts_with($uriAtual, '/administracao') ? 'active' : '' ?>">
+        <a href="<?= url('/administracao/usuarios') ?>" class="<?= str_starts_with($uriAtual, '/administracao/usuarios') ? 'active' : '' ?>">
             <i class="bi bi-person-gear me-2"></i> Usuários do Sistema
+        </a>
+        <a href="<?= url('/administracao/atualizacoes') ?>" class="<?= str_starts_with($uriAtual, '/administracao/atualizacoes') ? 'active' : '' ?>">
+            <i class="bi bi-cloud-arrow-down me-2"></i> Atualizações do Sistema
         </a>
         <?php endif; ?>
     </div>
