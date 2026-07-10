@@ -58,7 +58,12 @@ O script (`scripts/install.sh`) faz, nessa ordem:
    `scripts/grant-sudo-atualizacao.sh`, que é só pra servidores que já
    existiam antes do módulo de Atualizações).
 8. Ajusta dono/permissão do checkout.
-9. Cria o vhost do Apache em HTTP.
+9. Cria o vhost do Apache em HTTP, mais um `Alias /rd.intranet` apontando
+   pra `public/` — a aplicação usa `/rd.intranet` como prefixo de URL por
+   padrão (`base_url` em `configuracoes`), e o `.htaccess` (`RewriteBase
+   /rd.intranet/`) só funciona corretamente com esse Alias presente; sem
+   ele, qualquer rota dá "500 Internal Server Error" por loop de
+   redirecionamento (`AH00124`).
 
 ## Depois de rodar o script
 

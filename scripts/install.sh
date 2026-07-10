@@ -192,11 +192,30 @@ cat > "/etc/apache2/sites-available/rd-intranet.conf" <<EOF
 </VirtualHost>
 EOF
 a2ensite rd-intranet >/dev/null
+
+# A aplicacao roda com base_url=/rd.intranet por padrao (ver 'configuracoes'
+# no banco e app/Helpers/url.php) -- as rotas assumem esse prefixo na URL.
+# O .htaccess usa RewriteBase /rd.intranet/ pra isso, mas RewriteBase so
+# funciona quando o prefixo da URL de fato corresponde a um diretorio
+# fisico diferente via Alias (documentado no proprio mod_rewrite); sem
+# esse Alias, /rd.intranet/algo entra em loop de redirecionamento interno
+# (AH00124) porque o prefixo nao existe como pasta real dentro de public/.
+cat > "/etc/apache2/conf-available/rd-intranet-alias.conf" <<EOF
+Alias /rd.intranet ${REPO_DIR}/public
+
+<Directory ${REPO_DIR}/public>
+    Options -Indexes +FollowSymLinks
+    AllowOverride All
+    Require all granted
+</Directory>
+EOF
+a2enconf rd-intranet-alias >/dev/null
+
 systemctl reload apache2
 
 echo ""
 echo "== Instalacao concluida =="
-echo "Site (HTTP): http://${DOMINIO}/"
+echo "Site (HTTP): http://${DOMINIO}/rd.intranet/login"
 echo "Banco '${DB_NOME}' criado, usuario '${DB_USUARIO}', senha: ${DB_SENHA}"
 echo "(guarde essa senha agora -- ela nao fica no repositorio nem e reexibida)"
 echo ""
