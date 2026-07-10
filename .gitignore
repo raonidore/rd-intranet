@@ -3,6 +3,7 @@
 /storage/cache/*
 /storage/uploads/*
 .env
+/app/Config/database.php
 *.log
 .idea/
 .vscode/

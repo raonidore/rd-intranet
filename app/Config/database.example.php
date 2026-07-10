@@ -6,6 +6,6 @@ return [
 
     'user' => 'rd_intranet',
 
-    'password' => '@4rfullpower'
+    'password' => 'troque-esta-senha'
 
 ];
