@@ -103,7 +103,12 @@ bash "$REPO_DIR/scripts/sync-system-scripts.sh"
 # ---------------------------------------------------------------------
 # 5) Banco de dados
 # ---------------------------------------------------------------------
-if [ ! -f "$REPO_DIR/app/Config/database.php" ]; then
+if [ -f "$REPO_DIR/app/Config/database.php" ]; then
+  # instalacao retomada apos uma falha anterior -- reaproveita a senha que
+  # ja esta no arquivo em vez de gerar outra, senao o ALTER USER abaixo
+  # dessincroniza arquivo e banco a cada nova tentativa.
+  DB_SENHA="$(php -r "echo (require '$REPO_DIR/app/Config/database.php')['password'];")"
+else
   sudo -u "$REPO_USER" cp "$REPO_DIR/app/Config/database.example.php" "$REPO_DIR/app/Config/database.php"
   sudo -u "$REPO_USER" sed -i \
     -e "s/dbname=rd_intranet/dbname=${DB_NOME}/" \
@@ -115,6 +120,7 @@ fi
 mysql <<SQL
 CREATE DATABASE IF NOT EXISTS \`${DB_NOME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS '${DB_USUARIO}'@'localhost' IDENTIFIED BY '${DB_SENHA}';
+ALTER USER '${DB_USUARIO}'@'localhost' IDENTIFIED BY '${DB_SENHA}';
 GRANT ALL PRIVILEGES ON \`${DB_NOME}\`.* TO '${DB_USUARIO}'@'localhost';
 FLUSH PRIVILEGES;
 SQL
