@@ -57,10 +57,12 @@ class DeployCenterRepository
 
     public function marcarPendente(string $modulo): void
     {
+        // upsert: primeira alteracao pendente de um modulo novo cria a
+        // propria linha, nao depende de ela ja existir de antemao.
         $stmt = $this->pdo->prepare("
-            UPDATE configuracao_deploy
-            SET alteracoes_pendentes = 1
-            WHERE modulo = ?
+            INSERT INTO configuracao_deploy (modulo, alteracoes_pendentes)
+            VALUES (?, 1)
+            ON DUPLICATE KEY UPDATE alteracoes_pendentes = 1
         ");
 
         $stmt->execute([$modulo]);
@@ -105,18 +107,21 @@ class DeployCenterRepository
         $usuario = $_SESSION['usuario']['login'] ?? 'sistema';
 
         $stmt = $this->pdo->prepare("
-            UPDATE configuracao_deploy
-            SET alteracoes_pendentes = 0,
+            INSERT INTO configuracao_deploy
+                (modulo, alteracoes_pendentes, ultimo_deploy, ultimo_backup, ultimo_usuario)
+            VALUES
+                (?, 0, NOW(), ?, ?)
+            ON DUPLICATE KEY UPDATE
+                alteracoes_pendentes = 0,
                 ultimo_deploy = NOW(),
-                ultimo_backup = ?,
-                ultimo_usuario = ?
-            WHERE modulo = ?
+                ultimo_backup = VALUES(ultimo_backup),
+                ultimo_usuario = VALUES(ultimo_usuario)
         ");
 
         $stmt->execute([
+            $modulo,
             $backup,
             $usuario,
-            $modulo
         ]);
 
         $this->limparPendencias($modulo);
