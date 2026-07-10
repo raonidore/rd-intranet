@@ -82,11 +82,12 @@ foreach (App\Services\DependenciaCatalogo::itens() as $i) { echo $i["pacote"] . 
 ')
 echo "Instalando pacotes: $PACOTES"
 # shellcheck disable=SC2086
-# mariadb-server nao vem do catalogo de dependencias porque aquela lista e
-# so o cliente (usado pelo Console SQL pra conectar em bancos externos) --
-# o servidor local, que guarda os dados da propria aplicacao, so entra
-# numa instalacao nova mesmo.
-apt-get install -y -qq $PACOTES composer mariadb-server
+# mariadb-server e libapache2-mod-php nao vem do catalogo de dependencias
+# porque aquela lista e sobre o que a aplicacao *usa em runtime* (cliente
+# mysql, ferramentas de rede etc) -- servidor de banco local e o modulo do
+# PHP no Apache sao pre-requisito da propria aplicacao rodar, entram numa
+# instalacao nova sempre.
+apt-get install -y -qq $PACOTES composer mariadb-server libapache2-mod-php
 
 systemctl enable --now mariadb >/dev/null
 
@@ -211,7 +212,10 @@ Alias /rd.intranet ${REPO_DIR}/public
 EOF
 a2enconf rd-intranet-alias >/dev/null
 
-systemctl reload apache2
+# restart (nao so reload) pra garantir que qualquer modulo instalado nesta
+# mesma execucao (rewrite, php) entre em vigor de fato -- ja vimos reload
+# nao ser suficiente logo apos um modulo novo ser habilitado.
+systemctl restart apache2
 
 echo ""
 echo "== Instalacao concluida =="
