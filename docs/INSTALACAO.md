@@ -59,9 +59,11 @@ O script (`scripts/install.sh`) faz, nessa ordem:
    compartilhamento existindo no banco. Carrega `database/schema.sql` (o
    estado atual completo do banco — não é o histórico de
    `database/migrations/`, que tem `ALTER TABLE`s não seguros de reaplicar
-   do zero), marca essas migrations como já aplicadas e cria o usuário
-   admin padrão (login
-   `admin`, senha `rd.intranet`) — só se ainda não existir nenhum admin.
+   do zero), marca essas migrations como já aplicadas, cria o usuário
+   admin padrão (login `admin`, senha `rd.intranet` — só se ainda não
+   existir nenhum admin) e cadastra o cron nativo de coleta de tráfego de
+   rede (`*/5 * * * *`, roda como `www-data`) — sem ele,
+   `rede_trafego_historico` fica vazia pra sempre num servidor novo.
 7. Libera `www-data` via sudo (sem senha) pra rodar qualquer script já
    publicado em `/opt/rdtecnologia/scripts/*.sh` — arquivo novo, sem
    histórico anterior pra preservar (diferente de
