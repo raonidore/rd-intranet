@@ -6,6 +6,16 @@ use App\Components\Badge;
 ob_start();
 
 $curto = fn(?string $sha) => $sha ? substr($sha, 0, 7) : '—';
+
+$blocoCommit = function (?array $commit): string {
+    if (!$commit) {
+        return '<div class="text-muted">—</div>';
+    }
+
+    return '<div>' . htmlspecialchars($commit['assunto']) . '</div>'
+        . '<div class="small text-muted font-monospace">' . htmlspecialchars(substr($commit['hash'], 0, 7))
+        . ' · ' . htmlspecialchars($commit['data']) . '</div>';
+};
 ?>
 
 <?= Alert::flash() ?>
@@ -30,12 +40,12 @@ $curto = fn(?string $sha) => $sha ? substr($sha, 0, 7) : '—';
     <div class="card-body">
         <div class="row g-3">
             <div class="col-md-4">
-                <div class="text-muted small">Versão em execução</div>
-                <div class="font-monospace fs-6"><?= htmlspecialchars($curto($commitLocal)) ?></div>
+                <div class="text-muted small mb-1">Versão em execução</div>
+                <?= $blocoCommit($commitLocal) ?>
             </div>
             <div class="col-md-4">
-                <div class="text-muted small">Última versão no repositório</div>
-                <div class="font-monospace fs-6"><?= htmlspecialchars($curto($commitRemoto)) ?></div>
+                <div class="text-muted small mb-1">Última versão no repositório</div>
+                <?= $blocoCommit($commitRemoto) ?>
             </div>
             <div class="col-md-4">
                 <div class="text-muted small">Última verificação</div>

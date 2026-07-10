@@ -33,6 +33,36 @@ class AtualizacaoService
     }
 
     /**
+     * Dados legiveis de um commit (hash, data, assunto), pra mostrar em
+     * vez do hash cru na tela -- ex: commitInfo('HEAD') ou
+     * commitInfo('origin/main').
+     *
+     * @return array{hash: string, data: string, assunto: string}|null
+     */
+    public function commitInfo(string $ref): ?array
+    {
+        $formato = "%H\t%ad\t%s";
+        $formatoData = 'format:%d/%m/%Y %H:%M';
+        $resultado = $this->linux->executar(
+            $this->gitPrefixo()
+            . ' log -1 --date=' . escapeshellarg($formatoData)
+            . ' --format=' . escapeshellarg($formato)
+            . ' ' . escapeshellarg($ref)
+        );
+
+        if (!$resultado['success'] || trim($resultado['output']) === '') {
+            return null;
+        }
+
+        $partes = explode("\t", trim($resultado['output']), 3);
+        if (count($partes) < 3) {
+            return null;
+        }
+
+        return ['hash' => $partes[0], 'data' => $partes[1], 'assunto' => $partes[2]];
+    }
+
+    /**
      * Commits que existem em origin/main e ainda nao em HEAD, mais recente
      * primeiro. So le refs locais (sem rede) -- reflete o estado de acordo
      * com o ultimo fetch feito por verificar()/aplicar().

@@ -25,8 +25,8 @@ class AtualizacaoController extends Controller
         AuthMiddleware::checkAdmin();
 
         $this->view('administracao/atualizacoes', [
-            'commitLocal' => $this->service->commitAtual(),
-            'commitRemoto' => $this->service->commitRemoto(),
+            'commitLocal' => $this->service->commitInfo('HEAD'),
+            'commitRemoto' => $this->service->commitInfo('origin/main'),
             'commitsPendentes' => $this->service->commitsPendentes(),
             'verificadoEm' => ConfigService::get('atualizacao_verificado_em'),
             'ultimoErro' => ConfigService::get('atualizacao_ultimo_erro'),
