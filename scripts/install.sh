@@ -147,6 +147,25 @@ foreach (glob("database/migrations/*.sql") as $f) { $stmt->execute([basename($f)
 php "$REPO_DIR/rd" migrate
 
 # ---------------------------------------------------------------------
+# 6.1) Usuario admin padrao, so se ainda nao existir nenhum admin (idempotente
+#      em instalacao retomada). Senha fixa e conhecida de proposito -- e
+#      so pra dar o primeiro acesso; troque assim que logar.
+# ---------------------------------------------------------------------
+php -r '
+require "vendor/autoload.php";
+$pdo = App\Core\Database::connection();
+$existeAdmin = (int)$pdo->query("SELECT COUNT(*) FROM usuarios WHERE perfil = \"admin\"")->fetchColumn();
+if ($existeAdmin === 0) {
+    $hash = password_hash("rd.intranet", PASSWORD_DEFAULT);
+    $stmt = $pdo->prepare("INSERT INTO usuarios (nome, login, senha_hash, perfil, ativo) VALUES (?, ?, ?, \"admin\", 1)");
+    $stmt->execute(["Administrador", "admin", $hash]);
+    echo "Usuario admin padrao criado.\n";
+} else {
+    echo "Ja existe usuario admin, nada a criar.\n";
+}
+'
+
+# ---------------------------------------------------------------------
 # 7) sudoers: www-data pode rodar, sem senha, qualquer script ja aprovado
 #    dentro de /opt/rdtecnologia/scripts (diretorio root-only -- www-data
 #    nao consegue escrever nem trocar nenhum desses arquivos). Cada script
@@ -220,10 +239,13 @@ systemctl restart apache2
 echo ""
 echo "== Instalacao concluida =="
 echo "Site (HTTP): http://${DOMINIO}/rd.intranet/login"
+echo ""
+echo "Login admin padrao: admin / rd.intranet"
+echo "!! TROQUE ESSA SENHA agora, no primeiro login (Administracao > Usuarios do Sistema) !!"
+echo ""
 echo "Banco '${DB_NOME}' criado, usuario '${DB_USUARIO}', senha: ${DB_SENHA}"
 echo "(guarde essa senha agora -- ela nao fica no repositorio nem e reexibida)"
 echo ""
 echo "Falta:"
-echo "  1. Criar o primeiro usuario admin (nao ha tela pra isso ainda sem"
-echo "     login -- insira direto no banco, ver docs/INSTALACAO.md)."
+echo "  1. Logar e trocar a senha do admin padrao."
 echo "  2. Emitir HTTPS pela tela Infraestrutura > Certificado Digital."

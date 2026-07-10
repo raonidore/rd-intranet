@@ -50,8 +50,9 @@ O script (`scripts/install.sh`) faz, nessa ordem:
    `app/Config/database.example.php`.
 6. Roda `composer install` e carrega `database/schema.sql` (o estado atual
    completo do banco — não é o histórico de `database/migrations/`, que
-   tem `ALTER TABLE`s não seguros de reaplicar do zero) e marca essas
-   migrations como já aplicadas.
+   tem `ALTER TABLE`s não seguros de reaplicar do zero), marca essas
+   migrations como já aplicadas e cria o usuário admin padrão (login
+   `admin`, senha `rd.intranet`) — só se ainda não existir nenhum admin.
 7. Libera `www-data` via sudo (sem senha) pra rodar qualquer script já
    publicado em `/opt/rdtecnologia/scripts/*.sh` — arquivo novo, sem
    histórico anterior pra preservar (diferente de
@@ -67,19 +68,10 @@ O script (`scripts/install.sh`) faz, nessa ordem:
 
 ## Depois de rodar o script
 
-1. **Criar o primeiro usuário admin.** Ainda não existe uma tela pra isso
-   sem estar logado — insira direto no banco:
-
-   ```sql
-   INSERT INTO usuarios (nome, login, senha_hash, perfil, ativo)
-   VALUES ('Seu Nome', 'seu.login', '<hash>', 'admin', 1);
-   ```
-
-   Gere o hash com:
-
-   ```bash
-   php -r "echo password_hash('sua-senha', PASSWORD_DEFAULT), \"\n\";"
-   ```
+1. **Trocar a senha do admin padrão.** Login `admin` / senha `rd.intranet`
+   — troque assim que logar, pela tela **Administração > Usuários do
+   Sistema**. É uma senha conhecida/fixa de propósito, só serve pra dar o
+   primeiro acesso.
 
 2. **HTTPS**: faça login e emita o certificado pela tela
    **Infraestrutura > Certificado Digital** (autoassinado ou Let's Encrypt,
