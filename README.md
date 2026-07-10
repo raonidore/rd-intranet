@@ -24,7 +24,6 @@ Sistema de administração de infraestrutura desenvolvido pela RD Tecnologia.
 ## Estrutura
 
 app/
-config/
 database/
 docs/
 public/
