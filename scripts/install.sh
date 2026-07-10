@@ -64,7 +64,13 @@ apt-get install -y -qq git php-cli php-mysql php-xml php-mbstring unzip curl
 #    arquivos, nunca escreve, ver docs/INSTALACAO.md)
 # ---------------------------------------------------------------------
 if [ -d "$REPO_DIR/.git" ]; then
-  echo "Ja existe um checkout em $REPO_DIR, pulando clone."
+  # instalacao retomada apos uma falha anterior -- atualiza pro commit
+  # atual em vez de so pular, senao o resto do script (que roda a partir
+  # deste install.sh, ja atualizado) vai referenciar arquivos que o
+  # checkout antigo em REPO_DIR ainda nao tem.
+  echo "Ja existe um checkout em $REPO_DIR, atualizando em vez de clonar."
+  sudo -u "$REPO_USER" git -C "$REPO_DIR" -c safe.directory="$REPO_DIR" fetch origin "$REPO_BRANCH" --quiet
+  sudo -u "$REPO_USER" git -C "$REPO_DIR" -c safe.directory="$REPO_DIR" merge --ff-only "origin/$REPO_BRANCH"
 else
   # /var/www e do root; REPO_DIR precisa existir e ja pertencer ao
   # REPO_USER *antes* do clone, senao o "sudo -u" abaixo nao consegue
