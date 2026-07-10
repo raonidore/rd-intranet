@@ -25,7 +25,7 @@ if [ ! -f "$CONFIG" ]; then
   exit 1
 fi
 
-NOVA_SENHA="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
+NOVA_SENHA="$(set +o pipefail; tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
 
 mysql <<SQL
 ALTER USER '${DB_USUARIO}'@'localhost' IDENTIFIED BY '${NOVA_SENHA}';

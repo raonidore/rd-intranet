@@ -31,7 +31,7 @@ REPO_USER="${REPO_USER:-ti}"
 DOMINIO="${DOMINIO:-}"
 DB_NOME="${DB_NOME:-rd_intranet}"
 DB_USUARIO="${DB_USUARIO:-rd_intranet}"
-DB_SENHA="${DB_SENHA:-$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 24)}"
+DB_SENHA="${DB_SENHA:-$(set +o pipefail; tr -dc 'A-Za-z0-9' </dev/urandom | head -c 24)}"
 
 echo "== RD Intranet: instalacao =="
 echo "Repositorio: $REPO_URL ($REPO_BRANCH) -> $REPO_DIR (dono: $REPO_USER)"
