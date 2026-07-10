@@ -32,6 +32,11 @@ DOMINIO="${DOMINIO:-}"
 DB_NOME="${DB_NOME:-rd_intranet}"
 DB_USUARIO="${DB_USUARIO:-rd_intranet}"
 DB_SENHA="${DB_SENHA:-$(set +o pipefail; tr -dc 'A-Za-z0-9' </dev/urandom | head -c 24)}"
+# Porta onde o Apache DESTA instalacao escuta. So mude se o servidor ja
+# tiver outro web server (ex: nginx) usando a 80/443 -- nesse caso, use
+# uma porta interna (ex: 8080) e configure um reverse proxy no nginx do
+# cliente apontando pra ela (ver docs/INSTALACAO.md).
+APACHE_PORT="${APACHE_PORT:-80}"
 
 echo "== RD Intranet: instalacao =="
 echo "Repositorio: $REPO_URL ($REPO_BRANCH) -> $REPO_DIR (dono: $REPO_USER)"
@@ -197,7 +202,7 @@ chmod -R u+rwX,g+rwX,o+rX-w "$REPO_DIR"
 # ---------------------------------------------------------------------
 a2enmod rewrite >/dev/null
 cat > "/etc/apache2/sites-available/rd-intranet.conf" <<EOF
-<VirtualHost *:80>
+<VirtualHost *:${APACHE_PORT}>
     ServerName ${DOMINIO}
     DocumentRoot ${REPO_DIR}/public
 
@@ -212,6 +217,16 @@ cat > "/etc/apache2/sites-available/rd-intranet.conf" <<EOF
 </VirtualHost>
 EOF
 a2ensite rd-intranet >/dev/null
+
+if [ "$APACHE_PORT" != "80" ]; then
+  # porta nao-padrao (Apache convivendo com outro web server, ex: nginx,
+  # que ja segura a 80/443) -- garante que o Apache escute nela e tira o
+  # site padrao do caminho (ele so responde na 80).
+  if ! grep -q "^Listen ${APACHE_PORT}\$" /etc/apache2/ports.conf; then
+    echo "Listen ${APACHE_PORT}" >> /etc/apache2/ports.conf
+  fi
+  a2dissite 000-default >/dev/null 2>&1 || true
+fi
 
 # A aplicacao roda com base_url=/rd.intranet por padrao (ver 'configuracoes'
 # no banco e app/Helpers/url.php) -- as rotas assumem esse prefixo na URL.
@@ -238,7 +253,13 @@ systemctl restart apache2
 
 echo ""
 echo "== Instalacao concluida =="
-echo "Site (HTTP): http://${DOMINIO}/rd.intranet/login"
+if [ "$APACHE_PORT" = "80" ]; then
+  echo "Site (HTTP): http://${DOMINIO}/rd.intranet/login"
+else
+  echo "Apache respondendo internamente em http://127.0.0.1:${APACHE_PORT}/rd.intranet/login"
+  echo "Falta configurar o reverse proxy no nginx do servidor -- ver secao"
+  echo "'Rodando atras de nginx' em docs/INSTALACAO.md."
+fi
 echo ""
 echo "Login admin padrao: admin / rd.intranet"
 echo "!! TROQUE ESSA SENHA agora, no primeiro login (Administracao > Usuarios do Sistema) !!"

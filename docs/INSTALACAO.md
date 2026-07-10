@@ -89,3 +89,43 @@ merge uma mudança em `main` no GitHub, um admin abre
 "Atualizar agora" (ou espera a verificação diária avisar). Não é mais
 necessário repetir este guia — ele serve só pra levantar um servidor do
 zero.
+
+## Rodando atrás de nginx
+
+Se o servidor já tem nginx segurando as portas 80/443 (servindo outros
+sites do cliente, por exemplo), rode o instalador apontando o Apache da
+RD Intranet pra uma porta interna em vez de brigar pela 80:
+
+```bash
+sudo APACHE_PORT=8080 DOMINIO=intranet.suaempresa.com.br bash scripts/install.sh
+```
+
+Isso faz o Apache escutar só em `127.0.0.1:8080` (o `.htaccess`/`Alias`
+continuam funcionando normalmente, é só a porta que muda) e desativa o
+site padrão do Apache, que só responde na 80. Depois, adicione um bloco
+`server` no nginx do cliente fazendo proxy pra essa porta — pode ser um
+subdomínio dedicado (recomendado, mais simples que caminho compartilhado
+com outro site) ou combinar com um domínio já existente do cliente:
+
+```nginx
+server {
+    listen 80;
+    server_name intranet.suaempresa.com.br;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+A URL final fica `http://intranet.suaempresa.com.br/rd.intranet/login`
+(o prefixo `/rd.intranet/` continua, é o `base_url` padrão da aplicação —
+ver `app/Helpers/url.php`). Pra HTTPS nesse cenário, o certificado é
+coisa do nginx (`certbot --nginx` ou o que o cliente já usar pra gerenciar
+os certificados dos outros sites dele) — **não** use o módulo
+Infraestrutura > Certificado Digital aqui, ele gerencia o certificado do
+Apache interno, que não é o que fica exposto pra internet nesse modo.
