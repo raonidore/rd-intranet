@@ -30,7 +30,7 @@ function sel($valorAtual, $valor): string
             (SSH, NAT, bloqueio de IP, etc). Este formulário é para regras personalizadas.
         </div>
 
-        <form method="post" action="<?= $acao ?>">
+        <form method="post" action="<?= $acao ?>" id="form-regra">
             <?php if ($editando): ?>
                 <input type="hidden" name="id" value="<?= (int)$regra['id'] ?>">
             <?php endif; ?>
@@ -194,6 +194,31 @@ function sel($valorAtual, $valor): string
 
     campoAcao.addEventListener('change', atualizar);
     atualizar();
+})();
+
+(function () {
+    const AVALIAR_RISCO_URL = <?= json_encode(url('/infraestrutura/iptables/avaliar-risco')) ?>;
+    const form = document.getElementById('form-regra');
+    let confirmado = false;
+
+    form.addEventListener('submit', async function (e) {
+        if (confirmado) return;
+        e.preventDefault();
+
+        try {
+            const res = await fetch(AVALIAR_RISCO_URL, { method: 'POST', body: new FormData(form) });
+            const dados = await res.json();
+
+            if (dados.risco && !confirm(dados.risco + '\n\nDeseja continuar mesmo assim?')) {
+                return;
+            }
+        } catch (err) {
+            // checagem falhou -- nao trava o salvamento, so nao avisa
+        }
+
+        confirmado = true;
+        form.submit();
+    });
 })();
 </script>
 
