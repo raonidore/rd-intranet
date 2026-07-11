@@ -67,6 +67,57 @@ $blocoCommit = function (?array $commit): string {
     </div>
 </div>
 
+<?php
+$passosPendentes = array_filter($passosManuais, fn($p) => $p['status'] === 'pendente');
+?>
+<?php if (!empty($passosManuais)): ?>
+    <div class="card border-0 shadow-sm mb-4 <?= $passosPendentes ? 'border-start border-4 border-warning' : '' ?>">
+        <div class="card-header bg-white">
+            <strong><i class="bi bi-terminal"></i> Ações manuais pendentes (requerem root/SSH)</strong>
+            <div class="small text-muted mt-1">
+                O update via web não consegue rodar estes passos sozinho (não dá pra um processo se autoconceder mais
+                acesso). Rode o comando neste servidor e depois confirme aqui — assim dá pra saber, inclusive
+                remotamente, se cada servidor já está com tudo em dia.
+            </div>
+        </div>
+        <div class="list-group list-group-flush">
+            <?php foreach ($passosManuais as $p): ?>
+                <div class="list-group-item">
+                    <div class="d-flex justify-content-between align-items-start gap-3">
+                        <div class="flex-grow-1">
+                            <div class="fw-semibold"><?= htmlspecialchars($p['titulo']) ?></div>
+                            <div class="small text-muted mb-2"><?= htmlspecialchars($p['descricao']) ?></div>
+                            <code class="d-inline-block bg-light p-2 rounded small"><?= htmlspecialchars($p['comando']) ?></code>
+                        </div>
+                        <div class="text-end" style="min-width: 220px;">
+                            <?php if ($p['status'] === 'auto'): ?>
+                                <?= Badge::make('Detectado automaticamente', 'success') ?>
+                            <?php elseif ($p['status'] === 'manual'): ?>
+                                <?= Badge::make('Confirmado manualmente', 'success') ?>
+                                <div class="small text-muted mt-1">
+                                    em <?= htmlspecialchars($p['confirmado_em']) ?><?= $p['confirmado_por_nome'] ? ' por ' . htmlspecialchars($p['confirmado_por_nome']) : '' ?>
+                                </div>
+                                <form method="post" action="<?= url('/administracao/atualizacoes/passos-manuais/desconfirmar') ?>" class="mt-1"
+                                      onsubmit="return confirm('Desfazer a confirmação deste passo?');">
+                                    <input type="hidden" name="chave" value="<?= htmlspecialchars($p['chave']) ?>">
+                                    <button type="submit" class="btn btn-sm btn-link text-muted p-0">desfazer</button>
+                                </form>
+                            <?php else: ?>
+                                <?= Badge::make('Pendente', 'warning') ?>
+                                <form method="post" action="<?= url('/administracao/atualizacoes/passos-manuais/confirmar') ?>" class="mt-2"
+                                      onsubmit="return confirm('Confirma que já rodou este comando como root neste servidor?');">
+                                    <input type="hidden" name="chave" value="<?= htmlspecialchars($p['chave']) ?>">
+                                    <button type="submit" class="btn btn-sm btn-outline-success">Marcar como feito</button>
+                                </form>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    </div>
+<?php endif; ?>
+
 <?php if (empty($commitsPendentes)): ?>
     <div class="alert alert-success">
         <i class="bi bi-check-circle"></i> Nenhuma atualização pendente.

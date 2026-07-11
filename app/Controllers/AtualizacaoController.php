@@ -8,16 +8,20 @@ use App\Services\AtualizacaoService;
 use App\Services\AuditService;
 use App\Services\ConfigService;
 use App\Services\CronService;
+use App\Services\NotificationService;
+use App\Services\PassoManualService;
 
 class AtualizacaoController extends Controller
 {
     private const NOME_JOB_CRON = 'Verificar atualizações do sistema';
 
     private AtualizacaoService $service;
+    private PassoManualService $passoManual;
 
     public function __construct()
     {
         $this->service = new AtualizacaoService();
+        $this->passoManual = new PassoManualService();
     }
 
     public function index(): void
@@ -33,7 +37,36 @@ class AtualizacaoController extends Controller
             'podeReverter' => $this->service->podeReverter(),
             'historico' => $this->service->historico(),
             'checagemDiariaAtiva' => $this->checagemDiariaAtiva(),
+            'passosManuais' => $this->passoManual->listar(),
         ]);
+    }
+
+    public function confirmarPassoManual(): void
+    {
+        AuthMiddleware::checkAdmin();
+
+        $chave = trim($_POST['chave'] ?? '');
+        $this->passoManual->confirmar($chave, $_SESSION['usuario']['id'] ?? null);
+
+        AuditService::registrar('Atualizações', 'Confirmar passo manual', "Passo \"{$chave}\" confirmado como executado.");
+        NotificationService::success('Passo marcado como executado.');
+
+        header('Location: ' . url('/administracao/atualizacoes'));
+        exit;
+    }
+
+    public function desconfirmarPassoManual(): void
+    {
+        AuthMiddleware::checkAdmin();
+
+        $chave = trim($_POST['chave'] ?? '');
+        $this->passoManual->desconfirmar($chave);
+
+        AuditService::registrar('Atualizações', 'Desfazer confirmação de passo manual', "Passo \"{$chave}\" voltou a ficar pendente.");
+        NotificationService::success('Confirmação desfeita.');
+
+        header('Location: ' . url('/administracao/atualizacoes'));
+        exit;
     }
 
     public function verificar(): void

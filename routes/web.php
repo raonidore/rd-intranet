@@ -236,6 +236,8 @@ $router->post('/administracao/atualizacoes/verificar', [AtualizacaoController::c
 $router->post('/administracao/atualizacoes/aplicar', [AtualizacaoController::class, 'aplicar']);
 $router->post('/administracao/atualizacoes/reverter', [AtualizacaoController::class, 'reverter']);
 $router->post('/administracao/atualizacoes/checagem-diaria', [AtualizacaoController::class, 'checagemDiaria']);
+$router->post('/administracao/atualizacoes/passos-manuais/confirmar', [AtualizacaoController::class, 'confirmarPassoManual']);
+$router->post('/administracao/atualizacoes/passos-manuais/desconfirmar', [AtualizacaoController::class, 'desconfirmarPassoManual']);
 
 $router->get('/banco-dados/conexoes', [DbConexaoController::class, 'index']);
 $router->get('/banco-dados/conexoes/novo', [DbConexaoController::class, 'novoForm']);
