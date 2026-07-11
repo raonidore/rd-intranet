@@ -90,6 +90,7 @@ class AntivirusService
         $total = 0;
         $ameacas = 0;
         $erro = null;
+        $viuTotal = false;
 
         foreach (explode("\n", trim($resultado['output'])) as $linha) {
             $linha = trim($linha);
@@ -103,6 +104,7 @@ class AntivirusService
             }
             if ($partes[0] === 'TOTAL') {
                 $total = (int)($partes[1] ?? 0);
+                $viuTotal = true;
                 continue;
             }
             if ($partes[0] === 'AMEACA') {
@@ -114,6 +116,14 @@ class AntivirusService
                     $partes[3] ?? '?'
                 );
             }
+        }
+
+        // se o script nem chegou a rodar (ex: sudo falhou antes, script nao
+        // sincronizado ainda), a saida crua nao bate com nenhum prefixo
+        // esperado -- sem isso cai no caso "0 arquivos, 0 ameacas, sucesso",
+        // escondendo a falha real do admin.
+        if ($erro === null && !$viuTotal) {
+            $erro = trim($resultado['output']) !== '' ? $resultado['output'] : 'Falha desconhecida ao executar a verificação.';
         }
 
         $status = $erro !== null ? 'erro' : 'concluida';
