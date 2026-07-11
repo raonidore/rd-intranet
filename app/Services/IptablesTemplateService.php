@@ -98,6 +98,58 @@ class IptablesTemplateService
                     ['nome' => 'interface', 'label' => 'Interface (opcional)', 'tipo' => 'interface', 'opcional_todas' => true],
                 ],
             ],
+            'rate_limit_porta' => [
+                'nome' => 'Proteção contra força bruta (qualquer serviço)',
+                'descricao' => 'Limita novas tentativas de conexão por IP numa janela de tempo, para qualquer porta/serviço (RDP, painel web, FTP etc.) — mesma proteção do template de SSH, generalizada.',
+                'icone' => 'bi-speedometer2',
+                'campos' => [
+                    ['nome' => 'nome_servico', 'label' => 'Nome do serviço (identificação)', 'tipo' => 'texto', 'placeholder' => 'RDP', 'obrigatorio' => true],
+                    ['nome' => 'interface', 'label' => 'Interface', 'tipo' => 'interface', 'obrigatorio' => true],
+                    ['nome' => 'protocolo', 'label' => 'Protocolo', 'tipo' => 'protocolo', 'padrao' => 'tcp', 'obrigatorio' => true],
+                    ['nome' => 'porta', 'label' => 'Porta', 'tipo' => 'porta', 'obrigatorio' => true],
+                    ['nome' => 'tentativas', 'label' => 'Tentativas permitidas', 'tipo' => 'numero', 'padrao' => '4', 'obrigatorio' => true],
+                    ['nome' => 'janela', 'label' => 'Janela (segundos)', 'tipo' => 'numero', 'padrao' => '60', 'obrigatorio' => true],
+                ],
+            ],
+            'liberar_samba' => [
+                'nome' => 'Liberar Samba/CIFS (compartilhamento de arquivos)',
+                'descricao' => 'Libera as portas usadas pelo Samba (445/139 TCP e 137/138 UDP).',
+                'icone' => 'bi-folder2-open',
+                'campos' => [
+                    ['nome' => 'interface', 'label' => 'Interface (opcional)', 'tipo' => 'interface', 'opcional_todas' => true],
+                    ['nome' => 'rede_confiavel', 'label' => 'Rede permitida (opcional, CIDR)', 'tipo' => 'cidr', 'placeholder' => '192.168.1.0/24'],
+                ],
+            ],
+            'liberar_rdp' => [
+                'nome' => 'Liberar RDP (Área de Trabalho Remota)',
+                'descricao' => 'Libera acesso RDP restrito a uma rede/IP confiável — nunca deixa RDP aberto para qualquer origem.',
+                'icone' => 'bi-display',
+                'campos' => [
+                    ['nome' => 'interface', 'label' => 'Interface', 'tipo' => 'interface', 'obrigatorio' => true],
+                    ['nome' => 'rede_confiavel', 'label' => 'IP ou rede confiável (CIDR)', 'tipo' => 'cidr', 'placeholder' => '192.168.1.0/24', 'obrigatorio' => true],
+                    ['nome' => 'porta', 'label' => 'Porta RDP', 'tipo' => 'porta', 'padrao' => '3389', 'obrigatorio' => true],
+                ],
+            ],
+            'liberar_banco_dados' => [
+                'nome' => 'Liberar banco de dados para rede interna',
+                'descricao' => 'Libera uma porta de banco de dados (MySQL 3306, Postgres 5432, etc.) só para uma rede confiável.',
+                'icone' => 'bi-database-lock',
+                'campos' => [
+                    ['nome' => 'interface', 'label' => 'Interface', 'tipo' => 'interface', 'obrigatorio' => true],
+                    ['nome' => 'rede_confiavel', 'label' => 'IP ou rede confiável (CIDR)', 'tipo' => 'cidr', 'placeholder' => '192.168.1.0/24', 'obrigatorio' => true],
+                    ['nome' => 'porta', 'label' => 'Porta do banco', 'tipo' => 'porta', 'placeholder' => '3306 (MySQL) ou 5432 (Postgres)', 'obrigatorio' => true],
+                ],
+            ],
+            'protecao_syn_flood' => [
+                'nome' => 'Proteção básica contra SYN flood',
+                'descricao' => 'Limita a taxa de novas conexões TCP (SYN) recebidas, mitigando floods volumétricos simples.',
+                'icone' => 'bi-shield-exclamation',
+                'campos' => [
+                    ['nome' => 'interface', 'label' => 'Interface', 'tipo' => 'interface', 'obrigatorio' => true],
+                    ['nome' => 'taxa', 'label' => 'Taxa máxima (conexões/segundo)', 'tipo' => 'numero', 'padrao' => '20', 'obrigatorio' => true],
+                    ['nome' => 'rajada', 'label' => 'Rajada permitida (burst)', 'tipo' => 'numero', 'padrao' => '40', 'obrigatorio' => true],
+                ],
+            ],
         ];
     }
 
@@ -183,6 +235,51 @@ class IptablesTemplateService
                     [...$base, 'nome' => "Bloqueado: {$p['ip_bloqueado']}", 'tabela' => 'filter', 'cadeia' => 'INPUT',
                         'acao' => 'DROP', 'protocolo' => 'all', 'ip_origem' => $p['ip_bloqueado'],
                         'interface_entrada' => $p['interface'] ?: null, 'registrar_log' => true],
+                ], 'acoes_extras' => []];
+
+            case 'rate_limit_porta':
+                $nome = "GEN_{$p['porta']}_" . preg_replace('/\D/', '', $p['interface']);
+                return ['regras' => [
+                    [...$base, 'nome' => "Rastreio de tentativas em {$p['nome_servico']} ({$p['interface']})", 'tabela' => 'filter', 'cadeia' => 'INPUT',
+                        'acao' => 'NONE', 'protocolo' => $p['protocolo'], 'porta_destino' => $p['porta'], 'interface_entrada' => $p['interface'],
+                        'extra' => "-m conntrack --ctstate NEW -m recent --name {$nome} --set", 'ordem' => 10],
+                    [...$base, 'nome' => "Bloqueio por excesso de tentativas em {$p['nome_servico']} ({$p['interface']})", 'tabela' => 'filter', 'cadeia' => 'INPUT',
+                        'acao' => 'DROP', 'protocolo' => $p['protocolo'], 'porta_destino' => $p['porta'], 'interface_entrada' => $p['interface'],
+                        'extra' => "-m conntrack --ctstate NEW -m recent --name {$nome} --update --seconds {$p['janela']} --hitcount {$p['tentativas']}",
+                        'ordem' => 20, 'registrar_log' => true],
+                ], 'acoes_extras' => []];
+
+            case 'liberar_samba':
+                $regras = [];
+                foreach ([['tcp', '445'], ['tcp', '139'], ['udp', '137'], ['udp', '138']] as [$proto, $porta]) {
+                    $regras[] = [...$base, 'nome' => "Samba liberado ({$proto}/{$porta})", 'tabela' => 'filter', 'cadeia' => 'INPUT',
+                        'acao' => 'ACCEPT', 'protocolo' => $proto, 'porta_destino' => $porta,
+                        'interface_entrada' => $p['interface'] ?: null, 'ip_origem' => $p['rede_confiavel'] ?: null];
+                }
+                return ['regras' => $regras, 'acoes_extras' => []];
+
+            case 'liberar_rdp':
+                return ['regras' => [
+                    [...$base, 'nome' => "RDP liberado para {$p['rede_confiavel']}", 'tabela' => 'filter', 'cadeia' => 'INPUT',
+                        'acao' => 'ACCEPT', 'protocolo' => 'tcp', 'porta_destino' => $p['porta'],
+                        'ip_origem' => $p['rede_confiavel'], 'interface_entrada' => $p['interface']],
+                ], 'acoes_extras' => []];
+
+            case 'liberar_banco_dados':
+                return ['regras' => [
+                    [...$base, 'nome' => "Banco de dados (porta {$p['porta']}) liberado para {$p['rede_confiavel']}", 'tabela' => 'filter', 'cadeia' => 'INPUT',
+                        'acao' => 'ACCEPT', 'protocolo' => 'tcp', 'porta_destino' => $p['porta'],
+                        'ip_origem' => $p['rede_confiavel'], 'interface_entrada' => $p['interface']],
+                ], 'acoes_extras' => []];
+
+            case 'protecao_syn_flood':
+                return ['regras' => [
+                    [...$base, 'nome' => "SYN aceito até {$p['taxa']}/s ({$p['interface']})", 'tabela' => 'filter', 'cadeia' => 'INPUT',
+                        'acao' => 'ACCEPT', 'protocolo' => 'tcp', 'interface_entrada' => $p['interface'],
+                        'extra' => "--syn -m limit --limit {$p['taxa']}/s --limit-burst {$p['rajada']}", 'ordem' => 10],
+                    [...$base, 'nome' => "Excesso de SYN descartado ({$p['interface']})", 'tabela' => 'filter', 'cadeia' => 'INPUT',
+                        'acao' => 'DROP', 'protocolo' => 'tcp', 'interface_entrada' => $p['interface'],
+                        'extra' => '--syn', 'ordem' => 20, 'registrar_log' => true],
                 ], 'acoes_extras' => []];
         }
 
