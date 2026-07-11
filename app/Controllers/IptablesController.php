@@ -38,6 +38,9 @@ class IptablesController extends Controller
             'ultimoApplyEm' => $this->service->ultimoApplyEm(),
             'ultimoErro' => $this->service->ultimoErroApply(),
             'sshPortas' => $this->service->portasSshAtuais(),
+            'painelPortas' => $this->service->portasPainelAtuais(),
+            'panicoAtivo' => $this->service->panicoAtivo(),
+            'sombreadas' => $this->service->detectarSombreadas(),
         ]);
     }
 
@@ -55,7 +58,11 @@ class IptablesController extends Controller
         }
         unset($r);
 
-        $this->view('infrastructure/iptables_ao_vivo', ['estado' => $estado]);
+        $this->view('infrastructure/iptables_ao_vivo', [
+            'estado' => $estado,
+            'topHits' => $this->service->topRegrasPorHits(),
+            'rankingIps' => $this->service->rankingIpsBloqueados(),
+        ]);
     }
 
     public function contadores(): void
@@ -110,6 +117,38 @@ class IptablesController extends Controller
         AuditService::registrar('Firewall', 'Reverter manualmente', $resultado['message'] ?? '');
 
         echo json_encode($resultado);
+    }
+
+    public function panicoAtivar(): void
+    {
+        AuthMiddleware::checkModulo('infra_iptables');
+        header('Content-Type: application/json');
+
+        $resultado = $this->service->ativarPanico();
+
+        AuditService::registrar('Firewall', 'Ativar modo pânico', $resultado['message'] ?? '');
+
+        echo json_encode($resultado);
+    }
+
+    public function panicoDesativar(): void
+    {
+        AuthMiddleware::checkModulo('infra_iptables');
+        header('Content-Type: application/json');
+
+        $resultado = $this->service->desativarPanico();
+
+        AuditService::registrar('Firewall', 'Desativar modo pânico', $resultado['message'] ?? '');
+
+        echo json_encode($resultado);
+    }
+
+    public function avaliarRisco(): void
+    {
+        AuthMiddleware::checkModulo('infra_iptables');
+        header('Content-Type: application/json');
+
+        echo json_encode(['risco' => $this->service->avaliarRisco($this->dadosDoPost())]);
     }
 
     public function novoForm(): void
@@ -238,6 +277,55 @@ class IptablesController extends Controller
 
         if ($resultado['success']) {
             AuditService::registrar('Firewall', 'Alterar política padrão', 'Políticas de chain atualizadas (aguardando confirmação).');
+        }
+        $this->notificarEVoltar($resultado);
+    }
+
+    public function exportar(): void
+    {
+        AuthMiddleware::checkModulo('infra_iptables');
+
+        $regras = array_map(function (array $r): array {
+            unset($r['id'], $r['criado_em'], $r['atualizado_em']);
+            return $r;
+        }, $this->service->listar());
+
+        AuditService::registrar('Firewall', 'Exportar regras', count($regras) . ' regra(s) exportada(s).');
+
+        header('Content-Type: application/json');
+        header('Content-Disposition: attachment; filename="firewall-regras-' . date('Y-m-d_His') . '.json"');
+        echo json_encode($regras, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    }
+
+    public function importarForm(): void
+    {
+        AuthMiddleware::checkModulo('infra_iptables');
+
+        $this->view('infrastructure/iptables_importar');
+    }
+
+    public function importar(): void
+    {
+        AuthMiddleware::checkModulo('infra_iptables');
+
+        if (empty($_FILES['arquivo']['tmp_name']) || !is_uploaded_file($_FILES['arquivo']['tmp_name'])) {
+            NotificationService::error('Nenhum arquivo enviado.');
+            header('Location: ' . url('/infraestrutura/iptables/importar'));
+            exit;
+        }
+
+        $regras = json_decode((string)file_get_contents($_FILES['arquivo']['tmp_name']), true);
+
+        if (!is_array($regras)) {
+            NotificationService::error('Arquivo inválido: não é um JSON de regras reconhecível.');
+            header('Location: ' . url('/infraestrutura/iptables/importar'));
+            exit;
+        }
+
+        $resultado = $this->service->importarRegras($regras);
+
+        if ($resultado['success']) {
+            AuditService::registrar('Firewall', 'Importar regras', $resultado['message']);
         }
         $this->notificarEVoltar($resultado);
     }

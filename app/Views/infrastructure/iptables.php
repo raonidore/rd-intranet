@@ -44,11 +44,34 @@ foreach ($regras as $r) {
         <a href="<?= url('/infraestrutura/iptables/templates') ?>" class="btn btn-outline-primary">
             <i class="bi bi-magic"></i> Regras prontas
         </a>
+        <a href="<?= url('/infraestrutura/iptables/exportar') ?>" class="btn btn-outline-secondary">
+            <i class="bi bi-download"></i> Exportar
+        </a>
+        <a href="<?= url('/infraestrutura/iptables/importar') ?>" class="btn btn-outline-secondary">
+            <i class="bi bi-upload"></i> Importar
+        </a>
         <a href="<?= url('/infraestrutura/iptables/novo') ?>" class="btn btn-primary">
             <i class="bi bi-plus-lg"></i> Nova regra
         </a>
+        <?php if (!$panicoAtivo): ?>
+            <button type="button" class="btn btn-danger" id="btn-panico">
+                <i class="bi bi-exclamation-octagon"></i> Modo Pânico
+            </button>
+        <?php endif; ?>
     </div>
 </div>
+
+<?php if ($panicoAtivo): ?>
+    <div class="alert alert-danger d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <strong><i class="bi bi-exclamation-octagon"></i> Modo Pânico ativo.</strong>
+            Só SSH, este painel web e conexões já estabelecidas estão liberados — todo o resto do tráfego está bloqueado.
+        </div>
+        <button type="button" class="btn btn-light" id="btn-panico-desativar">
+            <i class="bi bi-shield-check"></i> Desativar modo pânico
+        </button>
+    </div>
+<?php endif; ?>
 
 <div id="alerta-pendente" class="alert alert-warning d-none">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -68,6 +91,17 @@ foreach ($regras as $r) {
     </div>
 </div>
 
+<?php if (!empty($sombreadas)): ?>
+    <div class="alert alert-warning">
+        <strong><i class="bi bi-eye-slash"></i> <?= count($sombreadas) ?> regra(s) nunca alcançada(s):</strong>
+        <ul class="mb-0 mt-1">
+            <?php foreach ($sombreadas as $s): ?>
+                <li class="small"><?= htmlspecialchars($s['mensagem']) ?></li>
+            <?php endforeach; ?>
+        </ul>
+    </div>
+<?php endif; ?>
+
 <?php if ($ultimoErro): ?>
     <div class="alert alert-danger">
         <strong><i class="bi bi-x-circle"></i> Última aplicação falhou.</strong> <?= htmlspecialchars($ultimoErro) ?>
@@ -77,6 +111,9 @@ foreach ($regras as $r) {
         <i class="bi bi-check-circle text-success"></i> Último ruleset aplicado com sucesso em <?= htmlspecialchars($ultimoApplyEm) ?>.
     </div>
 <?php endif; ?>
+
+<?php require __DIR__ . '/_iptables_fluxo.php'; ?>
+<?php require __DIR__ . '/_iptables_mapa_calor.php'; ?>
 
 <div class="card fw-card">
     <div class="card-header d-flex justify-content-between align-items-center">
@@ -98,7 +135,8 @@ foreach ($regras as $r) {
                 <small class="text-muted d-block mb-2">
                     Recomendado: manter ACCEPT e usar regras explícitas de DROP/REJECT no fim da lista — assim, se as regras forem
                     zeradas por acidente, o servidor não fica instantaneamente inacessível.
-                    Porta(s) SSH detectada(s) (<?= htmlspecialchars(implode(', ', $sshPortas)) ?>), conexões já estabelecidas e a interface
+                    Porta(s) SSH detectada(s) (<?= htmlspecialchars(implode(', ', $sshPortas)) ?>), porta(s) deste painel web
+                    (<?= htmlspecialchars(implode(', ', $painelPortas)) ?>), conexões já estabelecidas e a interface
                     local (loopback) estão sempre liberadas automaticamente, mesmo com política DROP.
                 </small>
                 <button type="submit" class="btn btn-outline-warning btn-sm">
@@ -109,8 +147,12 @@ foreach ($regras as $r) {
     </div>
 </div>
 
+<div class="mb-3">
+    <input type="search" id="busca-regras" class="form-control" placeholder="Buscar por nome, porta, IP, interface ou ação...">
+</div>
+
 <?php foreach (['filter' => 'Tabela filter (firewall)', 'nat' => 'Tabela nat (NAT/redirecionamento)'] as $tabela => $tituloTabela): ?>
-    <div class="card fw-card">
+    <div class="card fw-card" id="tabela-<?= $tabela ?>">
         <div class="card-header"><i class="bi bi-table me-1"></i> <?= $tituloTabela ?></div>
         <div class="card-body p-0">
             <?php if (empty($porGrupo[$tabela])): ?>
@@ -129,7 +171,15 @@ foreach ($regras as $r) {
                     <tbody>
                         <?php foreach ($porGrupo[$tabela] as $cadeia => $lista): ?>
                             <?php foreach ($lista as $r): ?>
-                                <tr class="<?= (int)$r['ativo'] === 1 ? '' : 'regra-desativada' ?>">
+                                <?php
+                                $busca = mb_strtolower(implode(' ', array_filter([
+                                    $r['nome'], $r['acao'], $cadeia, $r['protocolo'] ?? '',
+                                    $r['porta_destino'] ?? '', $r['porta_origem'] ?? '',
+                                    $r['ip_origem'] ?? '', $r['ip_destino'] ?? '',
+                                    $r['interface_entrada'] ?? '', $r['interface_saida'] ?? '',
+                                ])));
+                                ?>
+                                <tr class="linha-regra <?= (int)$r['ativo'] === 1 ? '' : 'regra-desativada' ?>" data-busca="<?= htmlspecialchars($busca) ?>">
                                     <td><code><?= htmlspecialchars($cadeia) ?></code></td>
                                     <td>
                                         <?= htmlspecialchars($r['nome']) ?>
@@ -203,6 +253,8 @@ foreach ($regras as $r) {
     const CONFIRMAR_URL = <?= json_encode(url('/infraestrutura/iptables/confirmar')) ?>;
     const REVERTER_URL = <?= json_encode(url('/infraestrutura/iptables/reverter')) ?>;
     const LOGS_URL = <?= json_encode(url('/infraestrutura/iptables/logs')) ?>;
+    const PANICO_ATIVAR_URL = <?= json_encode(url('/infraestrutura/iptables/panico/ativar')) ?>;
+    const PANICO_DESATIVAR_URL = <?= json_encode(url('/infraestrutura/iptables/panico/desativar')) ?>;
 
     const alertaPendente = document.getElementById('alerta-pendente');
     const segundosEl = document.getElementById('segundos-restantes');
@@ -314,7 +366,63 @@ foreach ($regras as $r) {
         }
     });
 
+    const btnPanico = document.getElementById('btn-panico');
+    if (btnPanico) {
+        btnPanico.addEventListener('click', async function () {
+            if (!confirm('Isso vai bloquear TODO o tráfego de entrada, exceto SSH, este painel web e conexões já estabelecidas. Continuar?')) return;
+            const digitado = prompt('Digite BLOQUEAR (em maiúsculas) para confirmar:');
+            if (digitado !== 'BLOQUEAR') {
+                alert('Confirmação incorreta, nada foi alterado.');
+                return;
+            }
+            btnPanico.disabled = true;
+            try {
+                const res = await fetch(PANICO_ATIVAR_URL, { method: 'POST' });
+                const data = await res.json();
+                alert(data.message);
+                location.reload();
+            } catch (e) {
+                alert('Erro ao comunicar com o servidor.');
+            } finally {
+                btnPanico.disabled = false;
+            }
+        });
+    }
+
+    const btnPanicoDesativar = document.getElementById('btn-panico-desativar');
+    if (btnPanicoDesativar) {
+        btnPanicoDesativar.addEventListener('click', async function () {
+            if (!confirm('Desativar o modo pânico e restaurar as regras anteriores?')) return;
+            btnPanicoDesativar.disabled = true;
+            try {
+                const res = await fetch(PANICO_DESATIVAR_URL, { method: 'POST' });
+                const data = await res.json();
+                alert(data.message);
+                location.reload();
+            } catch (e) {
+                alert('Erro ao comunicar com o servidor.');
+            } finally {
+                btnPanicoDesativar.disabled = false;
+            }
+        });
+    }
+
     verificarStatus();
+})();
+
+(function () {
+    const campoBusca = document.getElementById('busca-regras');
+    if (!campoBusca) return;
+
+    const linhas = document.querySelectorAll('.linha-regra');
+
+    campoBusca.addEventListener('input', function () {
+        const termo = campoBusca.value.trim().toLowerCase();
+        linhas.forEach(function (linha) {
+            const bate = termo === '' || (linha.dataset.busca || '').includes(termo);
+            linha.style.display = bate ? '' : 'none';
+        });
+    });
 })();
 </script>
 

@@ -152,6 +152,9 @@ $router->get('/infraestrutura/iptables/status', [IptablesController::class, 'sta
 $router->get('/infraestrutura/iptables/logs', [IptablesController::class, 'logsRegra']);
 $router->post('/infraestrutura/iptables/confirmar', [IptablesController::class, 'confirmar']);
 $router->post('/infraestrutura/iptables/reverter', [IptablesController::class, 'reverterAgora']);
+$router->post('/infraestrutura/iptables/panico/ativar', [IptablesController::class, 'panicoAtivar']);
+$router->post('/infraestrutura/iptables/panico/desativar', [IptablesController::class, 'panicoDesativar']);
+$router->post('/infraestrutura/iptables/avaliar-risco', [IptablesController::class, 'avaliarRisco']);
 
 $router->get('/infraestrutura/iptables/novo', [IptablesController::class, 'novoForm']);
 $router->post('/infraestrutura/iptables/novo', [IptablesController::class, 'novo']);
@@ -167,6 +170,9 @@ $router->post('/infraestrutura/iptables/politica', [IptablesController::class, '
 $router->get('/infraestrutura/iptables/templates', [IptablesController::class, 'templates']);
 $router->get('/infraestrutura/iptables/templates/form', [IptablesController::class, 'templateForm']);
 $router->post('/infraestrutura/iptables/templates/aplicar', [IptablesController::class, 'templateAplicar']);
+$router->get('/infraestrutura/iptables/exportar', [IptablesController::class, 'exportar']);
+$router->get('/infraestrutura/iptables/importar', [IptablesController::class, 'importarForm']);
+$router->post('/infraestrutura/iptables/importar', [IptablesController::class, 'importar']);
 
 $router->get('/infraestrutura/certificado', [CertificadoController::class, 'index']);
 $router->get('/infraestrutura/certificado/autoassinado', [CertificadoController::class, 'autoassinadoForm']);

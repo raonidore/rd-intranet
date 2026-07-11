@@ -2,6 +2,17 @@
 
 ob_start();
 
+function iptablesAcaoCor(string $acao): string
+{
+    return match ($acao) {
+        'ACCEPT' => 'success',
+        'DROP', 'REJECT' => 'danger',
+        'MASQUERADE', 'DNAT', 'SNAT' => 'info',
+        'LOG' => 'secondary',
+        default => 'warning',
+    };
+}
+
 $porTabela = ['filter' => [], 'nat' => []];
 foreach ($estado['regras'] as $r) {
     $porTabela[$r['tabela']][] = $r;
@@ -60,6 +71,59 @@ foreach ($estado['regras'] as $r) {
             <div class="text-muted small">ufw</div>
             <div class="fs-5 fw-bold"><?= $estado['ufw_ativo'] ? 'Ativo' : 'Inativo/não instalado' ?></div>
         </div>
+    </div>
+</div>
+
+<div class="card fw-card">
+    <div class="card-header"><i class="bi bi-bar-chart-line me-1"></i> Regras mais acionadas (últimas 24h)</div>
+    <div class="card-body">
+        <?php if (empty($topHits)): ?>
+            <p class="text-muted text-center py-3 mb-0">
+                Ainda sem histórico suficiente — o coletor roda a cada 5 minutos, volte daqui a pouco.
+            </p>
+        <?php else: ?>
+            <?php $maxHits = max(array_column($topHits, 'pkts_periodo')); ?>
+            <?php foreach ($topHits as $h): ?>
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between small mb-1">
+                        <span>
+                            <?= htmlspecialchars($h['nome']) ?>
+                            <span class="badge text-bg-<?= iptablesAcaoCor($h['acao']) ?> ms-1"><?= htmlspecialchars($h['acao']) ?></span>
+                        </span>
+                        <span class="font-monospace"><?= number_format($h['pkts_periodo'], 0, ',', '.') ?> pacotes</span>
+                    </div>
+                    <div class="progress" style="height:8px; border-radius:4px;">
+                        <div class="progress-bar bg-<?= iptablesAcaoCor($h['acao']) ?>"
+                             style="width: <?= $maxHits > 0 ? round($h['pkts_periodo'] / $maxHits * 100) : 0 ?>%; border-radius:4px;"></div>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        <?php endif; ?>
+    </div>
+</div>
+
+<div class="card fw-card">
+    <div class="card-header"><i class="bi bi-binoculars me-1"></i> IPs mais bloqueados (últimas 24h)</div>
+    <div class="card-body">
+        <?php if (empty($rankingIps)): ?>
+            <p class="text-muted text-center py-3 mb-0">
+                Nenhum evento registrado ainda — só regras com "Registrar no log" ligado entram nesse ranking.
+            </p>
+        <?php else: ?>
+            <?php $maxEventos = max(array_column($rankingIps, 'eventos')); ?>
+            <?php foreach ($rankingIps as $ip): ?>
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between small mb-1">
+                        <span class="font-monospace"><?= htmlspecialchars($ip['ip_origem']) ?></span>
+                        <span class="font-monospace"><?= number_format((int)$ip['eventos'], 0, ',', '.') ?> evento(s)</span>
+                    </div>
+                    <div class="progress" style="height:8px; border-radius:4px;">
+                        <div class="progress-bar bg-danger"
+                             style="width: <?= $maxEventos > 0 ? round($ip['eventos'] / $maxEventos * 100) : 0 ?>%; border-radius:4px;"></div>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        <?php endif; ?>
     </div>
 </div>
 

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Repositories\IptablesRegraRepository;
+use PDO;
 
 /**
  * Motor do firewall gerenciado. O banco (iptables_regras) e a fonte da
@@ -12,14 +13,17 @@ use App\Repositories\IptablesRegraRepository;
  * usado em NetworkConfigService pra configuracao de rede.
  *
  * Regras de protecao sempre presentes (nao ficam no banco, sao injetadas
- * aqui): conexoes ja estabelecidas, loopback, e a(s) porta(s) SSH
- * atualmente configuradas no sshd -- pra esta tela nunca conseguir, sozinha,
- * cortar o proprio acesso de administracao.
+ * aqui): conexoes ja estabelecidas, loopback, a(s) porta(s) SSH atualmente
+ * configuradas no sshd e a(s) porta(s) do Apache (o proprio painel) -- pra
+ * esta tela nunca conseguir, sozinha, cortar o proprio acesso de
+ * administracao (nem via SSH nem via navegador).
  */
 class IptablesService
 {
     private const SEGUNDOS_ROLLBACK_PADRAO = 90;
     private const PROTOCOLOS_COM_PORTA = ['tcp', 'udp'];
+    private const CAMPOS_MATCH = ['protocolo', 'porta_destino', 'porta_origem', 'ip_origem', 'ip_destino', 'interface_entrada', 'interface_saida'];
+    private const ACOES_TERMINAIS = ['ACCEPT', 'DROP', 'REJECT', 'MASQUERADE', 'DNAT', 'SNAT'];
 
     private IptablesRegraRepository $repo;
     private LinuxService $linux;
@@ -75,6 +79,25 @@ class IptablesService
         }
 
         return $portas ?: [22];
+    }
+
+    /**
+     * Porta(s) que o Apache (o proprio painel da RD Intranet) escuta,
+     * direto do ports.conf (mundialmente legivel). Mesma logica de
+     * portasSshAtuais() -- injetada na baseline pra nenhuma alteracao de
+     * firewall (nem o Modo Panico) conseguir trancar o admin fora da
+     * propria tela que ele usaria pra corrigir o problema.
+     */
+    public function portasPainelAtuais(): array
+    {
+        $conteudo = @file_get_contents('/etc/apache2/ports.conf') ?: '';
+        $portas = [];
+
+        if (preg_match_all('/^\s*Listen\s+(\d+)/mi', $conteudo, $m)) {
+            $portas = array_unique(array_map('intval', $m[1]));
+        }
+
+        return $portas ?: [80, 443];
     }
 
     public function politicaAtual(string $cadeia): string
@@ -141,6 +164,133 @@ class IptablesService
         }
 
         return null;
+    }
+
+    /**
+     * Aviso best-effort (nao bloqueia, so avisa) de que uma regra parece
+     * arriscada -- casos mais comuns de "o admin se tranca fora sozinho".
+     * A janela de confirmacao/reversao automatica ja protege contra o pior
+     * cenario, isto e so pra avisar ANTES de aplicar.
+     */
+    public function avaliarRisco(array $d): ?string
+    {
+        if (($d['cadeia'] ?? '') !== 'INPUT' || !in_array($d['acao'] ?? '', ['DROP', 'REJECT'], true)) {
+            return null;
+        }
+
+        $avisos = [];
+        $portaDestino = trim((string)($d['porta_destino'] ?? ''));
+
+        if ($portaDestino !== '' && in_array((int)$portaDestino, $this->portasSshAtuais(), true) && empty($d['ip_origem'])) {
+            $avisos[] = 'Esta regra bloqueia a porta SSH sem restringir a origem — pode derrubar seu próprio acesso remoto (a baseline libera o SSH atual, mas cuidado se ele mudar).';
+        }
+
+        if ($portaDestino === '' && empty($d['ip_origem']) && empty($d['interface_entrada'])) {
+            $avisos[] = 'Esta regra bloqueia toda a entrada, sem restringir porta, origem ou interface — risco de bloquear acesso ao servidor inteiro (fora do SSH/painel, que ficam sempre liberados).';
+        }
+
+        $meuIp = $_SERVER['REMOTE_ADDR'] ?? null;
+        if ($meuIp && !empty($d['ip_origem']) && $this->cidrContemIp($d['ip_origem'], $meuIp)) {
+            $avisos[] = "Esta regra bloqueia o IP de onde você está acessando agora ({$meuIp}).";
+        }
+
+        return $avisos ? implode(' ', $avisos) : null;
+    }
+
+    /**
+     * Heuristica best-effort (mesmo espirito de IptablesExplicadorService --
+     * nao cobre 100% dos casos, cobre os comuns): uma regra B nunca e
+     * alcancada se uma regra A, na mesma (tabela, cadeia) e antes dela, tem
+     * acao terminal (ACCEPT/DROP/REJECT/MASQUERADE/DNAT/SNAT -- LOG e NONE
+     * nao decidem, o pacote segue) e cobre todo campo que B usa (A nao
+     * restringe aquele campo, ou restringe com o mesmo valor de B).
+     *
+     * @return array<int, array{regra_sombreada: array, regra_bloqueadora: array, mensagem: string}>
+     */
+    public function detectarSombreadas(): array
+    {
+        $avisos = [];
+        $porGrupo = [];
+
+        foreach ($this->repo->listarAtivas() as $r) {
+            $porGrupo[$r['tabela']][$r['cadeia']][] = $r;
+        }
+
+        foreach ($porGrupo as $porCadeia) {
+            foreach ($porCadeia as $cadeia => $regras) {
+                foreach ($regras as $i => $b) {
+                    foreach (array_slice($regras, 0, $i) as $a) {
+                        if (!in_array($a['acao'], self::ACOES_TERMINAIS, true)) {
+                            continue;
+                        }
+                        if ($this->regraCobre($a, $b)) {
+                            $avisos[] = [
+                                'regra_sombreada' => $b,
+                                'regra_bloqueadora' => $a,
+                                'mensagem' => "A regra \"{$b['nome']}\" nunca é alcançada porque \"{$a['nome']}\" (antes dela, na cadeia {$cadeia}) já intercepta o mesmo tráfego.",
+                            ];
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        return $avisos;
+    }
+
+    private function regraCobre(array $a, array $b): bool
+    {
+        foreach (self::CAMPOS_MATCH as $campo) {
+            $valorA = (string)($a[$campo] ?? '');
+            if ($campo === 'protocolo' && $valorA === 'all') {
+                $valorA = '';
+            }
+            if ($valorA === '') {
+                continue;
+            }
+            if ($valorA !== (string)($b[$campo] ?? '')) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Importa um lote de regras (mesmo formato exportado por
+     * IptablesController::exportar()). Aditivo -- nunca apaga as regras
+     * existentes. Valida tudo antes de inserir qualquer coisa (tudo ou
+     * nada) e aplica uma unica vez no final, nao uma vez por regra.
+     *
+     * @return array{success: bool, message: string}
+     */
+    public function importarRegras(array $regras): array
+    {
+        if (empty($regras)) {
+            return ['success' => false, 'message' => 'Nenhuma regra encontrada no arquivo.'];
+        }
+
+        foreach ($regras as $i => $d) {
+            if (!is_array($d)) {
+                return ['success' => false, 'message' => "Item #{$i} do arquivo não é uma regra válida."];
+            }
+
+            $erro = $this->validar($d);
+            if ($erro !== null) {
+                $nome = $d['nome'] ?? '?';
+                return ['success' => false, 'message' => "Regra #{$i} (\"{$nome}\"): {$erro}"];
+            }
+        }
+
+        foreach ($regras as $d) {
+            $this->repo->criar($d);
+        }
+
+        $resultado = $this->aplicar();
+        $resultado['message'] = count($regras) . ' regra(s) importada(s). ' . $resultado['message'];
+
+        return $resultado;
     }
 
     /**
@@ -315,6 +465,74 @@ class IptablesService
         return is_array($dados) ? $dados : ['success' => false, 'message' => 'Resposta inesperada: ' . $resultado['output']];
     }
 
+    public function panicoAtivo(): bool
+    {
+        return ConfigService::get('iptables_panico_ativo', '') === '1';
+    }
+
+    /**
+     * Desativa temporariamente todas as regras cadastradas e forca as
+     * cadeias INPUT/FORWARD para DROP -- guarda o estado anterior (quais
+     * IDs estavam ativos + politicas) pra desativarPanico() restaurar
+     * depois. Passa pelo mesmo aplicar() de sempre, entao a janela de
+     * confirmacao/reversao automatica de 90s protege esta acao tambem: se
+     * o admin nao confirmar, o firewall anterior volta sozinho. A baseline
+     * (SSH + porta do painel web) garante que o proprio admin nao fica
+     * trancado fora enquanto decide.
+     */
+    public function ativarPanico(): array
+    {
+        if ($this->panicoAtivo()) {
+            return ['success' => false, 'message' => 'O modo pânico já está ativo.'];
+        }
+
+        $idsAtivos = array_column($this->repo->listarAtivas(), 'id');
+
+        ConfigService::set('iptables_panico_ids_ativos', json_encode($idsAtivos));
+        ConfigService::set('iptables_panico_politica_input', $this->politicaAtual('INPUT'));
+        ConfigService::set('iptables_panico_politica_forward', $this->politicaAtual('FORWARD'));
+
+        foreach ($idsAtivos as $id) {
+            $this->repo->definirAtivo((int)$id, false);
+        }
+
+        ConfigService::set('iptables_policy_INPUT', 'DROP');
+        ConfigService::set('iptables_policy_FORWARD', 'DROP');
+
+        $resultado = $this->aplicar();
+
+        if ($resultado['success']) {
+            ConfigService::set('iptables_panico_ativo', '1');
+            $resultado['message'] = 'Modo pânico ativado: só SSH, este painel e conexões já estabelecidas continuam liberados. ' . $resultado['message'];
+        }
+
+        return $resultado;
+    }
+
+    public function desativarPanico(): array
+    {
+        if (!$this->panicoAtivo()) {
+            return ['success' => false, 'message' => 'O modo pânico não está ativo.'];
+        }
+
+        $idsAtivos = json_decode(ConfigService::get('iptables_panico_ids_ativos', '[]'), true) ?: [];
+
+        foreach ($idsAtivos as $id) {
+            $this->repo->definirAtivo((int)$id, true);
+        }
+
+        ConfigService::set('iptables_policy_INPUT', ConfigService::get('iptables_panico_politica_input', 'ACCEPT'));
+        ConfigService::set('iptables_policy_FORWARD', ConfigService::get('iptables_panico_politica_forward', 'ACCEPT'));
+
+        $resultado = $this->aplicar();
+
+        if ($resultado['success']) {
+            ConfigService::set('iptables_panico_ativo', '');
+        }
+
+        return $resultado;
+    }
+
     public function statusRollback(): array
     {
         $resultado = $this->linux->executar('systemctl is-active rd-iptables-rollback.timer 2>/dev/null');
@@ -431,6 +649,125 @@ class IptablesService
      * Firewall Ao Vivo mostrar em tempo real quando uma regra esta de fato
      * bloqueando/aceitando trafego -- iptables-save nao traz contadores.
      */
+    /**
+     * Posicao (1-indexado) que cada regra ativa do banco ocupa dentro da
+     * sua (tabela, cadeia) no ruleset de verdade -- espelha exatamente a
+     * mesma logica de contagem de linhas que gerarConteudo()/linhasRegra()
+     * usam pra escrever o ruleset (baseline antes do INPUT + 2 linhas por
+     * regra quando registrar_log esta ligado). Usado pra casar cada regra
+     * do banco com o "num" que `iptables -L -v --line-numbers` devolve em
+     * contadores().
+     *
+     * @return array<int, array{id: int, tabela: string, cadeia: string, posicao: int}>
+     */
+    public function regrasComPosicao(): array
+    {
+        $porTabela = ['filter' => [], 'nat' => []];
+        foreach ($this->repo->listarAtivas() as $r) {
+            $porTabela[$r['tabela']][$r['cadeia']][] = $r;
+        }
+
+        $baselineInput = 2 + count($this->portasSshAtuais()) + count($this->portasPainelAtuais());
+        $offsets = [
+            'filter' => ['INPUT' => $baselineInput, 'FORWARD' => 0, 'OUTPUT' => 0],
+            'nat' => ['PREROUTING' => 0, 'INPUT' => 0, 'OUTPUT' => 0, 'POSTROUTING' => 0],
+        ];
+
+        $resultado = [];
+        foreach ($porTabela as $tabela => $porCadeia) {
+            foreach ($porCadeia as $cadeia => $lista) {
+                $pos = $offsets[$tabela][$cadeia] ?? 0;
+                foreach ($lista as $r) {
+                    $pos += !empty($r['registrar_log']) ? 2 : 1;
+                    $resultado[] = ['id' => (int)$r['id'], 'tabela' => $tabela, 'cadeia' => $cadeia, 'posicao' => $pos];
+                }
+            }
+        }
+
+        return $resultado;
+    }
+
+    /**
+     * Top regras por pacotes ganhos num periodo, comparando o snapshot
+     * mais antigo e o mais recente dentro da janela em
+     * iptables_regras_historico. Contador zerado/reiniciado (ex: reboot)
+     * geraria delta negativo -- tratado como 0 em vez de deixar o ranking
+     * estranho.
+     *
+     * @return array<int, array{regra_id: int, nome: string, acao: string, pkts_periodo: int}>
+     */
+    public function topRegrasPorHits(int $horas = 24, int $limite = 10): array
+    {
+        $pdo = \App\Core\Database::connection();
+
+        $stmt = $pdo->prepare("
+            SELECT
+                h.regra_id,
+                MIN(h.pkts) AS pkts_min,
+                MAX(h.pkts) AS pkts_max
+            FROM iptables_regras_historico h
+            WHERE h.coletado_em >= (NOW() - INTERVAL ? HOUR)
+            GROUP BY h.regra_id
+        ");
+        $stmt->execute([$horas]);
+        $deltas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        if (empty($deltas)) {
+            return [];
+        }
+
+        $regras = [];
+        foreach ($this->repo->listar() as $r) {
+            $regras[(int)$r['id']] = $r;
+        }
+
+        $resultado = [];
+        foreach ($deltas as $d) {
+            $regra = $regras[(int)$d['regra_id']] ?? null;
+            if ($regra === null) continue;
+
+            $delta = max(0, (int)$d['pkts_max'] - (int)$d['pkts_min']);
+            if ($delta === 0) continue;
+
+            $resultado[] = [
+                'regra_id' => (int)$d['regra_id'],
+                'nome' => $regra['nome'],
+                'acao' => $regra['acao'],
+                'pkts_periodo' => $delta,
+            ];
+        }
+
+        usort($resultado, fn($a, $b) => $b['pkts_periodo'] <=> $a['pkts_periodo']);
+
+        return array_slice($resultado, 0, $limite);
+    }
+
+    /**
+     * Ranking dos IPs de origem que mais apareceram nos eventos de log do
+     * firewall (regras com "registrar_log" ligado), coletados por
+     * coletar_logs_iptables.php.
+     *
+     * @return array<int, array{ip_origem: string, eventos: int}>
+     */
+    public function rankingIpsBloqueados(int $horas = 24, int $limite = 10): array
+    {
+        $limite = max(1, min($limite, 50));
+
+        $pdo = \App\Core\Database::connection();
+        $stmt = $pdo->prepare("
+            SELECT ip_origem, COUNT(*) AS eventos
+            FROM iptables_log_eventos
+            WHERE ocorrido_em >= (NOW() - INTERVAL ? HOUR)
+              AND ip_origem IS NOT NULL
+            GROUP BY ip_origem
+            ORDER BY eventos DESC
+            LIMIT {$limite}
+        ");
+        $stmt->execute([$horas]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function contadores(): array
     {
         $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/iptables_contadores_web.sh');
@@ -522,6 +859,9 @@ class IptablesService
         $linhas[] = '-A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT';
         $linhas[] = '-A INPUT -i lo -j ACCEPT';
         foreach ($this->portasSshAtuais() as $porta) {
+            $linhas[] = "-A INPUT -p tcp --dport {$porta} -j ACCEPT";
+        }
+        foreach ($this->portasPainelAtuais() as $porta) {
             $linhas[] = "-A INPUT -p tcp --dport {$porta} -j ACCEPT";
         }
 
@@ -619,5 +959,31 @@ class IptablesService
             return $this->validarIp($ip) && ctype_digit($prefixo) && (int)$prefixo <= 32;
         }
         return $this->validarIp($v);
+    }
+
+    /**
+     * So IPv4 (mesmo escopo de validarCidrOuIp). Usado por avaliarRisco()
+     * pra saber se um ip_origem de regra bateria no IP de quem esta logado.
+     */
+    private function cidrContemIp(string $cidr, string $ip): bool
+    {
+        $ipLong = ip2long($ip);
+        if ($ipLong === false) {
+            return false;
+        }
+
+        if (!str_contains($cidr, '/')) {
+            return ip2long($cidr) === $ipLong;
+        }
+
+        [$rede, $prefixo] = explode('/', $cidr, 2);
+        $redeLong = ip2long($rede);
+        if ($redeLong === false || !ctype_digit($prefixo)) {
+            return false;
+        }
+
+        $mascara = (int)$prefixo === 0 ? 0 : (~0 << (32 - (int)$prefixo));
+
+        return ($ipLong & $mascara) === ($redeLong & $mascara);
     }
 }
