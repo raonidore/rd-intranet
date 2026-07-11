@@ -29,6 +29,7 @@ class ModuloCatalogo
         'apache_config' => ['label' => 'Config. Global Apache', 'grupo' => 'Apache'],
         'bd_mysql' => ['label' => 'MySQL/MariaDB', 'grupo' => 'Banco de Dados'],
         'auditoria' => ['label' => 'Auditoria', 'grupo' => 'Segurança'],
+        'seguranca_antivirus' => ['label' => 'Antivírus', 'grupo' => 'Segurança'],
     ];
 
     public static function chaves(): array

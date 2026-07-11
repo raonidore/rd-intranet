@@ -243,6 +243,12 @@ class SambaGlobalConfigService
         }
 
         $linhas[] = "";
+        // antivirus.conf tem que vir antes de shares.conf -- e la que o
+        // modo tempo real (Seguranca > Antivirus) escreve o "vfs objects"
+        // com virusfilter incluido, e "vfs objects" nao acumula entre
+        // includes (o ultimo valor vence), entao precisa estar definido
+        // antes das secoes de compartilhamento comecarem.
+        $linhas[] = "include = /etc/samba/antivirus.conf";
         $linhas[] = "include = /etc/samba/shares.conf";
 
         return implode("\n", $linhas) . "\n";

@@ -32,6 +32,7 @@ use App\Controllers\IptablesController;
 use App\Controllers\CertificadoController;
 use App\Controllers\DependenciaController;
 use App\Controllers\AtualizacaoController;
+use App\Controllers\AntivirusController;
 
 $router->get('/', [DashboardController::class, 'index']);
 $router->get('/dashboard', [DashboardController::class, 'index']);
@@ -209,6 +210,14 @@ $router->post('/apache/configuracao/salvar', [ApacheConfiguracaoController::clas
 $router->post('/apache/configuracao/restaurar', [ApacheConfiguracaoController::class, 'restaurarBackup']);
 
 $router->get('/auditoria', [AuditoriaController::class, 'index']);
+
+$router->get('/seguranca/antivirus', [AntivirusController::class, 'index']);
+$router->post('/seguranca/antivirus/instalar', [AntivirusController::class, 'instalar']);
+$router->post('/seguranca/antivirus/verificar-agora', [AntivirusController::class, 'verificarAgora']);
+$router->post('/seguranca/antivirus/tempo-real/ativar', [AntivirusController::class, 'ativarTempoReal']);
+$router->post('/seguranca/antivirus/tempo-real/desativar', [AntivirusController::class, 'desativarTempoReal']);
+$router->post('/seguranca/antivirus/verificacao-periodica', [AntivirusController::class, 'verificacaoPeriodica']);
+$router->post('/seguranca/antivirus/quarentena/excluir', [AntivirusController::class, 'quarentenaExcluir']);
 
 $router->get('/administracao/usuarios', [UserController::class, 'index']);
 $router->get('/administracao/usuarios/novo', [UserController::class, 'novoForm']);

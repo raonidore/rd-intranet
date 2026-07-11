@@ -16,6 +16,7 @@ if (!$comando) {
     echo "  make:module NomeModulo\n";
     echo "  migrate                 Aplica as migrations pendentes em database/migrations/\n";
     echo "  atualizacao:verificar   Busca origin/main e atualiza o cache de 'há atualização?'\n";
+    echo "  antivirus:verificar     Escaneia os compartilhamentos do Samba em busca de ameaças\n";
     exit;
 }
 
@@ -114,6 +115,17 @@ switch ($comando) {
 
     case 'atualizacao:verificar':
         $resultado = (new \App\Services\AtualizacaoService())->verificar();
+
+        echo ($resultado['success'] ? 'OK: ' : 'ERRO: ') . $resultado['message'] . "\n";
+
+        if (!$resultado['success']) {
+            exit(1);
+        }
+
+        break;
+
+    case 'antivirus:verificar':
+        $resultado = (new \App\Services\AntivirusService())->verificarAgora(null, 'agendada');
 
         echo ($resultado['success'] ? 'OK: ' : 'ERRO: ') . $resultado['message'] . "\n";
 

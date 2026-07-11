@@ -24,7 +24,7 @@ $abrirApache = $rdSecaoAtiva(['/apache']);
 $abrirBancoDados = $rdSecaoAtiva(['/banco-dados']);
 $abrirInfraestrutura = $rdSecaoAtiva(['/infraestrutura']);
 $abrirSamba = $rdSecaoAtiva(['/samba', '/deploy']);
-$abrirSeguranca = $rdSecaoAtiva(['/auditoria', '/administracao']);
+$abrirSeguranca = $rdSecaoAtiva(['/auditoria', '/administracao', '/seguranca']);
 
 $abrirHardware = $rdSecaoAtiva(['/infraestrutura/hardware']);
 $abrirRede = $rdSecaoAtiva(['/infraestrutura/rede', '/infraestrutura/servidor/rede']);
@@ -354,7 +354,7 @@ $abrirInfraServicos = $rdSecaoAtiva(['/infraestrutura/servicos']);
     </div>
 
     <?php
-    $temSeguranca = PermissionService::temAcesso('auditoria') || PermissionService::ehAdmin();
+    $temSeguranca = PermissionService::temAcesso('auditoria') || PermissionService::temAcesso('seguranca_antivirus') || PermissionService::ehAdmin();
     ?>
     <?php if ($temSeguranca): ?>
     <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuSeguranca"
@@ -366,6 +366,12 @@ $abrirInfraServicos = $rdSecaoAtiva(['/infraestrutura/servicos']);
         <?php if (PermissionService::temAcesso('auditoria')): ?>
         <a href="<?= url('/auditoria') ?>" class="<?= $uriAtual === '/auditoria' ? 'active' : '' ?>">
             <i class="bi bi-journal-text me-2"></i> Auditoria
+        </a>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('seguranca_antivirus')): ?>
+        <a href="<?= url('/seguranca/antivirus') ?>" class="<?= str_starts_with($uriAtual, '/seguranca/antivirus') ? 'active' : '' ?>">
+            <i class="bi bi-virus me-2"></i> Antivírus
         </a>
         <?php endif; ?>
 

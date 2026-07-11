@@ -8,12 +8,14 @@
 # assumem que existe: o smb.conf com o [global] padrao da RD Intranet
 # (mesmo template de App\Core\Samba\SambaTemplate::global(), usado
 # tambem pela tela Samba > Config. Global -- fonte unica, nao duplicada
-# aqui) + 'include = /etc/samba/shares.conf', o proprio shares.conf
-# (comeca vazio, a tela de Compartilhamentos que preenche depois), o
-# diretorio de backup dos deploys de compartilhamentos e o diretorio de
-# tmp onde o PHP (www-data) escreve o shares.conf gerado antes do script
-# root aplicar (App\Core\Samba\SambaConfigWriter). Sem isso, a tela de
-# Deploy > Aplicar Samba falha ("Arquivo temporário não encontrado" ou
+# aqui) + 'include = /etc/samba/antivirus.conf' (vazio ate o admin ativar
+# o escaneamento em tempo real, ver Seguranca > Antivirus) +
+# 'include = /etc/samba/shares.conf', o proprio shares.conf (comeca
+# vazio, a tela de Compartilhamentos que preenche depois), o diretorio de
+# backup dos deploys de compartilhamentos e o diretorio de tmp onde o PHP
+# (www-data) escreve o shares.conf gerado antes do script root aplicar
+# (App\Core\Samba\SambaConfigWriter). Sem isso, a tela de Deploy > Aplicar
+# Samba falha ("Arquivo temporário não encontrado" ou
 # NT_STATUS_BAD_NETWORK_NAME) e nenhum compartilhamento fica de fato
 # acessivel via rede.
 #
@@ -39,11 +41,17 @@ if [ ! -f /etc/samba/shares.conf ]; then
   echo "Criado /etc/samba/shares.conf (vazio)."
 fi
 
-if [ ! -f /etc/samba/smb.conf ] || ! grep -q "^include = /etc/samba/shares.conf" /etc/samba/smb.conf; then
+if [ ! -f /etc/samba/antivirus.conf ]; then
+  : > /etc/samba/antivirus.conf
+  echo "Criado /etc/samba/antivirus.conf (vazio -- Seguranca > Antivirus escreve quando o tempo real e ativado)."
+fi
+
+if [ ! -f /etc/samba/smb.conf ] || ! grep -q "^include = /etc/samba/antivirus.conf" /etc/samba/smb.conf; then
   GLOBAL=$(php -r 'require $argv[1] . "/vendor/autoload.php"; echo App\Core\Samba\SambaTemplate::global();' "$REPO_DIR")
 
   {
     echo "$GLOBAL"
+    echo "include = /etc/samba/antivirus.conf"
     echo "include = /etc/samba/shares.conf"
   } > /tmp/smb.conf.rd-intranet
 
@@ -52,9 +60,9 @@ if [ ! -f /etc/samba/smb.conf ] || ! grep -q "^include = /etc/samba/shares.conf"
   fi
   mv /tmp/smb.conf.rd-intranet /etc/samba/smb.conf
 
-  echo "smb.conf [global] + include gerados."
+  echo "smb.conf [global] + includes gerados."
 else
-  echo "smb.conf ja tem include de shares.conf, nada a fazer."
+  echo "smb.conf ja tem os includes esperados, nada a fazer."
 fi
 
 testparm -s >/dev/null
