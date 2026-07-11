@@ -9,21 +9,26 @@ set -u
 
 export DEBIAN_FRONTEND=noninteractive
 
-if ! apt-get update -qq 2>/tmp/rd_av_err_$$; then
+# "-qq" so silencia o progresso do proprio apt -- o dpkg (chamado por
+# baixo) continua imprimindo "Unpacking.../Setting up..." no stdout
+# mesmo em modo nao interativo, o que quebrava o json_decode() do lado
+# PHP (a saida do script deixava de ser só a linha JSON). Por isso o
+# stdout tambem vai pro arquivo temporario, nao só o stderr.
+if ! apt-get update -qq >/tmp/rd_av_out_$$ 2>/tmp/rd_av_err_$$; then
   ERRO="$(tail -10 /tmp/rd_av_err_$$ | tr '\n' ' ' | sed 's/"/\\"/g')"
-  rm -f /tmp/rd_av_err_$$
+  rm -f /tmp/rd_av_out_$$ /tmp/rd_av_err_$$
   echo "{\"success\":false,\"message\":\"Erro ao atualizar lista de pacotes: ${ERRO}\"}"
   exit 1
 fi
-rm -f /tmp/rd_av_err_$$
+rm -f /tmp/rd_av_out_$$ /tmp/rd_av_err_$$
 
-if ! apt-get install -y -qq clamav-daemon clamav-freshclam 2>/tmp/rd_av_err_$$; then
+if ! apt-get install -y -qq clamav-daemon clamav-freshclam >/tmp/rd_av_out_$$ 2>/tmp/rd_av_err_$$; then
   ERRO="$(tail -20 /tmp/rd_av_err_$$ | tr '\n' ' ' | sed 's/"/\\"/g')"
-  rm -f /tmp/rd_av_err_$$
+  rm -f /tmp/rd_av_out_$$ /tmp/rd_av_err_$$
   echo "{\"success\":false,\"message\":\"Erro ao instalar ClamAV: ${ERRO}\"}"
   exit 1
 fi
-rm -f /tmp/rd_av_err_$$
+rm -f /tmp/rd_av_out_$$ /tmp/rd_av_err_$$
 
 mkdir -p /var/quarantine/rd-intranet
 chmod 700 /var/quarantine/rd-intranet
