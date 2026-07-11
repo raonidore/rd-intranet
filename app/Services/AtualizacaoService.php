@@ -144,7 +144,7 @@ class AtualizacaoService
         }
 
         if ($sucesso) {
-            $this->garantirCronTrafego();
+            $this->garantirCronsColeta();
         }
 
         $commitDepois = $this->commitAtual();
@@ -195,31 +195,53 @@ class AtualizacaoService
     }
 
     /**
-     * Garante que o cron nativo de coleta de trafego de rede existe --
-     * mesma logica de scripts/install.sh, so que reaplicada a cada
-     * atualizacao (idempotente: nao cria duplicado se o comando ja
-     * existir). Cobre o caso de um servidor que ainda nao tinha esse job
-     * quando foi instalado.
+     * Garante que os cron nativos de coleta (trafego de rede, contadores e
+     * logs do firewall) existem -- mesma logica de scripts/install.sh, so
+     * reaplicada a cada atualizacao (idempotente: nao cria duplicado se o
+     * comando ja existir). Cobre o caso de um servidor que ainda nao tinha
+     * algum desses jobs quando foi instalado.
      */
-    private function garantirCronTrafego(): void
+    public function garantirCronsColeta(): void
     {
-        $comandoTrafego = '/usr/bin/php ' . $this->repoDir() . '/scripts/system/coletar_trafego.php';
+        $this->garantirCronJob(
+            'Coleta de tráfego de rede',
+            'Grava snapshot de RX/TX (bytes e pacotes) por interface para o histórico de tráfego (Infraestrutura > Network > Tráfego > Histórico).',
+            '*/5 * * * *',
+            '/usr/bin/php ' . $this->repoDir() . '/scripts/system/coletar_trafego.php'
+        );
 
+        $this->garantirCronJob(
+            'Coleta de contadores do firewall',
+            'Grava snapshot de pacotes/bytes por regra ativa do firewall, para o gráfico de regras mais acionadas (Infraestrutura > Firewall > Ao Vivo).',
+            '*/5 * * * *',
+            '/usr/bin/php ' . $this->repoDir() . '/scripts/system/coletar_contadores_iptables.php'
+        );
+
+        $this->garantirCronJob(
+            'Coleta de logs do firewall',
+            'Grava os IPs bloqueados/liberados registrados pelas regras do firewall, para o ranking de IPs (Infraestrutura > Firewall > Ao Vivo).',
+            '*/2 * * * *',
+            '/usr/bin/php ' . $this->repoDir() . '/scripts/system/coletar_logs_iptables.php'
+        );
+    }
+
+    private function garantirCronJob(string $nome, string $descricao, string $expressao, string $comando): void
+    {
         $stmt = \App\Core\Database::connection()->prepare(
             'SELECT COUNT(*) FROM cron_jobs WHERE comando = ?'
         );
-        $stmt->execute([$comandoTrafego]);
+        $stmt->execute([$comando]);
 
         if ((int)$stmt->fetchColumn() > 0) {
             return;
         }
 
         (new CronService())->criar([
-            'nome' => 'Coleta de tráfego de rede',
-            'descricao' => 'Grava snapshot de RX/TX (bytes e pacotes) por interface para o histórico de tráfego (Infraestrutura > Network > Tráfego > Histórico).',
-            'expressao' => '*/5 * * * *',
+            'nome' => $nome,
+            'descricao' => $descricao,
+            'expressao' => $expressao,
             'usuario_execucao' => 'www-data',
-            'comando' => $comandoTrafego,
+            'comando' => $comando,
             'ativo' => true,
         ]);
     }

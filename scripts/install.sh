@@ -194,32 +194,15 @@ if ($existeAdmin === 0) {
 '
 
 # ---------------------------------------------------------------------
-# 6.2) Cron nativo de coleta de trafego de rede (Infraestrutura > Network
-#      > Trafego > Historico) -- nao e um "recurso opcional" que o admin
-#      liga depois (diferente da verificacao diaria de atualizacoes), e
-#      parte do proprio modulo de historico de trafego. Sem esse job,
-#      rede_trafego_historico fica pra sempre vazia num servidor novo.
+# 6.2) Crons nativos de coleta (trafego de rede, contadores e logs do
+#      firewall) -- nao sao "recursos opcionais" que o admin liga depois
+#      (diferente da verificacao diaria de atualizacoes), sao parte dos
+#      proprios modulos de historico/grafico. Sem eles, as telas
+#      correspondentes ficam pra sempre vazias num servidor novo.
+#      Mesma logica que AtualizacaoService::garantirCronsColeta() roda a
+#      cada "Atualizar agora" -- reaproveitada aqui, nao duplicada.
 # ---------------------------------------------------------------------
-php -r '
-require "vendor/autoload.php";
-$pdo = App\Core\Database::connection();
-$comando = "/usr/bin/php " . $argv[1] . "/scripts/system/coletar_trafego.php";
-$stmt = $pdo->prepare("SELECT COUNT(*) FROM cron_jobs WHERE comando = ?");
-$stmt->execute([$comando]);
-if ((int)$stmt->fetchColumn() === 0) {
-    $resultado = (new App\Services\CronService())->criar([
-        "nome" => "Coleta de tráfego de rede",
-        "descricao" => "Grava snapshot de RX/TX (bytes e pacotes) por interface para o histórico de tráfego (Infraestrutura > Network > Tráfego > Histórico).",
-        "expressao" => "*/5 * * * *",
-        "usuario_execucao" => "www-data",
-        "comando" => $comando,
-        "ativo" => true,
-    ]);
-    echo $resultado["message"] . "\n";
-} else {
-    echo "Job de coleta de trafego ja existe, nada a criar.\n";
-}
-' "$REPO_DIR"
+php -r 'require $argv[1] . "/vendor/autoload.php"; (new App\Services\AtualizacaoService())->garantirCronsColeta();' "$REPO_DIR"
 
 # ---------------------------------------------------------------------
 # 7) sudoers: www-data pode rodar, sem senha, qualquer script ja aprovado
