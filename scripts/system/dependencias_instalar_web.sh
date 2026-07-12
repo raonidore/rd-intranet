@@ -31,6 +31,7 @@ declare -A PACOTES=(
   [traceroute]="traceroute"
   [iputils-ping]="iputils-ping"
   [qrencode]="qrencode"
+  [snmp]="snmp"
 )
 
 PACOTE="${PACOTES[$CHAVE]:-}"

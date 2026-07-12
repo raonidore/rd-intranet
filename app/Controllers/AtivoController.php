@@ -5,6 +5,8 @@ namespace App\Controllers;
 use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
 use App\Services\AtivoService;
+use App\Services\AuditService;
+use App\Services\CronService;
 
 class AtivoController extends Controller
 {
@@ -19,7 +21,10 @@ class AtivoController extends Controller
     {
         AuthMiddleware::checkModulo('ativos_dashboard');
 
-        $this->view('ativos/dashboard', $this->service->dashboard());
+        $this->view('ativos/dashboard', array_merge($this->service->dashboard(), [
+            'comunidadePadrao' => $this->service->comunidadePadrao(),
+            'coletaSnmpAtiva' => $this->coletaSnmpAtiva(),
+        ]));
     }
 
     public function index(): void
@@ -175,5 +180,63 @@ class AtivoController extends Controller
             'ativos' => $ativos,
             'qrCodes' => $qrCodes,
         ]);
+    }
+
+    public function coletarSnmp(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $resultado = $this->service->coletarSnmp($id);
+
+        echo json_encode($resultado);
+    }
+
+    public function salvarConfigSnmp(): void
+    {
+        AuthMiddleware::checkModulo('ativos_dashboard');
+
+        $this->service->salvarComunidadePadrao(trim($_POST['comunidade'] ?? 'public'));
+
+        AuditService::registrar('Ativos', 'Config. SNMP', 'Community padrão de SNMP atualizada.');
+
+        header('Location: ' . url('/ativos'));
+        exit;
+    }
+
+    public function ativarColetaSnmp(): void
+    {
+        AuthMiddleware::checkModulo('ativos_dashboard');
+        header('Content-Type: application/json');
+
+        if ($this->coletaSnmpAtiva()) {
+            echo json_encode(['success' => true, 'message' => 'Coleta já estava ativa.']);
+            return;
+        }
+
+        $resultado = (new CronService())->criar([
+            'nome' => $this->service->nomeJobCronSnmp(),
+            'descricao' => 'Coleta dados via SNMP dos ativos com essa opção habilitada (Ativos de TI).',
+            'expressao' => '*/30 * * * *',
+            'usuario_execucao' => 'www-data',
+            'comando' => 'php /var/www/rd.intranet/rd ativos:coletar-snmp',
+            'ativo' => true,
+        ]);
+
+        AuditService::registrar('Ativos', 'Ativar coleta SNMP', $resultado['message']);
+
+        echo json_encode($resultado);
+    }
+
+    private function coletaSnmpAtiva(): bool
+    {
+        foreach ((new CronService())->listar() as $job) {
+            if ($job['nome'] === $this->service->nomeJobCronSnmp()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

@@ -175,6 +175,12 @@ switch ($comando) {
 
         break;
 
+    case 'ativos:coletar-snmp':
+        $resultado = (new \App\Services\AtivoService())->coletarSnmpTodos();
+        echo "OK: SNMP coletado em {$resultado['sucesso']}/{$resultado['total']} ativo(s).\n";
+
+        break;
+
     default:
         echo "Comando não encontrado: {$comando}\n";
         exit(1);

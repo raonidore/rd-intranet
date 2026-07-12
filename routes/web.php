@@ -383,3 +383,6 @@ $router->get('/ativos/excluir', [AtivoController::class, 'excluirForm']);
 $router->post('/ativos/excluir', [AtivoController::class, 'excluir']);
 $router->get('/ativos/etiqueta', [AtivoController::class, 'etiqueta']);
 $router->get('/ativos/etiquetas/lote', [AtivoController::class, 'etiquetasLote']);
+$router->post('/ativos/coletar-snmp', [AtivoController::class, 'coletarSnmp']);
+$router->post('/ativos/snmp/config', [AtivoController::class, 'salvarConfigSnmp']);
+$router->post('/ativos/snmp/ativar-coleta', [AtivoController::class, 'ativarColetaSnmp']);

@@ -29,11 +29,23 @@ $camposTipo = AtivoService::CAMPOS_DETALHES[$ativo['tipo']] ?? [];
         <?= Badge::make(htmlspecialchars(AtivoService::STATUS[$ativo['status']] ?? $ativo['status']), $statusCores[$ativo['status']] ?? 'secondary') ?>
     </div>
     <div class="d-flex gap-2">
+        <?php if (!empty($ativo['snmp_habilitado']) && !empty($ativo['ip'])): ?>
+            <button type="button" class="btn btn-outline-secondary" id="botaoColetarSnmp" data-id="<?= (int)$ativo['id'] ?>">
+                <i class="bi bi-arrow-repeat"></i> Coletar via SNMP
+            </button>
+        <?php endif; ?>
         <a href="<?= url('/ativos/etiqueta?id=' . $ativo['id']) ?>" target="_blank" class="btn btn-outline-secondary"><i class="bi bi-qr-code"></i> Etiqueta</a>
         <a href="<?= url('/ativos/editar?id=' . $ativo['id']) ?>" class="btn btn-primary"><i class="bi bi-pencil"></i> Editar</a>
         <a href="<?= url('/ativos/excluir?id=' . $ativo['id']) ?>" class="btn btn-outline-danger"><i class="bi bi-trash"></i></a>
     </div>
 </div>
+
+<?php if (!empty($ativo['ultimo_checkin'])): ?>
+    <div class="alert alert-light border small mb-4">
+        <i class="bi bi-clock-history"></i> Última atualização automática: <?= htmlspecialchars(data_br($ativo['ultimo_checkin'])) ?>
+        via <?= $ativo['origem'] === 'agente' ? 'agente Windows' : ($ativo['origem'] === 'snmp' ? 'SNMP' : 'manual') ?>.
+    </div>
+<?php endif; ?>
 
 <div class="row g-3">
     <div class="col-lg-6">
@@ -134,6 +146,33 @@ $camposTipo = AtivoService::CAMPOS_DETALHES[$ativo['tipo']] ?? [];
         </div>
     </div>
 </div>
+
+<script>
+(function () {
+    const botao = document.getElementById('botaoColetarSnmp');
+    if (!botao) return;
+
+    botao.addEventListener('click', async function () {
+        botao.disabled = true;
+        botao.innerHTML = '<i class="bi bi-hourglass-split"></i> Coletando...';
+
+        const dados = new URLSearchParams();
+        dados.set('id', botao.dataset.id);
+
+        try {
+            const res = await fetch(<?= json_encode(url('/ativos/coletar-snmp')) ?>, { method: 'POST', body: dados });
+            const resultado = await res.json();
+            alert(resultado.message || (resultado.success ? 'Coletado.' : 'Falha ao coletar.'));
+            if (resultado.success) location.reload();
+        } catch (e) {
+            alert('Erro ao comunicar com o servidor.');
+        } finally {
+            botao.disabled = false;
+            botao.innerHTML = '<i class="bi bi-arrow-repeat"></i> Coletar via SNMP';
+        }
+    });
+})();
+</script>
 
 <?php
 $conteudo = ob_get_clean();

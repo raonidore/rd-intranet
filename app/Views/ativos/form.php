@@ -98,6 +98,24 @@ $tipoAtual = $ativo['tipo'] ?? $tipoSelecionado;
         </div>
     </div>
 
+    <div class="card border-0 shadow-sm mb-3" id="cardSnmp" style="<?= in_array($tipoAtual, AtivoService::TIPOS_COM_SNMP, true) ? '' : 'display:none' ?>">
+        <div class="card-header bg-white"><strong>Coleta via SNMP</strong></div>
+        <div class="card-body">
+            <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" role="switch" name="snmp_habilitado" id="campoSnmpHabilitado"
+                       <?= !empty($ativo['snmp_habilitado']) ? 'checked' : '' ?>>
+                <label class="form-check-label" for="campoSnmpHabilitado">Habilitar coleta automática via SNMP para este ativo</label>
+            </div>
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Community SNMP (opcional)</label>
+                    <input type="text" name="snmp_community" class="form-control" value="<?= htmlspecialchars($ativo['snmp_community'] ?? '') ?>" placeholder="Deixe em branco para usar a padrão">
+                    <div class="form-text">Só preencha se este dispositivo usa uma community diferente da padrão configurada no Dashboard de Ativos. Requer o IP preenchido acima.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="card border-0 shadow-sm mb-3">
         <div class="card-header bg-white"><strong>Detalhes técnicos</strong></div>
         <div class="card-body">
@@ -123,10 +141,17 @@ $tipoAtual = $ativo['tipo'] ?? $tipoSelecionado;
     const campoTipo = document.getElementById('campoTipo');
     if (!campoTipo) return;
 
+    const tiposComSnmp = <?= json_encode(AtivoService::TIPOS_COM_SNMP) ?>;
+    const cardSnmp = document.getElementById('cardSnmp');
+
     function atualizarBlocos() {
         document.querySelectorAll('.bloco-detalhes').forEach(function (bloco) {
             bloco.style.display = bloco.dataset.tipo === campoTipo.value ? '' : 'none';
         });
+
+        if (cardSnmp) {
+            cardSnmp.style.display = tiposComSnmp.includes(campoTipo.value) ? '' : 'none';
+        }
     }
 
     campoTipo.addEventListener('change', atualizarBlocos);

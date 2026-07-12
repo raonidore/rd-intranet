@@ -56,6 +56,29 @@ $statusCores = [
     </div>
 
     <div class="col-lg-7">
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white"><strong>Coleta via SNMP</strong></div>
+            <div class="card-body">
+                <form method="post" action="<?= url('/ativos/snmp/config') ?>" class="row g-2 align-items-end mb-3">
+                    <div class="col-auto">
+                        <label class="form-label small mb-0">Community padrão</label>
+                        <input type="text" name="comunidade" class="form-control form-control-sm" value="<?= htmlspecialchars($comunidadePadrao) ?>" style="width:160px">
+                    </div>
+                    <div class="col-auto">
+                        <button class="btn btn-sm btn-outline-secondary">Salvar</button>
+                    </div>
+                </form>
+                <div class="d-flex justify-content-between align-items-center small text-muted">
+                    <span><i class="bi bi-info-circle"></i> Coleta periódica (a cada 30 min) dos ativos com SNMP habilitado.</span>
+                    <?php if ($coletaSnmpAtiva): ?>
+                        <span class="text-success"><i class="bi bi-check-circle"></i> Ativa</span>
+                    <?php else: ?>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="botaoAtivarColetaSnmp">Ativar coleta periódica</button>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+
         <div class="card border-0 shadow-sm h-100">
             <div class="card-header bg-white d-flex justify-content-between align-items-center">
                 <strong>Cadastrados recentemente</strong>
@@ -84,6 +107,25 @@ $statusCores = [
         </div>
     </div>
 </div>
+
+<script>
+(function () {
+    const botao = document.getElementById('botaoAtivarColetaSnmp');
+    if (!botao) return;
+
+    botao.addEventListener('click', async function () {
+        botao.disabled = true;
+        try {
+            const res = await fetch(<?= json_encode(url('/ativos/snmp/ativar-coleta')) ?>, { method: 'POST' });
+            const dados = await res.json();
+            alert(dados.message || (dados.success ? 'Ativado.' : 'Falha ao ativar.'));
+            location.reload();
+        } catch (e) {
+            botao.disabled = false;
+        }
+    });
+})();
+</script>
 
 <?php
 $conteudo = ob_get_clean();

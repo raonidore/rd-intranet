@@ -69,9 +69,9 @@ class AtivoRepository
     {
         $stmt = $this->pdo->prepare("
             INSERT INTO ativos
-            (tipo, codigo_patrimonio, nome, marca, modelo, numero_serie, setor, localizacao, responsavel, status, ip, observacoes, detalhes)
+            (tipo, codigo_patrimonio, nome, marca, modelo, numero_serie, setor, localizacao, responsavel, status, ip, snmp_habilitado, snmp_community, observacoes, detalhes)
             VALUES
-            (:tipo, :codigo_patrimonio, :nome, :marca, :modelo, :numero_serie, :setor, :localizacao, :responsavel, :status, :ip, :observacoes, :detalhes)
+            (:tipo, :codigo_patrimonio, :nome, :marca, :modelo, :numero_serie, :setor, :localizacao, :responsavel, :status, :ip, :snmp_habilitado, :snmp_community, :observacoes, :detalhes)
         ");
 
         $stmt->execute([
@@ -86,6 +86,8 @@ class AtivoRepository
             'responsavel' => $dados['responsavel'],
             'status' => $dados['status'],
             'ip' => $dados['ip'],
+            'snmp_habilitado' => $dados['snmp_habilitado'],
+            'snmp_community' => $dados['snmp_community'],
             'observacoes' => $dados['observacoes'],
             'detalhes' => $dados['detalhes'],
         ]);
@@ -106,6 +108,8 @@ class AtivoRepository
                    responsavel = :responsavel,
                    status = :status,
                    ip = :ip,
+                   snmp_habilitado = :snmp_habilitado,
+                   snmp_community = :snmp_community,
                    observacoes = :observacoes,
                    detalhes = :detalhes
              WHERE id = :id
@@ -122,9 +126,34 @@ class AtivoRepository
             'responsavel' => $dados['responsavel'],
             'status' => $dados['status'],
             'ip' => $dados['ip'],
+            'snmp_habilitado' => $dados['snmp_habilitado'],
+            'snmp_community' => $dados['snmp_community'],
             'observacoes' => $dados['observacoes'],
             'detalhes' => $dados['detalhes'],
         ]);
+    }
+
+    public function atualizarDetalhesSnmp(int $id, string $detalhesJson): bool
+    {
+        $stmt = $this->pdo->prepare("
+            UPDATE ativos
+               SET detalhes = :detalhes,
+                   origem = 'snmp',
+                   ultimo_checkin = NOW()
+             WHERE id = :id
+        ");
+
+        return $stmt->execute(['id' => $id, 'detalhes' => $detalhesJson]);
+    }
+
+    public function listarComSnmpHabilitado(): array
+    {
+        $stmt = $this->pdo->query("
+            SELECT * FROM ativos
+            WHERE snmp_habilitado = 1 AND ip IS NOT NULL AND ip <> ''
+        ");
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function excluir(int $id): bool
