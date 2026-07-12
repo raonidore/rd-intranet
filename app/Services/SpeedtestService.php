@@ -40,10 +40,10 @@ class SpeedtestService
         set_time_limit(90);
 
         $resultado = $this->linux->executar('/opt/rdtecnologia/scripts/speedtest_executar_web.sh');
-        $bruto = json_decode(trim($resultado['output']), true);
+        $bruto = $this->extrairResultadoJson($resultado['output']);
 
         if (!is_array($bruto) || isset($bruto['success'])) {
-            $mensagem = is_array($bruto) ? ($bruto['message'] ?? 'Erro desconhecido.') : $resultado['output'];
+            $mensagem = is_array($bruto) ? ($bruto['message'] ?? 'Erro desconhecido.') : 'Resposta inesperada do Speedtest CLI.';
             $this->repo->criar(['status' => 'erro', 'mensagem_erro' => $mensagem]);
 
             return ['success' => false, 'message' => $mensagem];
@@ -77,6 +77,34 @@ class SpeedtestService
             'success' => true,
             'message' => "Teste concluído: {$downloadMbps} Mbps download, {$uploadMbps} Mbps upload, {$pingMs} ms de ping.",
         ];
+    }
+
+    /**
+     * Na primeira execução de sempre (antes da aceitação de licença
+     * ficar salva em $HOME/.config), o Speedtest CLI imprime o banner
+     * legal como texto puro ANTES do JSON, mesmo com --accept-license
+     * --accept-gdpr e -f json -- confirmado rodando ao vivo. A saída
+     * inteira deixa de ser um JSON único nesse caso, então varre linha
+     * por linha em vez de assumir isso.
+     */
+    private function extrairResultadoJson(string $saida): ?array
+    {
+        $tentativa = json_decode(trim($saida), true);
+        if (is_array($tentativa)) {
+            return $tentativa;
+        }
+
+        foreach (array_reverse(explode("\n", $saida)) as $linha) {
+            $linha = trim($linha);
+            if ($linha === '' || $linha[0] !== '{') continue;
+
+            $decodificado = json_decode($linha, true);
+            if (is_array($decodificado) && (isset($decodificado['type']) || isset($decodificado['success']))) {
+                return $decodificado;
+            }
+        }
+
+        return null;
     }
 
     public function ultimoConcluido(): ?array

@@ -78,7 +78,15 @@ chmod 644 "$CHAVEIRO"
 CODINOME="$(. /etc/os-release && echo "$VERSION_CODENAME")"
 CODINOME_FALLBACK="jammy"
 
-if ! curl -fsS -o /dev/null "https://packagecloud.io/ookla/speedtest-cli/ubuntu/dists/${CODINOME}/Release"; then
+if ! curl -fsS -o /dev/null "https://packagecloud.io/ookla/speedtest-cli/ubuntu/dists/${CODINOME}/Release" 2>/dev/null; then
+  # 404 aqui e esperado/normal quando o codinome real ainda nao tem
+  # build da Ookla -- nao e um erro de verdade, so o sinal pra cair no
+  # fallback. Precisa suprimir o stderr do curl: executarScript()/
+  # executar() juntam stderr+stdout (2>&1) antes do PHP tentar
+  # json_decode() na saida inteira do script, entao um "curl: (22)..."
+  # solto aqui quebraria o parse mesmo com o resto do script indo bem
+  # (foi exatamente o que aconteceu: instalou com sucesso mas a tela
+  # mostrou como erro).
   CODINOME="$CODINOME_FALLBACK"
 fi
 
@@ -108,5 +116,18 @@ rm -f /tmp/rd_st_out_$$ /tmp/rd_st_err_$$
 mkdir -p /var/lib/rd-intranet/speedtest
 chown www-data:www-data /var/lib/rd-intranet/speedtest
 chmod 700 /var/lib/rd-intranet/speedtest
+
+# "Esquenta" a aceitacao de licenca rodando um teste real como www-data
+# (mesmo usuario que speedtest_executar_web.sh vai usar depois, sem
+# sudo). Confirmado ao vivo: na primeira execucao de sempre, o
+# speedtest imprime o banner legal inteiro como texto puro ANTES do
+# JSON mesmo com --accept-license --accept-gdpr -f json, porque ainda
+# nao tem $HOME/.config/ookla/speedtest-cli.json pra lembrar que ja foi
+# aceito -- da segunda vez em diante a saida vira um JSON limpo, uma
+# linha so. Sem isso, o primeiro clique em "Testar agora" pela tela
+# receberia essa saida "suja". Nao falha a instalacao se isso nao
+# rodar (ex: sem internet nesse instante) -- so faz o primeiro teste
+# real demorar/imprimir mais.
+runuser -u www-data -- env HOME=/var/lib/rd-intranet/speedtest speedtest --accept-license --accept-gdpr -f json >/dev/null 2>&1 || true
 
 echo '{"success":true,"message":"Speedtest CLI instalado com sucesso."}'
