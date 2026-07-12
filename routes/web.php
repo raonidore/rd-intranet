@@ -42,6 +42,7 @@ use App\Controllers\VpnIkev2Controller;
 use App\Controllers\VpnIkev2SaidaController;
 use App\Controllers\AtualizacaoController;
 use App\Controllers\AntivirusController;
+use App\Controllers\AtivoController;
 
 $router->get('/', [DashboardController::class, 'index']);
 $router->get('/dashboard', [DashboardController::class, 'index']);
@@ -365,3 +366,20 @@ $router->get('/banco-dados/console/arvore', [DbConsoleController::class, 'arvore
 $router->get('/banco-dados/console/arvore/bancos', [DbConsoleController::class, 'arvoreBancos']);
 $router->get('/banco-dados/console/sql', [DbConsoleController::class, 'sqlForm']);
 $router->post('/banco-dados/console/sql', [DbConsoleController::class, 'sqlExecutar']);
+
+/*
+ |---------------------------------------------------------
+ | Ativos de TI (CMDB)
+ |---------------------------------------------------------
+ */
+$router->get('/ativos', [AtivoController::class, 'dashboard']);
+$router->get('/ativos/lista', [AtivoController::class, 'index']);
+$router->get('/ativos/ver', [AtivoController::class, 'verForm']);
+$router->get('/ativos/novo', [AtivoController::class, 'novoForm']);
+$router->post('/ativos/novo', [AtivoController::class, 'novo']);
+$router->get('/ativos/editar', [AtivoController::class, 'editarForm']);
+$router->post('/ativos/editar', [AtivoController::class, 'editar']);
+$router->get('/ativos/excluir', [AtivoController::class, 'excluirForm']);
+$router->post('/ativos/excluir', [AtivoController::class, 'excluir']);
+$router->get('/ativos/etiqueta', [AtivoController::class, 'etiqueta']);
+$router->get('/ativos/etiquetas/lote', [AtivoController::class, 'etiquetasLote']);
