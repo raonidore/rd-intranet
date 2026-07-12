@@ -131,7 +131,7 @@ $badgeSimNao = fn(bool $v, string $simTexto = 'Ativo', string $naoTexto = 'Inati
                     <tbody>
                         <?php foreach ($historico as $h): ?>
                             <tr>
-                                <td class="small"><?= htmlspecialchars($h['iniciado_em']) ?></td>
+                                <td class="small"><?= htmlspecialchars(data_br($h['iniciado_em'])) ?></td>
                                 <td><?= $h['tipo'] === 'agendada' ? 'Agendada' : 'Manual' ?></td>
                                 <td class="small font-monospace"><?= htmlspecialchars($h['caminho']) ?></td>
                                 <td>
@@ -179,7 +179,7 @@ $badgeSimNao = fn(bool $v, string $simTexto = 'Ativo', string $naoTexto = 'Inati
                             <tr>
                                 <td class="small font-monospace"><?= htmlspecialchars($q['caminho_original']) ?></td>
                                 <td><?= htmlspecialchars($q['assinatura']) ?></td>
-                                <td class="small"><?= htmlspecialchars($q['detectado_em']) ?></td>
+                                <td class="small"><?= htmlspecialchars(data_br($q['detectado_em'])) ?></td>
                                 <td class="text-end">
                                     <button type="button" class="btn btn-sm btn-outline-danger botao-excluir-quarentena" data-id="<?= (int)$q['id'] ?>">
                                         <i class="bi bi-trash"></i> Excluir

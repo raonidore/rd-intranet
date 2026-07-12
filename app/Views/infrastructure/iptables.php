@@ -108,7 +108,7 @@ foreach ($regras as $r) {
     </div>
 <?php elseif ($ultimoApplyEm): ?>
     <div class="text-muted small mb-3">
-        <i class="bi bi-check-circle text-success"></i> Último ruleset aplicado com sucesso em <?= htmlspecialchars($ultimoApplyEm) ?>.
+        <i class="bi bi-check-circle text-success"></i> Último ruleset aplicado com sucesso em <?= htmlspecialchars(data_br($ultimoApplyEm)) ?>.
     </div>
 <?php endif; ?>
 

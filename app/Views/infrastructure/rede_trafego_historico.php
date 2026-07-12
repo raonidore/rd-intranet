@@ -76,20 +76,20 @@ $totalUpload = array_sum(array_column($consumo, 'upload'));
                     <th>Interface</th>
                     <th class="text-end">Download</th>
                     <th class="text-end">Upload</th>
-                    <th class="text-end">Pacotes RX</th>
-                    <th class="text-end">Pacotes TX</th>
+                    <th class="text-end">Pacotes RX (qtd.)</th>
+                    <th class="text-end">Pacotes TX (qtd.)</th>
                 </tr>
             </thead>
             <tbody>
                 <?php foreach ($consumo as $dia): ?>
                     <?php foreach ($dia['interfaces'] as $i): ?>
                         <tr>
-                            <td class="font-monospace"><?= htmlspecialchars($dia['dia']) ?></td>
+                            <td class="font-monospace"><?= htmlspecialchars(data_br($dia['dia'], 'd/m/Y')) ?></td>
                             <td><?= htmlspecialchars($i['nome']) ?></td>
                             <td class="text-end font-monospace" style="color:#22c55e"><?= formatBytesHistorico($i['download']) ?></td>
                             <td class="text-end font-monospace" style="color:#06b6d4"><?= formatBytesHistorico($i['upload']) ?></td>
-                            <td class="text-end font-monospace"><?= number_format($i['rx_packets'], 0, ',', '.') ?></td>
-                            <td class="text-end font-monospace"><?= number_format($i['tx_packets'], 0, ',', '.') ?></td>
+                            <td class="text-end font-monospace"><?= number_format($i['rx_packets'], 0, ',', '.') ?> pacotes</td>
+                            <td class="text-end font-monospace"><?= number_format($i['tx_packets'], 0, ',', '.') ?> pacotes</td>
                         </tr>
                     <?php endforeach; ?>
                 <?php endforeach; ?>

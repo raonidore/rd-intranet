@@ -49,7 +49,7 @@ $blocoCommit = function (?array $commit): string {
             </div>
             <div class="col-md-4">
                 <div class="text-muted small">Última verificação</div>
-                <div><?= $verificadoEm ? htmlspecialchars($verificadoEm) : 'Nunca verificado' ?></div>
+                <div><?= $verificadoEm ? htmlspecialchars(data_br($verificadoEm)) : 'Nunca verificado' ?></div>
             </div>
         </div>
 
@@ -87,7 +87,7 @@ $blocoPasso = function (array $p): string {
                 <?php elseif ($p['status'] === 'manual'): ?>
                     <?= Badge::make('Confirmado manualmente', 'success') ?>
                     <div class="small text-muted mt-1">
-                        em <?= htmlspecialchars($p['confirmado_em']) ?><?= $p['confirmado_por_nome'] ? ' por ' . htmlspecialchars($p['confirmado_por_nome']) : '' ?>
+                        em <?= htmlspecialchars(data_br($p['confirmado_em'])) ?><?= $p['confirmado_por_nome'] ? ' por ' . htmlspecialchars($p['confirmado_por_nome']) : '' ?>
                     </div>
                     <form method="post" action="<?= url('/administracao/atualizacoes/passos-manuais/desconfirmar') ?>" class="mt-1"
                           onsubmit="return confirm('Desfazer a confirmação deste passo?');">
@@ -208,7 +208,7 @@ $blocoPasso = function (array $p): string {
                 <tbody>
                     <?php foreach ($historico as $h): ?>
                         <tr>
-                            <td class="small"><?= htmlspecialchars($h['criado_em']) ?></td>
+                            <td class="small"><?= htmlspecialchars(data_br($h['criado_em'])) ?></td>
                             <td><?= $h['tipo'] === 'aplicar' ? 'Atualização' : 'Reversão' ?></td>
                             <td class="font-monospace small">
                                 <?= htmlspecialchars($curto($h['commit_antes'])) ?> → <?= htmlspecialchars($curto($h['commit_depois'])) ?>

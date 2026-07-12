@@ -71,7 +71,7 @@ ob_start();
     </div>
 <?php elseif ($sync['em']): ?>
     <div class="text-muted small mb-3">
-        <i class="bi bi-check-circle text-success"></i> Sincronizado com o sistema em <?= htmlspecialchars($sync['em']) ?>.
+        <i class="bi bi-check-circle text-success"></i> Sincronizado com o sistema em <?= htmlspecialchars(data_br($sync['em'])) ?>.
     </div>
 <?php endif; ?>
 
@@ -109,7 +109,7 @@ ob_start();
                         <td><?= (int)$job['ativo'] === 1 ? Badge::make('Ativo', 'success') : Badge::make('Desativado', 'secondary') ?></td>
                         <td>
                             <?php if ($job['ultima_execucao_em']): ?>
-                                <?= htmlspecialchars($job['ultima_execucao_em']) ?>
+                                <?= htmlspecialchars(data_br($job['ultima_execucao_em'])) ?>
                                 <?= (int)$job['ultima_execucao_sucesso'] === 1 ? Badge::make('OK', 'success') : Badge::make('Falha', 'danger') ?>
                             <?php else: ?>
                                 <span class="text-muted">Nunca executado</span>

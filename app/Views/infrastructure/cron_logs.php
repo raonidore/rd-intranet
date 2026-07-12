@@ -22,7 +22,7 @@ ob_start();
     <div class="card-body">
         <?php if ($job['ultima_execucao_em']): ?>
             <p class="mb-2">
-                <?= htmlspecialchars($job['ultima_execucao_em']) ?>
+                <?= htmlspecialchars(data_br($job['ultima_execucao_em'])) ?>
                 <?= (int)$job['ultima_execucao_sucesso'] === 1 ? Badge::make('OK', 'success') : Badge::make('Falha', 'danger') ?>
             </p>
             <pre class="bg-dark text-light p-3 rounded mb-0"><?= htmlspecialchars($job['ultima_execucao_saida'] ?: '(sem saída)') ?></pre>

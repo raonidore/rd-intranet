@@ -24,7 +24,7 @@ ob_start();
             <tbody>
                 <?php foreach ($registros as $r): ?>
                     <tr>
-                        <td><?= htmlspecialchars($r['criado_em']) ?></td>
+                        <td><?= htmlspecialchars(data_br($r['criado_em'])) ?></td>
                         <td><?= htmlspecialchars($r['usuario_nome'] ?? '-') ?></td>
                         <td><?= htmlspecialchars($r['modulo']) ?></td>
                         <td><?= htmlspecialchars($r['acao']) ?></td>

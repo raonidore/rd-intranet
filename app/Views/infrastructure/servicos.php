@@ -75,7 +75,7 @@ function serviceIcon(string $service): string
 
                     <div class="mb-3">
                         <div class="small text-muted">Ativo desde</div>
-                        <strong><?= htmlspecialchars($s['uptime'] ?: '-') ?></strong>
+                        <strong><?= $s['uptime'] ? htmlspecialchars(data_br($s['uptime'])) : '-' ?></strong>
                     </div>
 
                     <div class="btn-group">

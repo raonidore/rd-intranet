@@ -6,6 +6,7 @@ require_once __DIR__ . '/../vendor/autoload.php';
 \App\Core\Bootstrap\CoreBootstrap::boot();
 
 require_once __DIR__ . '/Helpers/url.php';
+require_once __DIR__ . '/Helpers/data.php';
 
 function auth_required()
 {
