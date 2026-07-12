@@ -34,13 +34,25 @@ rm -f /tmp/rd_st_out_$$ /tmp/rd_st_err_$$
 
 mkdir -p /etc/apt/keyrings
 
-if ! curl -fsSL "https://packagecloud.io/ookla/speedtest-cli/gpgkey" 2>/tmp/rd_st_err_$$ | gpg --batch --yes --no-tty --dearmor -o "$CHAVEIRO" 2>>/tmp/rd_st_err_$$; then
+# GNUPGHOME proprio e descartavel: rodando via sudo a partir do PHP, o
+# HOME herdado costuma vir vazio/incoerente, e o gpg tenta resolver
+# ~/.gnupg sozinho -- em alguns casos isso dispara uma checagem de
+# terminal e falha com "cannot open /dev/tty" mesmo com --no-tty. Dar um
+# home isolado e gravavel evita o gpg tocar em qualquer estado
+# ambiente/herdado.
+GNUPGHOME_TMP="$(mktemp -d)"
+chmod 700 "$GNUPGHOME_TMP"
+
+if ! curl -fsSL "https://packagecloud.io/ookla/speedtest-cli/gpgkey" 2>/tmp/rd_st_err_$$ \
+    | GNUPGHOME="$GNUPGHOME_TMP" gpg --batch --yes --no-tty --dearmor -o "$CHAVEIRO" 2>>/tmp/rd_st_err_$$; then
   ERRO="$(tail -10 /tmp/rd_st_err_$$ | tr '\n' ' ' | sed 's/"/\\"/g')"
   rm -f /tmp/rd_st_err_$$
+  rm -rf "$GNUPGHOME_TMP"
   echo "{\"success\":false,\"message\":\"Erro ao baixar/instalar a chave GPG da Ookla: ${ERRO}\"}"
   exit 1
 fi
 rm -f /tmp/rd_st_err_$$
+rm -rf "$GNUPGHOME_TMP"
 chmod 644 "$CHAVEIRO"
 
 # O repositorio da Ookla no packagecloud costuma ficar atras dos codinomes
