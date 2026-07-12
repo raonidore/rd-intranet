@@ -176,19 +176,58 @@ function formatBytesVpn(int $bytes): string
     </div>
 
     <div class="col-lg-4 col-md-6">
-        <a href="<?= url('/vpn/ikev2') ?>" class="tech-card">
-            <div class="accent" style="background:#6b7280"></div>
+        <a href="<?= url('/vpn/ikev2/servidor') ?>" class="tech-card">
+            <div class="accent" style="background:#f59e0b"></div>
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-start mb-3">
                     <div>
                         <div class="tech-label">Protocolo</div>
                         <h5 class="mb-0"><i class="bi bi-globe-americas me-1"></i> IKEv2 / IPsec</h5>
                     </div>
-                    <span class="pulse-dot neutro"></span>
+                    <span class="pulse-dot <?= !$ikev2['instalado'] ? 'neutro' : ($ikev2['clientes_online'] > 0 ? 'online' : 'offline') ?>"></span>
+                </div>
+
+                <?php if (!$ikev2['instalado']): ?>
+                    <div class="stat-mini-row">
+                        <span class="tech-label mb-0">Status</span>
+                        <span style="font-size:12px">Não instalado</span>
+                    </div>
+                <?php else: ?>
+                    <div class="stat-mini-row">
+                        <span class="tech-label mb-0">Clientes ativos</span>
+                        <span class="tech-num" style="font-size:16px"><?= $ikev2['clientes_total'] ?></span>
+                    </div>
+                    <div class="stat-mini-row">
+                        <span class="tech-label mb-0">Exposto à internet</span>
+                        <span style="font-size:12px"><?= $ikev2['exposto'] ? 'Sim' : 'Não' ?></span>
+                    </div>
+                    <div class="stat-mini-row">
+                        <span class="tech-label mb-0">Tráfego hoje</span>
+                        <span style="font-size:12px"><?= formatBytesVpn($ikev2['rx_hoje']) ?> ↓ / <?= formatBytesVpn($ikev2['tx_hoje']) ?> ↑</span>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </a>
+    </div>
+
+    <div class="col-lg-4 col-md-6">
+        <a href="<?= url('/vpn/ikev2/saida') ?>" class="tech-card">
+            <div class="accent" style="background:#a855f7"></div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <div>
+                        <div class="tech-label">Este servidor como cliente</div>
+                        <h5 class="mb-0"><i class="bi bi-box-arrow-up-right me-1"></i> IKEv2 - Saída</h5>
+                    </div>
+                    <span class="pulse-dot <?= $ikev2['conexoes_saida_ativas'] > 0 ? 'online' : 'neutro' ?>"></span>
                 </div>
                 <div class="stat-mini-row">
-                    <span class="tech-label mb-0">Status</span>
-                    <span style="font-size:12px">Próxima fase</span>
+                    <span class="tech-label mb-0">Conectadas</span>
+                    <span class="tech-num" style="font-size:16px"><?= $ikev2['conexoes_saida_ativas'] ?>/<?= $ikev2['conexoes_saida_total'] ?></span>
+                </div>
+                <div class="stat-mini-row">
+                    <span class="tech-label mb-0">Uso</span>
+                    <span style="font-size:12px">Conectar a um gateway IPsec existente</span>
                 </div>
             </div>
         </a>

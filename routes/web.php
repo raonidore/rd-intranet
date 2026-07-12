@@ -38,6 +38,8 @@ use App\Controllers\VpnWireguardController;
 use App\Controllers\VpnOpenvpnController;
 use App\Controllers\VpnOpenvpnSaidaController;
 use App\Controllers\VpnWireguardSaidaController;
+use App\Controllers\VpnIkev2Controller;
+use App\Controllers\VpnIkev2SaidaController;
 use App\Controllers\AtualizacaoController;
 use App\Controllers\AntivirusController;
 
@@ -212,7 +214,26 @@ $router->post('/infraestrutura/ddns/atualizar-todas', [DdnsController::class, 'a
 $router->post('/infraestrutura/ddns/automatica', [DdnsController::class, 'ativarAtualizacaoAutomatica']);
 
 $router->get('/vpn', [VpnController::class, 'dashboard']);
-$router->get('/vpn/ikev2', [VpnController::class, 'ikev2EmBreve']);
+$router->get('/vpn/ikev2/servidor', [VpnIkev2Controller::class, 'servidor']);
+$router->post('/vpn/ikev2/instalar', [VpnIkev2Controller::class, 'instalar']);
+$router->post('/vpn/ikev2/pki/inicializar', [VpnIkev2Controller::class, 'inicializarPki']);
+$router->post('/vpn/ikev2/salvar-config', [VpnIkev2Controller::class, 'salvarConfig']);
+$router->post('/vpn/ikev2/expor', [VpnIkev2Controller::class, 'exporToggle']);
+$router->post('/vpn/ikev2/ativar-coleta', [VpnIkev2Controller::class, 'ativarColeta']);
+$router->get('/vpn/ikev2/clientes', [VpnIkev2Controller::class, 'clientes']);
+$router->post('/vpn/ikev2/clientes/novo', [VpnIkev2Controller::class, 'criarCliente']);
+$router->post('/vpn/ikev2/clientes/entregue', [VpnIkev2Controller::class, 'marcarEntregue']);
+$router->post('/vpn/ikev2/clientes/revogar', [VpnIkev2Controller::class, 'revogarCliente']);
+$router->get('/vpn/ikev2/ca', [VpnIkev2Controller::class, 'baixarCa']);
+$router->get('/vpn/ikev2/trafego', [VpnIkev2Controller::class, 'trafego']);
+
+$router->get('/vpn/ikev2/saida', [VpnIkev2SaidaController::class, 'index']);
+$router->get('/vpn/ikev2/saida/novo', [VpnIkev2SaidaController::class, 'novoForm']);
+$router->post('/vpn/ikev2/saida/novo', [VpnIkev2SaidaController::class, 'novo']);
+$router->post('/vpn/ikev2/saida/conectar', [VpnIkev2SaidaController::class, 'conectar']);
+$router->post('/vpn/ikev2/saida/desconectar', [VpnIkev2SaidaController::class, 'desconectar']);
+$router->post('/vpn/ikev2/saida/boot', [VpnIkev2SaidaController::class, 'alternarBoot']);
+$router->post('/vpn/ikev2/saida/remover', [VpnIkev2SaidaController::class, 'remover']);
 
 $router->get('/vpn/openvpn/servidor', [VpnOpenvpnController::class, 'servidor']);
 $router->post('/vpn/openvpn/instalar', [VpnOpenvpnController::class, 'instalar']);

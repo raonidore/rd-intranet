@@ -7,10 +7,15 @@
 # /etc/openvpn/server/easy-rsa/pki -- so root le/escreve.
 #
 # Acoes:
-#   init                        cria CA + certificado do servidor + tls-crypt key
-#   emitir_cliente <nome>       emite cert+key de um cliente novo, imprime em JSON
-#   baixar_cliente <nome>       reimprime cert+key de um cliente ja emitido (nao precisa reemitir se o admin perdeu o .ovpn)
-#   revogar_cliente <nome>      revoga + regera a CRL que o servidor usa
+#   init                            cria CA + certificado do servidor + tls-crypt key
+#   emitir_cliente <nome>           emite cert+key de um cliente novo, imprime em JSON
+#   baixar_cliente <nome>           reimprime cert+key de um cliente ja emitido (nao precisa reemitir se o admin perdeu o .ovpn)
+#   revogar_cliente <nome>          revoga + regera a CRL que o servidor usa
+#   baixar_ca                       reimprime so o ca.crt (pra distribuir aos clientes IKEv2 confiarem na CA)
+#   emitir_servidor_cn <nome/host>  emite um certificado de SERVIDOR adicional com CN customizado
+#                                   (usado pelo IKEv2 -- o CN precisa bater com o endereco que o
+#                                   cliente usa pra conectar, diferente do CN generico "server" do OpenVPN).
+#                                   Reaproveita a MESMA CA -- nao cria uma segunda autoridade.
 
 set -u
 
@@ -24,7 +29,9 @@ if [ ! -x "$EASYRSA_BIN" ]; then
 fi
 
 nome_valido() {
-  [[ "$1" =~ ^[a-zA-Z0-9_-]{1,64}$ ]]
+  # aceita ponto tambem -- CN de servidor pode ser um hostname (ex:
+  # vpn.exemplo.com), usado pelo emitir_servidor_cn (IKEv2).
+  [[ "$1" =~ ^[a-zA-Z0-9_.-]{1,64}$ ]]
 }
 
 json_escapar() {
@@ -71,6 +78,46 @@ case "$ACAO" in
     chmod 600 /etc/openvpn/server/tls-crypt.key
 
     echo '{"success":true,"message":"PKI inicializada com sucesso."}'
+    ;;
+
+  baixar_ca)
+    if [ ! -f "$PKI_DIR/pki/ca.crt" ]; then
+      echo '{"success":false,"message":"PKI ainda não foi inicializada."}'
+      exit 1
+    fi
+    CA="$(json_escapar < "$PKI_DIR/pki/ca.crt")"
+    echo "{\"success\":true,\"ca\":\"${CA}\"}"
+    ;;
+
+  emitir_servidor_cn)
+    CN="${2:-}"
+    if ! nome_valido "$CN"; then
+      echo '{"success":false,"message":"CN inválido."}'
+      exit 1
+    fi
+    if [ ! -d "$PKI_DIR/pki" ]; then
+      echo '{"success":false,"message":"PKI ainda não foi inicializada."}'
+      exit 1
+    fi
+
+    cd "$PKI_DIR" || exit 1
+    export EASYRSA_BATCH=1
+
+    if [ ! -f "$PKI_DIR/pki/issued/${CN}.crt" ]; then
+      if ! EASYRSA_REQ_CN="$CN" "$EASYRSA_BIN" build-server-full "$CN" nopass >/tmp/rd_pki_err_$$ 2>&1; then
+        ERRO="$(tail -20 /tmp/rd_pki_err_$$ | json_escapar)"
+        rm -f /tmp/rd_pki_err_$$
+        echo "{\"success\":false,\"message\":\"Falha ao emitir certificado: ${ERRO}\"}"
+        exit 1
+      fi
+      rm -f /tmp/rd_pki_err_$$
+    fi
+
+    CA="$(json_escapar < "$PKI_DIR/pki/ca.crt")"
+    CERT="$(sed -n '/BEGIN CERTIFICATE/,/END CERTIFICATE/p' "$PKI_DIR/pki/issued/${CN}.crt" | json_escapar)"
+    KEY="$(json_escapar < "$PKI_DIR/pki/private/${CN}.key")"
+
+    echo "{\"success\":true,\"ca\":\"${CA}\",\"cert\":\"${CERT}\",\"key\":\"${KEY}\"}"
     ;;
 
   emitir_cliente)

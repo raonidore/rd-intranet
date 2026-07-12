@@ -32,6 +32,7 @@ $abrirRede = $rdSecaoAtiva(['/infraestrutura/rede', '/infraestrutura/servidor/re
 $abrirInfraServicos = $rdSecaoAtiva(['/infraestrutura/servicos']);
 $abrirVpnWireguard = $rdSecaoAtiva(['/vpn/wireguard']);
 $abrirVpnOpenvpn = $rdSecaoAtiva(['/vpn/openvpn']);
+$abrirVpnIkev2 = $rdSecaoAtiva(['/vpn/ikev2']);
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -312,7 +313,11 @@ $abrirVpnOpenvpn = $rdSecaoAtiva(['/vpn/openvpn']);
         || PermissionService::temAcesso('vpn_openvpn_servidor')
         || PermissionService::temAcesso('vpn_openvpn_clientes')
         || PermissionService::temAcesso('vpn_openvpn_trafego')
-        || PermissionService::temAcesso('vpn_openvpn_saida');
+        || PermissionService::temAcesso('vpn_openvpn_saida')
+        || PermissionService::temAcesso('vpn_ikev2_servidor')
+        || PermissionService::temAcesso('vpn_ikev2_clientes')
+        || PermissionService::temAcesso('vpn_ikev2_trafego')
+        || PermissionService::temAcesso('vpn_ikev2_saida');
     ?>
     <?php if ($temVpn): ?>
     <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuVpn"
@@ -387,10 +392,34 @@ $abrirVpnOpenvpn = $rdSecaoAtiva(['/vpn/openvpn']);
         </div>
         <?php endif; ?>
 
-        <?php if (PermissionService::temAcesso('vpn_dashboard')): ?>
-        <a href="<?= url('/vpn/ikev2') ?>" class="<?= $uriAtual === '/vpn/ikev2' ? 'active' : '' ?>">
-            <i class="bi bi-globe-americas me-2"></i> IKEv2 / IPsec
-        </a>
+        <?php if (PermissionService::temAcesso('vpn_ikev2_servidor') || PermissionService::temAcesso('vpn_ikev2_clientes') || PermissionService::temAcesso('vpn_ikev2_trafego') || PermissionService::temAcesso('vpn_ikev2_saida')): ?>
+        <button class="menu-toggle menu-toggle-sub" type="button" data-bs-toggle="collapse" data-bs-target="#menuVpnIkev2"
+                aria-expanded="<?= $abrirVpnIkev2 ? 'true' : 'false' ?>">
+            <span><i class="bi bi-globe-americas me-2"></i>IKEv2 / IPsec</span>
+            <i class="bi bi-chevron-right chevron"></i>
+        </button>
+        <div class="collapse menu-sub <?= $abrirVpnIkev2 ? 'show' : '' ?>" id="menuVpnIkev2">
+            <?php if (PermissionService::temAcesso('vpn_ikev2_servidor')): ?>
+            <a href="<?= url('/vpn/ikev2/servidor') ?>" class="<?= $uriAtual === '/vpn/ikev2/servidor' ? 'active' : '' ?>">
+                <i class="bi bi-hdd-rack me-2"></i> Servidor
+            </a>
+            <?php endif; ?>
+            <?php if (PermissionService::temAcesso('vpn_ikev2_clientes')): ?>
+            <a href="<?= url('/vpn/ikev2/clientes') ?>" class="<?= $uriAtual === '/vpn/ikev2/clientes' ? 'active' : '' ?>">
+                <i class="bi bi-people me-2"></i> Clientes
+            </a>
+            <?php endif; ?>
+            <?php if (PermissionService::temAcesso('vpn_ikev2_trafego')): ?>
+            <a href="<?= url('/vpn/ikev2/trafego') ?>" class="<?= $uriAtual === '/vpn/ikev2/trafego' ? 'active' : '' ?>">
+                <i class="bi bi-bar-chart-line me-2"></i> Tráfego
+            </a>
+            <?php endif; ?>
+            <?php if (PermissionService::temAcesso('vpn_ikev2_saida')): ?>
+            <a href="<?= url('/vpn/ikev2/saida') ?>" class="<?= str_starts_with($uriAtual, '/vpn/ikev2/saida') ? 'active' : '' ?>">
+                <i class="bi bi-box-arrow-up-right me-2"></i> Saída (cliente)
+            </a>
+            <?php endif; ?>
+        </div>
         <?php endif; ?>
     </div>
     <?php endif; ?>

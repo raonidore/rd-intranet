@@ -4,13 +4,14 @@ namespace App\Services;
 
 /**
  * Wrapper fino sobre o script root vpn_openvpn_pki_web.sh (easy-rsa).
- * Compartilhado pelo OpenVPN (Fase 2) -- pensado desde já pra IKEv2
- * (Fase 3) poder reaproveitar os métodos de emissão/revogação, já que
- * os dois são PKIs X.509. IKEv2 vai precisar de Extended Key Usage
- * (serverAuth) e identidade por SAN que o OpenVPN não usa -- não
- * implementado ainda, mas os métodos abaixo já retornam o conteúdo cru
- * dos certificados, então a Fase 3 pode montar isso sem precisar mudar
- * a assinatura destes métodos.
+ * Compartilhado pelo OpenVPN e pelo IKEv2 -- mesma CA, uma PKI só (nao
+ * duas autoridades separadas pra confiar). O IKEv2 usa
+ * emitirServidorComCn() pra ter um certificado de servidor com CN
+ * igual ao endereço público (em vez do CN genérico "server" do
+ * OpenVPN) -- é o que a maioria dos clientes IKEv2 nativos
+ * (iOS/Android/Windows) valida ao conectar. Simplificação deliberada:
+ * sem extensão SAN/Extended-Key-Usage dedicada -- CN batendo com o
+ * endereço já cobre a validação da grande maioria dos clientes reais.
  */
 class VpnPkiService
 {
@@ -44,6 +45,24 @@ class VpnPkiService
     public function baixarCliente(string $nome): array
     {
         return $this->chamar(['baixar_cliente', $nome]);
+    }
+
+    /**
+     * @return array{success: bool, message?: string, ca?: string, cert?: string, key?: string}
+     */
+    public function emitirServidorComCn(string $cn): array
+    {
+        set_time_limit(60);
+
+        return $this->chamar(['emitir_servidor_cn', $cn]);
+    }
+
+    /**
+     * @return array{success: bool, message?: string, ca?: string}
+     */
+    public function baixarCa(): array
+    {
+        return $this->chamar(['baixar_ca']);
     }
 
     /**

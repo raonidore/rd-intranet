@@ -169,6 +169,12 @@ switch ($comando) {
 
         break;
 
+    case 'vpn:coletar-ikev2':
+        (new \App\Services\VpnIkev2Service())->coletarTrafego();
+        echo "OK: snapshot de tráfego IKEv2 coletado.\n";
+
+        break;
+
     default:
         echo "Comando não encontrado: {$comando}\n";
         exit(1);

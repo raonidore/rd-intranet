@@ -4,6 +4,8 @@ namespace App\Controllers;
 
 use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
+use App\Services\VpnIkev2SaidaService;
+use App\Services\VpnIkev2Service;
 use App\Services\VpnOpenvpnSaidaService;
 use App\Services\VpnOpenvpnService;
 use App\Services\VpnWireguardSaidaService;
@@ -34,6 +36,16 @@ class VpnController extends Controller
         $conexoesSaidaOvpn = (new VpnOpenvpnSaidaService())->listar();
         $conexoesSaidaWg = (new VpnWireguardSaidaService())->listar();
 
+        $ikev2 = new VpnIkev2Service();
+        $configIkev2 = $ikev2->config();
+        $clientesIkev2 = $configIkev2 ? $ikev2->status()['clientes'] ?? [] : [];
+
+        $clientesIkev2Ativos = array_filter($clientesIkev2, fn($c) => (int)$c['ativo'] === 1);
+        $clientesIkev2Online = array_filter($clientesIkev2Ativos, fn($c) => $c['online']);
+        $trafegoHojeIkev2 = $ikev2->trafegoAgregadoHoje();
+
+        $conexoesSaidaIkev2 = (new VpnIkev2SaidaService())->listar();
+
         $this->view('vpn/dashboard', [
             'wireguard' => [
                 'instalado' => (bool)($configWg['instalado'] ?? false),
@@ -55,17 +67,16 @@ class VpnController extends Controller
                 'conexoes_saida_ativas' => count(array_filter($conexoesSaidaOvpn, fn($c) => $c['ativo'])),
                 'conexoes_saida_total' => count($conexoesSaidaOvpn),
             ],
-        ]);
-    }
-
-    public function ikev2EmBreve(): void
-    {
-        AuthMiddleware::checkModulo('vpn_dashboard');
-
-        $this->view('vpn/em_breve', [
-            'titulo' => 'IKEv2 / IPsec',
-            'descricao' => 'Suporte nativo em iOS/Android/Windows sem instalar app de terceiros. Fase seguinte do módulo VPN (via strongSwan) — depende da mesma PKI planejada para o OpenVPN.',
-            'icone' => 'bi-globe-americas',
+            'ikev2' => [
+                'instalado' => (bool)($configIkev2['instalado'] ?? false),
+                'exposto' => (bool)($configIkev2['exposto_internet'] ?? false),
+                'clientes_total' => count($clientesIkev2Ativos),
+                'clientes_online' => count($clientesIkev2Online),
+                'rx_hoje' => (int)($trafegoHojeIkev2['rx_total'] ?? 0),
+                'tx_hoje' => (int)($trafegoHojeIkev2['tx_total'] ?? 0),
+                'conexoes_saida_ativas' => count(array_filter($conexoesSaidaIkev2, fn($c) => $c['ativo'])),
+                'conexoes_saida_total' => count($conexoesSaidaIkev2),
+            ],
         ]);
     }
 }
