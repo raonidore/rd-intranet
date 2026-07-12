@@ -215,6 +215,39 @@ function corPercentualInfra(float $p): string
             </div>
         </a>
     </div>
+
+    <?php if (\App\Services\PermissionService::temAcesso('infra_speedtest')): ?>
+    <div class="col-lg-3 col-md-6">
+        <a href="<?= url('/infraestrutura/velocidade') ?>" class="tech-card">
+            <div class="accent" style="background:#22c55e"></div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <div>
+                        <div class="tech-label">Infraestrutura</div>
+                        <h5 class="mb-0"><i class="bi bi-speedometer2 me-1"></i> Teste de Velocidade</h5>
+                    </div>
+                    <span class="pulse-dot <?= $ultimoSpeedtest ? 'online' : 'offline' ?>"></span>
+                </div>
+
+                <?php if ($ultimoSpeedtest): ?>
+                    <div class="stat-mini-row">
+                        <span class="tech-label mb-0"><i class="bi bi-arrow-down-circle me-1"></i> Download</span>
+                        <span class="tech-num" style="font-size:16px; color:#22c55e"><?= number_format((float)$ultimoSpeedtest['download_mbps'], 1, ',', '.') ?> Mbps</span>
+                    </div>
+                    <div class="stat-mini-row">
+                        <span class="tech-label mb-0"><i class="bi bi-arrow-up-circle me-1"></i> Upload</span>
+                        <span class="tech-num" style="font-size:16px; color:#06b6d4"><?= number_format((float)$ultimoSpeedtest['upload_mbps'], 1, ',', '.') ?> Mbps</span>
+                    </div>
+                <?php else: ?>
+                    <div class="stat-mini-row">
+                        <span class="tech-label mb-0">Status</span>
+                        <span style="font-size:12px">Nenhum teste executado</span>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </a>
+    </div>
+    <?php endif; ?>
 </div>
 
 <?php

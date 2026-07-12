@@ -23,6 +23,8 @@ class ModuloCatalogo
         'infra_iptables' => ['label' => 'Firewall (iptables)', 'grupo' => 'Infraestrutura'],
         'infra_certificado' => ['label' => 'Certificado Digital', 'grupo' => 'Infraestrutura'],
         'infra_dependencias' => ['label' => 'Checklist de Dependências', 'grupo' => 'Infraestrutura'],
+        'infra_speedtest' => ['label' => 'Teste de Velocidade', 'grupo' => 'Infraestrutura'],
+        'infra_ddns' => ['label' => 'DNS Dinâmico', 'grupo' => 'Infraestrutura'],
         'apache_dashboard' => ['label' => 'Dashboard Apache', 'grupo' => 'Apache'],
         'apache_sites' => ['label' => 'Sites (VirtualHosts)', 'grupo' => 'Apache'],
         'apache_modulos' => ['label' => 'Módulos Apache', 'grupo' => 'Apache'],

@@ -5,6 +5,7 @@ namespace App\Controllers;
 use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
 use App\Services\ServerInfoService;
+use App\Services\SpeedtestService;
 
 class ServerController extends Controller
 {
@@ -14,6 +15,7 @@ class ServerController extends Controller
 
         $this->view('infrastructure/servidor', [
             'info' => (new ServerInfoService())->snapshot(),
+            'ultimoSpeedtest' => (new SpeedtestService())->ultimoConcluido(),
         ]);
     }
 

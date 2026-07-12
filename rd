@@ -135,6 +135,17 @@ switch ($comando) {
 
         break;
 
+    case 'speedtest:executar':
+        $resultado = (new \App\Services\SpeedtestService())->executar();
+
+        echo ($resultado['success'] ? 'OK: ' : 'ERRO: ') . $resultado['message'] . "\n";
+
+        if (!$resultado['success']) {
+            exit(1);
+        }
+
+        break;
+
     default:
         echo "Comando não encontrado: {$comando}\n";
         exit(1);

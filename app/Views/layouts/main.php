@@ -188,7 +188,9 @@ $abrirInfraServicos = $rdSecaoAtiva(['/infraestrutura/servicos']);
         || PermissionService::temAcesso('infra_cron')
         || PermissionService::temAcesso('infra_iptables')
         || PermissionService::temAcesso('infra_certificado')
-        || PermissionService::temAcesso('infra_dependencias');
+        || PermissionService::temAcesso('infra_dependencias')
+        || PermissionService::temAcesso('infra_speedtest')
+        || PermissionService::temAcesso('infra_ddns');
     ?>
     <?php if ($temInfra): ?>
     <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuInfra"
@@ -281,6 +283,18 @@ $abrirInfraServicos = $rdSecaoAtiva(['/infraestrutura/servicos']);
         <?php if (PermissionService::temAcesso('infra_dependencias')): ?>
         <a href="<?= url('/infraestrutura/dependencias') ?>" class="<?= str_starts_with($uriAtual, '/infraestrutura/dependencias') ? 'active' : '' ?>">
             <i class="bi bi-clipboard2-check me-2"></i> Dependências
+        </a>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('infra_speedtest')): ?>
+        <a href="<?= url('/infraestrutura/velocidade') ?>" class="<?= str_starts_with($uriAtual, '/infraestrutura/velocidade') ? 'active' : '' ?>">
+            <i class="bi bi-speedometer2 me-2"></i> Teste de Velocidade
+        </a>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('infra_ddns')): ?>
+        <a href="<?= url('/infraestrutura/ddns') ?>" class="<?= str_starts_with($uriAtual, '/infraestrutura/ddns') ? 'active' : '' ?>">
+            <i class="bi bi-globe2 me-2"></i> DNS Dinâmico
         </a>
         <?php endif; ?>
     </div>

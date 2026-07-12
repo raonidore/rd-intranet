@@ -31,6 +31,7 @@ use App\Controllers\CronController;
 use App\Controllers\IptablesController;
 use App\Controllers\CertificadoController;
 use App\Controllers\DependenciaController;
+use App\Controllers\SpeedtestController;
 use App\Controllers\AtualizacaoController;
 use App\Controllers\AntivirusController;
 
@@ -185,6 +186,11 @@ $router->post('/infraestrutura/certificado/importar', [CertificadoController::cl
 
 $router->get('/infraestrutura/dependencias', [DependenciaController::class, 'index']);
 $router->post('/infraestrutura/dependencias/instalar', [DependenciaController::class, 'instalar']);
+
+$router->get('/infraestrutura/velocidade', [SpeedtestController::class, 'index']);
+$router->post('/infraestrutura/velocidade/instalar', [SpeedtestController::class, 'instalar']);
+$router->post('/infraestrutura/velocidade/testar', [SpeedtestController::class, 'testar']);
+$router->post('/infraestrutura/velocidade/periodico', [SpeedtestController::class, 'ativarPeriodico']);
 
 $router->get('/deploy', [DeployCenterController::class, 'index']);
 $router->get('/deploy/samba/aplicar', [DeployCenterController::class, 'aplicarSamba']);

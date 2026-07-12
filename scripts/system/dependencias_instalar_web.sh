@@ -41,20 +41,25 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 
-if ! apt-get update -qq 2>/tmp/rd_dep_err_$$; then
+# "-qq" so silencia o progresso do proprio apt -- o dpkg (chamado por
+# baixo) continua imprimindo "Unpacking.../Setting up..." no stdout
+# mesmo em modo nao interativo, o que quebrava o json_decode() do lado
+# PHP (mesmo bug ja corrigido em antivirus_instalar_web.sh). Por isso o
+# stdout tambem vai pro arquivo temporario, nao só o stderr.
+if ! apt-get update -qq >/tmp/rd_dep_out_$$ 2>/tmp/rd_dep_err_$$; then
   ERRO="$(tail -10 /tmp/rd_dep_err_$$ | tr '\n' ' ' | sed 's/"/\\"/g')"
-  rm -f /tmp/rd_dep_err_$$
+  rm -f /tmp/rd_dep_out_$$ /tmp/rd_dep_err_$$
   echo "{\"success\":false,\"message\":\"Erro ao atualizar lista de pacotes: ${ERRO}\"}"
   exit 1
 fi
-rm -f /tmp/rd_dep_err_$$
+rm -f /tmp/rd_dep_out_$$ /tmp/rd_dep_err_$$
 
-if ! apt-get install -y "$PACOTE" 2>/tmp/rd_dep_err_$$; then
+if ! apt-get install -y -qq "$PACOTE" >/tmp/rd_dep_out_$$ 2>/tmp/rd_dep_err_$$; then
   ERRO="$(tail -20 /tmp/rd_dep_err_$$ | tr '\n' ' ' | sed 's/"/\\"/g')"
-  rm -f /tmp/rd_dep_err_$$
+  rm -f /tmp/rd_dep_out_$$ /tmp/rd_dep_err_$$
   echo "{\"success\":false,\"message\":\"Erro ao instalar ${PACOTE}: ${ERRO}\"}"
   exit 1
 fi
-rm -f /tmp/rd_dep_err_$$
+rm -f /tmp/rd_dep_out_$$ /tmp/rd_dep_err_$$
 
 echo "{\"success\":true,\"message\":\"${PACOTE} instalado com sucesso.\"}"
