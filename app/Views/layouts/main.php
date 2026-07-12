@@ -31,6 +31,7 @@ $abrirHardware = $rdSecaoAtiva(['/infraestrutura/hardware']);
 $abrirRede = $rdSecaoAtiva(['/infraestrutura/rede', '/infraestrutura/servidor/rede']);
 $abrirInfraServicos = $rdSecaoAtiva(['/infraestrutura/servicos']);
 $abrirVpnWireguard = $rdSecaoAtiva(['/vpn/wireguard']);
+$abrirVpnOpenvpn = $rdSecaoAtiva(['/vpn/openvpn/servidor', '/vpn/openvpn/clientes', '/vpn/openvpn/trafego']);
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -306,7 +307,11 @@ $abrirVpnWireguard = $rdSecaoAtiva(['/vpn/wireguard']);
     $temVpn = PermissionService::temAcesso('vpn_dashboard')
         || PermissionService::temAcesso('vpn_wireguard_servidor')
         || PermissionService::temAcesso('vpn_wireguard_peers')
-        || PermissionService::temAcesso('vpn_wireguard_trafego');
+        || PermissionService::temAcesso('vpn_wireguard_trafego')
+        || PermissionService::temAcesso('vpn_openvpn_servidor')
+        || PermissionService::temAcesso('vpn_openvpn_clientes')
+        || PermissionService::temAcesso('vpn_openvpn_trafego')
+        || PermissionService::temAcesso('vpn_openvpn_saida');
     ?>
     <?php if ($temVpn): ?>
     <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuVpn"
@@ -346,10 +351,38 @@ $abrirVpnWireguard = $rdSecaoAtiva(['/vpn/wireguard']);
         </div>
         <?php endif; ?>
 
-        <?php if (PermissionService::temAcesso('vpn_dashboard')): ?>
-        <a href="<?= url('/vpn/openvpn') ?>" class="<?= $uriAtual === '/vpn/openvpn' ? 'active' : '' ?>">
-            <i class="bi bi-shield-lock me-2"></i> OpenVPN
+        <?php if (PermissionService::temAcesso('vpn_openvpn_servidor') || PermissionService::temAcesso('vpn_openvpn_clientes') || PermissionService::temAcesso('vpn_openvpn_trafego')): ?>
+        <button class="menu-toggle menu-toggle-sub" type="button" data-bs-toggle="collapse" data-bs-target="#menuVpnOpenvpn"
+                aria-expanded="<?= $abrirVpnOpenvpn ? 'true' : 'false' ?>">
+            <span><i class="bi bi-shield-lock me-2"></i>OpenVPN</span>
+            <i class="bi bi-chevron-right chevron"></i>
+        </button>
+        <div class="collapse menu-sub <?= $abrirVpnOpenvpn ? 'show' : '' ?>" id="menuVpnOpenvpn">
+            <?php if (PermissionService::temAcesso('vpn_openvpn_servidor')): ?>
+            <a href="<?= url('/vpn/openvpn/servidor') ?>" class="<?= $uriAtual === '/vpn/openvpn/servidor' ? 'active' : '' ?>">
+                <i class="bi bi-hdd-rack me-2"></i> Servidor
+            </a>
+            <?php endif; ?>
+            <?php if (PermissionService::temAcesso('vpn_openvpn_clientes')): ?>
+            <a href="<?= url('/vpn/openvpn/clientes') ?>" class="<?= $uriAtual === '/vpn/openvpn/clientes' ? 'active' : '' ?>">
+                <i class="bi bi-people me-2"></i> Clientes
+            </a>
+            <?php endif; ?>
+            <?php if (PermissionService::temAcesso('vpn_openvpn_trafego')): ?>
+            <a href="<?= url('/vpn/openvpn/trafego') ?>" class="<?= $uriAtual === '/vpn/openvpn/trafego' ? 'active' : '' ?>">
+                <i class="bi bi-bar-chart-line me-2"></i> Tráfego
+            </a>
+            <?php endif; ?>
+        </div>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('vpn_openvpn_saida')): ?>
+        <a href="<?= url('/vpn/openvpn/saida') ?>" class="<?= str_starts_with($uriAtual, '/vpn/openvpn/saida') ? 'active' : '' ?>">
+            <i class="bi bi-box-arrow-up-right me-2"></i> OpenVPN - Saída
         </a>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('vpn_dashboard')): ?>
         <a href="<?= url('/vpn/ikev2') ?>" class="<?= $uriAtual === '/vpn/ikev2' ? 'active' : '' ?>">
             <i class="bi bi-globe-americas me-2"></i> IKEv2 / IPsec
         </a>

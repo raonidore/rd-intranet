@@ -95,19 +95,58 @@ function formatBytesVpn(int $bytes): string
     </div>
 
     <div class="col-lg-4 col-md-6">
-        <a href="<?= url('/vpn/openvpn') ?>" class="tech-card">
-            <div class="accent" style="background:#6b7280"></div>
+        <a href="<?= url('/vpn/openvpn/servidor') ?>" class="tech-card">
+            <div class="accent" style="background:#3b82f6"></div>
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-start mb-3">
                     <div>
-                        <div class="tech-label">Protocolo</div>
+                        <div class="tech-label">Protocolo (também "SSL VPN")</div>
                         <h5 class="mb-0"><i class="bi bi-shield-lock me-1"></i> OpenVPN</h5>
                     </div>
-                    <span class="pulse-dot neutro"></span>
+                    <span class="pulse-dot <?= !$openvpn['instalado'] ? 'neutro' : ($openvpn['clientes_online'] > 0 ? 'online' : 'offline') ?>"></span>
+                </div>
+
+                <?php if (!$openvpn['instalado']): ?>
+                    <div class="stat-mini-row">
+                        <span class="tech-label mb-0">Status</span>
+                        <span style="font-size:12px">Não instalado</span>
+                    </div>
+                <?php else: ?>
+                    <div class="stat-mini-row">
+                        <span class="tech-label mb-0">Clientes ativos</span>
+                        <span class="tech-num" style="font-size:16px"><?= $openvpn['clientes_total'] ?></span>
+                    </div>
+                    <div class="stat-mini-row">
+                        <span class="tech-label mb-0">Exposto à internet</span>
+                        <span style="font-size:12px"><?= $openvpn['exposto'] ? 'Sim' : 'Não' ?></span>
+                    </div>
+                    <div class="stat-mini-row">
+                        <span class="tech-label mb-0">Tráfego hoje</span>
+                        <span style="font-size:12px"><?= formatBytesVpn($openvpn['rx_hoje']) ?> ↓ / <?= formatBytesVpn($openvpn['tx_hoje']) ?> ↑</span>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </a>
+    </div>
+
+    <div class="col-lg-4 col-md-6">
+        <a href="<?= url('/vpn/openvpn/saida') ?>" class="tech-card">
+            <div class="accent" style="background:#a855f7"></div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <div>
+                        <div class="tech-label">Este servidor como cliente</div>
+                        <h5 class="mb-0"><i class="bi bi-box-arrow-up-right me-1"></i> Conexões de Saída</h5>
+                    </div>
+                    <span class="pulse-dot <?= $openvpn['conexoes_saida_ativas'] > 0 ? 'online' : 'neutro' ?>"></span>
                 </div>
                 <div class="stat-mini-row">
-                    <span class="tech-label mb-0">Status</span>
-                    <span style="font-size:12px">Próxima fase (cobre "SSL VPN")</span>
+                    <span class="tech-label mb-0">Conectadas</span>
+                    <span class="tech-num" style="font-size:16px"><?= $openvpn['conexoes_saida_ativas'] ?>/<?= $openvpn['conexoes_saida_total'] ?></span>
+                </div>
+                <div class="stat-mini-row">
+                    <span class="tech-label mb-0">Uso</span>
+                    <span style="font-size:12px">Conectar a OpenVPN de terceiros (matriz, provedor...)</span>
                 </div>
             </div>
         </a>

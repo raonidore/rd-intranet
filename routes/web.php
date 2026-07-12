@@ -35,6 +35,8 @@ use App\Controllers\SpeedtestController;
 use App\Controllers\DdnsController;
 use App\Controllers\VpnController;
 use App\Controllers\VpnWireguardController;
+use App\Controllers\VpnOpenvpnController;
+use App\Controllers\VpnOpenvpnSaidaController;
 use App\Controllers\AtualizacaoController;
 use App\Controllers\AntivirusController;
 
@@ -209,8 +211,28 @@ $router->post('/infraestrutura/ddns/atualizar-todas', [DdnsController::class, 'a
 $router->post('/infraestrutura/ddns/automatica', [DdnsController::class, 'ativarAtualizacaoAutomatica']);
 
 $router->get('/vpn', [VpnController::class, 'dashboard']);
-$router->get('/vpn/openvpn', [VpnController::class, 'openvpnEmBreve']);
 $router->get('/vpn/ikev2', [VpnController::class, 'ikev2EmBreve']);
+
+$router->get('/vpn/openvpn/servidor', [VpnOpenvpnController::class, 'servidor']);
+$router->post('/vpn/openvpn/instalar', [VpnOpenvpnController::class, 'instalar']);
+$router->post('/vpn/openvpn/pki/inicializar', [VpnOpenvpnController::class, 'inicializarPki']);
+$router->post('/vpn/openvpn/salvar-config', [VpnOpenvpnController::class, 'salvarConfig']);
+$router->post('/vpn/openvpn/expor', [VpnOpenvpnController::class, 'exporToggle']);
+$router->post('/vpn/openvpn/ativar-coleta', [VpnOpenvpnController::class, 'ativarColeta']);
+$router->get('/vpn/openvpn/clientes', [VpnOpenvpnController::class, 'clientes']);
+$router->post('/vpn/openvpn/clientes/novo', [VpnOpenvpnController::class, 'criarCliente']);
+$router->post('/vpn/openvpn/clientes/baixar', [VpnOpenvpnController::class, 'baixarClienteNovamente']);
+$router->post('/vpn/openvpn/clientes/entregue', [VpnOpenvpnController::class, 'marcarEntregue']);
+$router->post('/vpn/openvpn/clientes/revogar', [VpnOpenvpnController::class, 'revogarCliente']);
+$router->get('/vpn/openvpn/trafego', [VpnOpenvpnController::class, 'trafego']);
+
+$router->get('/vpn/openvpn/saida', [VpnOpenvpnSaidaController::class, 'index']);
+$router->get('/vpn/openvpn/saida/novo', [VpnOpenvpnSaidaController::class, 'novoForm']);
+$router->post('/vpn/openvpn/saida/novo', [VpnOpenvpnSaidaController::class, 'novo']);
+$router->post('/vpn/openvpn/saida/conectar', [VpnOpenvpnSaidaController::class, 'conectar']);
+$router->post('/vpn/openvpn/saida/desconectar', [VpnOpenvpnSaidaController::class, 'desconectar']);
+$router->post('/vpn/openvpn/saida/boot', [VpnOpenvpnSaidaController::class, 'alternarBoot']);
+$router->post('/vpn/openvpn/saida/remover', [VpnOpenvpnSaidaController::class, 'remover']);
 
 $router->get('/vpn/wireguard/servidor', [VpnWireguardController::class, 'servidor']);
 $router->post('/vpn/wireguard/instalar', [VpnWireguardController::class, 'instalar']);

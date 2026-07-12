@@ -4,6 +4,8 @@ namespace App\Controllers;
 
 use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
+use App\Services\VpnOpenvpnSaidaService;
+use App\Services\VpnOpenvpnService;
 use App\Services\VpnWireguardService;
 
 class VpnController extends Controller
@@ -18,7 +20,17 @@ class VpnController extends Controller
 
         $peersAtivos = array_filter($peers, fn($p) => (int)$p['ativo'] === 1);
         $peersOnline = array_filter($peersAtivos, fn($p) => $p['online']);
-        $trafegoHoje = $wg->trafegoAgregadoHoje();
+        $trafegoHojeWg = $wg->trafegoAgregadoHoje();
+
+        $ovpn = new VpnOpenvpnService();
+        $configOvpn = $ovpn->config();
+        $clientesOvpn = $configOvpn ? $ovpn->status()['clientes'] ?? [] : [];
+
+        $clientesAtivos = array_filter($clientesOvpn, fn($c) => (int)$c['ativo'] === 1);
+        $clientesOnline = array_filter($clientesAtivos, fn($c) => $c['online']);
+        $trafegoHojeOvpn = $ovpn->trafegoAgregadoHoje();
+
+        $conexoesSaida = (new VpnOpenvpnSaidaService())->listar();
 
         $this->view('vpn/dashboard', [
             'wireguard' => [
@@ -26,20 +38,19 @@ class VpnController extends Controller
                 'exposto' => (bool)($configWg['exposto_internet'] ?? false),
                 'peers_total' => count($peersAtivos),
                 'peers_online' => count($peersOnline),
-                'rx_hoje' => (int)($trafegoHoje['rx_total'] ?? 0),
-                'tx_hoje' => (int)($trafegoHoje['tx_total'] ?? 0),
+                'rx_hoje' => (int)($trafegoHojeWg['rx_total'] ?? 0),
+                'tx_hoje' => (int)($trafegoHojeWg['tx_total'] ?? 0),
             ],
-        ]);
-    }
-
-    public function openvpnEmBreve(): void
-    {
-        AuthMiddleware::checkModulo('vpn_dashboard');
-
-        $this->view('vpn/em_breve', [
-            'titulo' => 'OpenVPN',
-            'descricao' => 'Cobre também o uso como "SSL VPN" (o protocolo OpenVPN já é baseado em TLS/SSL). Fase seguinte do módulo VPN — precisa de uma PKI própria (CA + certificado por cliente).',
-            'icone' => 'bi-shield-lock',
+            'openvpn' => [
+                'instalado' => (bool)($configOvpn['instalado'] ?? false),
+                'exposto' => (bool)($configOvpn['exposto_internet'] ?? false),
+                'clientes_total' => count($clientesAtivos),
+                'clientes_online' => count($clientesOnline),
+                'rx_hoje' => (int)($trafegoHojeOvpn['rx_total'] ?? 0),
+                'tx_hoje' => (int)($trafegoHojeOvpn['tx_total'] ?? 0),
+                'conexoes_saida_ativas' => count(array_filter($conexoesSaida, fn($c) => $c['ativo'])),
+                'conexoes_saida_total' => count($conexoesSaida),
+            ],
         ]);
     }
 

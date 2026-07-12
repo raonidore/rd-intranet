@@ -163,6 +163,12 @@ switch ($comando) {
 
         break;
 
+    case 'vpn:coletar-openvpn':
+        (new \App\Services\VpnOpenvpnService())->coletarTrafego();
+        echo "OK: snapshot de tráfego OpenVPN coletado.\n";
+
+        break;
+
     default:
         echo "Comando não encontrado: {$comando}\n";
         exit(1);
