@@ -146,6 +146,17 @@ switch ($comando) {
 
         break;
 
+    case 'ddns:atualizar':
+        $resultado = (new \App\Services\DdnsService())->atualizarTodas();
+
+        echo ($resultado['success'] ? 'OK: ' : 'ERRO: ') . $resultado['message'] . "\n";
+
+        if (!$resultado['success']) {
+            exit(1);
+        }
+
+        break;
+
     default:
         echo "Comando não encontrado: {$comando}\n";
         exit(1);

@@ -32,6 +32,7 @@ use App\Controllers\IptablesController;
 use App\Controllers\CertificadoController;
 use App\Controllers\DependenciaController;
 use App\Controllers\SpeedtestController;
+use App\Controllers\DdnsController;
 use App\Controllers\AtualizacaoController;
 use App\Controllers\AntivirusController;
 
@@ -191,6 +192,19 @@ $router->get('/infraestrutura/velocidade', [SpeedtestController::class, 'index']
 $router->post('/infraestrutura/velocidade/instalar', [SpeedtestController::class, 'instalar']);
 $router->post('/infraestrutura/velocidade/testar', [SpeedtestController::class, 'testar']);
 $router->post('/infraestrutura/velocidade/periodico', [SpeedtestController::class, 'ativarPeriodico']);
+
+$router->get('/infraestrutura/ddns', [DdnsController::class, 'index']);
+$router->get('/infraestrutura/ddns/novo', [DdnsController::class, 'novoForm']);
+$router->post('/infraestrutura/ddns/novo', [DdnsController::class, 'novo']);
+$router->get('/infraestrutura/ddns/historico', [DdnsController::class, 'historico']);
+$router->get('/infraestrutura/ddns/editar', [DdnsController::class, 'editarForm']);
+$router->post('/infraestrutura/ddns/editar', [DdnsController::class, 'editar']);
+$router->post('/infraestrutura/ddns/excluir', [DdnsController::class, 'excluir']);
+$router->get('/infraestrutura/ddns/ativar', [DdnsController::class, 'ativar']);
+$router->get('/infraestrutura/ddns/desativar', [DdnsController::class, 'desativar']);
+$router->post('/infraestrutura/ddns/atualizar-agora', [DdnsController::class, 'atualizarAgora']);
+$router->post('/infraestrutura/ddns/atualizar-todas', [DdnsController::class, 'atualizarTodasAgora']);
+$router->post('/infraestrutura/ddns/automatica', [DdnsController::class, 'ativarAtualizacaoAutomatica']);
 
 $router->get('/deploy', [DeployCenterController::class, 'index']);
 $router->get('/deploy/samba/aplicar', [DeployCenterController::class, 'aplicarSamba']);
