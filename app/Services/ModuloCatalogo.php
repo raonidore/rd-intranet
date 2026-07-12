@@ -45,6 +45,9 @@ class ModuloCatalogo
         'bd_mysql' => ['label' => 'MySQL/MariaDB', 'grupo' => 'Banco de Dados'],
         'auditoria' => ['label' => 'Auditoria', 'grupo' => 'Segurança'],
         'seguranca_antivirus' => ['label' => 'Antivírus', 'grupo' => 'Segurança'],
+        'ativos_dashboard' => ['label' => 'Ativos - Dashboard', 'grupo' => 'Ativos'],
+        'ativos_lista' => ['label' => 'Ativos - Lista', 'grupo' => 'Ativos'],
+        'ativos_novo' => ['label' => 'Ativos - Novo/Editar', 'grupo' => 'Ativos'],
     ];
 
     public static function chaves(): array

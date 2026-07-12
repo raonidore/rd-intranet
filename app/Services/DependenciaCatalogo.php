@@ -158,6 +158,22 @@ class DependenciaCatalogo
                 'usado_em' => 'Infraestrutura > Network > Ping',
                 'obrigatorio' => true,
             ],
+            [
+                'chave' => 'qrencode',
+                'nome' => 'qrencode',
+                'pacote' => 'qrencode',
+                'descricao' => 'Gera os QR codes de configuração de VPN e das etiquetas de ativos.',
+                'usado_em' => 'VPN / Ativos > Etiquetas',
+                'obrigatorio' => false,
+            ],
+            [
+                'chave' => 'snmp',
+                'nome' => 'snmpget / snmpwalk',
+                'pacote' => 'snmp',
+                'descricao' => 'Coleta automática de dados de switches, impressoras e servidores via SNMP.',
+                'usado_em' => 'Ativos (coleta SNMP)',
+                'obrigatorio' => false,
+            ],
         ];
     }
 

@@ -30,6 +30,7 @@ declare -A PACOTES=(
   [acl]="acl"
   [traceroute]="traceroute"
   [iputils-ping]="iputils-ping"
+  [qrencode]="qrencode"
 )
 
 PACOTE="${PACOTES[$CHAVE]:-}"
