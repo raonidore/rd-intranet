@@ -34,7 +34,7 @@ rm -f /tmp/rd_st_out_$$ /tmp/rd_st_err_$$
 
 mkdir -p /etc/apt/keyrings
 
-if ! curl -fsSL "https://packagecloud.io/ookla/speedtest-cli/gpgkey" 2>/tmp/rd_st_err_$$ | gpg --dearmor -o "$CHAVEIRO" 2>>/tmp/rd_st_err_$$; then
+if ! curl -fsSL "https://packagecloud.io/ookla/speedtest-cli/gpgkey" 2>/tmp/rd_st_err_$$ | gpg --batch --yes --no-tty --dearmor -o "$CHAVEIRO" 2>>/tmp/rd_st_err_$$; then
   ERRO="$(tail -10 /tmp/rd_st_err_$$ | tr '\n' ' ' | sed 's/"/\\"/g')"
   rm -f /tmp/rd_st_err_$$
   echo "{\"success\":false,\"message\":\"Erro ao baixar/instalar a chave GPG da Ookla: ${ERRO}\"}"
