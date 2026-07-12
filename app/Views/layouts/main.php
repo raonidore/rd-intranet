@@ -33,6 +33,7 @@ $abrirInfraServicos = $rdSecaoAtiva(['/infraestrutura/servicos']);
 $abrirVpnWireguard = $rdSecaoAtiva(['/vpn/wireguard']);
 $abrirVpnOpenvpn = $rdSecaoAtiva(['/vpn/openvpn']);
 $abrirVpnIkev2 = $rdSecaoAtiva(['/vpn/ikev2']);
+$abrirAtivos = $rdSecaoAtiva(['/ativos']);
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -181,6 +182,38 @@ $abrirVpnIkev2 = $rdSecaoAtiva(['/vpn/ikev2']);
         <a href="<?= url('/banco-dados/conexoes') ?>" class="<?= $uriAtual === '/banco-dados/conexoes' || str_starts_with($uriAtual, '/banco-dados/console') ? 'active' : '' ?>">
             <i class="bi bi-hdd-stack me-2"></i> Conexões / Console
         </a>
+    </div>
+    <?php endif; ?>
+
+    <?php
+    $temAtivos = PermissionService::temAcesso('ativos_dashboard')
+        || PermissionService::temAcesso('ativos_lista')
+        || PermissionService::temAcesso('ativos_novo');
+    ?>
+    <?php if ($temAtivos): ?>
+    <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuAtivos"
+            aria-expanded="<?= $abrirAtivos ? 'true' : 'false' ?>">
+        <span><i class="bi bi-boxes me-2"></i>Ativos</span>
+        <i class="bi bi-chevron-right chevron"></i>
+    </button>
+    <div class="collapse <?= $abrirAtivos ? 'show' : '' ?>" id="menuAtivos">
+        <?php if (PermissionService::temAcesso('ativos_dashboard')): ?>
+        <a href="<?= url('/ativos') ?>" class="<?= $uriAtual === '/ativos' ? 'active' : '' ?>">
+            <i class="bi bi-speedometer2 me-2"></i> Dashboard
+        </a>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('ativos_lista')): ?>
+        <a href="<?= url('/ativos/lista') ?>" class="<?= str_starts_with($uriAtual, '/ativos/lista') || str_starts_with($uriAtual, '/ativos/ver') ? 'active' : '' ?>">
+            <i class="bi bi-list-ul me-2"></i> Lista de Ativos
+        </a>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('ativos_novo')): ?>
+        <a href="<?= url('/ativos/novo') ?>" class="<?= str_starts_with($uriAtual, '/ativos/novo') || str_starts_with($uriAtual, '/ativos/editar') ? 'active' : '' ?>">
+            <i class="bi bi-plus-lg me-2"></i> Novo Ativo
+        </a>
+        <?php endif; ?>
     </div>
     <?php endif; ?>
 
