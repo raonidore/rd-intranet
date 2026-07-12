@@ -16,4 +16,15 @@ class ApacheController extends Controller
             'status' => (new ApacheStatusService())->snapshot(),
         ]);
     }
+
+    public function verLog(): void
+    {
+        AuthMiddleware::checkModulo('apache_dashboard');
+        header('Content-Type: application/json');
+
+        $nome = $_GET['nome'] ?? '';
+        $conteudo = (new ApacheStatusService())->verLog($nome);
+
+        echo json_encode(['success' => true, 'conteudo' => $conteudo]);
+    }
 }

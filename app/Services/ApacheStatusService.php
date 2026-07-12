@@ -98,6 +98,26 @@ class ApacheStatusService
         return $dados;
     }
 
+    /**
+     * Le as ultimas linhas de um log do Apache. Precisa de sudo --
+     * /var/log/apache2 e root:adm 640 (o proprio apache2 abre o arquivo
+     * como root antes de baixar privilegio pra www-data; um processo
+     * PHP separado, mesmo rodando como www-data, nao consegue ler
+     * direto -- confirmado testando ao vivo).
+     */
+    public function verLog(string $nome, int $linhas = 200): string
+    {
+        if (!preg_match('/^[a-zA-Z0-9_.-]+\.log$/', $nome)) {
+            return 'Nome de log inválido.';
+        }
+
+        $linhas = max(10, min($linhas, 1000));
+
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/apache_log_ver_web.sh', [$nome, (string)$linhas]);
+
+        return $resultado['success'] ? $resultado['output'] : 'Não foi possível ler o arquivo: ' . $resultado['output'];
+    }
+
     private function formatarBytes(int $bytes): string
     {
         if ($bytes >= 1048576) {

@@ -31,7 +31,7 @@ $abrirHardware = $rdSecaoAtiva(['/infraestrutura/hardware']);
 $abrirRede = $rdSecaoAtiva(['/infraestrutura/rede', '/infraestrutura/servidor/rede']);
 $abrirInfraServicos = $rdSecaoAtiva(['/infraestrutura/servicos']);
 $abrirVpnWireguard = $rdSecaoAtiva(['/vpn/wireguard']);
-$abrirVpnOpenvpn = $rdSecaoAtiva(['/vpn/openvpn/servidor', '/vpn/openvpn/clientes', '/vpn/openvpn/trafego']);
+$abrirVpnOpenvpn = $rdSecaoAtiva(['/vpn/openvpn']);
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -351,7 +351,7 @@ $abrirVpnOpenvpn = $rdSecaoAtiva(['/vpn/openvpn/servidor', '/vpn/openvpn/cliente
         </div>
         <?php endif; ?>
 
-        <?php if (PermissionService::temAcesso('vpn_openvpn_servidor') || PermissionService::temAcesso('vpn_openvpn_clientes') || PermissionService::temAcesso('vpn_openvpn_trafego')): ?>
+        <?php if (PermissionService::temAcesso('vpn_openvpn_servidor') || PermissionService::temAcesso('vpn_openvpn_clientes') || PermissionService::temAcesso('vpn_openvpn_trafego') || PermissionService::temAcesso('vpn_openvpn_saida')): ?>
         <button class="menu-toggle menu-toggle-sub" type="button" data-bs-toggle="collapse" data-bs-target="#menuVpnOpenvpn"
                 aria-expanded="<?= $abrirVpnOpenvpn ? 'true' : 'false' ?>">
             <span><i class="bi bi-shield-lock me-2"></i>OpenVPN</span>
@@ -373,13 +373,12 @@ $abrirVpnOpenvpn = $rdSecaoAtiva(['/vpn/openvpn/servidor', '/vpn/openvpn/cliente
                 <i class="bi bi-bar-chart-line me-2"></i> Tráfego
             </a>
             <?php endif; ?>
+            <?php if (PermissionService::temAcesso('vpn_openvpn_saida')): ?>
+            <a href="<?= url('/vpn/openvpn/saida') ?>" class="<?= str_starts_with($uriAtual, '/vpn/openvpn/saida') ? 'active' : '' ?>">
+                <i class="bi bi-box-arrow-up-right me-2"></i> Saída (cliente)
+            </a>
+            <?php endif; ?>
         </div>
-        <?php endif; ?>
-
-        <?php if (PermissionService::temAcesso('vpn_openvpn_saida')): ?>
-        <a href="<?= url('/vpn/openvpn/saida') ?>" class="<?= str_starts_with($uriAtual, '/vpn/openvpn/saida') ? 'active' : '' ?>">
-            <i class="bi bi-box-arrow-up-right me-2"></i> OpenVPN - Saída
-        </a>
         <?php endif; ?>
 
         <?php if (PermissionService::temAcesso('vpn_dashboard')): ?>

@@ -254,6 +254,7 @@ $router->post('/samba/configuracao/salvar', [SambaConfiguracaoController::class,
 $router->post('/samba/configuracao/restaurar', [SambaConfiguracaoController::class, 'restaurarBackup']);
 
 $router->get('/apache/dashboard', [ApacheController::class, 'dashboard']);
+$router->get('/apache/dashboard/log', [ApacheController::class, 'verLog']);
 
 $router->get('/apache/sites', [ApacheSiteController::class, 'index']);
 $router->get('/apache/sites/ver', [ApacheSiteController::class, 'ver']);
