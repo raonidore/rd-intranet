@@ -6,6 +6,11 @@
 # "curl | sudo bash" (nenhum outro script deste repo instala as cegas via
 # pipe). URLs/formato conferidos ao vivo antes de escrever este script:
 #   curl -s https://packagecloud.io/install/repositories/ookla/speedtest-cli/config_file.list?os=ubuntu&dist=noble&source=script
+# ATENCAO: esse endpoint devolve uma config valida pra qualquer dist
+# pedido, mesmo pra codinomes sem repositorio publicado de verdade (ex:
+# "noble" -- confirmado em producao: "does not have a Release file").
+# Por isso o script abaixo confere se o Release existe antes de usar o
+# codinome real, com fallback pro ultimo LTS que a Ookla publicou.
 #
 # Tambem cria /var/lib/rd-intranet/speedtest (dono www-data) -- e o $HOME
 # que speedtest_executar_web.sh vai usar depois (sem sudo), porque o
@@ -38,7 +43,19 @@ fi
 rm -f /tmp/rd_st_err_$$
 chmod 644 "$CHAVEIRO"
 
+# O repositorio da Ookla no packagecloud costuma ficar atras dos codinomes
+# mais novos do Ubuntu (ex: sem "noble" ainda em 24.04) -- o pacote em si
+# e um binario Go estatico, sem dependencia real da versao, entao usar o
+# codinome LTS mais recente que a Ookla de fato publicou funciona em
+# qualquer Ubuntu mais novo. So cai pro codinome real da maquina se ele
+# tiver Release publicado (permite a Ookla passar a suportar codinomes
+# novos sem precisar mudar este script).
 CODINOME="$(. /etc/os-release && echo "$VERSION_CODENAME")"
+CODINOME_FALLBACK="jammy"
+
+if ! curl -fsS -o /dev/null "https://packagecloud.io/ookla/speedtest-cli/ubuntu/dists/${CODINOME}/Release"; then
+  CODINOME="$CODINOME_FALLBACK"
+fi
 
 echo "deb [signed-by=${CHAVEIRO}] https://packagecloud.io/ookla/speedtest-cli/ubuntu/ ${CODINOME} main" \
   | tee "$REPO_ARQUIVO" >/dev/null
