@@ -308,6 +308,7 @@ $abrirVpnOpenvpn = $rdSecaoAtiva(['/vpn/openvpn']);
         || PermissionService::temAcesso('vpn_wireguard_servidor')
         || PermissionService::temAcesso('vpn_wireguard_peers')
         || PermissionService::temAcesso('vpn_wireguard_trafego')
+        || PermissionService::temAcesso('vpn_wireguard_saida')
         || PermissionService::temAcesso('vpn_openvpn_servidor')
         || PermissionService::temAcesso('vpn_openvpn_clientes')
         || PermissionService::temAcesso('vpn_openvpn_trafego')
@@ -326,7 +327,7 @@ $abrirVpnOpenvpn = $rdSecaoAtiva(['/vpn/openvpn']);
         </a>
         <?php endif; ?>
 
-        <?php if (PermissionService::temAcesso('vpn_wireguard_servidor') || PermissionService::temAcesso('vpn_wireguard_peers') || PermissionService::temAcesso('vpn_wireguard_trafego')): ?>
+        <?php if (PermissionService::temAcesso('vpn_wireguard_servidor') || PermissionService::temAcesso('vpn_wireguard_peers') || PermissionService::temAcesso('vpn_wireguard_trafego') || PermissionService::temAcesso('vpn_wireguard_saida')): ?>
         <button class="menu-toggle menu-toggle-sub" type="button" data-bs-toggle="collapse" data-bs-target="#menuVpnWireguard"
                 aria-expanded="<?= $abrirVpnWireguard ? 'true' : 'false' ?>">
             <span><i class="bi bi-lock me-2"></i>WireGuard</span>
@@ -346,6 +347,11 @@ $abrirVpnOpenvpn = $rdSecaoAtiva(['/vpn/openvpn']);
             <?php if (PermissionService::temAcesso('vpn_wireguard_trafego')): ?>
             <a href="<?= url('/vpn/wireguard/trafego') ?>" class="<?= $uriAtual === '/vpn/wireguard/trafego' ? 'active' : '' ?>">
                 <i class="bi bi-bar-chart-line me-2"></i> Tráfego
+            </a>
+            <?php endif; ?>
+            <?php if (PermissionService::temAcesso('vpn_wireguard_saida')): ?>
+            <a href="<?= url('/vpn/wireguard/saida') ?>" class="<?= str_starts_with($uriAtual, '/vpn/wireguard/saida') ? 'active' : '' ?>">
+                <i class="bi bi-box-arrow-up-right me-2"></i> Saída (cliente)
             </a>
             <?php endif; ?>
         </div>

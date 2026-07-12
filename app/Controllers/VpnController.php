@@ -6,6 +6,7 @@ use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
 use App\Services\VpnOpenvpnSaidaService;
 use App\Services\VpnOpenvpnService;
+use App\Services\VpnWireguardSaidaService;
 use App\Services\VpnWireguardService;
 
 class VpnController extends Controller
@@ -30,7 +31,8 @@ class VpnController extends Controller
         $clientesOnline = array_filter($clientesAtivos, fn($c) => $c['online']);
         $trafegoHojeOvpn = $ovpn->trafegoAgregadoHoje();
 
-        $conexoesSaida = (new VpnOpenvpnSaidaService())->listar();
+        $conexoesSaidaOvpn = (new VpnOpenvpnSaidaService())->listar();
+        $conexoesSaidaWg = (new VpnWireguardSaidaService())->listar();
 
         $this->view('vpn/dashboard', [
             'wireguard' => [
@@ -40,6 +42,8 @@ class VpnController extends Controller
                 'peers_online' => count($peersOnline),
                 'rx_hoje' => (int)($trafegoHojeWg['rx_total'] ?? 0),
                 'tx_hoje' => (int)($trafegoHojeWg['tx_total'] ?? 0),
+                'conexoes_saida_ativas' => count(array_filter($conexoesSaidaWg, fn($c) => $c['ativo'])),
+                'conexoes_saida_total' => count($conexoesSaidaWg),
             ],
             'openvpn' => [
                 'instalado' => (bool)($configOvpn['instalado'] ?? false),
@@ -48,8 +52,8 @@ class VpnController extends Controller
                 'clientes_online' => count($clientesOnline),
                 'rx_hoje' => (int)($trafegoHojeOvpn['rx_total'] ?? 0),
                 'tx_hoje' => (int)($trafegoHojeOvpn['tx_total'] ?? 0),
-                'conexoes_saida_ativas' => count(array_filter($conexoesSaida, fn($c) => $c['ativo'])),
-                'conexoes_saida_total' => count($conexoesSaida),
+                'conexoes_saida_ativas' => count(array_filter($conexoesSaidaOvpn, fn($c) => $c['ativo'])),
+                'conexoes_saida_total' => count($conexoesSaidaOvpn),
             ],
         ]);
     }

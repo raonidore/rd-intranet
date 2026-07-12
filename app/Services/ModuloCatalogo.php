@@ -29,6 +29,7 @@ class ModuloCatalogo
         'vpn_wireguard_servidor' => ['label' => 'WireGuard - Servidor', 'grupo' => 'VPN'],
         'vpn_wireguard_peers' => ['label' => 'WireGuard - Peers', 'grupo' => 'VPN'],
         'vpn_wireguard_trafego' => ['label' => 'WireGuard - Tráfego', 'grupo' => 'VPN'],
+        'vpn_wireguard_saida' => ['label' => 'WireGuard - Conexões de Saída', 'grupo' => 'VPN'],
         'vpn_openvpn_servidor' => ['label' => 'OpenVPN - Servidor', 'grupo' => 'VPN'],
         'vpn_openvpn_clientes' => ['label' => 'OpenVPN - Clientes', 'grupo' => 'VPN'],
         'vpn_openvpn_trafego' => ['label' => 'OpenVPN - Tráfego', 'grupo' => 'VPN'],

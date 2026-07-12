@@ -37,6 +37,7 @@ use App\Controllers\VpnController;
 use App\Controllers\VpnWireguardController;
 use App\Controllers\VpnOpenvpnController;
 use App\Controllers\VpnOpenvpnSaidaController;
+use App\Controllers\VpnWireguardSaidaController;
 use App\Controllers\AtualizacaoController;
 use App\Controllers\AntivirusController;
 
@@ -244,6 +245,15 @@ $router->post('/vpn/wireguard/peers/novo', [VpnWireguardController::class, 'cria
 $router->post('/vpn/wireguard/peers/entregue', [VpnWireguardController::class, 'marcarEntregue']);
 $router->post('/vpn/wireguard/peers/revogar', [VpnWireguardController::class, 'revogarPeer']);
 $router->get('/vpn/wireguard/trafego', [VpnWireguardController::class, 'trafego']);
+
+$router->get('/vpn/wireguard/saida', [VpnWireguardSaidaController::class, 'index']);
+$router->get('/vpn/wireguard/saida/novo', [VpnWireguardSaidaController::class, 'novoForm']);
+$router->post('/vpn/wireguard/saida/gerar-chave', [VpnWireguardSaidaController::class, 'gerarChave']);
+$router->post('/vpn/wireguard/saida/novo', [VpnWireguardSaidaController::class, 'novo']);
+$router->post('/vpn/wireguard/saida/conectar', [VpnWireguardSaidaController::class, 'conectar']);
+$router->post('/vpn/wireguard/saida/desconectar', [VpnWireguardSaidaController::class, 'desconectar']);
+$router->post('/vpn/wireguard/saida/boot', [VpnWireguardSaidaController::class, 'alternarBoot']);
+$router->post('/vpn/wireguard/saida/remover', [VpnWireguardSaidaController::class, 'remover']);
 
 $router->get('/deploy', [DeployCenterController::class, 'index']);
 $router->get('/deploy/samba/aplicar', [DeployCenterController::class, 'aplicarSamba']);
