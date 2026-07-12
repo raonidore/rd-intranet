@@ -33,6 +33,8 @@ use App\Controllers\CertificadoController;
 use App\Controllers\DependenciaController;
 use App\Controllers\SpeedtestController;
 use App\Controllers\DdnsController;
+use App\Controllers\VpnController;
+use App\Controllers\VpnWireguardController;
 use App\Controllers\AtualizacaoController;
 use App\Controllers\AntivirusController;
 
@@ -205,6 +207,21 @@ $router->get('/infraestrutura/ddns/desativar', [DdnsController::class, 'desativa
 $router->post('/infraestrutura/ddns/atualizar-agora', [DdnsController::class, 'atualizarAgora']);
 $router->post('/infraestrutura/ddns/atualizar-todas', [DdnsController::class, 'atualizarTodasAgora']);
 $router->post('/infraestrutura/ddns/automatica', [DdnsController::class, 'ativarAtualizacaoAutomatica']);
+
+$router->get('/vpn', [VpnController::class, 'dashboard']);
+$router->get('/vpn/openvpn', [VpnController::class, 'openvpnEmBreve']);
+$router->get('/vpn/ikev2', [VpnController::class, 'ikev2EmBreve']);
+
+$router->get('/vpn/wireguard/servidor', [VpnWireguardController::class, 'servidor']);
+$router->post('/vpn/wireguard/instalar', [VpnWireguardController::class, 'instalar']);
+$router->post('/vpn/wireguard/salvar-config', [VpnWireguardController::class, 'salvarConfig']);
+$router->post('/vpn/wireguard/expor', [VpnWireguardController::class, 'exporToggle']);
+$router->post('/vpn/wireguard/ativar-coleta', [VpnWireguardController::class, 'ativarColeta']);
+$router->get('/vpn/wireguard/peers', [VpnWireguardController::class, 'peers']);
+$router->post('/vpn/wireguard/peers/novo', [VpnWireguardController::class, 'criarPeer']);
+$router->post('/vpn/wireguard/peers/entregue', [VpnWireguardController::class, 'marcarEntregue']);
+$router->post('/vpn/wireguard/peers/revogar', [VpnWireguardController::class, 'revogarPeer']);
+$router->get('/vpn/wireguard/trafego', [VpnWireguardController::class, 'trafego']);
 
 $router->get('/deploy', [DeployCenterController::class, 'index']);
 $router->get('/deploy/samba/aplicar', [DeployCenterController::class, 'aplicarSamba']);

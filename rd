@@ -157,6 +157,12 @@ switch ($comando) {
 
         break;
 
+    case 'vpn:coletar-wireguard':
+        (new \App\Services\VpnWireguardService())->coletarTrafego();
+        echo "OK: snapshot de tráfego WireGuard coletado.\n";
+
+        break;
+
     default:
         echo "Comando não encontrado: {$comando}\n";
         exit(1);

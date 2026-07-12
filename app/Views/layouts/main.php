@@ -25,10 +25,12 @@ $abrirBancoDados = $rdSecaoAtiva(['/banco-dados']);
 $abrirInfraestrutura = $rdSecaoAtiva(['/infraestrutura']);
 $abrirSamba = $rdSecaoAtiva(['/samba', '/deploy']);
 $abrirSeguranca = $rdSecaoAtiva(['/auditoria', '/administracao', '/seguranca']);
+$abrirVpn = $rdSecaoAtiva(['/vpn']);
 
 $abrirHardware = $rdSecaoAtiva(['/infraestrutura/hardware']);
 $abrirRede = $rdSecaoAtiva(['/infraestrutura/rede', '/infraestrutura/servidor/rede']);
 $abrirInfraServicos = $rdSecaoAtiva(['/infraestrutura/servicos']);
+$abrirVpnWireguard = $rdSecaoAtiva(['/vpn/wireguard']);
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -295,6 +297,61 @@ $abrirInfraServicos = $rdSecaoAtiva(['/infraestrutura/servicos']);
         <?php if (PermissionService::temAcesso('infra_ddns')): ?>
         <a href="<?= url('/infraestrutura/ddns') ?>" class="<?= str_starts_with($uriAtual, '/infraestrutura/ddns') ? 'active' : '' ?>">
             <i class="bi bi-globe2 me-2"></i> DNS Dinâmico
+        </a>
+        <?php endif; ?>
+    </div>
+    <?php endif; ?>
+
+    <?php
+    $temVpn = PermissionService::temAcesso('vpn_dashboard')
+        || PermissionService::temAcesso('vpn_wireguard_servidor')
+        || PermissionService::temAcesso('vpn_wireguard_peers')
+        || PermissionService::temAcesso('vpn_wireguard_trafego');
+    ?>
+    <?php if ($temVpn): ?>
+    <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuVpn"
+            aria-expanded="<?= $abrirVpn ? 'true' : 'false' ?>">
+        <span><i class="bi bi-shield-shaded me-2"></i>VPN</span>
+        <i class="bi bi-chevron-right chevron"></i>
+    </button>
+    <div class="collapse <?= $abrirVpn ? 'show' : '' ?>" id="menuVpn">
+        <?php if (PermissionService::temAcesso('vpn_dashboard')): ?>
+        <a href="<?= url('/vpn') ?>" class="<?= $uriAtual === '/vpn' ? 'active' : '' ?>">
+            <i class="bi bi-speedometer me-2"></i> Dashboard
+        </a>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('vpn_wireguard_servidor') || PermissionService::temAcesso('vpn_wireguard_peers') || PermissionService::temAcesso('vpn_wireguard_trafego')): ?>
+        <button class="menu-toggle menu-toggle-sub" type="button" data-bs-toggle="collapse" data-bs-target="#menuVpnWireguard"
+                aria-expanded="<?= $abrirVpnWireguard ? 'true' : 'false' ?>">
+            <span><i class="bi bi-lock me-2"></i>WireGuard</span>
+            <i class="bi bi-chevron-right chevron"></i>
+        </button>
+        <div class="collapse menu-sub <?= $abrirVpnWireguard ? 'show' : '' ?>" id="menuVpnWireguard">
+            <?php if (PermissionService::temAcesso('vpn_wireguard_servidor')): ?>
+            <a href="<?= url('/vpn/wireguard/servidor') ?>" class="<?= $uriAtual === '/vpn/wireguard/servidor' ? 'active' : '' ?>">
+                <i class="bi bi-hdd-rack me-2"></i> Servidor
+            </a>
+            <?php endif; ?>
+            <?php if (PermissionService::temAcesso('vpn_wireguard_peers')): ?>
+            <a href="<?= url('/vpn/wireguard/peers') ?>" class="<?= $uriAtual === '/vpn/wireguard/peers' ? 'active' : '' ?>">
+                <i class="bi bi-people me-2"></i> Peers
+            </a>
+            <?php endif; ?>
+            <?php if (PermissionService::temAcesso('vpn_wireguard_trafego')): ?>
+            <a href="<?= url('/vpn/wireguard/trafego') ?>" class="<?= $uriAtual === '/vpn/wireguard/trafego' ? 'active' : '' ?>">
+                <i class="bi bi-bar-chart-line me-2"></i> Tráfego
+            </a>
+            <?php endif; ?>
+        </div>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('vpn_dashboard')): ?>
+        <a href="<?= url('/vpn/openvpn') ?>" class="<?= $uriAtual === '/vpn/openvpn' ? 'active' : '' ?>">
+            <i class="bi bi-shield-lock me-2"></i> OpenVPN
+        </a>
+        <a href="<?= url('/vpn/ikev2') ?>" class="<?= $uriAtual === '/vpn/ikev2' ? 'active' : '' ?>">
+            <i class="bi bi-globe-americas me-2"></i> IKEv2 / IPsec
         </a>
         <?php endif; ?>
     </div>

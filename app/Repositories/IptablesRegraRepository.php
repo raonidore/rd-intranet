@@ -88,6 +88,14 @@ class IptablesRegraRepository
         return $stmt->execute([$id]);
     }
 
+    public function buscarPorOrigemTemplate(string $origemTemplate): array
+    {
+        $stmt = $this->pdo->prepare("SELECT * FROM iptables_regras WHERE origem_template = ?");
+        $stmt->execute([$origemTemplate]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     private function valores(array $d): array
     {
         return [

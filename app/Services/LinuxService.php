@@ -22,6 +22,42 @@ class LinuxService
     }
 
     /**
+     * Executa um comando passando dados pelo stdin, sem tocar em disco --
+     * usado quando o conteudo em si e sensivel (ex: gerar QR code de uma
+     * chave privada de VPN) e nao deve nem passar por um arquivo
+     * temporario nem virar argumento de linha de comando (visivel via
+     * "ps aux" enquanto o processo roda).
+     */
+    public function executarComEntrada(string $comando, string $entrada): array
+    {
+        $descritores = [
+            0 => ['pipe', 'r'],
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w'],
+        ];
+
+        $processo = proc_open($comando, $descritores, $pipes);
+        if (!is_resource($processo)) {
+            return ['success' => false, 'exitCode' => -1, 'output' => 'Falha ao iniciar processo.'];
+        }
+
+        fwrite($pipes[0], $entrada);
+        fclose($pipes[0]);
+
+        $saida = stream_get_contents($pipes[1]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+
+        $retorno = proc_close($processo);
+
+        return [
+            'success' => $retorno === 0,
+            'exitCode' => $retorno,
+            'output' => $saida,
+        ];
+    }
+
+    /**
      * Verifica se um usuário existe.
      */
     public function usuarioExiste(string $login): bool
