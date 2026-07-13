@@ -3,9 +3,13 @@
     ==============================================
 
     O que faz:
-      Coleta hardware, sistema operacional, uptime, programas instalados
-      e alertas recentes do Visualizador de Eventos, e envia tudo por
-      HTTPS para o RD Intranet (modulo Ativos de TI). Tambem busca e
+      Coleta hardware (processador, memoria total/em uso, placa-mae,
+      placa de video/som, tipo de memoria), sistema operacional, uptime,
+      rede (MAC/IP por adaptador), volumes logicos (uso por unidade),
+      portas fisicas (USB conectado + seriais), programas instalados
+      (com data de instalacao, quando disponivel) e alertas recentes do
+      Visualizador de Eventos, e envia tudo por HTTPS para o RD Intranet
+      (modulo Ativos de TI). Tambem busca e
       executa comandos remotos pendentes (desligar/reiniciar, enviados
       pela tela do ativo no RD Intranet) -- sempre com um aviso do
       Windows de 5 minutos antes de executar, que da tempo do usuario
@@ -156,14 +160,29 @@ try {
     $tipo = if ($sistema.ProductType -eq 1) { 'computador' } else { 'servidor' }
 
     $memoriaGb = [math]::Round($computador.TotalPhysicalMemory / 1GB, 1)
+    $memoriaLivreGb = [math]::Round($sistema.FreePhysicalMemory / 1MB, 1)
+    $memoriaUsadaGb = [math]::Round($memoriaGb - $memoriaLivreGb, 1)
 
     $discos = Get-CimInstance Win32_DiskDrive | ForEach-Object {
         '{0} ({1} GB)' -f $_.Model, [math]::Round($_.Size / 1GB, 0)
     }
     $armazenamento = $discos -join ', '
 
-    $ip = (Get-CimInstance Win32_NetworkAdapterConfiguration -Filter 'IPEnabled = True' |
-        Select-Object -First 1 -ExpandProperty IPAddress) | Select-Object -First 1
+    # Placa de video / som / tipo de memoria (Componentes)
+    $placaVideo = (Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Name)
+    $placaSom = (Get-CimInstance Win32_SoundDevice -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Name)
+
+    $tiposMemoria = @{ 20 = 'DDR'; 21 = 'DDR2'; 22 = 'DDR2 FB-DIMM'; 24 = 'DDR3'; 26 = 'DDR4'; 34 = 'DDR5' }
+    $codigoMemoria = (Get-CimInstance Win32_PhysicalMemory -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty SMBIOSMemoryType)
+    $tipoMemoria = if ($codigoMemoria -and $tiposMemoria.ContainsKey([int]$codigoMemoria)) { $tiposMemoria[[int]$codigoMemoria] } else { $null }
+
+    # Rede -- todos os adaptadores habilitados, com MAC e IP(s)
+    $redes = @(Get-CimInstance Win32_NetworkAdapterConfiguration -Filter 'IPEnabled = True' | ForEach-Object {
+        foreach ($enderecoIp in $_.IPAddress) {
+            @{ nome_adaptador = $_.Description; mac = $_.MACAddress; ip = $enderecoIp }
+        }
+    })
+    $ip = if ($redes.Count -gt 0) { $redes[0].ip } else { $null }
 
     $payload = @{
         machine_guid   = $machineGuid
@@ -176,15 +195,50 @@ try {
         sistema_operacional = $sistema.Caption
         processador    = $processador.Name
         memoria_ram    = "$memoriaGb GB"
+        memoria_usada  = "$memoriaUsadaGb GB"
+        tipo_memoria   = $tipoMemoria
         armazenamento  = $armazenamento
         placa_mae      = ('{0} {1}' -f $placaMae.Manufacturer, $placaMae.Product).Trim()
+        placa_video    = $placaVideo
+        placa_som      = $placaSom
         usuario_logado = $computador.UserName
         funcao         = if ($tipo -eq 'servidor') { $sistema.Caption } else { $null }
         virtualizado   = if ($computador.Model -match 'Virtual|VMware|KVM|VirtualBox') { 'Sim' } else { 'Não' }
         ligado_desde   = $sistema.LastBootUpTime.ToString('yyyy-MM-dd HH:mm:ss')
+        redes          = $redes
+        volumes        = @()
+        portas         = @()
         programas      = @()
         alertas        = @()
     }
+
+    # --------------------------------------------------------------
+    # Volumes logicos (unidades com letra, ex: C:, D:) -- diferente do
+    # "armazenamento" acima, que e o disco fisico inteiro.
+    $payload.volumes = @(Get-CimInstance Win32_LogicalDisk -Filter 'DriveType = 3' | ForEach-Object {
+        $totalGb = [math]::Round($_.Size / 1GB, 1)
+        $livreGb = [math]::Round($_.FreeSpace / 1GB, 1)
+        @{ unidade = $_.DeviceID; total_gb = $totalGb; usado_gb = [math]::Round($totalGb - $livreGb, 1) }
+    })
+
+    # --------------------------------------------------------------
+    # Portas fisicas -- dispositivos USB conectados agora + portas
+    # seriais (COM) disponiveis. Portas de video (HDMI/DP/VGA) ficam de
+    # fora -- o Windows nao expoe isso de forma padronizada via WMI.
+    $portasUsb = @()
+    try {
+        $portasUsb = Get-PnpDevice -Class USB -Status OK -ErrorAction SilentlyContinue |
+            Where-Object { $_.FriendlyName } |
+            ForEach-Object { @{ tipo = 'usb'; descricao = $_.FriendlyName } }
+    } catch {
+        # Get-PnpDevice pode nao existir em versoes muito antigas do PowerShell -- ignora
+    }
+
+    $portasSerial = @(Get-CimInstance Win32_SerialPort -ErrorAction SilentlyContinue | ForEach-Object {
+        @{ tipo = 'serial'; descricao = "$($_.DeviceID) - $($_.Description)" }
+    })
+
+    $payload.portas = @($portasUsb) + @($portasSerial)
 
     # --------------------------------------------------------------
     # Programas instalados -- le direto do registro (Uninstall), NAO
@@ -200,7 +254,15 @@ try {
     $programas = foreach ($chave in $chavesUninstall) {
         Get-ItemProperty $chave -ErrorAction SilentlyContinue |
             Where-Object { $_.DisplayName -and -not $_.SystemComponent } |
-            Select-Object -Property @{n='nome'; e={$_.DisplayName}}, @{n='versao'; e={$_.DisplayVersion}}
+            Select-Object -Property @{n='nome'; e={$_.DisplayName}}, @{n='versao'; e={$_.DisplayVersion}}, @{n='data_instalacao'; e={
+                # InstallDate vem como texto "yyyyMMdd" (ex: 20250601) --
+                # nem todo instalador preenche esse valor.
+                if ($_.InstallDate -and $_.InstallDate -match '^\d{8}$') {
+                    [datetime]::ParseExact($_.InstallDate, 'yyyyMMdd', $null).ToString('yyyy-MM-dd')
+                } else {
+                    $null
+                }
+            }}
     }
 
     $payload.programas = @($programas | Sort-Object nome -Unique)
@@ -254,7 +316,7 @@ try {
         -ContentType 'application/json; charset=utf-8' `
         -Body ([System.Text.Encoding]::UTF8.GetBytes($json))
 
-    Escrever-Log "OK: checkin enviado (guid=$machineGuid, tipo=$tipo, $($payload.programas.Count) programas, $($payload.alertas.Count) alertas). Resposta: $($resposta.message)"
+    Escrever-Log "OK: checkin enviado (guid=$machineGuid, tipo=$tipo, $($payload.programas.Count) programas, $($payload.alertas.Count) alertas, $($payload.redes.Count) redes, $($payload.volumes.Count) volumes, $($payload.portas.Count) portas). Resposta: $($resposta.message)"
 
     if (-not $jaInstalado) {
         Write-Host "Primeira coleta enviada com sucesso. O ativo já deve aparecer no RD Intranet." -ForegroundColor Green
