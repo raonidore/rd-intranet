@@ -5,46 +5,100 @@
     O que faz:
       Coleta hardware, sistema operacional, programas instalados e
       alertas recentes do Visualizador de Eventos, e envia tudo por
-      HTTPS para o RD Intranet (modulo Ativos de TI). Roda sem
-      instalar nada alem do proprio script -- so usa modulos nativos
-      do Windows (CIM/WMI, registro, Get-WinEvent).
+      HTTPS para o RD Intranet (modulo Ativos de TI). Nao instala nada
+      alem de si mesmo -- so usa modulos nativos do Windows (CIM/WMI,
+      registro, Get-WinEvent, Task Scheduler).
 
-    Como instalar (rodar como Administrador):
-      1. Copie este arquivo para C:\ProgramData\RDIntranetAgent\rd-intranet-agent.ps1
-         (crie a pasta se nao existir).
-      2. Registre como Tarefa Agendada rodando a cada 15 minutos:
+    Como instalar:
+      1. Baixe este arquivo pela tela Ativos > Dashboard do RD Intranet
+         (ja vem com o endereco do servidor e a chave de API preenchidos).
+      2. Clique com o botao direito nele e escolha "Executar com o
+         PowerShell" -- OU abra um PowerShell como Administrador e rode:
 
-         schtasks /create /tn "RD Intranet Agente" ^
-           /tr "powershell.exe -ExecutionPolicy Bypass -NoProfile -File C:\ProgramData\RDIntranetAgent\rd-intranet-agent.ps1" ^
-           /sc minute /mo 15 /ru SYSTEM /rl HIGHEST /f
+           .\rd-intranet-agent.ps1
 
-      3. Pra testar na hora, sem esperar o agendamento:
+      Isso e tudo. Na primeira execucao, se estiver rodando como
+      Administrador, o proprio script se copia pra
+      C:\ProgramData\RDIntranetAgent\ e se registra como Tarefa
+      Agendada rodando a cada 15 minutos (usuario SYSTEM). As execucoes
+      seguintes (via agendamento) so fazem a coleta, sem reinstalar nada.
 
-         powershell.exe -ExecutionPolicy Bypass -NoProfile -File C:\ProgramData\RDIntranetAgent\rd-intranet-agent.ps1
+      Se a chave de API for regenerada no servidor, baixe o script de
+      novo e rode de novo do mesmo jeito -- ele substitui a instalacao
+      anterior (script + tarefa) pela nova.
 
       O log de cada execucao fica em C:\ProgramData\RDIntranetAgent\agente.log --
       confira ali se o ativo nao aparecer no RD Intranet.
-
-    Este arquivo ja vem com o endereco do servidor e a chave de API
-    preenchidos (baixado direto da tela Ativos > Dashboard do RD
-    Intranet). Se a chave for regenerada no servidor, baixe o script
-    de novo e reinstale.
 #>
 
 $ServerUrl = '__SERVER_URL__'
 $ApiKey    = '__API_KEY__'
 
+$NomeTarefa    = 'RD Intranet Agente'
 $PastaAgente   = 'C:\ProgramData\RDIntranetAgent'
+$ScriptDestino = Join-Path $PastaAgente 'rd-intranet-agent.ps1'
 $ArquivoLog    = Join-Path $PastaAgente 'agente.log'
 $ArquivoMarca  = Join-Path $PastaAgente 'ultimo_evento.txt'
 
-if (!(Test-Path $PastaAgente)) {
-    New-Item -ItemType Directory -Path $PastaAgente -Force | Out-Null
-}
-
 function Escrever-Log([string]$Mensagem) {
+    if (!(Test-Path $PastaAgente)) {
+        New-Item -ItemType Directory -Path $PastaAgente -Force | Out-Null
+    }
     $linha = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + ' - ' + $Mensagem
     Add-Content -Path $ArquivoLog -Value $linha
+}
+
+function Rodando-Como-Administrador {
+    $identidade = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($identidade)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+# --------------------------------------------------------------------
+# Auto-instalacao: só roda quando o script NAO está sendo executado a
+# partir do local já instalado -- ou seja, roda na primeira vez (baixado
+# manualmente) e a cada nova reinstalação (chave regenerada), mas nunca
+# nas execuções normais disparadas pela própria Tarefa Agendada.
+$jaInstalado = $PSCommandPath -and ($PSCommandPath -eq $ScriptDestino)
+
+if (-not $jaInstalado) {
+    if (-not (Rodando-Como-Administrador)) {
+        Write-Host "Este script precisa ser executado como Administrador na primeira vez (para se instalar e criar a tarefa agendada)." -ForegroundColor Red
+        Write-Host "Clique com o botao direito no arquivo e escolha 'Executar com o PowerShell', ou abra um PowerShell como Administrador e rode o script de novo." -ForegroundColor Yellow
+        exit 1
+    }
+
+    try {
+        if (!(Test-Path $PastaAgente)) {
+            New-Item -ItemType Directory -Path $PastaAgente -Force | Out-Null
+        }
+
+        Copy-Item -Path $PSCommandPath -Destination $ScriptDestino -Force
+
+        $acao = New-ScheduledTaskAction -Execute 'powershell.exe' `
+            -Argument "-ExecutionPolicy Bypass -NoProfile -WindowStyle Hidden -File `"$ScriptDestino`""
+
+        $gatilho = New-ScheduledTaskTrigger -Once (Get-Date) `
+            -RepetitionInterval (New-TimeSpan -Minutes 15) `
+            -RepetitionDuration ([TimeSpan]::MaxValue)
+
+        $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+
+        $configuracoes = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+
+        Register-ScheduledTask -TaskName $NomeTarefa -Action $acao -Trigger $gatilho `
+            -Principal $principal -Settings $configuracoes -Force | Out-Null
+
+        Write-Host "Instalado com sucesso em $ScriptDestino" -ForegroundColor Green
+        Write-Host "Tarefa agendada '$NomeTarefa' criada -- roda a cada 15 minutos." -ForegroundColor Green
+        Write-Host "Fazendo a primeira coleta agora..." -ForegroundColor Cyan
+
+        Escrever-Log "Instalação concluída (script copiado + tarefa agendada registrada)."
+    } catch {
+        Write-Host "Falha ao instalar: $($_.Exception.Message)" -ForegroundColor Red
+        Escrever-Log "ERRO na instalação: $($_.Exception.Message)"
+        exit 1
+    }
 }
 
 # O RD Intranet usa certificado autoassinado por padrao -- sem isso o
@@ -196,6 +250,15 @@ try {
         -Body ([System.Text.Encoding]::UTF8.GetBytes($json))
 
     Escrever-Log "OK: checkin enviado (guid=$machineGuid, tipo=$tipo, $($payload.programas.Count) programas, $($payload.alertas.Count) alertas). Resposta: $($resposta.message)"
+
+    if (-not $jaInstalado) {
+        Write-Host "Primeira coleta enviada com sucesso. O ativo já deve aparecer no RD Intranet." -ForegroundColor Green
+    }
 } catch {
     Escrever-Log "ERRO: $($_.Exception.Message)"
+
+    if (-not $jaInstalado) {
+        Write-Host "A instalação foi concluída, mas a primeira coleta falhou: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "A tarefa agendada vai tentar de novo em até 15 minutos. Confira o log em $ArquivoLog se persistir." -ForegroundColor Yellow
+    }
 }
