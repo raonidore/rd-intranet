@@ -92,7 +92,12 @@ $statusCores = [
                             <tr>
                                 <td><input type="checkbox" class="form-check-input checkbox-ativo" name="ids[]" value="<?= (int)$a['id'] ?>"></td>
                                 <td class="font-monospace small"><?= htmlspecialchars($a['codigo_patrimonio']) ?></td>
-                                <td><?= htmlspecialchars($a['nome']) ?></td>
+                                <td>
+                                    <?= htmlspecialchars($a['nome']) ?>
+                                    <?php if (!empty($a['apelido'])): ?>
+                                        <span class="text-muted small">(<?= htmlspecialchars($a['apelido']) ?>)</span>
+                                    <?php endif; ?>
+                                </td>
                                 <td><i class="bi <?= AtivoService::TIPOS[$a['tipo']]['icone'] ?>"></i> <?= htmlspecialchars(AtivoService::TIPOS[$a['tipo']]['label']) ?></td>
                                 <td><?= Badge::make(htmlspecialchars(AtivoService::STATUS[$a['status']] ?? $a['status']), $statusCores[$a['status']] ?? 'secondary') ?></td>
                                 <td>
