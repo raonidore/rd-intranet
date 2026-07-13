@@ -3,9 +3,11 @@
     ==============================================
 
     O que faz:
-      Coleta hardware (processador, memoria total/em uso, placa-mae,
-      placa de video/som, tipo de memoria), sistema operacional, uptime,
-      rede (MAC/IP por adaptador), volumes logicos (uso por unidade),
+      Coleta hardware (processador, memoria total/em uso, modulos de
+      memoria com fabricante/modelo/frequencia/serie, placa-mae, placa
+      de video/som, tipo de memoria), sistema operacional, uptime, rede
+      (MAC/IP por adaptador), volumes logicos (uso por unidade + modelo/
+      fabricante/serie do disco fisico associado, quando disponivel),
       portas fisicas (USB conectado + seriais), programas instalados
       (com data de instalacao, quando disponivel) e alertas recentes do
       Visualizador de Eventos, e envia tudo por HTTPS para o RD Intranet
@@ -208,17 +210,51 @@ try {
         redes          = $redes
         volumes        = @()
         portas         = @()
+        memoria_modulos = @()
         programas      = @()
         alertas        = @()
     }
 
     # --------------------------------------------------------------
     # Volumes logicos (unidades com letra, ex: C:, D:) -- diferente do
-    # "armazenamento" acima, que e o disco fisico inteiro.
+    # "armazenamento" acima, que e o disco fisico inteiro. Tenta
+    # associar cada volume ao disco fisico por tras dele (modelo/
+    # fabricante/serie) -- nem sempre disponivel (discos removiveis,
+    # alguns controladores RAID/virtuais nao expoe isso).
     $payload.volumes = @(Get-CimInstance Win32_LogicalDisk -Filter 'DriveType = 3' | ForEach-Object {
         $totalGb = [math]::Round($_.Size / 1GB, 1)
         $livreGb = [math]::Round($_.FreeSpace / 1GB, 1)
-        @{ unidade = $_.DeviceID; total_gb = $totalGb; usado_gb = [math]::Round($totalGb - $livreGb, 1) }
+
+        $volume = @{ unidade = $_.DeviceID; total_gb = $totalGb; usado_gb = [math]::Round($totalGb - $livreGb, 1) }
+
+        try {
+            $particao = Get-CimAssociatedInstance -InputObject $_ -ResultClassName Win32_DiskPartition -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($particao) {
+                $discoFisico = Get-CimAssociatedInstance -InputObject $particao -ResultClassName Win32_DiskDrive -ErrorAction SilentlyContinue | Select-Object -First 1
+                if ($discoFisico) {
+                    $volume.modelo_disco = $discoFisico.Model
+                    $volume.fabricante_disco = $discoFisico.Manufacturer
+                    $volume.serial_disco = if ($discoFisico.SerialNumber) { $discoFisico.SerialNumber.Trim() } else { $null }
+                }
+            }
+        } catch {
+            # associacao disco-fisico -> volume pode falhar em discos
+            # removiveis/de rede -- segue sem esses dados extras
+        }
+
+        $volume
+    })
+
+    # --------------------------------------------------------------
+    # Modulos de memoria fisica (um por pente de RAM instalado)
+    $payload.memoria_modulos = @(Get-CimInstance Win32_PhysicalMemory -ErrorAction SilentlyContinue | ForEach-Object {
+        @{
+            fabricante     = $_.Manufacturer
+            modelo         = if ($_.PartNumber) { $_.PartNumber.Trim() } else { $null }
+            capacidade_gb  = [math]::Round($_.Capacity / 1GB, 1)
+            frequencia_mhz = if ($_.ConfiguredClockSpeed) { $_.ConfiguredClockSpeed } else { $_.Speed }
+            numero_serie   = if ($_.SerialNumber) { $_.SerialNumber.Trim() } else { $null }
+        }
     })
 
     # --------------------------------------------------------------
@@ -316,7 +352,7 @@ try {
         -ContentType 'application/json; charset=utf-8' `
         -Body ([System.Text.Encoding]::UTF8.GetBytes($json))
 
-    Escrever-Log "OK: checkin enviado (guid=$machineGuid, tipo=$tipo, $($payload.programas.Count) programas, $($payload.alertas.Count) alertas, $($payload.redes.Count) redes, $($payload.volumes.Count) volumes, $($payload.portas.Count) portas). Resposta: $($resposta.message)"
+    Escrever-Log "OK: checkin enviado (guid=$machineGuid, tipo=$tipo, $($payload.programas.Count) programas, $($payload.alertas.Count) alertas, $($payload.redes.Count) redes, $($payload.volumes.Count) volumes, $($payload.portas.Count) portas, $($payload.memoria_modulos.Count) modulos de memoria). Resposta: $($resposta.message)"
 
     if (-not $jaInstalado) {
         Write-Host "Primeira coleta enviada com sucesso. O ativo já deve aparecer no RD Intranet." -ForegroundColor Green
