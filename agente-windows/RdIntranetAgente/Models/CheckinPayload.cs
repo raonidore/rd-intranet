@@ -39,11 +39,23 @@ public class CheckinPayload
     [JsonPropertyName("memoria_ram")]
     public string? MemoriaRam { get; set; }
 
+    [JsonPropertyName("memoria_usada")]
+    public string? MemoriaUsada { get; set; }
+
+    [JsonPropertyName("tipo_memoria")]
+    public string? TipoMemoria { get; set; }
+
     [JsonPropertyName("armazenamento")]
     public string? Armazenamento { get; set; }
 
     [JsonPropertyName("placa_mae")]
     public string? PlacaMae { get; set; }
+
+    [JsonPropertyName("placa_video")]
+    public string? PlacaVideo { get; set; }
+
+    [JsonPropertyName("placa_som")]
+    public string? PlacaSom { get; set; }
 
     [JsonPropertyName("usuario_logado")]
     public string? UsuarioLogado { get; set; }
@@ -56,6 +68,15 @@ public class CheckinPayload
 
     [JsonPropertyName("ligado_desde")]
     public string? LigadoDesde { get; set; }
+
+    [JsonPropertyName("redes")]
+    public List<RedeItem> Redes { get; set; } = new();
+
+    [JsonPropertyName("volumes")]
+    public List<VolumeItem> Volumes { get; set; } = new();
+
+    [JsonPropertyName("portas")]
+    public List<PortaItem> Portas { get; set; } = new();
 
     [JsonPropertyName("programas")]
     public List<ProgramaItem> Programas { get; set; } = new();
@@ -71,6 +92,42 @@ public class ProgramaItem
 
     [JsonPropertyName("versao")]
     public string? Versao { get; set; }
+
+    [JsonPropertyName("data_instalacao")]
+    public string? DataInstalacao { get; set; }
+}
+
+public class RedeItem
+{
+    [JsonPropertyName("nome_adaptador")]
+    public string? NomeAdaptador { get; set; }
+
+    [JsonPropertyName("mac")]
+    public string? Mac { get; set; }
+
+    [JsonPropertyName("ip")]
+    public string? Ip { get; set; }
+}
+
+public class VolumeItem
+{
+    [JsonPropertyName("unidade")]
+    public string Unidade { get; set; } = "";
+
+    [JsonPropertyName("total_gb")]
+    public double TotalGb { get; set; }
+
+    [JsonPropertyName("usado_gb")]
+    public double UsadoGb { get; set; }
+}
+
+public class PortaItem
+{
+    [JsonPropertyName("tipo")]
+    public string Tipo { get; set; } = "usb";
+
+    [JsonPropertyName("descricao")]
+    public string Descricao { get; set; } = "";
 }
 
 public class AlertaItem

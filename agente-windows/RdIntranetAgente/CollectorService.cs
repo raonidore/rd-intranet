@@ -41,9 +41,10 @@ public static class CollectorService
         payload.NumeroSerie = serialBios;
 
         // ----------------------------------------------------------
-        // Sistema operacional / tipo do ativo / uptime
+        // Sistema operacional / tipo do ativo / uptime / memoria livre
         // ProductType: 1 = estacao de trabalho, 2 = controlador de dominio, 3 = servidor
-        using (var buscaSistema = new ManagementObjectSearcher("SELECT Caption, ProductType, LastBootUpTime FROM Win32_OperatingSystem"))
+        double memoriaLivreGb = 0;
+        using (var buscaSistema = new ManagementObjectSearcher("SELECT Caption, ProductType, LastBootUpTime, FreePhysicalMemory FROM Win32_OperatingSystem"))
         {
             foreach (ManagementObject so in buscaSistema.Get())
             {
@@ -59,11 +60,18 @@ public static class CollectorService
                     var ultimoBoot = ManagementDateTimeConverter.ToDateTime(ultimoBootCim);
                     payload.LigadoDesde = ultimoBoot.ToString("yyyy-MM-dd HH:mm:ss");
                 }
+
+                if (so["FreePhysicalMemory"] != null)
+                {
+                    // FreePhysicalMemory vem em KB
+                    memoriaLivreGb = Convert.ToInt64(so["FreePhysicalMemory"]) / 1024.0 / 1024.0;
+                }
             }
         }
 
         // ----------------------------------------------------------
         // Fabricante / modelo / memoria / usuario logado
+        double memoriaTotalGb = 0;
         using (var buscaComputador = new ManagementObjectSearcher("SELECT Manufacturer, Model, TotalPhysicalMemory, UserName FROM Win32_ComputerSystem"))
         {
             foreach (ManagementObject cs in buscaComputador.Get())
@@ -75,12 +83,58 @@ public static class CollectorService
                 if (cs["TotalPhysicalMemory"] != null)
                 {
                     var bytes = Convert.ToInt64(cs["TotalPhysicalMemory"]);
-                    payload.MemoriaRam = $"{Math.Round(bytes / 1024.0 / 1024.0 / 1024.0, 1)} GB";
+                    memoriaTotalGb = bytes / 1024.0 / 1024.0 / 1024.0;
+                    payload.MemoriaRam = $"{Math.Round(memoriaTotalGb, 1)} GB";
                 }
 
                 var modeloTexto = payload.Modelo ?? "";
                 payload.Virtualizado = (modeloTexto.Contains("Virtual") || modeloTexto.Contains("VMware")
                     || modeloTexto.Contains("KVM") || modeloTexto.Contains("VirtualBox")) ? "Sim" : "Não";
+            }
+        }
+
+        if (memoriaTotalGb > 0)
+        {
+            payload.MemoriaUsada = $"{Math.Round(Math.Max(0, memoriaTotalGb - memoriaLivreGb), 1)} GB";
+        }
+
+        // ----------------------------------------------------------
+        // Placa de video / som / tipo de memoria (Componentes)
+        using (var buscaVideo = new ManagementObjectSearcher("SELECT Name FROM Win32_VideoController"))
+        {
+            foreach (ManagementObject v in buscaVideo.Get())
+            {
+                payload.PlacaVideo = v["Name"]?.ToString();
+                break;
+            }
+        }
+
+        using (var buscaSom = new ManagementObjectSearcher("SELECT Name FROM Win32_SoundDevice"))
+        {
+            foreach (ManagementObject s in buscaSom.Get())
+            {
+                payload.PlacaSom = s["Name"]?.ToString();
+                break;
+            }
+        }
+
+        var tiposMemoria = new Dictionary<int, string>
+        {
+            { 20, "DDR" }, { 21, "DDR2" }, { 22, "DDR2 FB-DIMM" }, { 24, "DDR3" }, { 26, "DDR4" }, { 34, "DDR5" }
+        };
+        using (var buscaMemoria = new ManagementObjectSearcher("SELECT SMBIOSMemoryType FROM Win32_PhysicalMemory"))
+        {
+            foreach (ManagementObject m in buscaMemoria.Get())
+            {
+                if (m["SMBIOSMemoryType"] != null)
+                {
+                    var codigo = Convert.ToInt32(m["SMBIOSMemoryType"]);
+                    if (tiposMemoria.TryGetValue(codigo, out var nomeTipo))
+                    {
+                        payload.TipoMemoria = nomeTipo;
+                    }
+                }
+                break;
             }
         }
 
@@ -120,7 +174,10 @@ public static class CollectorService
         }
         payload.Armazenamento = string.Join(", ", discos);
 
-        payload.Ip = ObterPrimeiroIp();
+        payload.Redes = ObterRedes();
+        payload.Ip = payload.Redes.Count > 0 ? payload.Redes[0].Ip : null;
+        payload.Volumes = ObterVolumes();
+        payload.Portas = ObterPortas();
         payload.Programas = ObterProgramasInstalados();
         payload.Alertas = ObterAlertas(eventosDesde ?? DateTime.Now.AddHours(-24));
 
@@ -133,19 +190,87 @@ public static class CollectorService
         return chave?.GetValue("MachineGuid")?.ToString() ?? Environment.MachineName;
     }
 
-    private static string? ObterPrimeiroIp()
+    /// <summary>Um item por combinação adaptador+IP (um adaptador com IPv4 e IPv6 vira duas linhas).</summary>
+    private static List<RedeItem> ObterRedes()
     {
-        using var busca = new ManagementObjectSearcher("SELECT IPAddress FROM Win32_NetworkAdapterConfiguration WHERE IPEnabled = True");
+        var redes = new List<RedeItem>();
+
+        using var busca = new ManagementObjectSearcher("SELECT Description, MACAddress, IPAddress FROM Win32_NetworkAdapterConfiguration WHERE IPEnabled = True");
 
         foreach (ManagementObject nic in busca.Get())
         {
-            if (nic["IPAddress"] is string[] enderecos && enderecos.Length > 0)
+            if (nic["IPAddress"] is not string[] enderecos) continue;
+
+            var nome = nic["Description"]?.ToString();
+            var mac = nic["MACAddress"]?.ToString();
+
+            foreach (var endereco in enderecos)
             {
-                return enderecos[0];
+                redes.Add(new RedeItem { NomeAdaptador = nome, Mac = mac, Ip = endereco });
             }
         }
 
-        return null;
+        return redes;
+    }
+
+    /// <summary>Volumes lógicos (unidades com letra, ex: C:, D:) -- diferente do Armazenamento acima, que é o disco físico inteiro.</summary>
+    private static List<VolumeItem> ObterVolumes()
+    {
+        var volumes = new List<VolumeItem>();
+
+        using var busca = new ManagementObjectSearcher("SELECT DeviceID, Size, FreeSpace FROM Win32_LogicalDisk WHERE DriveType = 3");
+
+        foreach (ManagementObject disco in busca.Get())
+        {
+            if (disco["Size"] == null) continue;
+
+            var totalGb = Convert.ToInt64(disco["Size"]) / 1024.0 / 1024.0 / 1024.0;
+            var livreGb = disco["FreeSpace"] != null ? Convert.ToInt64(disco["FreeSpace"]) / 1024.0 / 1024.0 / 1024.0 : 0;
+
+            volumes.Add(new VolumeItem
+            {
+                Unidade = disco["DeviceID"]?.ToString() ?? "",
+                TotalGb = Math.Round(totalGb, 1),
+                UsadoGb = Math.Round(Math.Max(0, totalGb - livreGb), 1)
+            });
+        }
+
+        return volumes;
+    }
+
+    /// <summary>
+    /// Dispositivos USB conectados agora + portas seriais (COM)
+    /// disponíveis. Portas de vídeo (HDMI/DP/VGA) ficam de fora -- o
+    /// Windows não expõe isso de forma padronizada via WMI.
+    /// </summary>
+    private static List<PortaItem> ObterPortas()
+    {
+        var portas = new List<PortaItem>();
+
+        using (var buscaUsb = new ManagementObjectSearcher("SELECT Name, PNPDeviceID FROM Win32_PnPEntity WHERE PNPDeviceID LIKE 'USB%'"))
+        {
+            foreach (ManagementObject dispositivo in buscaUsb.Get())
+            {
+                var nome = dispositivo["Name"]?.ToString();
+                if (string.IsNullOrWhiteSpace(nome)) continue;
+
+                portas.Add(new PortaItem { Tipo = "usb", Descricao = nome });
+            }
+        }
+
+        using (var buscaSerial = new ManagementObjectSearcher("SELECT DeviceID, Description FROM Win32_SerialPort"))
+        {
+            foreach (ManagementObject porta in buscaSerial.Get())
+            {
+                portas.Add(new PortaItem
+                {
+                    Tipo = "serial",
+                    Descricao = $"{porta["DeviceID"]} - {porta["Description"]}"
+                });
+            }
+        }
+
+        return portas;
     }
 
     /// <summary>
@@ -179,10 +304,18 @@ public static class CollectorService
 
                 if (sub.GetValue("SystemComponent") is int componenteDoSistema && componenteDoSistema == 1) continue;
 
+                string? dataInstalacao = null;
+                if (sub.GetValue("InstallDate") is string bruta && bruta.Length == 8
+                    && DateTime.TryParseExact(bruta, "yyyyMMdd", null, System.Globalization.DateTimeStyles.None, out var data))
+                {
+                    dataInstalacao = data.ToString("yyyy-MM-dd");
+                }
+
                 programas.Add(new ProgramaItem
                 {
                     Nome = nome,
-                    Versao = sub.GetValue("DisplayVersion") as string
+                    Versao = sub.GetValue("DisplayVersion") as string,
+                    DataInstalacao = dataInstalacao
                 });
             }
         }
