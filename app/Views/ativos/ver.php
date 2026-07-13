@@ -14,7 +14,53 @@ $statusCores = [
 
 $detalhes = $ativo['detalhes'] ?? [];
 $camposTipo = AtivoService::CAMPOS_DETALHES[$ativo['tipo']] ?? [];
+
+// Campos de "Componentes" ficam numa aba própria -- o resto dos
+// detalhes técnicos (SO, funcao, snmp, etc.) fica na Visão Geral.
+$camposComponentes = ['processador', 'memoria_ram', 'tipo_memoria', 'placa_mae', 'placa_video', 'placa_som', 'armazenamento'];
+$camposVisaoGeral = array_diff_key($camposTipo, array_flip($camposComponentes));
+
+function parseGb($texto): float
+{
+    if (!$texto) return 0.0;
+    preg_match('/([\d.]+)/', (string)$texto, $m);
+    return isset($m[1]) ? (float)$m[1] : 0.0;
+}
+
+function gaugeRadial(float $percentual, string $label, string $sublabel): string
+{
+    $percentual = max(0, min(100, $percentual));
+    $cor = $percentual >= 90 ? '#ef4444' : ($percentual >= 75 ? '#f59e0b' : '#22c55e');
+    $graus = $percentual * 3.6;
+
+    return '
+        <div class="text-center">
+            <div class="gauge-radial" style="--pct:' . $graus . 'deg; --cor:' . $cor . '">
+                <div class="gauge-valor">' . round($percentual) . '%</div>
+            </div>
+            <div class="gauge-label mt-2">' . htmlspecialchars($label) . '</div>
+            <div class="gauge-sublabel text-muted small">' . htmlspecialchars($sublabel) . '</div>
+        </div>
+    ';
+}
+
+$memoriaTotalGb = parseGb($detalhes['memoria_ram'] ?? null);
+$memoriaUsadaGb = parseGb($detalhes['memoria_usada'] ?? null);
+$memoriaPct = $memoriaTotalGb > 0 ? ($memoriaUsadaGb / $memoriaTotalGb) * 100 : null;
 ?>
+
+<style>
+.gauge-radial {
+    width: 92px; height: 92px; border-radius: 50%; margin: 0 auto;
+    background: conic-gradient(var(--cor) var(--pct), #e9ecef 0deg);
+    display: flex; align-items: center; justify-content: center; position: relative;
+}
+.gauge-radial::before {
+    content: ''; position: absolute; inset: 9px; border-radius: 50%; background: #fff;
+}
+.gauge-valor { position: relative; z-index: 1; font-weight: 700; font-size: 15px; font-family: 'SFMono-Regular', Consolas, monospace; }
+.gauge-label { font-size: 13px; font-weight: 600; }
+</style>
 
 <?= Alert::flash() ?>
 
@@ -28,10 +74,7 @@ $camposTipo = AtivoService::CAMPOS_DETALHES[$ativo['tipo']] ?? [];
         <span class="font-monospace text-muted"><?= htmlspecialchars($ativo['codigo_patrimonio']) ?></span>
         <?= Badge::make(htmlspecialchars(AtivoService::STATUS[$ativo['status']] ?? $ativo['status']), $statusCores[$ativo['status']] ?? 'secondary') ?>
         <?php if ($ativo['origem'] === 'agente'): ?>
-            <?= Badge::make($estaLigada ? '<i class="bi bi-circle-fill" style="font-size:8px"></i> Ligada' : 'Offline', $estaLigada ? 'success' : 'secondary') ?>
-            <?php if ($estaLigada && $uptime): ?>
-                <span class="text-muted small">uptime: <?= htmlspecialchars($uptime) ?></span>
-            <?php endif; ?>
+            <?= Badge::make($estaLigada ? '<i class="bi bi-circle-fill" style="font-size:8px"></i> Ligado' : 'Desligado', $estaLigada ? 'success' : 'secondary') ?>
         <?php endif; ?>
     </div>
     <div class="d-flex gap-2">
@@ -56,81 +99,181 @@ $camposTipo = AtivoService::CAMPOS_DETALHES[$ativo['tipo']] ?? [];
     </div>
 </div>
 
-<?php if (!empty($ativo['ultimo_checkin'])): ?>
-    <div class="alert alert-light border small mb-4">
-        <i class="bi bi-clock-history"></i> Última atualização automática: <?= htmlspecialchars(data_br($ativo['ultimo_checkin'])) ?>
-        via <?= $ativo['origem'] === 'agente' ? 'agente Windows' : ($ativo['origem'] === 'snmp' ? 'SNMP' : 'manual') ?>.
-    </div>
-<?php endif; ?>
-
-<div class="row g-3">
-    <div class="col-lg-6">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-white"><strong>Dados gerais</strong></div>
-            <div class="card-body">
-                <div class="stat-mini-row d-flex justify-content-between py-2 border-bottom">
-                    <span class="text-muted">Marca / Fabricante</span><span><?= htmlspecialchars($ativo['marca'] ?? '—') ?></span>
-                </div>
-                <div class="stat-mini-row d-flex justify-content-between py-2 border-bottom">
-                    <span class="text-muted">Modelo</span><span><?= htmlspecialchars($ativo['modelo'] ?? '—') ?></span>
-                </div>
-                <div class="stat-mini-row d-flex justify-content-between py-2 border-bottom">
-                    <span class="text-muted">Nº de série</span><span><?= htmlspecialchars($ativo['numero_serie'] ?? '—') ?></span>
-                </div>
-                <div class="stat-mini-row d-flex justify-content-between py-2 border-bottom">
-                    <span class="text-muted">IP</span><span><?= htmlspecialchars($ativo['ip'] ?? '—') ?></span>
-                </div>
-                <div class="stat-mini-row d-flex justify-content-between py-2 border-bottom">
-                    <span class="text-muted">Setor</span><span><?= htmlspecialchars($ativo['setor_nome'] ?? '—') ?></span>
-                </div>
-                <div class="stat-mini-row d-flex justify-content-between py-2 border-bottom">
-                    <span class="text-muted">Localização</span><span><?= htmlspecialchars($ativo['localizacao_nome'] ?? '—') ?></span>
-                </div>
-                <div class="stat-mini-row d-flex justify-content-between py-2">
-                    <span class="text-muted">Responsável</span><span><?= htmlspecialchars($ativo['responsavel'] ?? '—') ?></span>
-                </div>
-                <?php if (!empty($ativo['observacoes'])): ?>
-                    <hr>
-                    <div class="text-muted small mb-1">Observações</div>
-                    <p class="mb-0"><?= nl2br(htmlspecialchars($ativo['observacoes'])) ?></p>
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+    <?php if (!empty($ativo['ultimo_checkin'])): ?>
+        <div class="alert alert-light border small mb-0 py-2">
+            <i class="bi bi-clock-history"></i> Última atualização: <?= htmlspecialchars(data_br($ativo['ultimo_checkin'])) ?>
+            via <?= $ativo['origem'] === 'agente' ? 'agente Windows' : ($ativo['origem'] === 'snmp' ? 'SNMP' : 'manual') ?>
+            <?php if ($estaLigada && $uptime): ?>
+                · ligado há <?= htmlspecialchars($uptime) ?>
+                <?php if (!empty($detalhes['ligado_desde'])): ?>
+                    (desde <?= htmlspecialchars(data_br($detalhes['ligado_desde'])) ?>)
                 <?php endif; ?>
-            </div>
+            <?php endif; ?>
         </div>
-    </div>
+    <?php endif; ?>
 
-    <div class="col-lg-6">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-white"><strong>Detalhes técnicos</strong></div>
-            <div class="card-body">
-                <?php if (empty($camposTipo) || empty($detalhes)): ?>
-                    <p class="text-muted mb-0">Nenhum detalhe técnico preenchido ainda.</p>
-                <?php else: ?>
-                    <?php foreach ($camposTipo as $campo => $label): ?>
-                        <?php if (!empty($detalhes[$campo])): ?>
-                            <div class="d-flex justify-content-between py-2 border-bottom">
-                                <span class="text-muted"><?= htmlspecialchars($label) ?></span>
-                                <span><?= htmlspecialchars($detalhes[$campo]) ?></span>
-                            </div>
+    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalAlertas">
+        <i class="bi bi-exclamation-triangle"></i> Ver Alertas (<?= count($alertas) ?>)
+    </button>
+</div>
+
+<ul class="nav nav-tabs mb-3" id="abasAtivo" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#abaGeral" type="button">Visão Geral</button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaComponentes" type="button">Componentes</button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaVolumes" type="button">Volumes lógicos <?= !empty($volumes) ? '<span class="badge text-bg-secondary ms-1">' . count($volumes) . '</span>' : '' ?></button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaNetwork" type="button">Network <?= !empty($redes) ? '<span class="badge text-bg-secondary ms-1">' . count($redes) . '</span>' : '' ?></button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaPortas" type="button">Portas <?= !empty($portas) ? '<span class="badge text-bg-secondary ms-1">' . count($portas) . '</span>' : '' ?></button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaProgramas" type="button">Programas <?= !empty($programas) ? '<span class="badge text-bg-secondary ms-1">' . count($programas) . '</span>' : '' ?></button>
+    </li>
+</ul>
+
+<div class="tab-content">
+    <!-- Visão Geral -->
+    <div class="tab-pane fade show active" id="abaGeral">
+        <div class="row g-3">
+            <div class="col-lg-7">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-white"><strong>Dados gerais</strong></div>
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between py-2 border-bottom">
+                            <span class="text-muted">Marca / Fabricante</span><span><?= htmlspecialchars($ativo['marca'] ?? '—') ?></span>
+                        </div>
+                        <div class="d-flex justify-content-between py-2 border-bottom">
+                            <span class="text-muted">Modelo</span><span><?= htmlspecialchars($ativo['modelo'] ?? '—') ?></span>
+                        </div>
+                        <div class="d-flex justify-content-between py-2 border-bottom">
+                            <span class="text-muted">Nº de série</span><span><?= htmlspecialchars($ativo['numero_serie'] ?? '—') ?></span>
+                        </div>
+                        <div class="d-flex justify-content-between py-2 border-bottom">
+                            <span class="text-muted">IP principal</span><span><?= htmlspecialchars($ativo['ip'] ?? '—') ?></span>
+                        </div>
+                        <div class="d-flex justify-content-between py-2 border-bottom">
+                            <span class="text-muted">Setor</span><span><?= htmlspecialchars($ativo['setor_nome'] ?? '—') ?></span>
+                        </div>
+                        <div class="d-flex justify-content-between py-2 border-bottom">
+                            <span class="text-muted">Localização</span><span><?= htmlspecialchars($ativo['localizacao_nome'] ?? '—') ?></span>
+                        </div>
+                        <div class="d-flex justify-content-between py-2">
+                            <span class="text-muted">Responsável</span><span><?= htmlspecialchars($ativo['responsavel'] ?? '—') ?></span>
+                        </div>
+                        <?php if (!empty($camposVisaoGeral)): ?>
+                            <hr>
+                            <?php foreach ($camposVisaoGeral as $campo => $label): ?>
+                                <?php if (!empty($detalhes[$campo]) && $campo !== 'ligado_desde'): ?>
+                                    <div class="d-flex justify-content-between py-2 border-bottom">
+                                        <span class="text-muted"><?= htmlspecialchars($label) ?></span>
+                                        <span><?= htmlspecialchars($detalhes[$campo]) ?></span>
+                                    </div>
+                                <?php endif; ?>
+                            <?php endforeach; ?>
                         <?php endif; ?>
-                    <?php endforeach; ?>
+                        <?php if (!empty($ativo['observacoes'])): ?>
+                            <hr>
+                            <div class="text-muted small mb-1">Observações</div>
+                            <p class="mb-0"><?= nl2br(htmlspecialchars($ativo['observacoes'])) ?></p>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-5">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-white"><strong>Uso de memória</strong></div>
+                    <div class="card-body d-flex align-items-center justify-content-center">
+                        <?php if ($memoriaPct !== null): ?>
+                            <?= gaugeRadial($memoriaPct, 'RAM', round($memoriaUsadaGb, 1) . ' / ' . round($memoriaTotalGb, 1) . ' GB') ?>
+                        <?php else: ?>
+                            <p class="text-muted small mb-0 text-center py-4">Sem dado de memória em uso ainda.<br>Preenchido automaticamente pelo agente Windows.</p>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Componentes -->
+    <div class="tab-pane fade" id="abaComponentes">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <?php
+                $temComponente = false;
+                foreach ($camposComponentes as $campo) {
+                    if (!empty($detalhes[$campo])) $temComponente = true;
+                }
+                ?>
+                <?php if (!$temComponente): ?>
+                    <p class="text-muted mb-0">Nenhum componente detalhado ainda.</p>
+                <?php else: ?>
+                    <div class="row">
+                        <?php foreach ($camposComponentes as $campo): ?>
+                            <?php if (!empty($detalhes[$campo]) && isset($camposTipo[$campo])): ?>
+                                <div class="col-md-6 d-flex justify-content-between py-2 border-bottom">
+                                    <span class="text-muted"><?= htmlspecialchars($camposTipo[$campo]) ?></span>
+                                    <span class="text-end"><?= htmlspecialchars($detalhes[$campo]) ?></span>
+                                </div>
+                            <?php endif; ?>
+                        <?php endforeach; ?>
+                    </div>
                 <?php endif; ?>
             </div>
         </div>
     </div>
 
-    <div class="col-lg-6">
+    <!-- Volumes lógicos -->
+    <div class="tab-pane fade" id="abaVolumes">
+        <?php if (empty($volumes)): ?>
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-muted">Nenhum volume coletado ainda. Preenchido automaticamente pelo agente Windows.</div>
+            </div>
+        <?php else: ?>
+            <div class="row g-3">
+                <?php foreach ($volumes as $v): ?>
+                    <?php
+                    $total = (float)$v['total_gb'];
+                    $usado = (float)$v['usado_gb'];
+                    $pct = $total > 0 ? ($usado / $total) * 100 : 0;
+                    ?>
+                    <div class="col-md-3 col-sm-4 col-6">
+                        <div class="card border-0 shadow-sm h-100">
+                            <div class="card-body text-center">
+                                <?= gaugeRadial($pct, 'Unidade ' . $v['unidade'], round($usado, 1) . ' / ' . round($total, 1) . ' GB') ?>
+                            </div>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+    </div>
+
+    <!-- Network -->
+    <div class="tab-pane fade" id="abaNetwork">
         <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white"><strong>Programas instalados</strong></div>
             <div class="card-body p-0">
-                <?php if (empty($programas)): ?>
-                    <p class="text-muted p-3 mb-0">Nenhum programa coletado ainda. Isso é preenchido automaticamente pelo agente Windows quando instalado neste ativo.</p>
+                <?php if (empty($redes)): ?>
+                    <p class="text-muted p-3 mb-0">Nenhum adaptador de rede coletado ainda.</p>
                 <?php else: ?>
                     <table class="table table-sm mb-0">
+                        <thead>
+                            <tr><th>Adaptador</th><th>MAC</th><th>IP</th></tr>
+                        </thead>
                         <tbody>
-                            <?php foreach ($programas as $p): ?>
+                            <?php foreach ($redes as $r): ?>
                                 <tr>
-                                    <td><?= htmlspecialchars($p['nome']) ?></td>
-                                    <td class="text-muted small text-end"><?= htmlspecialchars($p['versao'] ?? '') ?></td>
+                                    <td><?= htmlspecialchars($r['nome_adaptador'] ?? '—') ?></td>
+                                    <td class="font-monospace small"><?= htmlspecialchars($r['mac'] ?? '—') ?></td>
+                                    <td class="font-monospace small"><?= htmlspecialchars($r['ip'] ?? '—') ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
@@ -140,19 +283,56 @@ $camposTipo = AtivoService::CAMPOS_DETALHES[$ativo['tipo']] ?? [];
         </div>
     </div>
 
-    <div class="col-lg-6">
+    <!-- Portas -->
+    <div class="tab-pane fade" id="abaPortas">
         <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white"><strong>Alertas</strong></div>
+            <div class="card-body">
+                <?php if (empty($portas)): ?>
+                    <p class="text-muted mb-0">Nenhuma porta coletada ainda.</p>
+                <?php else: ?>
+                    <p class="text-muted small">Dispositivos USB conectados no momento da coleta e portas seriais (COM) disponíveis. O Windows não expõe de forma padronizada portas de vídeo (HDMI/DisplayPort/VGA), por isso não aparecem aqui.</p>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="small text-uppercase text-muted">USB</h6>
+                            <ul class="list-group list-group-flush mb-3">
+                                <?php $temUsb = false; foreach ($portas as $p): if ($p['tipo'] === 'usb'): $temUsb = true; ?>
+                                    <li class="list-group-item px-0 small"><?= htmlspecialchars($p['descricao']) ?></li>
+                                <?php endif; endforeach; ?>
+                                <?php if (!$temUsb): ?><li class="list-group-item px-0 small text-muted">Nenhum dispositivo USB coletado.</li><?php endif; ?>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="small text-uppercase text-muted">Seriais (COM)</h6>
+                            <ul class="list-group list-group-flush">
+                                <?php $temSerial = false; foreach ($portas as $p): if ($p['tipo'] === 'serial'): $temSerial = true; ?>
+                                    <li class="list-group-item px-0 small"><?= htmlspecialchars($p['descricao']) ?></li>
+                                <?php endif; endforeach; ?>
+                                <?php if (!$temSerial): ?><li class="list-group-item px-0 small text-muted">Nenhuma porta serial encontrada.</li><?php endif; ?>
+                            </ul>
+                        </div>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
+    <!-- Programas -->
+    <div class="tab-pane fade" id="abaProgramas">
+        <div class="card border-0 shadow-sm">
             <div class="card-body p-0">
-                <?php if (empty($alertas)): ?>
-                    <p class="text-muted p-3 mb-0">Nenhum alerta coletado ainda. Isso é preenchido automaticamente pelo agente Windows quando instalado neste ativo.</p>
+                <?php if (empty($programas)): ?>
+                    <p class="text-muted p-3 mb-0">Nenhum programa coletado ainda. Isso é preenchido automaticamente pelo agente Windows quando instalado neste ativo.</p>
                 <?php else: ?>
                     <table class="table table-sm mb-0">
+                        <thead>
+                            <tr><th>Programa</th><th>Versão</th><th>Instalado em</th></tr>
+                        </thead>
                         <tbody>
-                            <?php foreach ($alertas as $al): ?>
+                            <?php foreach ($programas as $p): ?>
                                 <tr>
-                                    <td><?= Badge::make(htmlspecialchars($al['nivel']), $al['nivel'] === 'erro' ? 'danger' : ($al['nivel'] === 'aviso' ? 'warning' : 'secondary')) ?></td>
-                                    <td class="small"><?= htmlspecialchars($al['mensagem']) ?></td>
+                                    <td><?= htmlspecialchars($p['nome']) ?></td>
+                                    <td class="text-muted small"><?= htmlspecialchars($p['versao'] ?? '—') ?></td>
+                                    <td class="text-muted small"><?= !empty($p['data_instalacao']) ? htmlspecialchars(data_br($p['data_instalacao'], 'd/m/Y')) : '—' ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
@@ -163,29 +343,63 @@ $camposTipo = AtivoService::CAMPOS_DETALHES[$ativo['tipo']] ?? [];
     </div>
 
     <?php if ($ativo['origem'] === 'agente'): ?>
-        <div class="col-lg-6">
-            <div class="card border-0 shadow-sm">
-                <div class="card-header bg-white"><strong>Comandos remotos</strong></div>
-                <div class="card-body p-0">
-                    <?php if (empty($comandos)): ?>
-                        <p class="text-muted p-3 mb-0">Nenhum comando enviado ainda.</p>
-                    <?php else: ?>
-                        <table class="table table-sm mb-0">
-                            <tbody>
-                                <?php foreach ($comandos as $c): ?>
-                                    <tr>
-                                        <td class="text-capitalize"><?= htmlspecialchars($c['comando']) ?></td>
-                                        <td><?= Badge::make($c['status'] === 'entregue' ? 'Entregue' : 'Pendente', $c['status'] === 'entregue' ? 'success' : 'secondary') ?></td>
-                                        <td class="text-muted small text-end"><?= htmlspecialchars(data_br($c['criado_em'])) ?></td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    <?php endif; ?>
-                </div>
+        <div class="card border-0 shadow-sm mt-3">
+            <div class="card-header bg-white"><strong>Comandos remotos</strong></div>
+            <div class="card-body p-0">
+                <?php if (empty($comandos)): ?>
+                    <p class="text-muted p-3 mb-0">Nenhum comando enviado ainda.</p>
+                <?php else: ?>
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                            <?php foreach ($comandos as $c): ?>
+                                <tr>
+                                    <td class="text-capitalize"><?= htmlspecialchars($c['comando']) ?></td>
+                                    <td><?= Badge::make($c['status'] === 'entregue' ? 'Entregue' : 'Pendente', $c['status'] === 'entregue' ? 'success' : 'secondary') ?></td>
+                                    <td class="text-muted small text-end"><?= htmlspecialchars(data_br($c['criado_em'])) ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                <?php endif; ?>
             </div>
         </div>
     <?php endif; ?>
+</div>
+
+<!-- Modal de Alertas -->
+<div class="modal fade" id="modalAlertas" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-exclamation-triangle"></i> Alertas (<?= count($alertas) ?>)</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <?php if (empty($alertas)): ?>
+                    <p class="text-muted mb-0">Nenhum alerta coletado ainda. Isso é preenchido automaticamente pelo agente Windows quando instalado neste ativo.</p>
+                <?php else: ?>
+                    <input type="text" id="buscaAlertas" class="form-control mb-3" placeholder="Buscar por palavra, origem ou nível...">
+                    <table class="table table-sm table-hover mb-0" id="tabelaAlertas">
+                        <tbody>
+                            <?php foreach ($alertas as $al): ?>
+                                <tr class="linha-alerta">
+                                    <td style="width:90px"><?= Badge::make(htmlspecialchars($al['nivel']), $al['nivel'] === 'erro' ? 'danger' : ($al['nivel'] === 'aviso' ? 'warning' : 'secondary')) ?></td>
+                                    <td class="small">
+                                        <?= htmlspecialchars($al['mensagem']) ?>
+                                        <div class="text-muted" style="font-size:11px">
+                                            <?= htmlspecialchars($al['origem_evento'] ?? '') ?>
+                                            <?= !empty($al['ocorrido_em']) ? ' · ' . htmlspecialchars(data_br($al['ocorrido_em'])) : '' ?>
+                                        </div>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                    <p class="text-muted small mt-2 mb-0" id="contadorBuscaAlertas"></p>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -247,6 +461,27 @@ $camposTipo = AtivoService::CAMPOS_DETALHES[$ativo['tipo']] ?? [];
                 botao.disabled = false;
             }
         });
+    });
+})();
+
+(function () {
+    const campoBusca = document.getElementById('buscaAlertas');
+    if (!campoBusca) return;
+
+    const linhas = document.querySelectorAll('#tabelaAlertas .linha-alerta');
+    const contador = document.getElementById('contadorBuscaAlertas');
+
+    campoBusca.addEventListener('input', function () {
+        const termo = campoBusca.value.trim().toLowerCase();
+        let visiveis = 0;
+
+        linhas.forEach(function (linha) {
+            const bate = linha.textContent.toLowerCase().includes(termo);
+            linha.style.display = bate ? '' : 'none';
+            if (bate) visiveis++;
+        });
+
+        contador.textContent = termo ? visiveis + ' de ' + linhas.length + ' alertas' : '';
     });
 })();
 </script>

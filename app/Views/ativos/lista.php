@@ -81,6 +81,7 @@ $statusCores = [
                             <th>Nome</th>
                             <th>Tipo</th>
                             <th>Status</th>
+                            <th>Condição</th>
                             <th>Localização</th>
                             <th class="text-end">Ações</th>
                         </tr>
@@ -93,6 +94,13 @@ $statusCores = [
                                 <td><?= htmlspecialchars($a['nome']) ?></td>
                                 <td><i class="bi <?= AtivoService::TIPOS[$a['tipo']]['icone'] ?>"></i> <?= htmlspecialchars(AtivoService::TIPOS[$a['tipo']]['label']) ?></td>
                                 <td><?= Badge::make(htmlspecialchars(AtivoService::STATUS[$a['status']] ?? $a['status']), $statusCores[$a['status']] ?? 'secondary') ?></td>
+                                <td>
+                                    <?php if ($a['origem'] === 'agente'): ?>
+                                        <?= Badge::make(AtivoService::estaLigada($a) ? 'Ligado' : 'Desligado', AtivoService::estaLigada($a) ? 'success' : 'secondary') ?>
+                                    <?php else: ?>
+                                        <span class="text-muted small">—</span>
+                                    <?php endif; ?>
+                                </td>
                                 <td class="small text-muted"><?= htmlspecialchars($a['localizacao_nome'] ?? '—') ?></td>
                                 <td class="text-end">
                                     <div class="btn-group" role="group">
