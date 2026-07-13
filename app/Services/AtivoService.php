@@ -439,6 +439,34 @@ class AtivoService
         return $chave;
     }
 
+    public function vincularDispositivoMesh(int $ativoId, ?string $meshDeviceId): bool
+    {
+        $meshDeviceId = $meshDeviceId === '' ? null : $meshDeviceId;
+
+        if ($meshDeviceId !== null) {
+            // Um dispositivo só pode estar vinculado a um ativo por vez.
+            $this->repository->limparMeshDeOutros($meshDeviceId, $ativoId);
+        }
+
+        $ok = $this->repository->vincularMesh($ativoId, $meshDeviceId);
+
+        if ($ok) {
+            AuditService::registrar(
+                'Ativos',
+                'Acesso Remoto',
+                $meshDeviceId ? "Ativo #{$ativoId} vinculado ao dispositivo MeshCentral {$meshDeviceId}." : "Ativo #{$ativoId} desvinculado do MeshCentral."
+            );
+        }
+
+        return $ok;
+    }
+
+    public function desvincularDispositivoMesh(string $meshDeviceId): void
+    {
+        $this->repository->limparMesh($meshDeviceId);
+        AuditService::registrar('Ativos', 'Acesso Remoto', "Dispositivo MeshCentral {$meshDeviceId} desvinculado.");
+    }
+
     /**
      * Recebe o payload do agente Windows e faz upsert em `ativos`,
      * casando por `machine_guid` (não por hostname/nome -- esse pode

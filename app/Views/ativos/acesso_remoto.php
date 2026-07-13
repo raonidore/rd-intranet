@@ -55,6 +55,100 @@ use App\Components\Badge;
     </div>
 </div>
 
+<?php if ($instalado && $rodando): ?>
+<div class="card border-0 shadow-sm mt-3" style="max-width:720px">
+    <div class="card-body">
+        <strong>Integração (usada pra vincular ativos aos dispositivos e futuramente abrir a tela remota embutida)</strong>
+        <p class="text-muted small mt-2 mb-3">
+            Gere um <strong>Login Token</strong> no console do MeshCentral: entre com a conta admin,
+            clique no seu usuário (canto superior direito) &gt; <em>Minha conta</em> &gt; <em>Tokens de login</em> &gt;
+            <em>Novo</em>. Cole aqui o "Nome do usuário" e a "Senha" gerados (a senha só aparece uma vez lá).
+        </p>
+        <form method="post" action="<?= url('/ativos/acesso-remoto/credenciais') ?>" class="row g-2 align-items-end">
+            <div class="col-sm-5">
+                <label class="form-label small mb-1">Nome do usuário (token)</label>
+                <input type="text" name="usuario" class="form-control form-control-sm" value="<?= htmlspecialchars($usuarioTokenAtual) ?>" placeholder="~t:xxxxxxxxxxxxxxxx" required>
+            </div>
+            <div class="col-sm-5">
+                <label class="form-label small mb-1">Senha (token)</label>
+                <input type="password" name="senha" class="form-control form-control-sm" placeholder="<?= $credenciaisConfiguradas ? '••••••••  (deixe preenchido pra manter)' : '' ?>" <?= $credenciaisConfiguradas ? '' : 'required' ?>>
+            </div>
+            <div class="col-sm-2">
+                <button type="submit" class="btn btn-sm btn-primary w-100">Salvar</button>
+            </div>
+        </form>
+        <?php if ($credenciaisConfiguradas): ?>
+            <div class="mt-2"><?= Badge::make('Credenciais configuradas', 'success') ?></div>
+        <?php endif; ?>
+    </div>
+</div>
+<?php endif; ?>
+
+<?php if ($instalado && $rodando && $credenciaisConfiguradas): ?>
+<div class="card border-0 shadow-sm mt-3" style="max-width:960px">
+    <div class="card-body">
+        <strong>Dispositivos no MeshCentral</strong>
+        <p class="text-muted small mt-2">
+            Aparecem aqui depois que o MeshAgent for instalado numa máquina Windows (pelo instalador do
+            próprio console do MeshCentral, link acima). Vincule cada um ao ativo correspondente pra
+            habilitar o acesso remoto embutido na ficha do ativo.
+        </p>
+        <?php if (empty($dispositivos)): ?>
+            <p class="text-muted small mb-0">Nenhum dispositivo reportado ainda pelo MeshCentral.</p>
+        <?php else: ?>
+            <?php
+            $ativosPorMesh = [];
+            foreach ($ativos as $a) {
+                if (!empty($a['mesh_device_id'])) {
+                    $ativosPorMesh[$a['mesh_device_id']] = $a;
+                }
+            }
+            ?>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                    <thead>
+                        <tr>
+                            <th>Dispositivo</th>
+                            <th>Grupo</th>
+                            <th>Status</th>
+                            <th>Vincular ao ativo</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($dispositivos as $d): ?>
+                            <?php
+                            $deviceId = $d['_id'] ?? '';
+                            $vinculado = $ativosPorMesh[$deviceId] ?? null;
+                            $conectado = !empty($d['conn']);
+                            ?>
+                            <tr>
+                                <td><?= htmlspecialchars($d['name'] ?? $deviceId) ?></td>
+                                <td class="text-muted small"><?= htmlspecialchars($d['groupname'] ?? '-') ?></td>
+                                <td><?= $conectado ? Badge::make('Conectado', 'success') : Badge::make('Offline', 'secondary') ?></td>
+                                <td>
+                                    <form method="post" action="<?= url('/ativos/acesso-remoto/vincular') ?>" class="d-flex gap-2">
+                                        <input type="hidden" name="mesh_device_id" value="<?= htmlspecialchars($deviceId) ?>">
+                                        <select name="ativo_id" class="form-select form-select-sm">
+                                            <option value="">-- Nenhum --</option>
+                                            <?php foreach ($ativos as $a): ?>
+                                                <option value="<?= (int)$a['id'] ?>" <?= ($vinculado && (int)$vinculado['id'] === (int)$a['id']) ? 'selected' : '' ?>>
+                                                    <?= htmlspecialchars($a['codigo_patrimonio'] . ' - ' . $a['nome']) ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                        <button type="submit" class="btn btn-sm btn-outline-primary">Salvar</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
+<?php endif; ?>
+
 <script>
 (function () {
     const botao = document.getElementById('botaoInstalar');

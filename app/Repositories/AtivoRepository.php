@@ -153,6 +153,25 @@ class AtivoRepository
         return $stmt->execute(['id' => $id, 'detalhes' => $detalhesJson]);
     }
 
+    public function vincularMesh(int $id, ?string $meshDeviceId): bool
+    {
+        $stmt = $this->pdo->prepare("UPDATE ativos SET mesh_device_id = :mesh_device_id WHERE id = :id");
+
+        return $stmt->execute(['id' => $id, 'mesh_device_id' => $meshDeviceId]);
+    }
+
+    public function limparMeshDeOutros(string $meshDeviceId, int $exceto): void
+    {
+        $stmt = $this->pdo->prepare("UPDATE ativos SET mesh_device_id = NULL WHERE mesh_device_id = :mesh_device_id AND id <> :id");
+        $stmt->execute(['mesh_device_id' => $meshDeviceId, 'id' => $exceto]);
+    }
+
+    public function limparMesh(string $meshDeviceId): void
+    {
+        $stmt = $this->pdo->prepare("UPDATE ativos SET mesh_device_id = NULL WHERE mesh_device_id = :mesh_device_id");
+        $stmt->execute(['mesh_device_id' => $meshDeviceId]);
+    }
+
     public function listarComSnmpHabilitado(): array
     {
         $stmt = $this->pdo->query("
