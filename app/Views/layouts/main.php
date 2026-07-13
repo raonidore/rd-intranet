@@ -189,7 +189,8 @@ $abrirAtivos = $rdSecaoAtiva(['/ativos']);
     $temAtivos = PermissionService::temAcesso('ativos_dashboard')
         || PermissionService::temAcesso('ativos_lista')
         || PermissionService::temAcesso('ativos_novo')
-        || PermissionService::temAcesso('ativos_cadastros');
+        || PermissionService::temAcesso('ativos_cadastros')
+        || PermissionService::temAcesso('ativos_acesso_remoto');
     ?>
     <?php if ($temAtivos): ?>
     <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuAtivos"
@@ -219,6 +220,12 @@ $abrirAtivos = $rdSecaoAtiva(['/ativos']);
         <?php if (PermissionService::temAcesso('ativos_cadastros')): ?>
         <a href="<?= url('/ativos/cadastros') ?>" class="<?= str_starts_with($uriAtual, '/ativos/cadastros') ? 'active' : '' ?>">
             <i class="bi bi-tags me-2"></i> Cadastros
+        </a>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('ativos_acesso_remoto')): ?>
+        <a href="<?= url('/ativos/acesso-remoto') ?>" class="<?= str_starts_with($uriAtual, '/ativos/acesso-remoto') ? 'active' : '' ?>">
+            <i class="bi bi-display me-2"></i> Acesso Remoto
         </a>
         <?php endif; ?>
     </div>

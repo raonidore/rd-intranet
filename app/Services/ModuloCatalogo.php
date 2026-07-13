@@ -49,6 +49,7 @@ class ModuloCatalogo
         'ativos_lista' => ['label' => 'Ativos - Lista', 'grupo' => 'Ativos'],
         'ativos_novo' => ['label' => 'Ativos - Novo/Editar', 'grupo' => 'Ativos'],
         'ativos_cadastros' => ['label' => 'Ativos - Cadastros (Setor/Localização)', 'grupo' => 'Ativos'],
+        'ativos_acesso_remoto' => ['label' => 'Ativos - Acesso Remoto', 'grupo' => 'Ativos'],
     ];
 
     public static function chaves(): array
