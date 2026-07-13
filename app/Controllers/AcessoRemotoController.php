@@ -6,6 +6,7 @@ use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
 use App\Services\AcessoRemotoService;
 use App\Services\AtivoService;
+use App\Services\AuditService;
 
 class AcessoRemotoController extends Controller
 {
@@ -73,5 +74,31 @@ class AcessoRemotoController extends Controller
 
         header('Location: ' . url('/ativos/acesso-remoto'));
         exit;
+    }
+
+    public function compartilhar(): void
+    {
+        AuthMiddleware::checkModulo('ativos_acesso_remoto');
+        header('Content-Type: application/json');
+
+        $ativoId = (int)($_POST['ativo_id'] ?? 0);
+        $ativo = $this->ativoService->buscar($ativoId);
+
+        if (!$ativo || empty($ativo['mesh_device_id'])) {
+            echo json_encode(['success' => false, 'message' => 'Este ativo não está vinculado a um dispositivo do MeshCentral.']);
+            return;
+        }
+
+        $convidado = $_SESSION['usuario']['nome'] ?? 'RD Intranet';
+        $url = $this->service->gerarLinkCompartilhamento($ativo['mesh_device_id'], $convidado);
+
+        if ($url === null) {
+            echo json_encode(['success' => false, 'message' => 'Falha ao gerar o link de acesso remoto. O dispositivo pode estar offline.']);
+            return;
+        }
+
+        AuditService::registrar('Ativos', 'Acesso Remoto', "Sessão de tela remota aberta para o ativo #{$ativoId}.");
+
+        echo json_encode(['success' => true, 'url' => $url]);
     }
 }

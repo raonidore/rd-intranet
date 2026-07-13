@@ -105,6 +105,43 @@ class AcessoRemotoService
         return $resultado['data'];
     }
 
+    /**
+     * Gera um link de compartilhamento de tela de uso único (sem exigir
+     * login separado no MeshCentral -- é a peça que permite embutir a tela
+     * remota num iframe na ficha do ativo). Diferente dos outros comandos
+     * do meshctrl, "DeviceSharing --add" NÃO respeita --json (bug/limitação
+     * da própria ferramenta -- confirmado testando ao vivo), sempre devolve
+     * texto simples "ID: ...\nURL: ...".
+     */
+    public function gerarLinkCompartilhamento(string $meshDeviceId, string $convidado, int $duracaoMinutos = 60): ?string
+    {
+        if (!$this->credenciaisConfiguradas()) {
+            return null;
+        }
+
+        $cmd = 'node ' . escapeshellarg(self::MESHCTRL_PATH);
+        $cmd .= ' DeviceSharing';
+        $cmd .= ' --id ' . escapeshellarg($meshDeviceId);
+        $cmd .= ' --add ' . escapeshellarg($convidado);
+        $cmd .= ' --type desktop';
+        $cmd .= ' --consent notify';
+        $cmd .= ' --duration ' . escapeshellarg((string)$duracaoMinutos);
+        $cmd .= ' --loginuser ' . escapeshellarg($this->usuarioTokenAtual());
+        $cmd .= ' --loginpass ' . escapeshellarg(ConfigService::get('meshcentral_login_senha', '') ?: '');
+        $cmd .= ' --url ' . escapeshellarg('wss://127.0.0.1:' . $this->porta());
+
+        $resultado = $this->linux->executar($cmd);
+
+        if (!preg_match('/^URL:\s*(\S+)/m', $resultado['output'], $m)) {
+            return null;
+        }
+
+        // O MeshCentral monta a URL com o hostname do certificado (fixo,
+        // "meshcentral"), que não resolve no navegador de quem acessa --
+        // troca pelo mesmo host:porta usados pra abrir o console.
+        return preg_replace('~^https?://[^/]+~', rtrim($this->urlConsole(), '/'), $m[1]);
+    }
+
     public function instalado(): bool
     {
         $resultado = $this->linux->executar('systemctl list-unit-files meshcentral.service --no-legend 2>/dev/null');

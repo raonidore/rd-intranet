@@ -84,6 +84,11 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
         <?php endif; ?>
     </div>
     <div class="d-flex gap-2">
+        <?php if (!empty($ativo['mesh_device_id'])): ?>
+            <button type="button" class="btn btn-outline-primary" id="botaoTelaRemota" data-id="<?= (int)$ativo['id'] ?>">
+                <i class="bi bi-display"></i> Tela remota
+            </button>
+        <?php endif; ?>
         <?php if (!empty($ativo['snmp_habilitado']) && !empty($ativo['ip'])): ?>
             <button type="button" class="btn btn-outline-secondary" id="botaoColetarSnmp" data-id="<?= (int)$ativo['id'] ?>">
                 <i class="bi bi-arrow-repeat"></i> Coletar via SNMP
@@ -522,6 +527,23 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     </div>
 </div>
 
+<!-- Modal de Tela Remota -->
+<div class="modal fade" id="modalTelaRemota" tabindex="-1">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title"><i class="bi bi-display"></i> Tela remota -- <?= htmlspecialchars($ativo['nome']) ?></h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" id="botaoFecharTelaRemota"></button>
+            </div>
+            <div class="modal-body p-0 d-flex align-items-center justify-content-center bg-dark" id="corpoTelaRemota">
+                <div class="text-white-50" id="statusTelaRemota">
+                    <i class="bi bi-hourglass-split"></i> Abrindo sessão remota via MeshCentral...
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 (function () {
     const botao = document.getElementById('botaoColetarSnmp');
@@ -545,6 +567,48 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             botao.disabled = false;
             botao.innerHTML = '<i class="bi bi-arrow-repeat"></i> Coletar via SNMP';
         }
+    });
+})();
+
+(function () {
+    const botao = document.getElementById('botaoTelaRemota');
+    if (!botao) return;
+
+    const modalEl = document.getElementById('modalTelaRemota');
+    const modal = new bootstrap.Modal(modalEl);
+    const corpo = document.getElementById('corpoTelaRemota');
+    const statusInicial = corpo.innerHTML;
+
+    botao.addEventListener('click', async function () {
+        corpo.innerHTML = statusInicial;
+        modal.show();
+
+        const dados = new URLSearchParams();
+        dados.set('ativo_id', botao.dataset.id);
+
+        try {
+            const res = await fetch(<?= json_encode(url('/ativos/acesso-remoto/compartilhar')) ?>, { method: 'POST', body: dados });
+            const resultado = await res.json();
+
+            if (!resultado.success) {
+                corpo.innerHTML = '<div class="text-white-50 text-center p-4">' + (resultado.message || 'Falha ao abrir a tela remota.') + '</div>';
+                return;
+            }
+
+            const iframe = document.createElement('iframe');
+            iframe.src = resultado.url;
+            iframe.style.width = '100%';
+            iframe.style.height = '100%';
+            iframe.style.border = '0';
+            corpo.innerHTML = '';
+            corpo.appendChild(iframe);
+        } catch (e) {
+            corpo.innerHTML = '<div class="text-white-50 text-center p-4">Erro ao comunicar com o servidor.</div>';
+        }
+    });
+
+    modalEl.addEventListener('hidden.bs.modal', function () {
+        corpo.innerHTML = statusInicial;
     });
 })();
 
