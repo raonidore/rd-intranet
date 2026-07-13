@@ -53,6 +53,21 @@ class AtivoCatalogoRepository
         return (int)$this->pdo->lastInsertId();
     }
 
+    public function existeOutro(string $tipo, string $nome, int $idExcluido): bool
+    {
+        $stmt = $this->pdo->prepare("SELECT id FROM ativos_catalogos WHERE tipo = ? AND nome = ? AND id <> ? LIMIT 1");
+        $stmt->execute([$tipo, $nome, $idExcluido]);
+
+        return (bool)$stmt->fetchColumn();
+    }
+
+    public function atualizar(int $id, string $nome): bool
+    {
+        $stmt = $this->pdo->prepare("UPDATE ativos_catalogos SET nome = ? WHERE id = ?");
+
+        return $stmt->execute([$nome, $id]);
+    }
+
     public function excluir(int $id): bool
     {
         $stmt = $this->pdo->prepare("DELETE FROM ativos_catalogos WHERE id = ?");

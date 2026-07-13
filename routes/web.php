@@ -403,6 +403,7 @@ $router->get('/api/ativos/agente/download', [AtivoAgenteController::class, 'down
 
 $router->get('/ativos/cadastros', [AtivoController::class, 'cadastros']);
 $router->post('/ativos/cadastros/novo', [AtivoController::class, 'cadastroNovo']);
+$router->post('/ativos/cadastros/editar', [AtivoController::class, 'cadastroEditar']);
 $router->post('/ativos/cadastros/excluir', [AtivoController::class, 'cadastroExcluir']);
 
 $router->get('/ativos/acesso-remoto', [AcessoRemotoController::class, 'index']);

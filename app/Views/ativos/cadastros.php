@@ -30,12 +30,23 @@ use App\Components\Alert;
                 <?php else: ?>
                     <ul class="list-group list-group-flush">
                         <?php foreach ($setores as $s): ?>
-                            <li class="list-group-item d-flex justify-content-between align-items-center px-0">
-                                <?= htmlspecialchars($s['nome']) ?>
-                                <form method="post" action="<?= url('/ativos/cadastros/excluir') ?>"
-                                      onsubmit="return confirm('Excluir o setor &quot;<?= htmlspecialchars(addslashes($s['nome'])) ?>&quot;?');">
+                            <li class="list-group-item px-0">
+                                <div class="d-flex justify-content-between align-items-center linha-view">
+                                    <span><?= htmlspecialchars($s['nome']) ?></span>
+                                    <div class="d-flex gap-1">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary botao-editar-cadastro"><i class="bi bi-pencil"></i></button>
+                                        <form method="post" action="<?= url('/ativos/cadastros/excluir') ?>"
+                                              onsubmit="return confirm('Excluir o setor &quot;<?= htmlspecialchars(addslashes($s['nome'])) ?>&quot;?');">
+                                            <input type="hidden" name="id" value="<?= (int)$s['id'] ?>">
+                                            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                        </form>
+                                    </div>
+                                </div>
+                                <form method="post" action="<?= url('/ativos/cadastros/editar') ?>" class="linha-edit d-none gap-2 mt-1">
                                     <input type="hidden" name="id" value="<?= (int)$s['id'] ?>">
-                                    <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                    <input type="text" name="nome" class="form-control form-control-sm" value="<?= htmlspecialchars($s['nome']) ?>" required>
+                                    <button class="btn btn-sm btn-primary text-nowrap">Salvar</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary botao-cancelar-edicao">Cancelar</button>
                                 </form>
                             </li>
                         <?php endforeach; ?>
@@ -60,12 +71,23 @@ use App\Components\Alert;
                 <?php else: ?>
                     <ul class="list-group list-group-flush">
                         <?php foreach ($localizacoes as $l): ?>
-                            <li class="list-group-item d-flex justify-content-between align-items-center px-0">
-                                <?= htmlspecialchars($l['nome']) ?>
-                                <form method="post" action="<?= url('/ativos/cadastros/excluir') ?>"
-                                      onsubmit="return confirm('Excluir a localização &quot;<?= htmlspecialchars(addslashes($l['nome'])) ?>&quot;?');">
+                            <li class="list-group-item px-0">
+                                <div class="d-flex justify-content-between align-items-center linha-view">
+                                    <span><?= htmlspecialchars($l['nome']) ?></span>
+                                    <div class="d-flex gap-1">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary botao-editar-cadastro"><i class="bi bi-pencil"></i></button>
+                                        <form method="post" action="<?= url('/ativos/cadastros/excluir') ?>"
+                                              onsubmit="return confirm('Excluir a localização &quot;<?= htmlspecialchars(addslashes($l['nome'])) ?>&quot;?');">
+                                            <input type="hidden" name="id" value="<?= (int)$l['id'] ?>">
+                                            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                        </form>
+                                    </div>
+                                </div>
+                                <form method="post" action="<?= url('/ativos/cadastros/editar') ?>" class="linha-edit d-none gap-2 mt-1">
                                     <input type="hidden" name="id" value="<?= (int)$l['id'] ?>">
-                                    <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                    <input type="text" name="nome" class="form-control form-control-sm" value="<?= htmlspecialchars($l['nome']) ?>" required>
+                                    <button class="btn btn-sm btn-primary text-nowrap">Salvar</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary botao-cancelar-edicao">Cancelar</button>
                                 </form>
                             </li>
                         <?php endforeach; ?>
@@ -75,6 +97,31 @@ use App\Components\Alert;
         </div>
     </div>
 </div>
+
+<script>
+(function () {
+    document.querySelectorAll('.botao-editar-cadastro').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+            const li = botao.closest('li');
+            li.querySelector('.linha-view').classList.add('d-none');
+            const edicao = li.querySelector('.linha-edit');
+            edicao.classList.remove('d-none');
+            edicao.classList.add('d-flex');
+            edicao.querySelector('input[name="nome"]').focus();
+        });
+    });
+
+    document.querySelectorAll('.botao-cancelar-edicao').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+            const li = botao.closest('li');
+            const edicao = li.querySelector('.linha-edit');
+            edicao.classList.add('d-none');
+            edicao.classList.remove('d-flex');
+            li.querySelector('.linha-view').classList.remove('d-none');
+        });
+    });
+})();
+</script>
 
 <?php
 $conteudo = ob_get_clean();

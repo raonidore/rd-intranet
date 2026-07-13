@@ -55,6 +55,38 @@ class AtivoCatalogoService
         return true;
     }
 
+    public function atualizar(int $id, string $nome): bool
+    {
+        $item = $this->repository->buscarPorId($id);
+        if (!$item) {
+            NotificationService::error('Registro não encontrado.');
+            return false;
+        }
+
+        $nome = trim($nome);
+        if ($nome === '') {
+            NotificationService::error('Informe um nome.');
+            return false;
+        }
+
+        if ($nome === $item['nome']) {
+            return true;
+        }
+
+        if ($this->repository->existeOutro($item['tipo'], $nome, $id)) {
+            NotificationService::error((self::TIPOS[$item['tipo']] ?? $item['tipo']) . ' "' . $nome . '" já existe.');
+            return false;
+        }
+
+        $this->repository->atualizar($id, $nome);
+
+        AuditService::registrar('Ativos', 'Cadastro', (self::TIPOS[$item['tipo']] ?? $item['tipo']) . ' "' . $item['nome'] . '" renomeado para "' . $nome . '".');
+
+        NotificationService::success('Atualizado com sucesso.');
+
+        return true;
+    }
+
     public function excluir(int $id): bool
     {
         $item = $this->repository->buscarPorId($id);

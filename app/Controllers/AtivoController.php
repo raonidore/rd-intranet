@@ -312,6 +312,19 @@ class AtivoController extends Controller
         exit;
     }
 
+    public function cadastroEditar(): void
+    {
+        AuthMiddleware::checkModulo('ativos_cadastros');
+
+        $this->catalogoService->atualizar(
+            (int)($_POST['id'] ?? 0),
+            $_POST['nome'] ?? ''
+        );
+
+        header('Location: ' . url('/ativos/cadastros'));
+        exit;
+    }
+
     public function cadastroExcluir(): void
     {
         AuthMiddleware::checkModulo('ativos_cadastros');
