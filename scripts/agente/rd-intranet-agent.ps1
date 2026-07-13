@@ -9,15 +9,18 @@
       (MAC/IP por adaptador), volumes logicos (uso por unidade + modelo/
       fabricante/serie do disco fisico associado, quando disponivel),
       portas fisicas (USB conectado + seriais), programas instalados
-      (com data de instalacao, quando disponivel) e alertas recentes do
-      Visualizador de Eventos, e envia tudo por HTTPS para o RD Intranet
-      (modulo Ativos de TI). Tambem busca e
-      executa comandos remotos pendentes (desligar/reiniciar, enviados
-      pela tela do ativo no RD Intranet) -- sempre com um aviso do
-      Windows de 5 minutos antes de executar, que da tempo do usuario
-      salvar o trabalho ou cancelar localmente (shutdown /a). Nao
-      instala nada alem de si mesmo -- so usa modulos nativos do
-      Windows (CIM/WMI, registro, Get-WinEvent, Task Scheduler).
+      (com data de instalacao, quando disponivel), atualizacoes do
+      Windows instaladas (KBs) e alertas recentes do Visualizador de
+      Eventos, e envia tudo por HTTPS para o RD Intranet (modulo Ativos
+      de TI). Tambem busca e executa comandos remotos pendentes
+      (desligar/reiniciar, desinstalar atualizacao, desinstalar
+      programa -- enviados pela ficha do ativo no RD Intranet).
+      Desligar/reiniciar sempre com um aviso do Windows de 5 minutos
+      antes de executar (shutdown /a cancela localmente); desinstalacao
+      de programa e melhor esforco pra instaladores nao-MSI (pode abrir
+      uma tela no computador remoto). Nao instala nada alem de si mesmo
+      -- so usa modulos nativos do Windows (CIM/WMI, registro,
+      Get-WinEvent, Task Scheduler).
 
     Como instalar:
       1. Baixe este arquivo pela tela Ativos > Dashboard do RD Intranet
@@ -29,9 +32,10 @@
 
       Isso e tudo. Na primeira execucao, se estiver rodando como
       Administrador, o proprio script se copia pra
-      C:\ProgramData\RDIntranetAgent\ e se registra como Tarefa
-      Agendada rodando a cada 15 minutos (usuario SYSTEM). As execucoes
-      seguintes (via agendamento) so fazem a coleta, sem reinstalar nada.
+      C:\ProgramData\RDIntranetAgent\ e se registra como Tarefa Agendada
+      rodando no intervalo configurado em Ativos > Dashboard no RD
+      Intranet (usuario SYSTEM). As execucoes seguintes (via
+      agendamento) so fazem a coleta, sem reinstalar nada.
 
       Se a chave de API for regenerada no servidor, baixe o script de
       novo e rode de novo do mesmo jeito -- ele substitui a instalacao
@@ -41,8 +45,9 @@
       confira ali se o ativo nao aparecer no RD Intranet.
 #>
 
-$ServerUrl = '__SERVER_URL__'
-$ApiKey    = '__API_KEY__'
+$ServerUrl        = '__SERVER_URL__'
+$ApiKey           = '__API_KEY__'
+$IntervaloMinutos = [int]'__INTERVALO_MINUTOS__'
 
 $NomeTarefa    = 'RD Intranet Agente'
 $PastaAgente   = 'C:\ProgramData\RDIntranetAgent'
@@ -89,7 +94,7 @@ if (-not $jaInstalado) {
             -Argument "-ExecutionPolicy Bypass -NoProfile -WindowStyle Hidden -File `"$ScriptDestino`""
 
         $gatilho = New-ScheduledTaskTrigger -Once (Get-Date) `
-            -RepetitionInterval (New-TimeSpan -Minutes 15) `
+            -RepetitionInterval (New-TimeSpan -Minutes $IntervaloMinutos) `
             -RepetitionDuration ([TimeSpan]::MaxValue)
 
         $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
@@ -100,7 +105,7 @@ if (-not $jaInstalado) {
             -Principal $principal -Settings $configuracoes -Force | Out-Null
 
         Write-Host "Instalado com sucesso em $ScriptDestino" -ForegroundColor Green
-        Write-Host "Tarefa agendada '$NomeTarefa' criada -- roda a cada 15 minutos." -ForegroundColor Green
+        Write-Host "Tarefa agendada '$NomeTarefa' criada -- roda a cada $IntervaloMinutos minutos." -ForegroundColor Green
         Write-Host "Fazendo a primeira coleta agora..." -ForegroundColor Cyan
 
         Escrever-Log "Instalação concluída (script copiado + tarefa agendada registrada)."
@@ -212,6 +217,7 @@ try {
         portas         = @()
         memoria_modulos = @()
         programas      = @()
+        atualizacoes_windows = @()
         alertas        = @()
     }
 
@@ -298,10 +304,30 @@ try {
                 } else {
                     $null
                 }
-            }}
+            }}, @{n='uninstall_string'; e={ $_.UninstallString }}
     }
 
     $payload.programas = @($programas | Sort-Object nome -Unique)
+
+    # --------------------------------------------------------------
+    # Atualizacoes do Windows instaladas (hotfixes/KBs) -- o mesmo local
+    # que o comando "wmic qfe list" ou o cmdlet Get-HotFix usam por
+    # baixo. InstalledOn nem sempre vem preenchido pelo Windows.
+    $payload.atualizacoes_windows = @(Get-CimInstance Win32_QuickFixEngineering -ErrorAction SilentlyContinue | ForEach-Object {
+        # InstalledOn vem ora como [datetime], ora como texto (inconsistencia
+        # conhecida dessa classe WMI, varia por versao/idioma do Windows) --
+        # o cast [datetime] aceita os dois casos.
+        $instaladoEm = $null
+        if ($_.InstalledOn) {
+            try { $instaladoEm = ([datetime]$_.InstalledOn).ToString('yyyy-MM-dd') } catch { $instaladoEm = $null }
+        }
+
+        @{
+            kb            = $_.HotFixID
+            descricao     = $_.Description
+            instalado_em  = $instaladoEm
+        }
+    })
 
     # --------------------------------------------------------------
     # Alertas -- so os eventos NOVOS desde o ultimo checkin (guarda um
@@ -352,7 +378,7 @@ try {
         -ContentType 'application/json; charset=utf-8' `
         -Body ([System.Text.Encoding]::UTF8.GetBytes($json))
 
-    Escrever-Log "OK: checkin enviado (guid=$machineGuid, tipo=$tipo, $($payload.programas.Count) programas, $($payload.alertas.Count) alertas, $($payload.redes.Count) redes, $($payload.volumes.Count) volumes, $($payload.portas.Count) portas, $($payload.memoria_modulos.Count) modulos de memoria). Resposta: $($resposta.message)"
+    Escrever-Log "OK: checkin enviado (guid=$machineGuid, tipo=$tipo, $($payload.programas.Count) programas, $($payload.alertas.Count) alertas, $($payload.redes.Count) redes, $($payload.volumes.Count) volumes, $($payload.portas.Count) portas, $($payload.memoria_modulos.Count) modulos de memoria, $($payload.atualizacoes_windows.Count) atualizacoes do Windows). Resposta: $($resposta.message)"
 
     if (-not $jaInstalado) {
         Write-Host "Primeira coleta enviada com sucesso. O ativo já deve aparecer no RD Intranet." -ForegroundColor Green
@@ -366,15 +392,43 @@ try {
     $tempoAvisoSegundos = 300
 
     foreach ($comando in $resposta.comandos) {
-        Escrever-Log "Comando remoto recebido: $($comando.comando) (id=$($comando.id))"
+        Escrever-Log "Comando remoto recebido: $($comando.comando) (id=$($comando.id), alvo=$($comando.alvo))"
 
         try {
-            if ($comando.comando -eq 'desligar') {
-                shutdown.exe /s /t $tempoAvisoSegundos /c "RD Intranet: este computador sera desligado remotamente pelo suporte de TI em 5 minutos. Salve seu trabalho."
-                Escrever-Log "Desligamento agendado para daqui a $tempoAvisoSegundos segundos."
-            } elseif ($comando.comando -eq 'reiniciar') {
-                shutdown.exe /r /t $tempoAvisoSegundos /c "RD Intranet: este computador sera reiniciado remotamente pelo suporte de TI em 5 minutos. Salve seu trabalho."
-                Escrever-Log "Reinicio agendado para daqui a $tempoAvisoSegundos segundos."
+            switch ($comando.comando) {
+                'desligar' {
+                    shutdown.exe /s /t $tempoAvisoSegundos /c "RD Intranet: este computador sera desligado remotamente pelo suporte de TI em 5 minutos. Salve seu trabalho."
+                    Escrever-Log "Desligamento agendado para daqui a $tempoAvisoSegundos segundos."
+                }
+                'reiniciar' {
+                    shutdown.exe /r /t $tempoAvisoSegundos /c "RD Intranet: este computador sera reiniciado remotamente pelo suporte de TI em 5 minutos. Salve seu trabalho."
+                    Escrever-Log "Reinicio agendado para daqui a $tempoAvisoSegundos segundos."
+                }
+                'desinstalar_atualizacao' {
+                    # wusa.exe quer so o numero, sem o prefixo "KB". Nem toda
+                    # atualizacao pode ser removida (algumas ja foram
+                    # substituidas por atualizacoes cumulativas mais novas --
+                    # limitacao do proprio Windows, o comando so falha nesse caso).
+                    $kb = $comando.alvo -replace '^KB', ''
+                    Start-Process -FilePath 'wusa.exe' -ArgumentList "/uninstall /kb:$kb /quiet /norestart" -Wait -ErrorAction Stop
+                    Escrever-Log "Desinstalacao da atualizacao KB$kb solicitada ao Windows."
+                }
+                'desinstalar_programa' {
+                    # UninstallString bruta do registro. Se for instalador MSI,
+                    # trocamos /I (instalar/reparar) por /X (desinstalar) e
+                    # forcamos modo silencioso. Instaladores nao-MSI rodam como
+                    # estao -- podem abrir uma tela no computador remoto, nao ha
+                    # como garantir silencio total nesse caso.
+                    $alvo = $comando.alvo
+                    if ($alvo -match '\{[0-9A-Fa-f-]{36}\}') {
+                        $guid = $matches[0]
+                        Start-Process -FilePath 'msiexec.exe' -ArgumentList "/X$guid /quiet /norestart" -Wait -ErrorAction Stop
+                        Escrever-Log "Desinstalacao via MSI ($guid) executada."
+                    } else {
+                        Start-Process -FilePath 'cmd.exe' -ArgumentList "/c `"$alvo`"" -Wait -ErrorAction Stop
+                        Escrever-Log "Desinstalacao via comando nao-MSI executada (pode ter aberto uma tela no computador remoto)."
+                    }
+                }
             }
         } catch {
             Escrever-Log "ERRO ao executar comando $($comando.comando): $($_.Exception.Message)"
@@ -385,6 +439,6 @@ try {
 
     if (-not $jaInstalado) {
         Write-Host "A instalação foi concluída, mas a primeira coleta falhou: $($_.Exception.Message)" -ForegroundColor Yellow
-        Write-Host "A tarefa agendada vai tentar de novo em até 15 minutos. Confira o log em $ArquivoLog se persistir." -ForegroundColor Yellow
+        Write-Host "A tarefa agendada vai tentar de novo em até $IntervaloMinutos minutos. Confira o log em $ArquivoLog se persistir." -ForegroundColor Yellow
     }
 }
