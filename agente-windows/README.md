@@ -43,6 +43,27 @@ já vem embutido no `.exe` (propriedade `ApplicationIcon` do `.csproj`) --
 aparece no Explorer, na barra de tarefas e no ícone da bandeja, sem
 precisar de nenhum arquivo extra junto do `.exe`.
 
+## Atualizando os agentes já instalados (sem reinstalar máquina por máquina)
+
+O agente se autoatualiza. O fluxo:
+
+1. Publique um `.exe` novo (seção acima) e **suba o número de versão em
+   `<Version>` no `RdIntranetAgente.csproj`** antes de compilar (ex: de
+   `1.0.0` pra `1.0.1`) -- é essa versão que o agente compara com a do
+   servidor.
+2. No RD Intranet, em **Ativos > Dashboard**, no card "Atualizar agente
+   (.exe)", envie o `.exe` publicado e informe a mesma versão (formato
+   `X.Y.Z`).
+3. Cada agente já instalado confere essa versão a cada 12h (e também ao
+   abrir) chamando `GET /api/ativos/agente/versao` com a chave de API.
+   Se for mais nova que a própria, baixa o `.exe` novo, entrega a troca
+   do arquivo pra um script auxiliar (um processo Windows não consegue
+   sobrescrever o próprio `.exe` em execução) e reabre sozinho --
+   nenhuma ação manual na máquina do usuário.
+
+Se nenhum `.exe` for enviado ainda, essa checagem simplesmente não
+encontra nada e não faz nada (sem erro visível pro usuário).
+
 ## Distribuição em massa (opcional)
 
 Pra não precisar configurar servidor/chave manualmente em cada máquina,
@@ -86,6 +107,9 @@ em `%LocalAppData%\RDIntranetAgent\config.json`, por usuário).
   (`msiexec /X{guid} /quiet`), instaladores não-MSI rodam como estão
   e podem abrir uma tela no computador remoto -- não há garantia de
   silêncio total nesse caso.
+- Confere a cada 12h se há uma versão nova do próprio `.exe` publicada
+  no RD Intranet e se autoatualiza sozinho quando encontra (ver seção
+  acima).
 - Mostra no tooltip do ícone da bandeja: horário do último checkin e
   volume de dados enviado/recebido (última coleta + total acumulado).
 - Menu de contexto (botão direito no ícone): "Coletar agora",

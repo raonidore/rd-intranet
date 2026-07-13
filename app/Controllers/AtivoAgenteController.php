@@ -5,6 +5,7 @@ namespace App\Controllers;
 use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
 use App\Services\AtivoService;
+use App\Services\NotificationService;
 
 /**
  * Endpoints usados pelo agente Windows -- NÃO passam por sessão/login,
@@ -65,5 +66,84 @@ class AtivoAgenteController extends Controller
         header('Content-Type: text/plain; charset=UTF-8');
         header('Content-Disposition: attachment; filename="rd-intranet-agent.ps1"');
         echo $conteudo;
+    }
+
+    /** Download manual do .exe pelo admin, pelo navegador -- pra instalar/distribuir. */
+    public function baixarExecutavel(): void
+    {
+        AuthMiddleware::checkModulo('ativos_dashboard');
+
+        $caminho = $this->service->caminhoAgenteExePublico();
+
+        if ($caminho === null) {
+            http_response_code(404);
+            echo 'Nenhuma versão do agente .exe foi enviada ainda.';
+            return;
+        }
+
+        header('Content-Type: application/octet-stream');
+        header('Content-Disposition: attachment; filename="RdIntranetAgente.exe"');
+        header('Content-Length: ' . filesize($caminho));
+        readfile($caminho);
+    }
+
+    /** Consultado pelo próprio agente (X-RD-Agente-Chave) pra saber se há versão nova. */
+    public function versaoExecutavel(): void
+    {
+        header('Content-Type: application/json');
+
+        $chaveEnviada = $_SERVER['HTTP_X_RD_AGENTE_CHAVE'] ?? '';
+
+        if ($chaveEnviada === '' || !hash_equals($this->service->chaveAgente(), $chaveEnviada)) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'message' => 'Chave de API inválida.']);
+            return;
+        }
+
+        echo json_encode([
+            'success' => true,
+            'disponivel' => $this->service->agenteExeDisponivel(),
+            'versao' => $this->service->versaoAgenteExe(),
+        ]);
+    }
+
+    /** Baixado pelo próprio agente (X-RD-Agente-Chave) pra se autoatualizar. */
+    public function downloadAtualizacao(): void
+    {
+        $chaveEnviada = $_SERVER['HTTP_X_RD_AGENTE_CHAVE'] ?? '';
+
+        if ($chaveEnviada === '' || !hash_equals($this->service->chaveAgente(), $chaveEnviada)) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'message' => 'Chave de API inválida.']);
+            return;
+        }
+
+        $caminho = $this->service->caminhoAgenteExePublico();
+
+        if ($caminho === null) {
+            http_response_code(404);
+            return;
+        }
+
+        header('Content-Type: application/octet-stream');
+        header('Content-Length: ' . filesize($caminho));
+        readfile($caminho);
+    }
+
+    public function uploadExecutavel(): void
+    {
+        AuthMiddleware::checkModulo('ativos_dashboard');
+
+        $arquivo = $_FILES['arquivo'] ?? null;
+        $versao = trim($_POST['versao'] ?? '');
+
+        if (!$arquivo || $arquivo['error'] !== UPLOAD_ERR_OK) {
+            NotificationService::error('Falha no upload do arquivo.');
+        } else {
+            $this->service->salvarNovoAgenteExe($arquivo['tmp_name'], $versao);
+        }
+
+        header('Location: ' . url('/ativos'));
+        exit;
     }
 }

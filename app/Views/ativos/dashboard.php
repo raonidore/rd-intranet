@@ -71,8 +71,41 @@ $statusCores = [
                     </div>
                 </div>
                 <a href="<?= url('/ativos/agente/script') ?>" class="btn btn-sm btn-primary"><i class="bi bi-download"></i> Baixar script do agente (.ps1)</a>
+                <?php if ($agenteExeDisponivel): ?>
+                    <a href="<?= url('/ativos/agente/exe') ?>" class="btn btn-sm btn-primary"><i class="bi bi-download"></i> Baixar agente (.exe) -- v<?= htmlspecialchars($versaoAgenteExe) ?></a>
+                <?php endif; ?>
                 <form method="post" action="<?= url('/ativos/agente/regenerar-chave') ?>" class="d-inline" id="formRegenerarChave">
                     <button class="btn btn-sm btn-outline-danger"><i class="bi bi-arrow-repeat"></i> Gerar nova chave</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white"><strong>Atualizar agente (.exe)</strong></div>
+            <div class="card-body">
+                <p class="text-muted small mb-2">
+                    <?php if ($agenteExeDisponivel): ?>
+                        Versão atual disponível: <strong>v<?= htmlspecialchars($versaoAgenteExe) ?></strong>.
+                    <?php else: ?>
+                        Nenhuma versão enviada ainda -- os agentes .exe já instalados não se autoatualizam até o primeiro envio.
+                    <?php endif; ?>
+                    Envie aqui um novo <code>.exe</code> publicado (veja o README em <code>agente-windows/</code>) junto do
+                    número de versão (o mesmo do <code>&lt;Version&gt;</code> no <code>.csproj</code>) -- os agentes já
+                    instalados detectam a versão nova sozinhos e se atualizam no próximo check-in, sem precisar
+                    reinstalar máquina por máquina.
+                </p>
+                <form method="post" action="<?= url('/ativos/agente/exe/upload') ?>" enctype="multipart/form-data" class="row g-2 align-items-end">
+                    <div class="col-auto">
+                        <label class="form-label small mb-0">Versão</label>
+                        <input type="text" name="versao" class="form-control form-control-sm" style="width:110px" placeholder="1.0.1" pattern="\d+\.\d+\.\d+" required>
+                    </div>
+                    <div class="col-auto">
+                        <label class="form-label small mb-0">Arquivo (.exe)</label>
+                        <input type="file" name="arquivo" accept=".exe" class="form-control form-control-sm" required>
+                    </div>
+                    <div class="col-auto">
+                        <button type="submit" class="btn btn-sm btn-outline-primary"><i class="bi bi-upload"></i> Enviar</button>
+                    </div>
                 </form>
             </div>
         </div>

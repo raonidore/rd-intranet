@@ -19,6 +19,7 @@ public class AppState
     public long UltimoEnvioBytes { get; set; }
     public long UltimoRecebimentoBytes { get; set; }
     public DateTime? MarcaEventos { get; set; }
+    public DateTime? UltimaVerificacaoAtualizacao { get; set; }
 
     private static string PastaDados => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),

@@ -444,6 +444,67 @@ class AtivoService
         return $chave;
     }
 
+    /**
+     * Distribuição do agente Windows em C#/WinForms (.exe) -- diferente do
+     * .ps1 (que é texto, gerado sob demanda a cada download), o .exe é um
+     * binário que precisa ser compilado no Windows (fora deste ambiente).
+     * O admin compila, sobe aqui com um número de versão, e os agentes já
+     * instalados se autoatualizam comparando essa versão com a própria.
+     */
+    private function caminhoAgenteExe(): string
+    {
+        return __DIR__ . '/../../storage/uploads/agente/RdIntranetAgente.exe';
+    }
+
+    public function versaoAgenteExe(): string
+    {
+        return ConfigService::get('ativos_agente_exe_versao', '') ?: '';
+    }
+
+    public function agenteExeDisponivel(): bool
+    {
+        return $this->versaoAgenteExe() !== '' && file_exists($this->caminhoAgenteExe());
+    }
+
+    public function caminhoAgenteExePublico(): ?string
+    {
+        return $this->agenteExeDisponivel() ? $this->caminhoAgenteExe() : null;
+    }
+
+    public function salvarNovoAgenteExe(string $caminhoTemporario, string $versao): array
+    {
+        $versao = trim($versao);
+
+        if (!preg_match('/^\d+\.\d+\.\d+$/', $versao)) {
+            NotificationService::error('Versão inválida -- use o formato X.Y.Z (mesmo número do <Version> no .csproj), ex: 1.0.1.');
+            return ['success' => false];
+        }
+
+        if (!is_uploaded_file($caminhoTemporario)) {
+            NotificationService::error('Upload inválido.');
+            return ['success' => false];
+        }
+
+        $destino = $this->caminhoAgenteExe();
+        $pasta = dirname($destino);
+
+        if (!is_dir($pasta) && !@mkdir($pasta, 0777, true) && !is_dir($pasta)) {
+            NotificationService::error('Falha ao criar a pasta de destino no servidor.');
+            return ['success' => false];
+        }
+
+        if (!@move_uploaded_file($caminhoTemporario, $destino)) {
+            NotificationService::error('Falha ao salvar o arquivo no servidor (permissão de escrita?).');
+            return ['success' => false];
+        }
+
+        ConfigService::set('ativos_agente_exe_versao', $versao);
+        AuditService::registrar('Ativos', 'Agente Windows', "Nova versão do agente .exe enviada: {$versao}.");
+        NotificationService::success("Versão {$versao} do agente enviada. Agentes já instalados vão se autoatualizar no próximo check-in.");
+
+        return ['success' => true];
+    }
+
     public function vincularDispositivoMesh(int $ativoId, ?string $meshDeviceId): bool
     {
         $meshDeviceId = $meshDeviceId === '' ? null : $meshDeviceId;

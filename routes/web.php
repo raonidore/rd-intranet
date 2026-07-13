@@ -395,7 +395,11 @@ $router->post('/ativos/snmp/ativar-coleta', [AtivoController::class, 'ativarCole
 $router->post('/ativos/agente/regenerar-chave', [AtivoController::class, 'regenerarChaveAgente']);
 $router->post('/ativos/comunicacao/salvar', [AtivoController::class, 'salvarIntervaloComunicacao']);
 $router->get('/ativos/agente/script', [AtivoAgenteController::class, 'baixarScript']);
+$router->get('/ativos/agente/exe', [AtivoAgenteController::class, 'baixarExecutavel']);
+$router->post('/ativos/agente/exe/upload', [AtivoAgenteController::class, 'uploadExecutavel']);
 $router->post('/api/ativos/checkin', [AtivoAgenteController::class, 'checkin']);
+$router->get('/api/ativos/agente/versao', [AtivoAgenteController::class, 'versaoExecutavel']);
+$router->get('/api/ativos/agente/download', [AtivoAgenteController::class, 'downloadAtualizacao']);
 
 $router->get('/ativos/cadastros', [AtivoController::class, 'cadastros']);
 $router->post('/ativos/cadastros/novo', [AtivoController::class, 'cadastroNovo']);

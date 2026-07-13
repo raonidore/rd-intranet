@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Reflection;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Win32;
@@ -43,7 +44,11 @@ public class TrayApplicationContext : ApplicationContext
         AtualizarTooltip();
 
         _timer = new System.Windows.Forms.Timer { Interval = IntervaloEmMs() };
-        _timer.Tick += async (s, e) => await ColetarEEnviarAsync(manual: false);
+        _timer.Tick += async (s, e) =>
+        {
+            await ColetarEEnviarAsync(manual: false);
+            await VerificarAtualizacaoAsync();
+        };
 
         if (!_config.EstaConfigurado)
         {
@@ -54,6 +59,7 @@ public class TrayApplicationContext : ApplicationContext
         {
             _timer.Start();
             _ = ColetarEEnviarAsync(manual: false);
+            _ = VerificarAtualizacaoAsync();
         }
     }
 
@@ -173,6 +179,88 @@ public class TrayApplicationContext : ApplicationContext
 
         return $"{valor:0.#} {unidades[i]}";
     }
+
+    /// <summary>
+    /// Checa (no máximo 1x a cada 12h -- não a cada checkin) se há uma
+    /// versão nova do .exe publicada no RD Intranet. Se houver, baixa pra
+    /// uma pasta temporária e entrega a troca do arquivo pra um script
+    /// auxiliar, porque um processo Windows não consegue sobrescrever o
+    /// próprio .exe em execução -- o script espera este processo encerrar
+    /// (Application.Exit logo em seguida), move o novo arquivo por cima
+    /// do antigo e reabre. Tudo best-effort: qualquer falha aqui só
+    /// significa "tenta de novo daqui a 12h", nunca derruba o agente.
+    /// </summary>
+    private async Task VerificarAtualizacaoAsync()
+    {
+        if (_estado.UltimaVerificacaoAtualizacao.HasValue &&
+            (DateTime.Now - _estado.UltimaVerificacaoAtualizacao.Value) < TimeSpan.FromHours(12))
+        {
+            return;
+        }
+
+        _estado.UltimaVerificacaoAtualizacao = DateTime.Now;
+        _estado.Salvar();
+
+        try
+        {
+            var cliente = new AtualizacaoClient(_config);
+            var versaoServidor = await cliente.ObterVersaoDisponivelAsync();
+            if (versaoServidor == null) return;
+
+            var versaoAtual = Assembly.GetExecutingAssembly().GetName().Version ?? new Version(0, 0, 0, 0);
+            if (versaoServidor <= versaoAtual) return;
+
+            var pastaAtualizacao = Path.Combine(Path.GetTempPath(), "RDIntranetAgenteUpdate");
+            Directory.CreateDirectory(pastaAtualizacao);
+            var novoExe = Path.Combine(pastaAtualizacao, "RdIntranetAgente.new.exe");
+
+            if (!await cliente.BaixarNovaVersaoAsync(novoExe))
+            {
+                return;
+            }
+
+            var exeAtual = Application.ExecutablePath;
+            var scriptPath = Path.Combine(pastaAtualizacao, "atualizar.bat");
+            File.WriteAllText(scriptPath, ConteudoScriptAtualizacao(novoExe, exeAtual));
+
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = $"/c \"{scriptPath}\"",
+                WindowStyle = ProcessWindowStyle.Hidden,
+                CreateNoWindow = true,
+                UseShellExecute = false
+            });
+
+            Application.Exit();
+        }
+        catch
+        {
+            // atualizacao automatica e best-effort -- nao deve interromper o funcionamento normal
+        }
+    }
+
+    /// <summary>
+    /// O move só consegue substituir o .exe depois que este processo
+    /// encerrar de vez (arquivo em uso) -- por isso o retry com pausas em
+    /// vez de tentar uma vez só logo de cara.
+    /// </summary>
+    private static string ConteudoScriptAtualizacao(string origem, string destino) => $@"@echo off
+setlocal
+set ""ORIGEM={origem}""
+set ""DESTINO={destino}""
+set contador=0
+:tentar
+timeout /t 1 /nobreak >nul
+move /y ""%ORIGEM%"" ""%DESTINO%"" >nul 2>&1
+if exist ""%ORIGEM%"" (
+    set /a contador+=1
+    if %contador% lss 20 goto tentar
+    exit /b 1
+)
+start """" ""%DESTINO%""
+del ""%~f0""
+";
 
     /// <summary>
     /// Reaproveita o mesmo ícone embutido no .exe (via ApplicationIcon no

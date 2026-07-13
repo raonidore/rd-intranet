@@ -30,6 +30,8 @@ class AtivoController extends Controller
             'coletaSnmpAtiva' => $this->coletaSnmpAtiva(),
             'chaveAgente' => $this->service->chaveAgente(),
             'intervaloComunicacao' => $this->service->intervaloComunicacao(),
+            'versaoAgenteExe' => $this->service->versaoAgenteExe(),
+            'agenteExeDisponivel' => $this->service->agenteExeDisponivel(),
         ]));
     }
 
