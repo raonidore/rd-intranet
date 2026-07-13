@@ -29,6 +29,7 @@ class AtivoController extends Controller
             'comunidadePadrao' => $this->service->comunidadePadrao(),
             'coletaSnmpAtiva' => $this->coletaSnmpAtiva(),
             'chaveAgente' => $this->service->chaveAgente(),
+            'intervaloComunicacao' => $this->service->intervaloComunicacao(),
         ]));
     }
 
@@ -69,8 +70,11 @@ class AtivoController extends Controller
             'volumes' => $this->service->listarVolumes($id),
             'portas' => $this->service->listarPortas($id),
             'memoria' => $this->service->listarMemoria($id),
+            'atualizacoesWindows' => $this->service->listarAtualizacoesWindows($id),
             'estaLigada' => AtivoService::estaLigada($ativo),
             'uptime' => AtivoService::uptimeTexto($ativo),
+            'minutosDesdeCheckin' => AtivoService::minutosDesdeUltimoCheckin($ativo),
+            'intervaloComunicacao' => $this->service->intervaloComunicacao(),
         ]);
     }
 
@@ -258,6 +262,16 @@ class AtivoController extends Controller
         return false;
     }
 
+    public function salvarIntervaloComunicacao(): void
+    {
+        AuthMiddleware::checkModulo('ativos_dashboard');
+
+        $this->service->salvarIntervaloComunicacao((int)($_POST['minutos'] ?? 15));
+
+        header('Location: ' . url('/ativos'));
+        exit;
+    }
+
     public function regenerarChaveAgente(): void
     {
         AuthMiddleware::checkModulo('ativos_dashboard');
@@ -314,7 +328,32 @@ class AtivoController extends Controller
         $comando = $_POST['comando'] ?? '';
         $usuario = $_SESSION['usuario']['nome'] ?? null;
 
-        $resultado = $this->service->enviarComando($id, $comando, $usuario);
+        $alvo = null;
+        $alvoLabel = null;
+
+        if ($comando === 'desinstalar_programa') {
+            $programa = $this->service->buscarPrograma($id, (int)($_POST['programa_id'] ?? 0));
+            if (!$programa) {
+                echo json_encode(['success' => false, 'message' => 'Programa não encontrado.']);
+                return;
+            }
+            if (empty($programa['uninstall_string'])) {
+                echo json_encode(['success' => false, 'message' => 'Não temos o comando de desinstalação deste programa (o instalador não registrou um UninstallString no Windows).']);
+                return;
+            }
+            $alvo = $programa['uninstall_string'];
+            $alvoLabel = $programa['nome'];
+        } elseif ($comando === 'desinstalar_atualizacao') {
+            $atualizacao = $this->service->buscarAtualizacaoWindows($id, (int)($_POST['atualizacao_id'] ?? 0));
+            if (!$atualizacao) {
+                echo json_encode(['success' => false, 'message' => 'Atualização não encontrada.']);
+                return;
+            }
+            $alvo = $atualizacao['kb'];
+            $alvoLabel = $atualizacao['kb'];
+        }
+
+        $resultado = $this->service->enviarComando($id, $comando, $usuario, $alvo, $alvoLabel);
 
         echo json_encode($resultado);
     }

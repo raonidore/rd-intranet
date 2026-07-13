@@ -57,8 +57,8 @@ class AtivoAgenteController extends Controller
         $servidorUrl = $esquema . '://' . $host . url('');
 
         $conteudo = str_replace(
-            ['__SERVER_URL__', '__API_KEY__'],
-            [$servidorUrl, $this->service->chaveAgente()],
+            ['__SERVER_URL__', '__API_KEY__', '__INTERVALO_MINUTOS__'],
+            [$servidorUrl, $this->service->chaveAgente(), (string)$this->service->intervaloComunicacao()],
             $template
         );
 

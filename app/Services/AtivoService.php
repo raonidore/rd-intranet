@@ -489,10 +489,12 @@ class AtivoService
         $this->repository->substituirVolumes($id, array_slice($payload['volumes'] ?? [], 0, 20));
         $this->repository->substituirPortas($id, array_slice($payload['portas'] ?? [], 0, 100));
         $this->repository->substituirMemoria($id, array_slice($payload['memoria_modulos'] ?? [], 0, 32));
+        $this->repository->substituirAtualizacoesWindows($id, array_slice($payload['atualizacoes_windows'] ?? [], 0, 500));
 
-        // Comandos remotos pendentes (desligar/reiniciar) -- entregues
-        // agora, junto com a resposta deste checkin. O agente é quem
-        // decide como/quando executar (com aviso pro usuário).
+        // Comandos remotos pendentes (desligar/reiniciar/desinstalar) --
+        // entregues agora, junto com a resposta deste checkin. O agente
+        // é quem decide como/quando executar (com aviso pro usuário,
+        // quando aplicável).
         $pendentes = $this->repository->comandosPendentes($id);
         if (!empty($pendentes)) {
             $this->repository->marcarComandosEntregues(array_column($pendentes, 'id'));
@@ -502,8 +504,27 @@ class AtivoService
             'success' => true,
             'message' => 'Check-in recebido.',
             'ativo_id' => $id,
-            'comandos' => array_map(fn($c) => ['id' => (int)$c['id'], 'comando' => $c['comando']], $pendentes),
+            'comandos' => array_map(fn($c) => [
+                'id' => (int)$c['id'],
+                'comando' => $c['comando'],
+                'alvo' => $c['alvo'],
+            ], $pendentes),
         ];
+    }
+
+    public function listarAtualizacoesWindows(int $ativoId): array
+    {
+        return $this->repository->listarAtualizacoesWindows($ativoId);
+    }
+
+    public function buscarPrograma(int $ativoId, int $programaId): ?array
+    {
+        return $this->repository->buscarPrograma($ativoId, $programaId);
+    }
+
+    public function buscarAtualizacaoWindows(int $ativoId, int $atualizacaoId): ?array
+    {
+        return $this->repository->buscarAtualizacaoWindows($ativoId, $atualizacaoId);
     }
 
     /*
@@ -512,10 +533,16 @@ class AtivoService
      |---------------------------------------------------------
      */
 
-    public function enviarComando(int $ativoId, string $comando, ?string $solicitadoPor): array
+    private const COMANDOS_VALIDOS = ['desligar', 'reiniciar', 'desinstalar_atualizacao', 'desinstalar_programa'];
+
+    public function enviarComando(int $ativoId, string $comando, ?string $solicitadoPor, ?string $alvo = null, ?string $alvoLabel = null): array
     {
-        if (!in_array($comando, ['desligar', 'reiniciar'], true)) {
+        if (!in_array($comando, self::COMANDOS_VALIDOS, true)) {
             return ['success' => false, 'message' => 'Comando inválido.'];
+        }
+
+        if (in_array($comando, ['desinstalar_atualizacao', 'desinstalar_programa'], true) && empty($alvo)) {
+            return ['success' => false, 'message' => 'Informe o que deve ser desinstalado.'];
         }
 
         $ativo = $this->repository->buscarPorId($ativoId);
@@ -527,19 +554,25 @@ class AtivoService
             return ['success' => false, 'message' => 'Este ativo não tem o agente Windows instalado -- não é possível enviar comandos remotos.'];
         }
 
-        $this->repository->criarComando($ativoId, $comando, $solicitadoPor);
+        $this->repository->criarComando($ativoId, $comando, $solicitadoPor, $alvo, $alvoLabel);
+
+        $labels = [
+            'desligar' => 'Desligamento',
+            'reiniciar' => 'Reinício',
+            'desinstalar_atualizacao' => 'Desinstalação da atualização ' . $alvoLabel,
+            'desinstalar_programa' => 'Desinstalação de ' . $alvoLabel,
+        ];
+        $label = $labels[$comando];
 
         AuditService::registrar(
             'Ativos',
             'Comando remoto',
-            ucfirst($comando) . ' solicitado para ' . $ativo['codigo_patrimonio'] . ' (' . $ativo['nome'] . ').'
+            $label . ' solicitado(a) para ' . $ativo['codigo_patrimonio'] . ' (' . $ativo['nome'] . ').'
         );
-
-        $label = $comando === 'desligar' ? 'Desligamento' : 'Reinício';
 
         return [
             'success' => true,
-            'message' => "{$label} agendado. Será entregue ao agente na próxima coleta (em até " . $this->intervaloAproximado() . ").",
+            'message' => "{$label} agendado(a). Será entregue ao agente na próxima coleta (em até " . $this->intervaloAproximado() . ").",
         ];
     }
 
@@ -548,16 +581,43 @@ class AtivoService
         return $this->repository->historicoComandos($ativoId);
     }
 
+    /**
+     * Intervalo esperado entre checkins, configurável em Ativos >
+     * Dashboard. Usado pra (a) calcular a janela de "está ligada" e
+     * (b) ser gravado no .ps1 baixado a partir de agora -- agentes já
+     * instalados mantêm o intervalo antigo até serem reinstalados.
+     */
+    public function intervaloComunicacao(): int
+    {
+        return (int)(ConfigService::get('ativos_intervalo_comunicacao_min', '15') ?? 15);
+    }
+
+    public function salvarIntervaloComunicacao(int $minutos): bool
+    {
+        if ($minutos < 5 || $minutos > 240) {
+            NotificationService::error('O intervalo deve ser entre 5 e 240 minutos.');
+            return false;
+        }
+
+        ConfigService::set('ativos_intervalo_comunicacao_min', (string)$minutos);
+
+        AuditService::registrar('Ativos', 'Config. Comunicação', "Intervalo de comunicação com agentes alterado para {$minutos} min.");
+
+        NotificationService::success('Intervalo salvo. Vale pra novos agentes instalados a partir de agora -- os já instalados mantêm o intervalo com que foram configurados.');
+
+        return true;
+    }
+
     private function intervaloAproximado(): string
     {
-        return '15-30 min';
+        $min = $this->intervaloComunicacao();
+        return "{$min}-" . ($min * 2) . ' min';
     }
 
     /**
      * "Ligada" é uma inferência, não um dado direto: se o último checkin
-     * foi recente, assumimos que a máquina está ligada. Não sabemos o
-     * intervalo exato configurado em cada agente, então usamos uma janela
-     * generosa (30 min) como aproximação razoável.
+     * foi recente, assumimos que a máquina está ligada. A janela usa 2x
+     * o intervalo configurado, como margem de uma coleta perdida.
      */
     public static function estaLigada(array $ativo): bool
     {
@@ -565,7 +625,22 @@ class AtivoService
             return false;
         }
 
-        return (time() - strtotime($ativo['ultimo_checkin'])) <= 30 * 60;
+        $minutos = (int)(ConfigService::get('ativos_intervalo_comunicacao_min', '15') ?? 15);
+
+        return (time() - strtotime($ativo['ultimo_checkin'])) <= $minutos * 2 * 60;
+    }
+
+    /**
+     * Quantos minutos se passaram desde o último checkin -- pra deixar
+     * claro na tela que "Ligada" é uma inferência, não um dado ao vivo.
+     */
+    public static function minutosDesdeUltimoCheckin(array $ativo): ?int
+    {
+        if (empty($ativo['ultimo_checkin'])) {
+            return null;
+        }
+
+        return (int)floor((time() - strtotime($ativo['ultimo_checkin'])) / 60);
     }
 
     /**

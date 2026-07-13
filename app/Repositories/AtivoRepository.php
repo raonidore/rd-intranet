@@ -231,7 +231,7 @@ class AtivoRepository
             return;
         }
 
-        $stmt = $this->pdo->prepare("INSERT INTO ativos_programas (ativo_id, nome, versao, data_instalacao) VALUES (?, ?, ?, ?)");
+        $stmt = $this->pdo->prepare("INSERT INTO ativos_programas (ativo_id, nome, versao, data_instalacao, uninstall_string) VALUES (?, ?, ?, ?, ?)");
 
         foreach ($programas as $p) {
             $nome = trim((string)($p['nome'] ?? ''));
@@ -240,13 +240,71 @@ class AtivoRepository
             }
             $versao = trim((string)($p['versao'] ?? ''));
             $dataInstalacao = trim((string)($p['data_instalacao'] ?? ''));
+            $uninstallString = trim((string)($p['uninstall_string'] ?? ''));
             $stmt->execute([
                 $ativoId,
                 $nome,
                 $versao !== '' ? $versao : null,
                 $dataInstalacao !== '' ? $dataInstalacao : null,
+                $uninstallString !== '' ? $uninstallString : null,
             ]);
         }
+    }
+
+    public function buscarPrograma(int $ativoId, int $programaId): ?array
+    {
+        $stmt = $this->pdo->prepare("SELECT * FROM ativos_programas WHERE id = ? AND ativo_id = ? LIMIT 1");
+        $stmt->execute([$programaId, $ativoId]);
+
+        $item = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $item ?: null;
+    }
+
+    public function substituirAtualizacoesWindows(int $ativoId, array $atualizacoes): void
+    {
+        $this->pdo->prepare("DELETE FROM ativos_atualizacoes_windows WHERE ativo_id = ?")->execute([$ativoId]);
+
+        if (empty($atualizacoes)) {
+            return;
+        }
+
+        $stmt = $this->pdo->prepare("INSERT INTO ativos_atualizacoes_windows (ativo_id, kb, descricao, instalado_em) VALUES (?, ?, ?, ?)");
+
+        foreach ($atualizacoes as $a) {
+            $kb = trim((string)($a['kb'] ?? ''));
+            if ($kb === '') {
+                continue;
+            }
+
+            $descricao = trim((string)($a['descricao'] ?? ''));
+            $instaladoEm = trim((string)($a['instalado_em'] ?? ''));
+
+            $stmt->execute([
+                $ativoId,
+                $kb,
+                $descricao !== '' ? $descricao : null,
+                $instaladoEm !== '' ? $instaladoEm : null,
+            ]);
+        }
+    }
+
+    public function listarAtualizacoesWindows(int $ativoId): array
+    {
+        $stmt = $this->pdo->prepare("SELECT * FROM ativos_atualizacoes_windows WHERE ativo_id = ? ORDER BY instalado_em DESC, kb DESC");
+        $stmt->execute([$ativoId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function buscarAtualizacaoWindows(int $ativoId, int $atualizacaoId): ?array
+    {
+        $stmt = $this->pdo->prepare("SELECT * FROM ativos_atualizacoes_windows WHERE id = ? AND ativo_id = ? LIMIT 1");
+        $stmt->execute([$atualizacaoId, $ativoId]);
+
+        $item = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $item ?: null;
     }
 
     public function substituirRedes(int $ativoId, array $redes): void
@@ -500,13 +558,13 @@ class AtivoRepository
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public function criarComando(int $ativoId, string $comando, ?string $solicitadoPor): int
+    public function criarComando(int $ativoId, string $comando, ?string $solicitadoPor, ?string $alvo = null, ?string $alvoLabel = null): int
     {
         $stmt = $this->pdo->prepare("
-            INSERT INTO ativos_comandos (ativo_id, comando, solicitado_por)
-            VALUES (?, ?, ?)
+            INSERT INTO ativos_comandos (ativo_id, comando, alvo, alvo_label, solicitado_por)
+            VALUES (?, ?, ?, ?, ?)
         ");
-        $stmt->execute([$ativoId, $comando, $solicitadoPor]);
+        $stmt->execute([$ativoId, $comando, $alvo, $alvoLabel, $solicitadoPor]);
 
         return (int)$this->pdo->lastInsertId();
     }
