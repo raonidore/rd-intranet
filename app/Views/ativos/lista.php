@@ -82,6 +82,7 @@ $statusCores = [
                             <th>Tipo</th>
                             <th>Status</th>
                             <th>Condição</th>
+                            <th>Setor</th>
                             <th>Localização</th>
                             <th class="text-end">Ações</th>
                         </tr>
@@ -104,6 +105,7 @@ $statusCores = [
                                         <span class="text-muted small">—</span>
                                     <?php endif; ?>
                                 </td>
+                                <td class="small text-muted"><?= htmlspecialchars($a['setor_nome'] ?? '—') ?></td>
                                 <td class="small text-muted"><?= htmlspecialchars($a['localizacao_nome'] ?? '—') ?></td>
                                 <td class="text-end">
                                     <div class="btn-group" role="group">
