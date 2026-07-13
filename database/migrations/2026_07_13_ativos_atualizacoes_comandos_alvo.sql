@@ -20,13 +20,18 @@ CREATE TABLE IF NOT EXISTS ativos_atualizacoes_windows (
 
 -- UninstallString bruta do registro -- necessária pro agente conseguir
 -- desinstalar remotamente sem precisar procurar de novo (e sem
--- ambiguidade de "qual programa com esse nome").
+-- ambiguidade de "qual programa com esse nome"). Sem AFTER de propósito
+-- (não usa "AFTER data_instalacao"): essa coluna é adicionada por
+-- 2026_07_13_ativos_rede_volumes_portas.sql, que em banco novo roda
+-- DEPOIS desta (ordem alfabética dos arquivos, não cronológica) --
+-- depender da posição quebraria a aplicação em servidor novo.
 ALTER TABLE ativos_programas
-    ADD COLUMN uninstall_string VARCHAR(500) NULL AFTER data_instalacao;
+    ADD COLUMN uninstall_string VARCHAR(500) NULL;
 
 -- Comandos remotos ganham um "alvo" (numero do KB ou UninstallString do
--- programa) e dois novos tipos.
-ALTER TABLE ativos_comandos
-    MODIFY COLUMN comando ENUM('desligar','reiniciar','desinstalar_atualizacao','desinstalar_programa') NOT NULL,
-    ADD COLUMN alvo VARCHAR(500) NULL AFTER comando,
-    ADD COLUMN alvo_label VARCHAR(255) NULL AFTER alvo;
+-- programa) e dois novos tipos -- movido pra
+-- 2026_07_13_ativos_cadastros_comandos_empresa.sql (é lá que a tabela
+-- ativos_comandos é criada; mesmo motivo do ativos_programas acima --
+-- em servidor novo esta migration roda antes daquela em ordem
+-- alfabética, e um ALTER TABLE numa tabela que ainda não existe quebra
+-- a aplicação do zero).

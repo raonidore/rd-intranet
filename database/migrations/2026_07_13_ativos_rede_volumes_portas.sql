@@ -27,6 +27,18 @@ CREATE TABLE IF NOT EXISTS ativos_volumes (
     CONSTRAINT fk_ativos_volumes_ativo FOREIGN KEY (ativo_id) REFERENCES ativos(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Dados do disco fisico associado a cada volume logico (nem sempre o
+-- Windows preenche fabricante/serial de forma confiavel via WMI --
+-- ficam NULL quando o driver do disco nao informa). Fica aqui (não em
+-- 2026_07_13_ativos_memoria_disco_fisico.sql, apesar do nome) porque
+-- precisa da tabela ativos_volumes já criada acima -- em servidor novo
+-- as migrations rodam em ordem alfabética do arquivo, não cronológica,
+-- e "memoria_disco_fisico" ordena antes de "rede_volumes_portas".
+ALTER TABLE ativos_volumes
+    ADD COLUMN modelo_disco VARCHAR(150) NULL AFTER usado_gb,
+    ADD COLUMN fabricante_disco VARCHAR(100) NULL AFTER modelo_disco,
+    ADD COLUMN serial_disco VARCHAR(100) NULL AFTER fabricante_disco;
+
 -- tipo: 'usb' (dispositivo USB atualmente conectado) ou 'serial' (porta
 -- COM disponivel). Portas de video (HDMI/DP/VGA) ficam de fora --
 -- o Windows nao expoe isso via WMI de forma padronizada entre

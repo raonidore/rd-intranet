@@ -1,10 +1,8 @@
--- Dados do disco fisico associado a cada volume logico (nem sempre o
--- Windows preenche fabricante/serial de forma confiavel via WMI --
--- ficam NULL quando o driver do disco nao informa).
-ALTER TABLE ativos_volumes
-    ADD COLUMN modelo_disco VARCHAR(150) NULL AFTER usado_gb,
-    ADD COLUMN fabricante_disco VARCHAR(100) NULL AFTER modelo_disco,
-    ADD COLUMN serial_disco VARCHAR(100) NULL AFTER fabricante_disco;
+-- Dados do disco fisico associado a cada volume logico -- movido pra
+-- 2026_07_13_ativos_rede_volumes_portas.sql (é lá que a tabela
+-- ativos_volumes é criada; em servidor novo esta migration roda antes
+-- daquela em ordem alfabética, e um ALTER TABLE numa tabela que ainda
+-- não existe quebra a aplicação do zero).
 
 -- Modulos de memoria fisica (um por pente de RAM instalado) -- mesmo
 -- padrao "substituir a cada checkin" das outras tabelas de snapshot.
