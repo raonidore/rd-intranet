@@ -243,6 +243,11 @@ class AtivoService
         return $this->repository->listarVolumes($ativoId);
     }
 
+    public function listarMemoria(int $ativoId): array
+    {
+        return $this->repository->listarMemoria($ativoId);
+    }
+
     public function listarPortas(int $ativoId): array
     {
         return $this->repository->listarPortas($ativoId);
@@ -483,6 +488,7 @@ class AtivoService
         $this->repository->substituirRedes($id, array_slice($payload['redes'] ?? [], 0, 20));
         $this->repository->substituirVolumes($id, array_slice($payload['volumes'] ?? [], 0, 20));
         $this->repository->substituirPortas($id, array_slice($payload['portas'] ?? [], 0, 100));
+        $this->repository->substituirMemoria($id, array_slice($payload['memoria_modulos'] ?? [], 0, 32));
 
         // Comandos remotos pendentes (desligar/reiniciar) -- entregues
         // agora, junto com a resposta deste checkin. O agente é quem

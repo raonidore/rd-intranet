@@ -68,6 +68,7 @@ class AtivoController extends Controller
             'redes' => $this->service->listarRedes($id),
             'volumes' => $this->service->listarVolumes($id),
             'portas' => $this->service->listarPortas($id),
+            'memoria' => $this->service->listarMemoria($id),
             'estaLigada' => AtivoService::estaLigada($ativo),
             'uptime' => AtivoService::uptimeTexto($ativo),
         ]);

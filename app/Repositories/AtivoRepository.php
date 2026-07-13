@@ -292,7 +292,10 @@ class AtivoRepository
             return;
         }
 
-        $stmt = $this->pdo->prepare("INSERT INTO ativos_volumes (ativo_id, unidade, total_gb, usado_gb) VALUES (?, ?, ?, ?)");
+        $stmt = $this->pdo->prepare("
+            INSERT INTO ativos_volumes (ativo_id, unidade, total_gb, usado_gb, modelo_disco, fabricante_disco, serial_disco)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ");
 
         foreach ($volumes as $v) {
             $unidade = trim((string)($v['unidade'] ?? ''));
@@ -300,13 +303,61 @@ class AtivoRepository
                 continue;
             }
 
+            $modeloDisco = trim((string)($v['modelo_disco'] ?? ''));
+            $fabricanteDisco = trim((string)($v['fabricante_disco'] ?? ''));
+            $serialDisco = trim((string)($v['serial_disco'] ?? ''));
+
             $stmt->execute([
                 $ativoId,
                 $unidade,
                 isset($v['total_gb']) ? (float)$v['total_gb'] : null,
                 isset($v['usado_gb']) ? (float)$v['usado_gb'] : null,
+                $modeloDisco !== '' ? $modeloDisco : null,
+                $fabricanteDisco !== '' ? $fabricanteDisco : null,
+                $serialDisco !== '' ? $serialDisco : null,
             ]);
         }
+    }
+
+    public function substituirMemoria(int $ativoId, array $modulos): void
+    {
+        $this->pdo->prepare("DELETE FROM ativos_memoria WHERE ativo_id = ?")->execute([$ativoId]);
+
+        if (empty($modulos)) {
+            return;
+        }
+
+        $stmt = $this->pdo->prepare("
+            INSERT INTO ativos_memoria (ativo_id, fabricante, modelo, capacidade_gb, frequencia_mhz, numero_serie)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ");
+
+        foreach ($modulos as $m) {
+            $fabricante = trim((string)($m['fabricante'] ?? ''));
+            $modelo = trim((string)($m['modelo'] ?? ''));
+            $serial = trim((string)($m['numero_serie'] ?? ''));
+
+            if ($fabricante === '' && $modelo === '' && empty($m['capacidade_gb'])) {
+                continue;
+            }
+
+            $stmt->execute([
+                $ativoId,
+                $fabricante !== '' ? $fabricante : null,
+                $modelo !== '' ? $modelo : null,
+                isset($m['capacidade_gb']) ? (float)$m['capacidade_gb'] : null,
+                isset($m['frequencia_mhz']) ? (int)$m['frequencia_mhz'] : null,
+                $serial !== '' ? $serial : null,
+            ]);
+        }
+    }
+
+    public function listarMemoria(int $ativoId): array
+    {
+        $stmt = $this->pdo->prepare("SELECT * FROM ativos_memoria WHERE ativo_id = ? ORDER BY id");
+        $stmt->execute([$ativoId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function listarVolumes(int $ativoId): array
