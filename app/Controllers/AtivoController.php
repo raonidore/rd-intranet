@@ -7,6 +7,7 @@ use App\Middleware\AuthMiddleware;
 use App\Services\AtivoService;
 use App\Services\AuditService;
 use App\Services\CronService;
+use App\Services\NotificationService;
 
 class AtivoController extends Controller
 {
@@ -24,6 +25,7 @@ class AtivoController extends Controller
         $this->view('ativos/dashboard', array_merge($this->service->dashboard(), [
             'comunidadePadrao' => $this->service->comunidadePadrao(),
             'coletaSnmpAtiva' => $this->coletaSnmpAtiva(),
+            'chaveAgente' => $this->service->chaveAgente(),
         ]));
     }
 
@@ -238,5 +240,19 @@ class AtivoController extends Controller
         }
 
         return false;
+    }
+
+    public function regenerarChaveAgente(): void
+    {
+        AuthMiddleware::checkModulo('ativos_dashboard');
+
+        $this->service->regenerarChaveAgente();
+
+        AuditService::registrar('Ativos', 'Regenerar chave do agente', 'Chave de API do agente Windows regenerada.');
+
+        NotificationService::success('Nova chave gerada. Agentes já instalados precisam do script atualizado para continuar funcionando.');
+
+        header('Location: ' . url('/ativos'));
+        exit;
     }
 }

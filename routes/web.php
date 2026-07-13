@@ -43,6 +43,7 @@ use App\Controllers\VpnIkev2SaidaController;
 use App\Controllers\AtualizacaoController;
 use App\Controllers\AntivirusController;
 use App\Controllers\AtivoController;
+use App\Controllers\AtivoAgenteController;
 
 $router->get('/', [DashboardController::class, 'index']);
 $router->get('/dashboard', [DashboardController::class, 'index']);
@@ -386,3 +387,6 @@ $router->get('/ativos/etiquetas/lote', [AtivoController::class, 'etiquetasLote']
 $router->post('/ativos/coletar-snmp', [AtivoController::class, 'coletarSnmp']);
 $router->post('/ativos/snmp/config', [AtivoController::class, 'salvarConfigSnmp']);
 $router->post('/ativos/snmp/ativar-coleta', [AtivoController::class, 'ativarColetaSnmp']);
+$router->post('/ativos/agente/regenerar-chave', [AtivoController::class, 'regenerarChaveAgente']);
+$router->get('/ativos/agente/script', [AtivoAgenteController::class, 'baixarScript']);
+$router->post('/api/ativos/checkin', [AtivoAgenteController::class, 'checkin']);

@@ -242,7 +242,7 @@ class AtivoService
         $detalhes = [];
 
         foreach (array_keys($campos) as $campo) {
-            $valor = trim($post[$campo] ?? '');
+            $valor = trim((string)($post[$campo] ?? ''));
             if ($valor !== '') {
                 $detalhes[$campo] = $valor;
             }
@@ -343,5 +343,84 @@ class AtivoService
     public function nomeJobCronSnmp(): string
     {
         return self::NOME_JOB_CRON_SNMP;
+    }
+
+    /*
+     |---------------------------------------------------------
+     | Agente Windows (Fase 3) -- checkin autenticado por chave de API,
+     | não por sessão. A chave é compartilhada por todo o parque
+     | (mesmo modelo do "deploy key" do OCS Inventory/GLPI), guardada
+     | via ConfigService igual qualquer outra configuração do app.
+     |---------------------------------------------------------
+     */
+
+    public function chaveAgente(): string
+    {
+        $chave = ConfigService::get('ativos_agent_api_key');
+
+        if (!$chave) {
+            $chave = bin2hex(random_bytes(32));
+            ConfigService::set('ativos_agent_api_key', $chave);
+        }
+
+        return $chave;
+    }
+
+    public function regenerarChaveAgente(): string
+    {
+        $chave = bin2hex(random_bytes(32));
+        ConfigService::set('ativos_agent_api_key', $chave);
+
+        return $chave;
+    }
+
+    /**
+     * Recebe o payload do agente Windows e faz upsert em `ativos`,
+     * casando por `machine_guid` (não por hostname/nome -- esse pode
+     * mudar). Substitui a lista de programas instalados (snapshot atual)
+     * e insere os alertas enviados (o agente já manda só os novos desde
+     * o último checkin, via um bookmark local dele).
+     */
+    public function checkinAgente(array $payload): array
+    {
+        $machineGuid = trim((string)($payload['machine_guid'] ?? ''));
+
+        if ($machineGuid === '') {
+            return ['success' => false, 'message' => 'machine_guid é obrigatório.'];
+        }
+
+        $tipo = in_array($payload['tipo'] ?? '', ['computador', 'servidor'], true) ? $payload['tipo'] : 'computador';
+
+        $existente = $this->repository->buscarPorMachineGuid($machineGuid);
+
+        $camposBase = [
+            'nome' => trim((string)($payload['nome'] ?? '')) ?: ($existente['nome'] ?? 'Ativo sem nome'),
+            'marca' => trim((string)($payload['marca'] ?? '')) ?: null,
+            'modelo' => trim((string)($payload['modelo'] ?? '')) ?: null,
+            'numero_serie' => trim((string)($payload['numero_serie'] ?? '')) ?: null,
+            'ip' => trim((string)($payload['ip'] ?? '')) ?: null,
+        ];
+
+        $camposTecnicos = $this->extrairDetalhes($tipo, $payload);
+
+        if ($existente) {
+            $id = (int)$existente['id'];
+            $detalhesAtuais = json_decode($existente['detalhes'] ?? '', true) ?: [];
+            $detalhesNovos = array_merge($detalhesAtuais, $camposTecnicos);
+
+            $this->repository->atualizarViaAgente($id, $camposBase, json_encode($detalhesNovos, JSON_UNESCAPED_UNICODE));
+        } else {
+            $id = $this->repository->criarViaAgente(array_merge($camposBase, [
+                'tipo' => $tipo,
+                'codigo_patrimonio' => $this->proximoCodigo($tipo),
+                'machine_guid' => $machineGuid,
+                'detalhes' => json_encode($camposTecnicos, JSON_UNESCAPED_UNICODE),
+            ]));
+        }
+
+        $this->repository->substituirProgramas($id, array_slice($payload['programas'] ?? [], 0, 500));
+        $this->repository->inserirAlertas($id, array_slice($payload['alertas'] ?? [], 0, 200));
+
+        return ['success' => true, 'message' => 'Check-in recebido.', 'ativo_id' => $id];
     }
 }

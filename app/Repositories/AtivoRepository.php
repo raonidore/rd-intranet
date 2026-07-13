@@ -156,6 +156,111 @@ class AtivoRepository
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public function buscarPorMachineGuid(string $machineGuid): ?array
+    {
+        $stmt = $this->pdo->prepare("SELECT * FROM ativos WHERE machine_guid = ? LIMIT 1");
+        $stmt->execute([$machineGuid]);
+
+        $item = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $item ?: null;
+    }
+
+    public function criarViaAgente(array $dados): int
+    {
+        $stmt = $this->pdo->prepare("
+            INSERT INTO ativos
+            (tipo, codigo_patrimonio, nome, marca, modelo, numero_serie, ip, status, machine_guid, origem, ultimo_checkin, detalhes)
+            VALUES
+            (:tipo, :codigo_patrimonio, :nome, :marca, :modelo, :numero_serie, :ip, 'ativo', :machine_guid, 'agente', NOW(), :detalhes)
+        ");
+
+        $stmt->execute([
+            'tipo' => $dados['tipo'],
+            'codigo_patrimonio' => $dados['codigo_patrimonio'],
+            'nome' => $dados['nome'],
+            'marca' => $dados['marca'],
+            'modelo' => $dados['modelo'],
+            'numero_serie' => $dados['numero_serie'],
+            'ip' => $dados['ip'],
+            'machine_guid' => $dados['machine_guid'],
+            'detalhes' => $dados['detalhes'],
+        ]);
+
+        return (int)$this->pdo->lastInsertId();
+    }
+
+    public function atualizarViaAgente(int $id, array $camposBase, string $detalhesJson): bool
+    {
+        $stmt = $this->pdo->prepare("
+            UPDATE ativos
+               SET nome = :nome,
+                   marca = COALESCE(:marca, marca),
+                   modelo = COALESCE(:modelo, modelo),
+                   numero_serie = COALESCE(:numero_serie, numero_serie),
+                   ip = COALESCE(:ip, ip),
+                   detalhes = :detalhes,
+                   origem = 'agente',
+                   ultimo_checkin = NOW()
+             WHERE id = :id
+        ");
+
+        return $stmt->execute([
+            'id' => $id,
+            'nome' => $camposBase['nome'],
+            'marca' => $camposBase['marca'],
+            'modelo' => $camposBase['modelo'],
+            'numero_serie' => $camposBase['numero_serie'],
+            'ip' => $camposBase['ip'],
+            'detalhes' => $detalhesJson,
+        ]);
+    }
+
+    public function substituirProgramas(int $ativoId, array $programas): void
+    {
+        $this->pdo->prepare("DELETE FROM ativos_programas WHERE ativo_id = ?")->execute([$ativoId]);
+
+        if (empty($programas)) {
+            return;
+        }
+
+        $stmt = $this->pdo->prepare("INSERT INTO ativos_programas (ativo_id, nome, versao) VALUES (?, ?, ?)");
+
+        foreach ($programas as $p) {
+            $nome = trim((string)($p['nome'] ?? ''));
+            if ($nome === '') {
+                continue;
+            }
+            $versao = trim((string)($p['versao'] ?? ''));
+            $stmt->execute([$ativoId, $nome, $versao !== '' ? $versao : null]);
+        }
+    }
+
+    public function inserirAlertas(int $ativoId, array $alertas): void
+    {
+        if (empty($alertas)) {
+            return;
+        }
+
+        $stmt = $this->pdo->prepare("
+            INSERT INTO ativos_alertas (ativo_id, nivel, origem_evento, mensagem, ocorrido_em)
+            VALUES (?, ?, ?, ?, ?)
+        ");
+
+        foreach ($alertas as $a) {
+            $mensagem = trim((string)($a['mensagem'] ?? ''));
+            if ($mensagem === '') {
+                continue;
+            }
+
+            $nivel = in_array($a['nivel'] ?? '', ['erro', 'aviso', 'informacao'], true) ? $a['nivel'] : 'informacao';
+            $origemEvento = trim((string)($a['origem_evento'] ?? ''));
+            $ocorridoEm = !empty($a['ocorrido_em']) ? $a['ocorrido_em'] : null;
+
+            $stmt->execute([$ativoId, $nivel, $origemEvento !== '' ? $origemEvento : null, $mensagem, $ocorridoEm]);
+        }
+    }
+
     public function excluir(int $id): bool
     {
         $stmt = $this->pdo->prepare("DELETE FROM ativos WHERE id = ?");

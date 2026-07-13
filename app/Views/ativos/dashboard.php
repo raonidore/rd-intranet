@@ -57,6 +57,27 @@ $statusCores = [
 
     <div class="col-lg-7">
         <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white"><strong>Agente Windows</strong></div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">
+                    Instale nos computadores/servidores Windows pra receber automaticamente hardware,
+                    programas instalados e alertas do Visualizador de Eventos.
+                </p>
+                <div class="mb-3">
+                    <label class="form-label small mb-1">Chave de API do agente</label>
+                    <div class="input-group input-group-sm" style="max-width:520px">
+                        <input type="text" class="form-control font-monospace" value="<?= htmlspecialchars($chaveAgente) ?>" readonly id="campoChaveAgente">
+                        <button class="btn btn-outline-secondary" type="button" id="botaoCopiarChave" title="Copiar"><i class="bi bi-clipboard"></i></button>
+                    </div>
+                </div>
+                <a href="<?= url('/ativos/agente/script') ?>" class="btn btn-sm btn-primary"><i class="bi bi-download"></i> Baixar script do agente (.ps1)</a>
+                <form method="post" action="<?= url('/ativos/agente/regenerar-chave') ?>" class="d-inline" id="formRegenerarChave">
+                    <button class="btn btn-sm btn-outline-danger"><i class="bi bi-arrow-repeat"></i> Gerar nova chave</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-3">
             <div class="card-header bg-white"><strong>Coleta via SNMP</strong></div>
             <div class="card-body">
                 <form method="post" action="<?= url('/ativos/snmp/config') ?>" class="row g-2 align-items-end mb-3">
@@ -111,19 +132,37 @@ $statusCores = [
 <script>
 (function () {
     const botao = document.getElementById('botaoAtivarColetaSnmp');
-    if (!botao) return;
+    if (botao) {
+        botao.addEventListener('click', async function () {
+            botao.disabled = true;
+            try {
+                const res = await fetch(<?= json_encode(url('/ativos/snmp/ativar-coleta')) ?>, { method: 'POST' });
+                const dados = await res.json();
+                alert(dados.message || (dados.success ? 'Ativado.' : 'Falha ao ativar.'));
+                location.reload();
+            } catch (e) {
+                botao.disabled = false;
+            }
+        });
+    }
 
-    botao.addEventListener('click', async function () {
-        botao.disabled = true;
-        try {
-            const res = await fetch(<?= json_encode(url('/ativos/snmp/ativar-coleta')) ?>, { method: 'POST' });
-            const dados = await res.json();
-            alert(dados.message || (dados.success ? 'Ativado.' : 'Falha ao ativar.'));
-            location.reload();
-        } catch (e) {
-            botao.disabled = false;
-        }
-    });
+    const botaoCopiar = document.getElementById('botaoCopiarChave');
+    if (botaoCopiar) {
+        botaoCopiar.addEventListener('click', function () {
+            navigator.clipboard.writeText(document.getElementById('campoChaveAgente').value);
+            botaoCopiar.innerHTML = '<i class="bi bi-check-lg"></i>';
+            setTimeout(function () { botaoCopiar.innerHTML = '<i class="bi bi-clipboard"></i>'; }, 1500);
+        });
+    }
+
+    const formRegenerar = document.getElementById('formRegenerarChave');
+    if (formRegenerar) {
+        formRegenerar.addEventListener('submit', function (e) {
+            if (!confirm('Isso invalida a chave atual -- agentes já instalados vão parar de funcionar até você reinstalar o script com a nova chave. Continuar?')) {
+                e.preventDefault();
+            }
+        });
+    }
 })();
 </script>
 
