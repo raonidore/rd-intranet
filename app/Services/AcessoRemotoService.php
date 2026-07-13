@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Repositories\IptablesRegraRepository;
+
 /**
  * Acesso remoto via MeshCentral (self-hosted, Apache 2.0,
  * https://github.com/Ylianst/MeshCentral) -- NÃO é construído do zero.
@@ -186,5 +188,49 @@ class AcessoRemotoService
         $host = explode(':', $host)[0];
 
         return "https://{$host}:{$this->porta()}/";
+    }
+
+    public function portaLiberadaNoFirewall(): bool
+    {
+        $repo = new IptablesRegraRepository();
+        $porta = (string)$this->porta();
+
+        foreach ($repo->buscarPorOrigemTemplate('liberar_porta') as $regra) {
+            if (!empty($regra['ativo']) && (string)($regra['porta_destino'] ?? '') === $porta) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Cria e aplica (via o módulo de Firewall já existente, mesmo template
+     * "liberar_porta" usado na tela de Infraestrutura) uma regra ACCEPT de
+     * entrada pra porta do MeshCentral. Confirma na hora em vez de deixar
+     * pendente na janela de rollback do módulo de Firewall -- liberar porta
+     * é aditivo (ACCEPT), não corre o risco de travar o acesso do admin que
+     * justifica a confirmação manual pras regras de bloqueio.
+     */
+    public function liberarPortaNoFirewall(): array
+    {
+        $firewall = new IptablesService();
+
+        $resultado = $firewall->aplicarTemplate('liberar_porta', [
+            'protocolo' => 'tcp',
+            'porta' => (string)$this->porta(),
+        ]);
+
+        if (!$resultado['success']) {
+            return $resultado;
+        }
+
+        $confirmado = $firewall->confirmar();
+
+        if ($confirmado['success']) {
+            AuditService::registrar('Ativos', 'Acesso Remoto', "Porta {$this->porta()}/tcp liberada no Firewall pra acesso ao MeshCentral.");
+        }
+
+        return $confirmado;
     }
 }

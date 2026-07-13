@@ -35,7 +35,16 @@ class AcessoRemotoController extends Controller
             'usuarioTokenAtual' => $this->service->usuarioTokenAtual(),
             'dispositivos' => ($rodando && $credenciaisConfiguradas) ? $this->service->listarDispositivos() : [],
             'ativos' => $this->ativoService->listar(),
+            'portaLiberada' => $this->service->portaLiberadaNoFirewall(),
         ]);
+    }
+
+    public function liberarPorta(): void
+    {
+        AuthMiddleware::checkModulo('ativos_acesso_remoto');
+        header('Content-Type: application/json');
+
+        echo json_encode($this->service->liberarPortaNoFirewall());
     }
 
     public function vincular(): void

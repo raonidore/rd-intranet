@@ -410,5 +410,6 @@ $router->post('/ativos/acesso-remoto/instalar', [AcessoRemotoController::class, 
 $router->post('/ativos/acesso-remoto/credenciais', [AcessoRemotoController::class, 'salvarCredenciais']);
 $router->post('/ativos/acesso-remoto/vincular', [AcessoRemotoController::class, 'vincular']);
 $router->post('/ativos/acesso-remoto/compartilhar', [AcessoRemotoController::class, 'compartilhar']);
+$router->post('/ativos/acesso-remoto/liberar-porta', [AcessoRemotoController::class, 'liberarPorta']);
 
 $router->post('/ativos/comando', [AtivoController::class, 'enviarComando']);

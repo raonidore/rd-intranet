@@ -51,6 +51,26 @@ use App\Components\Badge;
                 MeshCentral. Depois de criar, desative o cadastro público de novas contas nas
                 configurações dele (não é gerenciado por aqui ainda).
             </p>
+
+            <?php if ($rodando): ?>
+                <hr>
+                <div class="d-flex justify-content-between align-items-center gap-3">
+                    <div>
+                        <strong>Porta <?= (int)$porta ?>/tcp no Firewall</strong>
+                        <p class="text-muted small mb-0">
+                            Sem isso, o console e a tela remota embutida na ficha do ativo não ficam
+                            alcançáveis de fora deste servidor.
+                        </p>
+                    </div>
+                    <?php if ($portaLiberada): ?>
+                        <?= Badge::make('Liberada', 'success') ?>
+                    <?php else: ?>
+                        <button type="button" class="btn btn-sm btn-outline-warning text-nowrap" id="botaoLiberarPorta">
+                            <i class="bi bi-unlock"></i> Liberar no Firewall
+                        </button>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
         <?php endif; ?>
     </div>
 </div>
@@ -168,6 +188,35 @@ use App\Components\Badge;
         } finally {
             botao.disabled = false;
             botao.innerHTML = '<i class="bi bi-download"></i> Instalar';
+        }
+    });
+})();
+
+(function () {
+    const botao = document.getElementById('botaoLiberarPorta');
+    if (!botao) return;
+
+    botao.addEventListener('click', async function () {
+        const confirmado = confirm(
+            'Criar e aplicar uma regra no Firewall liberando a porta <?= (int)$porta ?>/tcp (entrada) ' +
+            'pra qualquer origem?\n\nÉ só isso -- não mexe em mais nada do Firewall.'
+        );
+
+        if (!confirmado) return;
+
+        botao.disabled = true;
+        botao.innerHTML = '<i class="bi bi-hourglass-split"></i> Aplicando...';
+
+        try {
+            const res = await fetch(<?= json_encode(url('/ativos/acesso-remoto/liberar-porta')) ?>, { method: 'POST' });
+            const resultado = await res.json();
+            alert(resultado.message || (resultado.success ? 'Porta liberada.' : 'Falha ao liberar a porta.'));
+            if (resultado.success) location.reload();
+        } catch (e) {
+            alert('Erro ao comunicar com o servidor.');
+        } finally {
+            botao.disabled = false;
+            botao.innerHTML = '<i class="bi bi-unlock"></i> Liberar no Firewall';
         }
     });
 })();
