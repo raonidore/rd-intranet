@@ -3,11 +3,15 @@
     ==============================================
 
     O que faz:
-      Coleta hardware, sistema operacional, programas instalados e
-      alertas recentes do Visualizador de Eventos, e envia tudo por
-      HTTPS para o RD Intranet (modulo Ativos de TI). Nao instala nada
-      alem de si mesmo -- so usa modulos nativos do Windows (CIM/WMI,
-      registro, Get-WinEvent, Task Scheduler).
+      Coleta hardware, sistema operacional, uptime, programas instalados
+      e alertas recentes do Visualizador de Eventos, e envia tudo por
+      HTTPS para o RD Intranet (modulo Ativos de TI). Tambem busca e
+      executa comandos remotos pendentes (desligar/reiniciar, enviados
+      pela tela do ativo no RD Intranet) -- sempre com um aviso do
+      Windows de 5 minutos antes de executar, que da tempo do usuario
+      salvar o trabalho ou cancelar localmente (shutdown /a). Nao
+      instala nada alem de si mesmo -- so usa modulos nativos do
+      Windows (CIM/WMI, registro, Get-WinEvent, Task Scheduler).
 
     Como instalar:
       1. Baixe este arquivo pela tela Ativos > Dashboard do RD Intranet
@@ -177,6 +181,7 @@ try {
         usuario_logado = $computador.UserName
         funcao         = if ($tipo -eq 'servidor') { $sistema.Caption } else { $null }
         virtualizado   = if ($computador.Model -match 'Virtual|VMware|KVM|VirtualBox') { 'Sim' } else { 'Não' }
+        ligado_desde   = $sistema.LastBootUpTime.ToString('yyyy-MM-dd HH:mm:ss')
         programas      = @()
         alertas        = @()
     }
@@ -253,6 +258,29 @@ try {
 
     if (-not $jaInstalado) {
         Write-Host "Primeira coleta enviada com sucesso. O ativo já deve aparecer no RD Intranet." -ForegroundColor Green
+    }
+
+    # --------------------------------------------------------------
+    # Comandos remotos (desligar/reiniciar) -- vem junto da resposta do
+    # checkin. Usa o shutdown.exe nativo do Windows com um tempo de
+    # aviso (mostra um alerta do sistema pro usuário, com chance de
+    # cancelar via "shutdown /a" localmente antes do prazo acabar).
+    $tempoAvisoSegundos = 300
+
+    foreach ($comando in $resposta.comandos) {
+        Escrever-Log "Comando remoto recebido: $($comando.comando) (id=$($comando.id))"
+
+        try {
+            if ($comando.comando -eq 'desligar') {
+                shutdown.exe /s /t $tempoAvisoSegundos /c "RD Intranet: este computador sera desligado remotamente pelo suporte de TI em 5 minutos. Salve seu trabalho."
+                Escrever-Log "Desligamento agendado para daqui a $tempoAvisoSegundos segundos."
+            } elseif ($comando.comando -eq 'reiniciar') {
+                shutdown.exe /r /t $tempoAvisoSegundos /c "RD Intranet: este computador sera reiniciado remotamente pelo suporte de TI em 5 minutos. Salve seu trabalho."
+                Escrever-Log "Reinicio agendado para daqui a $tempoAvisoSegundos segundos."
+            }
+        } catch {
+            Escrever-Log "ERRO ao executar comando $($comando.comando): $($_.Exception.Message)"
+        }
     }
 } catch {
     Escrever-Log "ERRO: $($_.Exception.Message)"
