@@ -106,12 +106,15 @@ class AcessoRemotoService
     }
 
     /**
-     * Gera um link de compartilhamento de tela de uso único (sem exigir
-     * login separado no MeshCentral -- é a peça que permite embutir a tela
-     * remota num iframe na ficha do ativo). Diferente dos outros comandos
-     * do meshctrl, "DeviceSharing --add" NÃO respeita --json (bug/limitação
-     * da própria ferramenta -- confirmado testando ao vivo), sempre devolve
-     * texto simples "ID: ...\nURL: ...".
+     * Gera um link de compartilhamento de uso único (sem exigir login
+     * separado no MeshCentral -- é a peça que permite embutir a tela
+     * remota num iframe na ficha do ativo). Inclui desktop + arquivos
+     * (--type desktop,files), então o mesmo link já dá acesso a subir/
+     * baixar arquivos da máquina remota, sem precisar gerar outro.
+     * Diferente dos outros comandos do meshctrl, "DeviceSharing --add"
+     * NÃO respeita --json (bug/limitação da própria ferramenta --
+     * confirmado testando ao vivo), sempre devolve texto simples
+     * "ID: ...\nURL: ...".
      */
     public function gerarLinkCompartilhamento(string $meshDeviceId, string $convidado, int $duracaoMinutos = 60): ?string
     {
@@ -123,7 +126,7 @@ class AcessoRemotoService
         $cmd .= ' DeviceSharing';
         $cmd .= ' --id ' . escapeshellarg($meshDeviceId);
         $cmd .= ' --add ' . escapeshellarg($convidado);
-        $cmd .= ' --type desktop';
+        $cmd .= ' --type desktop,files';
         $cmd .= ' --consent notify';
         $cmd .= ' --duration ' . escapeshellarg((string)$duracaoMinutos);
         $cmd .= ' --loginuser ' . escapeshellarg($this->usuarioTokenAtual());
