@@ -108,13 +108,20 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
     <?php if (!empty($ativo['ultimo_checkin'])): ?>
         <div class="alert alert-light border small mb-0 py-2">
-            <i class="bi bi-clock-history"></i> Última atualização: <?= htmlspecialchars(data_br($ativo['ultimo_checkin'])) ?>
-            via <?= $ativo['origem'] === 'agente' ? 'agente Windows' : ($ativo['origem'] === 'snmp' ? 'SNMP' : 'manual') ?>
-            <?php if ($estaLigada && $uptime): ?>
-                · ligado há <?= htmlspecialchars($uptime) ?>
-                <?php if (!empty($detalhes['ligado_desde'])): ?>
-                    (desde <?= htmlspecialchars(data_br($detalhes['ligado_desde'])) ?>)
+            <i class="bi bi-clock-history"></i>
+            <?php if ($ativo['origem'] === 'agente'): ?>
+                Não é ao vivo: última comunicação com o agente foi há <strong><?= $minutosDesdeCheckin ?> min</strong>
+                (<?= htmlspecialchars(data_br($ativo['ultimo_checkin'])) ?>), próxima esperada em até
+                <strong><?= $intervaloComunicacao ?> min</strong>.
+                <?php if ($estaLigada && $uptime): ?>
+                    · ligado há <?= htmlspecialchars($uptime) ?>
+                    <?php if (!empty($detalhes['ligado_desde'])): ?>
+                        (desde <?= htmlspecialchars(data_br($detalhes['ligado_desde'])) ?>)
+                    <?php endif; ?>
                 <?php endif; ?>
+            <?php else: ?>
+                Última atualização: <?= htmlspecialchars(data_br($ativo['ultimo_checkin'])) ?>
+                via <?= $ativo['origem'] === 'snmp' ? 'SNMP' : 'manual' ?>
             <?php endif; ?>
         </div>
     <?php endif; ?>
@@ -145,6 +152,9 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     </li>
     <li class="nav-item" role="presentation">
         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaProgramas" type="button">Programas <?= !empty($programas) ? '<span class="badge text-bg-secondary ms-1">' . count($programas) . '</span>' : '' ?></button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaAtualizacoes" type="button">Atualizações do Windows <?= !empty($atualizacoesWindows) ? '<span class="badge text-bg-secondary ms-1">' . count($atualizacoesWindows) . '</span>' : '' ?></button>
     </li>
 </ul>
 
@@ -388,7 +398,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                 <?php else: ?>
                     <table class="table table-sm mb-0">
                         <thead>
-                            <tr><th>Programa</th><th>Versão</th><th>Instalado em</th></tr>
+                            <tr><th>Programa</th><th>Versão</th><th>Instalado em</th><?php if ($ativo['origem'] === 'agente'): ?><th class="text-end">Ações</th><?php endif; ?></tr>
                         </thead>
                         <tbody>
                             <?php foreach ($programas as $p): ?>
@@ -396,10 +406,57 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                     <td><?= htmlspecialchars($p['nome']) ?></td>
                                     <td class="text-muted small"><?= htmlspecialchars($p['versao'] ?? '—') ?></td>
                                     <td class="text-muted small"><?= !empty($p['data_instalacao']) ? htmlspecialchars(data_br($p['data_instalacao'], 'd/m/Y')) : '—' ?></td>
+                                    <?php if ($ativo['origem'] === 'agente'): ?>
+                                        <td class="text-end">
+                                            <?php if (!empty($p['uninstall_string'])): ?>
+                                                <button type="button" class="btn btn-sm btn-outline-danger botao-desinstalar-programa"
+                                                        data-ativo-id="<?= (int)$ativo['id'] ?>" data-programa-id="<?= (int)$p['id'] ?>" data-nome="<?= htmlspecialchars($p['nome']) ?>">
+                                                    <i class="bi bi-trash"></i> Desinstalar
+                                                </button>
+                                            <?php else: ?>
+                                                <span class="text-muted small" data-bs-toggle="tooltip" title="Sem comando de desinstalação registrado pelo instalador">—</span>
+                                            <?php endif; ?>
+                                        </td>
+                                    <?php endif; ?>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
                     </table>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
+    <!-- Atualizações do Windows -->
+    <div class="tab-pane fade" id="abaAtualizacoes">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-0">
+                <?php if (empty($atualizacoesWindows)): ?>
+                    <p class="text-muted p-3 mb-0">Nenhuma atualização coletada ainda. Preenchido automaticamente pelo agente Windows.</p>
+                <?php else: ?>
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr><th>KB</th><th>Descrição</th><th>Instalado em</th><?php if ($ativo['origem'] === 'agente'): ?><th class="text-end">Ações</th><?php endif; ?></tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($atualizacoesWindows as $a): ?>
+                                <tr>
+                                    <td class="font-monospace small"><?= htmlspecialchars($a['kb']) ?></td>
+                                    <td class="small"><?= htmlspecialchars($a['descricao'] ?? '—') ?></td>
+                                    <td class="text-muted small"><?= !empty($a['instalado_em']) ? htmlspecialchars(data_br($a['instalado_em'], 'd/m/Y')) : '—' ?></td>
+                                    <?php if ($ativo['origem'] === 'agente'): ?>
+                                        <td class="text-end">
+                                            <button type="button" class="btn btn-sm btn-outline-danger botao-desinstalar-atualizacao"
+                                                    data-ativo-id="<?= (int)$ativo['id'] ?>" data-atualizacao-id="<?= (int)$a['id'] ?>" data-kb="<?= htmlspecialchars($a['kb']) ?>">
+                                                <i class="bi bi-trash"></i> Desinstalar
+                                            </button>
+                                        </td>
+                                    <?php endif; ?>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                    <p class="text-muted small p-2 mb-0">Algumas atualizações não podem mais ser removidas depois de "substituídas" por atualizações cumulativas mais novas -- isso é uma limitação do próprio Windows, não do agente.</p>
                 <?php endif; ?>
             </div>
         </div>
@@ -416,7 +473,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                         <tbody>
                             <?php foreach ($comandos as $c): ?>
                                 <tr>
-                                    <td class="text-capitalize"><?= htmlspecialchars($c['comando']) ?></td>
+                                    <td class="text-capitalize"><?= htmlspecialchars(str_replace('_', ' ', $c['comando'])) ?><?= !empty($c['alvo_label']) ? ': ' . htmlspecialchars($c['alvo_label']) : '' ?></td>
                                     <td><?= Badge::make($c['status'] === 'entregue' ? 'Entregue' : 'Pendente', $c['status'] === 'entregue' ? 'success' : 'secondary') ?></td>
                                     <td class="text-muted small text-end"><?= htmlspecialchars(data_br($c['criado_em'])) ?></td>
                                 </tr>
@@ -501,8 +558,8 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                 'Tem certeza que quer ' + label + ' esta máquina remotamente?\n\n' +
                 'O usuário vai receber um aviso do Windows com alguns minutos de contagem ' +
                 'regressiva antes de acontecer (dá tempo de salvar o trabalho ou cancelar ' +
-                'localmente). Pode levar até 30 minutos pra chegar até lá, dependendo de ' +
-                'quando o agente fizer a próxima coleta.'
+                'localmente). Pode levar até <?= $intervaloComunicacao * 2 ?> minutos pra chegar até lá, ' +
+                'dependendo de quando o agente fizer a próxima coleta.'
             );
 
             if (!confirmado) return;
@@ -524,6 +581,61 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                 botao.disabled = false;
             }
         });
+    });
+})();
+
+(function () {
+    async function enviarDesinstalacao(dados, mensagemConfirmacao) {
+        if (!confirm(mensagemConfirmacao)) return;
+
+        try {
+            const res = await fetch(<?= json_encode(url('/ativos/comando')) ?>, { method: 'POST', body: dados });
+            const resultado = await res.json();
+            alert(resultado.message || (resultado.success ? 'Comando enviado.' : 'Falha ao enviar comando.'));
+            if (resultado.success) location.reload();
+        } catch (e) {
+            alert('Erro ao comunicar com o servidor.');
+        }
+    }
+
+    document.querySelectorAll('.botao-desinstalar-programa').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+            const dados = new URLSearchParams();
+            dados.set('id', botao.dataset.ativoId);
+            dados.set('comando', 'desinstalar_programa');
+            dados.set('programa_id', botao.dataset.programaId);
+
+            enviarDesinstalacao(
+                dados,
+                'Desinstalar "' + botao.dataset.nome + '" remotamente?\n\n' +
+                'O comando é executado silenciosamente quando o instalador suporta isso (ex: MSI). ' +
+                'Instaladores mais antigos/não-padrão podem abrir uma tela de confirmação no ' +
+                'computador remoto -- não há garantia de desinstalação 100% silenciosa em todos os casos.'
+            );
+        });
+    });
+
+    document.querySelectorAll('.botao-desinstalar-atualizacao').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+            const dados = new URLSearchParams();
+            dados.set('id', botao.dataset.ativoId);
+            dados.set('comando', 'desinstalar_atualizacao');
+            dados.set('atualizacao_id', botao.dataset.atualizacaoId);
+
+            enviarDesinstalacao(
+                dados,
+                'Desinstalar a atualização ' + botao.dataset.kb + ' remotamente?\n\n' +
+                'Algumas atualizações não podem mais ser removidas se já foram substituídas por ' +
+                'atualizações cumulativas mais novas -- isso é uma limitação do Windows, o comando ' +
+                'pode falhar silenciosamente nesse caso.'
+            );
+        });
+    });
+})();
+
+(function () {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+        new bootstrap.Tooltip(el);
     });
 })();
 

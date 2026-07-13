@@ -78,6 +78,31 @@ $statusCores = [
         </div>
 
         <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white"><strong>Comunicação com Agentes</strong></div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">
+                    Intervalo esperado entre uma coleta e outra. Usado pra decidir quando um ativo aparece
+                    como "Desligado" (2x esse valor sem se comunicar) e gravado automaticamente no script
+                    <code>.ps1</code> baixado a partir de agora -- agentes já instalados mantêm o intervalo
+                    com que foram configurados até serem reinstalados.
+                </p>
+                <form method="post" action="<?= url('/ativos/comunicacao/salvar') ?>" class="row g-2 align-items-end">
+                    <div class="col-auto">
+                        <label class="form-label small mb-0">Intervalo (minutos)</label>
+                        <input type="number" name="minutos" class="form-control form-control-sm" style="width:100px"
+                               min="5" max="240" value="<?= (int)$intervaloComunicacao ?>">
+                    </div>
+                    <div class="col-auto">
+                        <button class="btn btn-sm btn-outline-secondary">Salvar</button>
+                    </div>
+                    <div class="col-auto">
+                        <span class="text-muted small">Considerado "Desligado" após <?= (int)$intervaloComunicacao * 2 ?> min sem comunicação.</span>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-3">
             <div class="card-header bg-white"><strong>Coleta via SNMP</strong></div>
             <div class="card-body">
                 <form method="post" action="<?= url('/ativos/snmp/config') ?>" class="row g-2 align-items-end mb-3">

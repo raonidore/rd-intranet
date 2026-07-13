@@ -96,7 +96,10 @@ $statusCores = [
                                 <td><?= Badge::make(htmlspecialchars(AtivoService::STATUS[$a['status']] ?? $a['status']), $statusCores[$a['status']] ?? 'secondary') ?></td>
                                 <td>
                                     <?php if ($a['origem'] === 'agente'): ?>
-                                        <?= Badge::make(AtivoService::estaLigada($a) ? 'Ligado' : 'Desligado', AtivoService::estaLigada($a) ? 'success' : 'secondary') ?>
+                                        <?php $minutosAtras = AtivoService::minutosDesdeUltimoCheckin($a); ?>
+                                        <span data-bs-toggle="tooltip" title="<?= $minutosAtras !== null ? 'Visto há ' . $minutosAtras . ' min (não é ao vivo)' : 'Nunca se comunicou' ?>">
+                                            <?= Badge::make(AtivoService::estaLigada($a) ? 'Ligado' : 'Desligado', AtivoService::estaLigada($a) ? 'success' : 'secondary') ?>
+                                        </span>
                                     <?php else: ?>
                                         <span class="text-muted small">—</span>
                                     <?php endif; ?>
@@ -120,6 +123,12 @@ $statusCores = [
 </form>
 
 <script>
+(function () {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+        new bootstrap.Tooltip(el);
+    });
+})();
+
 (function () {
     const marcarTodos = document.getElementById('marcarTodos');
     const checkboxes = document.querySelectorAll('.checkbox-ativo');
