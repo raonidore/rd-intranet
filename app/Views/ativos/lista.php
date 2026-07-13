@@ -93,7 +93,7 @@ $statusCores = [
                                 <td><?= htmlspecialchars($a['nome']) ?></td>
                                 <td><i class="bi <?= AtivoService::TIPOS[$a['tipo']]['icone'] ?>"></i> <?= htmlspecialchars(AtivoService::TIPOS[$a['tipo']]['label']) ?></td>
                                 <td><?= Badge::make(htmlspecialchars(AtivoService::STATUS[$a['status']] ?? $a['status']), $statusCores[$a['status']] ?? 'secondary') ?></td>
-                                <td class="small text-muted"><?= htmlspecialchars($a['localizacao'] ?? '—') ?></td>
+                                <td class="small text-muted"><?= htmlspecialchars($a['localizacao_nome'] ?? '—') ?></td>
                                 <td class="text-end">
                                     <div class="btn-group" role="group">
                                         <a href="<?= url('/ativos/ver?id=' . $a['id']) ?>" class="btn btn-sm btn-outline-secondary" title="Ver"><i class="bi bi-eye"></i></a>

@@ -188,7 +188,8 @@ $abrirAtivos = $rdSecaoAtiva(['/ativos']);
     <?php
     $temAtivos = PermissionService::temAcesso('ativos_dashboard')
         || PermissionService::temAcesso('ativos_lista')
-        || PermissionService::temAcesso('ativos_novo');
+        || PermissionService::temAcesso('ativos_novo')
+        || PermissionService::temAcesso('ativos_cadastros');
     ?>
     <?php if ($temAtivos): ?>
     <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuAtivos"
@@ -212,6 +213,12 @@ $abrirAtivos = $rdSecaoAtiva(['/ativos']);
         <?php if (PermissionService::temAcesso('ativos_novo')): ?>
         <a href="<?= url('/ativos/novo') ?>" class="<?= str_starts_with($uriAtual, '/ativos/novo') || str_starts_with($uriAtual, '/ativos/editar') ? 'active' : '' ?>">
             <i class="bi bi-plus-lg me-2"></i> Novo Ativo
+        </a>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('ativos_cadastros')): ?>
+        <a href="<?= url('/ativos/cadastros') ?>" class="<?= str_starts_with($uriAtual, '/ativos/cadastros') ? 'active' : '' ?>">
+            <i class="bi bi-tags me-2"></i> Cadastros
         </a>
         <?php endif; ?>
     </div>
@@ -552,6 +559,9 @@ $abrirAtivos = $rdSecaoAtiva(['/ativos']);
         </a>
         <a href="<?= url('/administracao/atualizacoes') ?>" class="<?= str_starts_with($uriAtual, '/administracao/atualizacoes') ? 'active' : '' ?>">
             <i class="bi bi-cloud-arrow-down me-2"></i> Atualizações do Sistema
+        </a>
+        <a href="<?= url('/administracao/empresa') ?>" class="<?= str_starts_with($uriAtual, '/administracao/empresa') ? 'active' : '' ?>">
+            <i class="bi bi-building me-2"></i> Dados da Empresa
         </a>
         <?php endif; ?>
     </div>

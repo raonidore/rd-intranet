@@ -79,11 +79,23 @@ $tipoAtual = $ativo['tipo'] ?? $tipoSelecionado;
             <div class="row g-3 mb-3">
                 <div class="col-md-4">
                     <label class="form-label">Setor</label>
-                    <input type="text" name="setor" class="form-control" value="<?= htmlspecialchars($ativo['setor'] ?? '') ?>">
+                    <select name="setor_id" class="form-select">
+                        <option value="">— Nenhum —</option>
+                        <?php foreach ($setores as $s): ?>
+                            <option value="<?= (int)$s['id'] ?>" <?= (int)($ativo['setor_id'] ?? 0) === (int)$s['id'] ? 'selected' : '' ?>><?= htmlspecialchars($s['nome']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <div class="form-text">Não achou? <a href="<?= url('/ativos/cadastros') ?>" target="_blank">Cadastre um novo setor</a>.</div>
                 </div>
                 <div class="col-md-4">
                     <label class="form-label">Localização</label>
-                    <input type="text" name="localizacao" class="form-control" value="<?= htmlspecialchars($ativo['localizacao'] ?? '') ?>" placeholder="Ex: Sala 2 - 2º andar">
+                    <select name="localizacao_id" class="form-select">
+                        <option value="">— Nenhuma —</option>
+                        <?php foreach ($localizacoes as $l): ?>
+                            <option value="<?= (int)$l['id'] ?>" <?= (int)($ativo['localizacao_id'] ?? 0) === (int)$l['id'] ? 'selected' : '' ?>><?= htmlspecialchars($l['nome']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <div class="form-text">Não achou? <a href="<?= url('/ativos/cadastros') ?>" target="_blank">Cadastre uma nova localização</a>.</div>
                 </div>
                 <div class="col-md-4">
                     <label class="form-label">Responsável</label>
