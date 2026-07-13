@@ -49,6 +49,11 @@ fi
 # (o firewall decide quem alcanca), sem redirect de porta 80->443
 # (redirPort 0, ja temos o Apache cuidando disso pro dominio principal).
 # allowFraming permite embutir a tela remota num iframe do RD Intranet.
+# allowedorigin:true desliga a checagem de Origin do navegador contra um
+# hostname fixo -- sem isso, o MeshCentral so aceita conexao vinda do
+# mesmo hostname configurado em "cert", e rejeita com "Invalid origin"
+# quem acessa por IP ou por outro nome (nosso caso: acesso tanto por
+# hostname quanto por IP na rede interna).
 if [ ! -f "$PASTA_DADOS/config.json" ]; then
   cat > "$PASTA_DADOS/config.json" <<EOF
 {
@@ -61,12 +66,28 @@ if [ ! -f "$PASTA_DADOS/config.json" ]; then
   "domains": {
     "": {
       "title": "RD Intranet - Acesso Remoto",
-      "title2": ""
+      "title2": "",
+      "allowedorigin": true
     }
   }
 }
 EOF
 fi
+
+# Idempotente: se o config.json ja existia (reinstalacao/reparo), garante
+# que allowedorigin esteja ligado mesmo assim, sem mexer no resto do
+# arquivo (ex: senha/2FA/contas ja configuradas continuam intactas).
+node -e "
+const fs = require('fs');
+const caminho = '$PASTA_DADOS/config.json';
+const config = JSON.parse(fs.readFileSync(caminho, 'utf8'));
+if (!config.domains) config.domains = {};
+if (!config.domains['']) config.domains[''] = {};
+config.domains[''].allowedorigin = true;
+if (!config.settings) config.settings = {};
+config.settings.allowFraming = true;
+fs.writeFileSync(caminho, JSON.stringify(config, null, 2));
+"
 
 chown -R "$USUARIO":"$USUARIO" "$PASTA_INSTALACAO"
 
