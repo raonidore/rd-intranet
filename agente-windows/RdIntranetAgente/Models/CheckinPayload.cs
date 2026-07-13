@@ -78,6 +78,9 @@ public class CheckinPayload
     [JsonPropertyName("portas")]
     public List<PortaItem> Portas { get; set; } = new();
 
+    [JsonPropertyName("portas_rede")]
+    public List<PortaRedeItem> PortasRede { get; set; } = new();
+
     [JsonPropertyName("memoria_modulos")]
     public List<MemoriaItem> MemoriaModulos { get; set; } = new();
 
@@ -176,6 +179,24 @@ public class PortaItem
 
     [JsonPropertyName("descricao")]
     public string Descricao { get; set; } = "";
+}
+
+public class PortaRedeItem
+{
+    [JsonPropertyName("protocolo")]
+    public string Protocolo { get; set; } = "tcp";
+
+    [JsonPropertyName("porta_local")]
+    public int PortaLocal { get; set; }
+
+    [JsonPropertyName("endereco_local")]
+    public string? EnderecoLocal { get; set; }
+
+    [JsonPropertyName("processo")]
+    public string? Processo { get; set; }
+
+    [JsonPropertyName("pid")]
+    public int? Pid { get; set; }
 }
 
 public class AlertaItem

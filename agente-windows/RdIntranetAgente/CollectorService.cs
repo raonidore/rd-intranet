@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Management;
 using Microsoft.Win32;
@@ -178,6 +179,7 @@ public static class CollectorService
         payload.Ip = payload.Redes.Count > 0 ? payload.Redes[0].Ip : null;
         payload.Volumes = ObterVolumes();
         payload.Portas = ObterPortas();
+        payload.PortasRede = ObterPortasRede();
         payload.MemoriaModulos = ObterModulosMemoria();
         payload.Programas = ObterProgramasInstalados();
         payload.AtualizacoesWindows = ObterAtualizacoesWindows();
@@ -332,6 +334,86 @@ public static class CollectorService
         }
 
         return portas;
+    }
+
+    /// <summary>
+    /// Portas de rede em escuta (LISTENING) -- pra auditoria de seguranca,
+    /// mostra o que a maquina esta expondo na rede. Sem uma classe WMI
+    /// pronta pra isso com PID incluido, usa o proprio netstat.exe
+    /// (ja vem com o Windows) e faz parsing da saida -- mesma filosofia
+    /// de "melhor esforco" ja usada no restante do agente.
+    /// </summary>
+    private static List<PortaRedeItem> ObterPortasRede()
+    {
+        var portas = new List<PortaRedeItem>();
+
+        try
+        {
+            using var processo = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "netstat.exe",
+                    Arguments = "-ano",
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+
+            processo.Start();
+            var saida = processo.StandardOutput.ReadToEnd();
+            processo.WaitForExit(5000);
+
+            foreach (var linhaBruta in saida.Split('\n'))
+            {
+                var campos = linhaBruta.Trim().Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                if (campos.Length < 4) continue;
+
+                string protocolo;
+                if (campos[0].Equals("TCP", StringComparison.OrdinalIgnoreCase)) protocolo = "tcp";
+                else if (campos[0].Equals("UDP", StringComparison.OrdinalIgnoreCase)) protocolo = "udp";
+                else continue;
+
+                // TCP: Proto Local Estrangeiro Estado PID (5 campos) -- so LISTENING interessa.
+                // UDP: Proto Local Estrangeiro PID (4 campos) -- sempre "em escuta".
+                if (protocolo == "tcp" && (campos.Length < 5 || !campos[3].Equals("LISTENING", StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                if (!int.TryParse(campos[^1], out var pid)) continue;
+
+                var enderecoLocal = campos[1];
+                var posDoisPontos = enderecoLocal.LastIndexOf(':');
+                if (posDoisPontos < 0) continue;
+
+                var endereco = enderecoLocal[..posDoisPontos].Trim('[', ']');
+                if (!int.TryParse(enderecoLocal[(posDoisPontos + 1)..], out var porta)) continue;
+
+                string? nomeProcesso = null;
+                try { nomeProcesso = Process.GetProcessById(pid).ProcessName; } catch { /* processo pode ja ter encerrado */ }
+
+                portas.Add(new PortaRedeItem
+                {
+                    Protocolo = protocolo,
+                    PortaLocal = porta,
+                    EnderecoLocal = endereco,
+                    Processo = nomeProcesso,
+                    Pid = pid
+                });
+            }
+        }
+        catch
+        {
+            // netstat pode falhar em ambiente restrito -- segue sem essa lista
+        }
+
+        return portas
+            .GroupBy(p => (p.Protocolo, p.PortaLocal, p.EnderecoLocal))
+            .Select(g => g.First())
+            .OrderBy(p => p.Protocolo).ThenBy(p => p.PortaLocal)
+            .ToList();
     }
 
     /// <summary>

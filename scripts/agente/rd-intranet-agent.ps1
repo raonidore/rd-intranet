@@ -8,7 +8,8 @@
       de video/som, tipo de memoria), sistema operacional, uptime, rede
       (MAC/IP por adaptador), volumes logicos (uso por unidade + modelo/
       fabricante/serie do disco fisico associado, quando disponivel),
-      portas fisicas (USB conectado + seriais), programas instalados
+      portas fisicas (USB conectado + seriais), portas de rede em
+      escuta (auditoria de seguranca), programas instalados
       (com data de instalacao, quando disponivel), atualizacoes do
       Windows instaladas (KBs) e alertas recentes do Visualizador de
       Eventos, e envia tudo por HTTPS para o RD Intranet (modulo Ativos
@@ -215,6 +216,7 @@ try {
         redes          = $redes
         volumes        = @()
         portas         = @()
+        portas_rede    = @()
         memoria_modulos = @()
         programas      = @()
         atualizacoes_windows = @()
@@ -281,6 +283,44 @@ try {
     })
 
     $payload.portas = @($portasUsb) + @($portasSerial)
+
+    # --------------------------------------------------------------
+    # Portas de rede em escuta (LISTENING) -- pra auditoria de
+    # seguranca, mostra o que a maquina esta expondo na rede. So
+    # existe em Windows com o modulo NetTCPIP (Windows 8/2012 em
+    # diante) -- em versoes mais antigas simplesmente fica vazio.
+    $portasRede = @()
+    try {
+        $portasRede += Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | ForEach-Object {
+            $proc = Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue
+            @{
+                protocolo      = 'tcp'
+                porta_local    = $_.LocalPort
+                endereco_local = $_.LocalAddress
+                processo       = if ($proc) { $proc.ProcessName } else { $null }
+                pid            = $_.OwningProcess
+            }
+        }
+    } catch {
+        # Get-NetTCPConnection pode nao existir em Windows antigos -- ignora
+    }
+
+    try {
+        $portasRede += Get-NetUDPEndpoint -ErrorAction SilentlyContinue | ForEach-Object {
+            $proc = Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue
+            @{
+                protocolo      = 'udp'
+                porta_local    = $_.LocalPort
+                endereco_local = $_.LocalAddress
+                processo       = if ($proc) { $proc.ProcessName } else { $null }
+                pid            = $_.OwningProcess
+            }
+        }
+    } catch {
+        # Get-NetUDPEndpoint pode nao existir em Windows antigos -- ignora
+    }
+
+    $payload.portas_rede = @($portasRede)
 
     # --------------------------------------------------------------
     # Programas instalados -- le direto do registro (Uninstall), NAO
@@ -378,7 +418,7 @@ try {
         -ContentType 'application/json; charset=utf-8' `
         -Body ([System.Text.Encoding]::UTF8.GetBytes($json))
 
-    Escrever-Log "OK: checkin enviado (guid=$machineGuid, tipo=$tipo, $($payload.programas.Count) programas, $($payload.alertas.Count) alertas, $($payload.redes.Count) redes, $($payload.volumes.Count) volumes, $($payload.portas.Count) portas, $($payload.memoria_modulos.Count) modulos de memoria, $($payload.atualizacoes_windows.Count) atualizacoes do Windows). Resposta: $($resposta.message)"
+    Escrever-Log "OK: checkin enviado (guid=$machineGuid, tipo=$tipo, $($payload.programas.Count) programas, $($payload.alertas.Count) alertas, $($payload.redes.Count) redes, $($payload.volumes.Count) volumes, $($payload.portas.Count) portas, $($payload.portas_rede.Count) portas de rede, $($payload.memoria_modulos.Count) modulos de memoria, $($payload.atualizacoes_windows.Count) atualizacoes do Windows). Resposta: $($resposta.message)"
 
     if (-not $jaInstalado) {
         Write-Host "Primeira coleta enviada com sucesso. O ativo já deve aparecer no RD Intranet." -ForegroundColor Green

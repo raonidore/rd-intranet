@@ -253,6 +253,11 @@ class AtivoService
         return $this->repository->listarPortas($ativoId);
     }
 
+    public function listarPortasRede(int $ativoId): array
+    {
+        return $this->repository->listarPortasRede($ativoId);
+    }
+
     private function proximoCodigo(string $tipo): string
     {
         $prefixo = self::TIPOS[$tipo]['prefixo'];
@@ -516,6 +521,7 @@ class AtivoService
         $this->repository->substituirRedes($id, array_slice($payload['redes'] ?? [], 0, 20));
         $this->repository->substituirVolumes($id, array_slice($payload['volumes'] ?? [], 0, 20));
         $this->repository->substituirPortas($id, array_slice($payload['portas'] ?? [], 0, 100));
+        $this->repository->substituirPortasRede($id, array_slice($payload['portas_rede'] ?? [], 0, 300));
         $this->repository->substituirMemoria($id, array_slice($payload['memoria_modulos'] ?? [], 0, 32));
         $this->repository->substituirAtualizacoesWindows($id, array_slice($payload['atualizacoes_windows'] ?? [], 0, 500));
 

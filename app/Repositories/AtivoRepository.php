@@ -474,6 +474,46 @@ class AtivoRepository
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public function substituirPortasRede(int $ativoId, array $portas): void
+    {
+        $this->pdo->prepare("DELETE FROM ativos_portas_rede WHERE ativo_id = ?")->execute([$ativoId]);
+
+        if (empty($portas)) {
+            return;
+        }
+
+        $stmt = $this->pdo->prepare("
+            INSERT INTO ativos_portas_rede (ativo_id, protocolo, porta_local, endereco_local, processo, pid)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ");
+
+        foreach ($portas as $p) {
+            $protocolo = strtolower(trim((string)($p['protocolo'] ?? '')));
+            $porta = (int)($p['porta_local'] ?? 0);
+
+            if (!in_array($protocolo, ['tcp', 'udp'], true) || $porta <= 0 || $porta > 65535) {
+                continue;
+            }
+
+            $stmt->execute([
+                $ativoId,
+                $protocolo,
+                $porta,
+                trim((string)($p['endereco_local'] ?? '')) ?: null,
+                trim((string)($p['processo'] ?? '')) ?: null,
+                isset($p['pid']) ? (int)$p['pid'] : null,
+            ]);
+        }
+    }
+
+    public function listarPortasRede(int $ativoId): array
+    {
+        $stmt = $this->pdo->prepare("SELECT * FROM ativos_portas_rede WHERE ativo_id = ? ORDER BY protocolo, porta_local");
+        $stmt->execute([$ativoId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function inserirAlertas(int $ativoId, array $alertas): void
     {
         if (empty($alertas)) {

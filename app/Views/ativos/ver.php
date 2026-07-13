@@ -359,6 +359,32 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                 <?php endif; ?>
             </div>
         </div>
+
+        <div class="card border-0 shadow-sm mt-3">
+            <div class="card-header bg-white"><strong>Portas de rede abertas</strong></div>
+            <div class="card-body p-0">
+                <?php if (empty($portasRede)): ?>
+                    <p class="text-muted p-3 mb-0">Nenhuma porta de rede coletada ainda. Preenchido automaticamente pelo agente Windows (portas em escuta no momento da coleta).</p>
+                <?php else: ?>
+                    <p class="text-muted small p-2 mb-0">Portas em escuta (LISTENING) no momento da última coleta -- útil pra checar exposição de serviços na máquina. Não é ao vivo, reflete o último check-in do agente.</p>
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr><th>Protocolo</th><th>Porta</th><th>Endereço</th><th>Processo</th></tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($portasRede as $p): ?>
+                                <tr>
+                                    <td class="text-uppercase small"><?= htmlspecialchars($p['protocolo']) ?></td>
+                                    <td class="font-monospace"><?= (int)$p['porta_local'] ?></td>
+                                    <td class="font-monospace small"><?= htmlspecialchars($p['endereco_local'] ?? '—') ?></td>
+                                    <td class="small"><?= htmlspecialchars($p['processo'] ?? '—') ?><?= !empty($p['pid']) ? ' <span class="text-muted">(PID ' . (int)$p['pid'] . ')</span>' : '' ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                <?php endif; ?>
+            </div>
+        </div>
     </div>
 
     <!-- Portas -->
