@@ -180,6 +180,7 @@ public static class CollectorService
         payload.Portas = ObterPortas();
         payload.MemoriaModulos = ObterModulosMemoria();
         payload.Programas = ObterProgramasInstalados();
+        payload.AtualizacoesWindows = ObterAtualizacoesWindows();
         payload.Alertas = ObterAlertas(eventosDesde ?? DateTime.Now.AddHours(-24));
 
         return payload;
@@ -375,7 +376,8 @@ public static class CollectorService
                 {
                     Nome = nome,
                     Versao = sub.GetValue("DisplayVersion") as string,
-                    DataInstalacao = dataInstalacao
+                    DataInstalacao = dataInstalacao,
+                    UninstallString = sub.GetValue("UninstallString") as string
                 });
             }
         }
@@ -385,6 +387,45 @@ public static class CollectorService
             .Select(g => g.First())
             .OrderBy(p => p.Nome, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    /// <summary>
+    /// Atualizações do Windows instaladas (hotfixes/KBs) -- mesmo local
+    /// que o Get-HotFix do PowerShell usa por baixo.
+    /// </summary>
+    private static List<AtualizacaoItem> ObterAtualizacoesWindows()
+    {
+        var atualizacoes = new List<AtualizacaoItem>();
+
+        using var busca = new ManagementObjectSearcher("SELECT HotFixID, Description, InstalledOn FROM Win32_QuickFixEngineering");
+
+        foreach (ManagementObject qfe in busca.Get())
+        {
+            var kb = qfe["HotFixID"]?.ToString();
+            if (string.IsNullOrWhiteSpace(kb)) continue;
+
+            string? instaladoEm = null;
+            // InstalledOn vem ora como [DateTime], ora como texto -- essa
+            // classe WMI é conhecida por ser inconsistente entre versões/
+            // idiomas do Windows.
+            if (qfe["InstalledOn"] is DateTime dataDireta)
+            {
+                instaladoEm = dataDireta.ToString("yyyy-MM-dd");
+            }
+            else if (qfe["InstalledOn"] is string dataTexto && DateTime.TryParse(dataTexto, out var dataConvertida))
+            {
+                instaladoEm = dataConvertida.ToString("yyyy-MM-dd");
+            }
+
+            atualizacoes.Add(new AtualizacaoItem
+            {
+                Kb = kb,
+                Descricao = qfe["Description"]?.ToString(),
+                InstaladoEm = instaladoEm
+            });
+        }
+
+        return atualizacoes;
     }
 
     /// <summary>

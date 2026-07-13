@@ -84,6 +84,9 @@ public class CheckinPayload
     [JsonPropertyName("programas")]
     public List<ProgramaItem> Programas { get; set; } = new();
 
+    [JsonPropertyName("atualizacoes_windows")]
+    public List<AtualizacaoItem> AtualizacoesWindows { get; set; } = new();
+
     [JsonPropertyName("alertas")]
     public List<AlertaItem> Alertas { get; set; } = new();
 }
@@ -98,6 +101,21 @@ public class ProgramaItem
 
     [JsonPropertyName("data_instalacao")]
     public string? DataInstalacao { get; set; }
+
+    [JsonPropertyName("uninstall_string")]
+    public string? UninstallString { get; set; }
+}
+
+public class AtualizacaoItem
+{
+    [JsonPropertyName("kb")]
+    public string Kb { get; set; } = "";
+
+    [JsonPropertyName("descricao")]
+    public string? Descricao { get; set; }
+
+    [JsonPropertyName("instalado_em")]
+    public string? InstaladoEm { get; set; }
 }
 
 public class RedeItem
@@ -175,7 +193,7 @@ public class AlertaItem
     public string? OcorridoEm { get; set; }
 }
 
-/// <summary>Comando remoto (desligar/reiniciar) que veio na resposta do checkin.</summary>
+/// <summary>Comando remoto que veio na resposta do checkin (desligar/reiniciar/desinstalar).</summary>
 public class ComandoItem
 {
     [JsonPropertyName("id")]
@@ -183,6 +201,9 @@ public class ComandoItem
 
     [JsonPropertyName("comando")]
     public string Comando { get; set; } = "";
+
+    [JsonPropertyName("alvo")]
+    public string? Alvo { get; set; }
 }
 
 public class RespostaCheckin

@@ -62,21 +62,27 @@ em `%LocalAppData%\RDIntranetAgent\config.json`, por usuário).
 
 - Registra-se pra iniciar com o Windows (`HKCU\...\Run`, sem precisar
   de admin).
-- A cada N minutos (configurável, padrão 15), coleta hardware/SO,
-  uptime (ligado desde), componentes (processador, memória total/em
-  uso, tipo de memória, placa-mãe, placa de vídeo, placa de som),
-  módulos de memória (fabricante/modelo/frequência/série, um por
-  pente), rede (MAC/IP por adaptador), volumes lógicos (uso por
-  unidade + modelo/fabricante/série do disco físico associado, quando
-  disponível), portas físicas (USB conectado + seriais), programas
-  instalados (via registro, não via `Win32_Product`, com data de
-  instalação quando disponível) e alertas novos do Visualizador de
-  Eventos (System/Application, Erro/Aviso), e envia pro servidor.
-- Busca e executa comandos remotos pendentes (Desligar/Reiniciar,
-  enviados pela ficha do ativo no RD Intranet) -- sempre com um aviso
+- A cada N minutos (configurável em Ativos > Dashboard no RD Intranet,
+  padrão 15), coleta hardware/SO, uptime (ligado desde), componentes
+  (processador, memória total/em uso, tipo de memória, placa-mãe,
+  placa de vídeo, placa de som), módulos de memória (fabricante/
+  modelo/frequência/série, um por pente), rede (MAC/IP por adaptador),
+  volumes lógicos (uso por unidade + modelo/fabricante/série do disco
+  físico associado, quando disponível), portas físicas (USB conectado
+  + seriais), programas instalados (via registro, não via
+  `Win32_Product`, com data de instalação e UninstallString quando
+  disponíveis), atualizações do Windows instaladas (KBs) e alertas
+  novos do Visualizador de Eventos (System/Application, Erro/Aviso), e
+  envia pro servidor.
+- Busca e executa comandos remotos pendentes (Desligar, Reiniciar,
+  Desinstalar atualização, Desinstalar programa -- enviados pela ficha
+  do ativo no RD Intranet). Desligar/Reiniciar sempre com um aviso
   nativo do Windows de 5 minutos antes de executar (`shutdown.exe /t`),
   que dá tempo do usuário salvar o trabalho ou cancelar localmente
-  (`shutdown /a`).
+  (`shutdown /a`). Desinstalação é melhor esforço: MSI sai silencioso
+  (`msiexec /X{guid} /quiet`), instaladores não-MSI rodam como estão
+  e podem abrir uma tela no computador remoto -- não há garantia de
+  silêncio total nesse caso.
 - Mostra no tooltip do ícone da bandeja: horário do último checkin e
   volume de dados enviado/recebido (última coleta + total acumulado).
 - Menu de contexto (botão direito no ícone): "Coletar agora",

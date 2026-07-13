@@ -203,10 +203,12 @@ public class TrayApplicationContext : ApplicationContext
     private const int TempoAvisoSegundos = 300;
 
     /// <summary>
-    /// Comandos remotos (desligar/reiniciar) vindos junto da resposta do
-    /// checkin. Usa o shutdown.exe nativo do Windows com um tempo de
-    /// aviso -- mostra um alerta do sistema pro usuário, com chance de
-    /// cancelar localmente (shutdown /a) antes do prazo acabar.
+    /// Comandos remotos vindos junto da resposta do checkin. Desligar/
+    /// reiniciar usam o shutdown.exe nativo com um tempo de aviso --
+    /// mostra um alerta do sistema pro usuário, com chance de cancelar
+    /// localmente (shutdown /a) antes do prazo acabar. Desinstalação é
+    /// melhor esforço: MSI sai silencioso, instaladores não-MSI rodam
+    /// como estão (podem abrir uma tela local, sem garantia de silêncio).
     /// </summary>
     private void ExecutarComandosPendentes(List<ComandoItem> comandos)
     {
@@ -214,32 +216,53 @@ public class TrayApplicationContext : ApplicationContext
         {
             try
             {
-                string argumentos = comando.Comando switch
+                switch (comando.Comando)
                 {
-                    "desligar" => $"/s /t {TempoAvisoSegundos} /c \"RD Intranet: este computador será desligado remotamente pelo suporte de TI em 5 minutos. Salve seu trabalho.\"",
-                    "reiniciar" => $"/r /t {TempoAvisoSegundos} /c \"RD Intranet: este computador será reiniciado remotamente pelo suporte de TI em 5 minutos. Salve seu trabalho.\"",
-                    _ => ""
-                };
+                    case "desligar":
+                        Executar("shutdown.exe", $"/s /t {TempoAvisoSegundos} /c \"RD Intranet: este computador será desligado remotamente pelo suporte de TI em 5 minutos. Salve seu trabalho.\"");
+                        break;
 
-                if (argumentos == "")
-                {
-                    continue;
+                    case "reiniciar":
+                        Executar("shutdown.exe", $"/r /t {TempoAvisoSegundos} /c \"RD Intranet: este computador será reiniciado remotamente pelo suporte de TI em 5 minutos. Salve seu trabalho.\"");
+                        break;
+
+                    case "desinstalar_atualizacao":
+                        if (string.IsNullOrWhiteSpace(comando.Alvo)) break;
+                        var kb = comando.Alvo.TrimStart('K', 'B');
+                        Executar("wusa.exe", $"/uninstall /kb:{kb} /quiet /norestart");
+                        break;
+
+                    case "desinstalar_programa":
+                        if (string.IsNullOrWhiteSpace(comando.Alvo)) break;
+                        var match = System.Text.RegularExpressions.Regex.Match(comando.Alvo, @"\{[0-9A-Fa-f-]{36}\}");
+                        if (match.Success)
+                        {
+                            Executar("msiexec.exe", $"/X{match.Value} /quiet /norestart");
+                        }
+                        else
+                        {
+                            Executar("cmd.exe", $"/c \"{comando.Alvo}\"");
+                        }
+                        break;
                 }
-
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = "shutdown.exe",
-                    Arguments = argumentos,
-                    CreateNoWindow = true,
-                    UseShellExecute = false
-                });
             }
             catch
             {
-                // se o shutdown.exe falhar (ex: sem permissão), não derruba
-                // o resto do checkin -- só não executa o comando
+                // se o comando falhar (ex: sem permissão, KB já removido),
+                // não derruba o resto do checkin -- só não executa esse item
             }
         }
+    }
+
+    private static void Executar(string arquivo, string argumentos)
+    {
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = arquivo,
+            Arguments = argumentos,
+            CreateNoWindow = true,
+            UseShellExecute = false
+        });
     }
 
     private void Encerrar()
