@@ -47,6 +47,12 @@ function gaugeRadial(float $percentual, string $label, string $sublabel): string
 $memoriaTotalGb = parseGb($detalhes['memoria_ram'] ?? null);
 $memoriaUsadaGb = parseGb($detalhes['memoria_usada'] ?? null);
 $memoriaPct = $memoriaTotalGb > 0 ? ($memoriaUsadaGb / $memoriaTotalGb) * 100 : null;
+
+$volumePrincipal = $volumes[0] ?? null;
+$discoPct = null;
+if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
+    $discoPct = ((float)$volumePrincipal['usado_gb'] / (float)$volumePrincipal['total_gb']) * 100;
+}
 ?>
 
 <style>
@@ -126,6 +132,9 @@ $memoriaPct = $memoriaTotalGb > 0 ? ($memoriaUsadaGb / $memoriaTotalGb) * 100 : 
         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaComponentes" type="button">Componentes</button>
     </li>
     <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaMemoria" type="button">Memória <?= !empty($memoria) ? '<span class="badge text-bg-secondary ms-1">' . count($memoria) . '</span>' : '' ?></button>
+    </li>
+    <li class="nav-item" role="presentation">
         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaVolumes" type="button">Volumes lógicos <?= !empty($volumes) ? '<span class="badge text-bg-secondary ms-1">' . count($volumes) . '</span>' : '' ?></button>
     </li>
     <li class="nav-item" role="presentation">
@@ -143,7 +152,7 @@ $memoriaPct = $memoriaTotalGb > 0 ? ($memoriaUsadaGb / $memoriaTotalGb) * 100 : 
     <!-- Visão Geral -->
     <div class="tab-pane fade show active" id="abaGeral">
         <div class="row g-3">
-            <div class="col-lg-7">
+            <div class="col-lg-6">
                 <div class="card border-0 shadow-sm h-100">
                     <div class="card-header bg-white"><strong>Dados gerais</strong></div>
                     <div class="card-body">
@@ -188,14 +197,30 @@ $memoriaPct = $memoriaTotalGb > 0 ? ($memoriaUsadaGb / $memoriaTotalGb) * 100 : 
                 </div>
             </div>
 
-            <div class="col-lg-5">
+            <div class="col-lg-3 col-md-6">
                 <div class="card border-0 shadow-sm h-100">
-                    <div class="card-header bg-white"><strong>Uso de memória</strong></div>
+                    <div class="card-header bg-white"><strong>Uso de Memória</strong></div>
                     <div class="card-body d-flex align-items-center justify-content-center">
                         <?php if ($memoriaPct !== null): ?>
                             <?= gaugeRadial($memoriaPct, 'RAM', round($memoriaUsadaGb, 1) . ' / ' . round($memoriaTotalGb, 1) . ' GB') ?>
                         <?php else: ?>
                             <p class="text-muted small mb-0 text-center py-4">Sem dado de memória em uso ainda.<br>Preenchido automaticamente pelo agente Windows.</p>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-3 col-md-6">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-white"><strong>Uso do Volume Lógico</strong></div>
+                    <div class="card-body d-flex flex-column align-items-center justify-content-center">
+                        <?php if ($discoPct !== null): ?>
+                            <?= gaugeRadial($discoPct, 'Unidade ' . $volumePrincipal['unidade'], round((float)$volumePrincipal['usado_gb'], 1) . ' / ' . round((float)$volumePrincipal['total_gb'], 1) . ' GB') ?>
+                            <?php if (count($volumes) > 1): ?>
+                                <p class="text-muted text-center mb-0" style="font-size:11px">+<?= count($volumes) - 1 ?> outra(s) na aba Volumes lógicos</p>
+                            <?php endif; ?>
+                        <?php else: ?>
+                            <p class="text-muted small mb-0 text-center py-4">Sem dado de volume ainda.<br>Preenchido automaticamente pelo agente Windows.</p>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -231,6 +256,35 @@ $memoriaPct = $memoriaTotalGb > 0 ? ($memoriaUsadaGb / $memoriaTotalGb) * 100 : 
         </div>
     </div>
 
+    <!-- Memória -->
+    <div class="tab-pane fade" id="abaMemoria">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-0">
+                <?php if (empty($memoria)): ?>
+                    <p class="text-muted p-3 mb-0">Nenhum módulo de memória coletado ainda. Preenchido automaticamente pelo agente Windows.</p>
+                <?php else: ?>
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr><th>Fabricante</th><th>Modelo</th><th>Capacidade</th><th>Frequência</th><th>Nº de série</th></tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($memoria as $m): ?>
+                                <tr>
+                                    <td><?= htmlspecialchars($m['fabricante'] ?? '—') ?></td>
+                                    <td><?= htmlspecialchars($m['modelo'] ?? '—') ?></td>
+                                    <td><?= !empty($m['capacidade_gb']) ? htmlspecialchars($m['capacidade_gb']) . ' GB' : '—' ?></td>
+                                    <td><?= !empty($m['frequencia_mhz']) ? htmlspecialchars($m['frequencia_mhz']) . ' MHz' : '—' ?></td>
+                                    <td class="font-monospace small"><?= htmlspecialchars($m['numero_serie'] ?? '—') ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                    <p class="text-muted small p-2 mb-0">Fabricante e número de série nem sempre são informados pelo Windows -- depende do fabricante do módulo.</p>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
     <!-- Volumes lógicos -->
     <div class="tab-pane fade" id="abaVolumes">
         <?php if (empty($volumes)): ?>
@@ -249,11 +303,20 @@ $memoriaPct = $memoriaTotalGb > 0 ? ($memoriaUsadaGb / $memoriaTotalGb) * 100 : 
                         <div class="card border-0 shadow-sm h-100">
                             <div class="card-body text-center">
                                 <?= gaugeRadial($pct, 'Unidade ' . $v['unidade'], round($usado, 1) . ' / ' . round($total, 1) . ' GB') ?>
+                                <?php if (!empty($v['modelo_disco']) || !empty($v['fabricante_disco']) || !empty($v['serial_disco'])): ?>
+                                    <hr class="my-2">
+                                    <div class="text-start" style="font-size:11px">
+                                        <?php if (!empty($v['modelo_disco'])): ?><div class="text-muted">Modelo: <?= htmlspecialchars($v['modelo_disco']) ?></div><?php endif; ?>
+                                        <?php if (!empty($v['fabricante_disco'])): ?><div class="text-muted">Fabricante: <?= htmlspecialchars($v['fabricante_disco']) ?></div><?php endif; ?>
+                                        <?php if (!empty($v['serial_disco'])): ?><div class="text-muted">Série: <?= htmlspecialchars($v['serial_disco']) ?></div><?php endif; ?>
+                                    </div>
+                                <?php endif; ?>
                             </div>
                         </div>
                     </div>
                 <?php endforeach; ?>
             </div>
+            <p class="text-muted small mt-2 mb-0">Fabricante e número de série do disco físico nem sempre são informados pelo Windows -- depende do driver/controlador de cada fabricante.</p>
         <?php endif; ?>
     </div>
 
