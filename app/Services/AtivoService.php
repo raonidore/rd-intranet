@@ -37,6 +37,7 @@ class AtivoService
             'armazenamento' => 'Armazenamento',
             'placa_mae' => 'Placa-mãe',
             'usuario_logado' => 'Usuário',
+            'ligado_desde' => 'Ligado desde',
             'snmp_sys_descr' => 'Descrição (SNMP)',
             'snmp_uptime' => 'Uptime (SNMP)',
         ],
@@ -47,6 +48,7 @@ class AtivoService
             'armazenamento' => 'Armazenamento',
             'funcao' => 'Função',
             'virtualizado' => 'Virtualizado',
+            'ligado_desde' => 'Ligado desde',
             'snmp_sys_descr' => 'Descrição (SNMP)',
             'snmp_uptime' => 'Uptime (SNMP)',
         ],
@@ -126,8 +128,8 @@ class AtivoService
             'marca' => trim($post['marca'] ?? '') ?: null,
             'modelo' => trim($post['modelo'] ?? '') ?: null,
             'numero_serie' => trim($post['numero_serie'] ?? '') ?: null,
-            'setor' => trim($post['setor'] ?? '') ?: null,
-            'localizacao' => trim($post['localizacao'] ?? '') ?: null,
+            'setor_id' => !empty($post['setor_id']) ? (int)$post['setor_id'] : null,
+            'localizacao_id' => !empty($post['localizacao_id']) ? (int)$post['localizacao_id'] : null,
             'responsavel' => trim($post['responsavel'] ?? '') ?: null,
             'status' => isset(self::STATUS[$post['status'] ?? '']) ? $post['status'] : 'ativo',
             'ip' => trim($post['ip'] ?? '') ?: null,
@@ -165,8 +167,8 @@ class AtivoService
             'marca' => trim($post['marca'] ?? '') ?: null,
             'modelo' => trim($post['modelo'] ?? '') ?: null,
             'numero_serie' => trim($post['numero_serie'] ?? '') ?: null,
-            'setor' => trim($post['setor'] ?? '') ?: null,
-            'localizacao' => trim($post['localizacao'] ?? '') ?: null,
+            'setor_id' => !empty($post['setor_id']) ? (int)$post['setor_id'] : null,
+            'localizacao_id' => !empty($post['localizacao_id']) ? (int)$post['localizacao_id'] : null,
             'responsavel' => trim($post['responsavel'] ?? '') ?: null,
             'status' => isset(self::STATUS[$post['status'] ?? '']) ? $post['status'] : $ativo['status'],
             'ip' => trim($post['ip'] ?? '') ?: null,
@@ -233,7 +235,42 @@ class AtivoService
             $numero = (int)$m[1];
         }
 
-        return sprintf('RD-%s-%06d', $prefixo, $numero + 1);
+        return sprintf('%s-%s-%06d', $this->siglaEmpresa(), $prefixo, $numero + 1);
+    }
+
+    public function nomeEmpresa(): string
+    {
+        return ConfigService::get('empresa_nome', 'RD Tecnologia') ?? 'RD Tecnologia';
+    }
+
+    public function siglaEmpresa(): string
+    {
+        return ConfigService::get('empresa_sigla', 'RD') ?? 'RD';
+    }
+
+    public function salvarEmpresa(string $nome, string $sigla): bool
+    {
+        $nome = trim($nome);
+        $sigla = strtoupper(trim($sigla));
+
+        if ($nome === '') {
+            NotificationService::error('Informe o nome da empresa.');
+            return false;
+        }
+
+        if (!preg_match('/^[A-Z]{2,6}$/', $sigla)) {
+            NotificationService::error('A sigla deve ter de 2 a 6 letras (sem números ou símbolos).');
+            return false;
+        }
+
+        ConfigService::set('empresa_nome', $nome);
+        ConfigService::set('empresa_sigla', $sigla);
+
+        AuditService::registrar('Administração', 'Dados da Empresa', "Nome: {$nome}, Sigla: {$sigla}.");
+
+        NotificationService::success('Dados da empresa salvos. Novos ativos e etiquetas já usam a sigla atualizada.');
+
+        return true;
     }
 
     private function extrairDetalhes(string $tipo, array $post): array
@@ -421,6 +458,109 @@ class AtivoService
         $this->repository->substituirProgramas($id, array_slice($payload['programas'] ?? [], 0, 500));
         $this->repository->inserirAlertas($id, array_slice($payload['alertas'] ?? [], 0, 200));
 
-        return ['success' => true, 'message' => 'Check-in recebido.', 'ativo_id' => $id];
+        // Comandos remotos pendentes (desligar/reiniciar) -- entregues
+        // agora, junto com a resposta deste checkin. O agente é quem
+        // decide como/quando executar (com aviso pro usuário).
+        $pendentes = $this->repository->comandosPendentes($id);
+        if (!empty($pendentes)) {
+            $this->repository->marcarComandosEntregues(array_column($pendentes, 'id'));
+        }
+
+        return [
+            'success' => true,
+            'message' => 'Check-in recebido.',
+            'ativo_id' => $id,
+            'comandos' => array_map(fn($c) => ['id' => (int)$c['id'], 'comando' => $c['comando']], $pendentes),
+        ];
+    }
+
+    /*
+     |---------------------------------------------------------
+     | Comandos remotos (desligar/reiniciar)
+     |---------------------------------------------------------
+     */
+
+    public function enviarComando(int $ativoId, string $comando, ?string $solicitadoPor): array
+    {
+        if (!in_array($comando, ['desligar', 'reiniciar'], true)) {
+            return ['success' => false, 'message' => 'Comando inválido.'];
+        }
+
+        $ativo = $this->repository->buscarPorId($ativoId);
+        if (!$ativo) {
+            return ['success' => false, 'message' => 'Ativo não encontrado.'];
+        }
+
+        if ($ativo['origem'] !== 'agente') {
+            return ['success' => false, 'message' => 'Este ativo não tem o agente Windows instalado -- não é possível enviar comandos remotos.'];
+        }
+
+        $this->repository->criarComando($ativoId, $comando, $solicitadoPor);
+
+        AuditService::registrar(
+            'Ativos',
+            'Comando remoto',
+            ucfirst($comando) . ' solicitado para ' . $ativo['codigo_patrimonio'] . ' (' . $ativo['nome'] . ').'
+        );
+
+        $label = $comando === 'desligar' ? 'Desligamento' : 'Reinício';
+
+        return [
+            'success' => true,
+            'message' => "{$label} agendado. Será entregue ao agente na próxima coleta (em até " . $this->intervaloAproximado() . ").",
+        ];
+    }
+
+    public function historicoComandos(int $ativoId): array
+    {
+        return $this->repository->historicoComandos($ativoId);
+    }
+
+    private function intervaloAproximado(): string
+    {
+        return '15-30 min';
+    }
+
+    /**
+     * "Ligada" é uma inferência, não um dado direto: se o último checkin
+     * foi recente, assumimos que a máquina está ligada. Não sabemos o
+     * intervalo exato configurado em cada agente, então usamos uma janela
+     * generosa (30 min) como aproximação razoável.
+     */
+    public function estaLigada(array $ativo): bool
+    {
+        if (empty($ativo['ultimo_checkin'])) {
+            return false;
+        }
+
+        return (time() - strtotime($ativo['ultimo_checkin'])) <= 30 * 60;
+    }
+
+    public function uptimeTexto(array $ativo): ?string
+    {
+        $detalhes = is_array($ativo['detalhes'] ?? null)
+            ? $ativo['detalhes']
+            : (json_decode($ativo['detalhes'] ?? '', true) ?: []);
+
+        $ligadoDesde = $detalhes['ligado_desde'] ?? null;
+        if (!$ligadoDesde) {
+            return null;
+        }
+
+        $timestamp = strtotime($ligadoDesde);
+        if (!$timestamp) {
+            return null;
+        }
+
+        $segundos = max(0, time() - $timestamp);
+        $dias = intdiv($segundos, 86400);
+        $horas = intdiv($segundos % 86400, 3600);
+
+        if ($dias > 0) {
+            return "{$dias}d {$horas}h";
+        }
+
+        $minutos = intdiv($segundos % 3600, 60);
+        return "{$horas}h {$minutos}min";
     }
 }

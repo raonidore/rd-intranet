@@ -44,6 +44,7 @@ use App\Controllers\AtualizacaoController;
 use App\Controllers\AntivirusController;
 use App\Controllers\AtivoController;
 use App\Controllers\AtivoAgenteController;
+use App\Controllers\EmpresaController;
 
 $router->get('/', [DashboardController::class, 'index']);
 $router->get('/dashboard', [DashboardController::class, 'index']);
@@ -332,6 +333,9 @@ $router->post('/administracao/atualizacoes/checagem-diaria', [AtualizacaoControl
 $router->post('/administracao/atualizacoes/passos-manuais/confirmar', [AtualizacaoController::class, 'confirmarPassoManual']);
 $router->post('/administracao/atualizacoes/passos-manuais/desconfirmar', [AtualizacaoController::class, 'desconfirmarPassoManual']);
 
+$router->get('/administracao/empresa', [EmpresaController::class, 'index']);
+$router->post('/administracao/empresa/salvar', [EmpresaController::class, 'salvar']);
+
 $router->get('/banco-dados/conexoes', [DbConexaoController::class, 'index']);
 $router->get('/banco-dados/conexoes/novo', [DbConexaoController::class, 'novoForm']);
 $router->post('/banco-dados/conexoes/novo', [DbConexaoController::class, 'novo']);
@@ -390,3 +394,9 @@ $router->post('/ativos/snmp/ativar-coleta', [AtivoController::class, 'ativarCole
 $router->post('/ativos/agente/regenerar-chave', [AtivoController::class, 'regenerarChaveAgente']);
 $router->get('/ativos/agente/script', [AtivoAgenteController::class, 'baixarScript']);
 $router->post('/api/ativos/checkin', [AtivoAgenteController::class, 'checkin']);
+
+$router->get('/ativos/cadastros', [AtivoController::class, 'cadastros']);
+$router->post('/ativos/cadastros/novo', [AtivoController::class, 'cadastroNovo']);
+$router->post('/ativos/cadastros/excluir', [AtivoController::class, 'cadastroExcluir']);
+
+$router->post('/ativos/comando', [AtivoController::class, 'enviarComando']);

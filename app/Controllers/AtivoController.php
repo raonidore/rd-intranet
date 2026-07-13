@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
+use App\Services\AtivoCatalogoService;
 use App\Services\AtivoService;
 use App\Services\AuditService;
 use App\Services\CronService;
@@ -12,10 +13,12 @@ use App\Services\NotificationService;
 class AtivoController extends Controller
 {
     private AtivoService $service;
+    private AtivoCatalogoService $catalogoService;
 
     public function __construct()
     {
         $this->service = new AtivoService();
+        $this->catalogoService = new AtivoCatalogoService();
     }
 
     public function dashboard(): void
@@ -61,6 +64,9 @@ class AtivoController extends Controller
             'ativo' => $ativo,
             'programas' => $this->service->listarProgramas($id),
             'alertas' => $this->service->listarAlertas($id),
+            'comandos' => $this->service->historicoComandos($id),
+            'estaLigada' => $this->service->estaLigada($ativo),
+            'uptime' => $this->service->uptimeTexto($ativo),
         ]);
     }
 
@@ -71,6 +77,8 @@ class AtivoController extends Controller
         $this->view('ativos/form', [
             'ativo' => null,
             'tipoSelecionado' => $_GET['tipo'] ?? 'computador',
+            'setores' => $this->catalogoService->listarSetores(),
+            'localizacoes' => $this->catalogoService->listarLocalizacoes(),
         ]);
     }
 
@@ -99,6 +107,8 @@ class AtivoController extends Controller
         $this->view('ativos/form', [
             'ativo' => $ativo,
             'tipoSelecionado' => $ativo['tipo'],
+            'setores' => $this->catalogoService->listarSetores(),
+            'localizacoes' => $this->catalogoService->listarLocalizacoes(),
         ]);
     }
 
@@ -156,6 +166,7 @@ class AtivoController extends Controller
         $this->view('ativos/etiqueta', [
             'ativos' => [$ativo],
             'qrCodes' => [$id => $this->service->gerarEtiquetaQrCodeBase64($id)],
+            'empresaNome' => $this->service->nomeEmpresa(),
         ]);
     }
 
@@ -181,6 +192,7 @@ class AtivoController extends Controller
         $this->view('ativos/etiqueta', [
             'ativos' => $ativos,
             'qrCodes' => $qrCodes,
+            'empresaNome' => $this->service->nomeEmpresa(),
         ]);
     }
 
@@ -254,5 +266,52 @@ class AtivoController extends Controller
 
         header('Location: ' . url('/ativos'));
         exit;
+    }
+
+    public function cadastros(): void
+    {
+        AuthMiddleware::checkModulo('ativos_cadastros');
+
+        $this->view('ativos/cadastros', [
+            'setores' => $this->catalogoService->listarSetores(),
+            'localizacoes' => $this->catalogoService->listarLocalizacoes(),
+        ]);
+    }
+
+    public function cadastroNovo(): void
+    {
+        AuthMiddleware::checkModulo('ativos_cadastros');
+
+        $this->catalogoService->criar(
+            $_POST['tipo'] ?? '',
+            $_POST['nome'] ?? ''
+        );
+
+        header('Location: ' . url('/ativos/cadastros'));
+        exit;
+    }
+
+    public function cadastroExcluir(): void
+    {
+        AuthMiddleware::checkModulo('ativos_cadastros');
+
+        $this->catalogoService->excluir((int)($_POST['id'] ?? 0));
+
+        header('Location: ' . url('/ativos/cadastros'));
+        exit;
+    }
+
+    public function enviarComando(): void
+    {
+        AuthMiddleware::checkModulo('ativos_novo');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $comando = $_POST['comando'] ?? '';
+        $usuario = $_SESSION['usuario']['nome'] ?? null;
+
+        $resultado = $this->service->enviarComando($id, $comando, $usuario);
+
+        echo json_encode($resultado);
     }
 }

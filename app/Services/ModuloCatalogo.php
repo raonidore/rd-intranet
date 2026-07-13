@@ -48,6 +48,7 @@ class ModuloCatalogo
         'ativos_dashboard' => ['label' => 'Ativos - Dashboard', 'grupo' => 'Ativos'],
         'ativos_lista' => ['label' => 'Ativos - Lista', 'grupo' => 'Ativos'],
         'ativos_novo' => ['label' => 'Ativos - Novo/Editar', 'grupo' => 'Ativos'],
+        'ativos_cadastros' => ['label' => 'Ativos - Cadastros (Setor/Localização)', 'grupo' => 'Ativos'],
     ];
 
     public static function chaves(): array

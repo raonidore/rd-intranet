@@ -14,27 +14,34 @@ class AtivoRepository
         $this->pdo = Database::connection();
     }
 
+    private const SELECT_COM_CATALOGOS = "
+        SELECT a.*, cs.nome AS setor_nome, cl.nome AS localizacao_nome
+        FROM ativos a
+        LEFT JOIN ativos_catalogos cs ON cs.id = a.setor_id
+        LEFT JOIN ativos_catalogos cl ON cl.id = a.localizacao_id
+    ";
+
     public function listar(array $filtros = []): array
     {
-        $sql = "SELECT * FROM ativos WHERE 1=1";
+        $sql = self::SELECT_COM_CATALOGOS . " WHERE 1=1";
         $params = [];
 
         if (!empty($filtros['tipo'])) {
-            $sql .= " AND tipo = :tipo";
+            $sql .= " AND a.tipo = :tipo";
             $params['tipo'] = $filtros['tipo'];
         }
 
         if (!empty($filtros['status'])) {
-            $sql .= " AND status = :status";
+            $sql .= " AND a.status = :status";
             $params['status'] = $filtros['status'];
         }
 
         if (!empty($filtros['busca'])) {
-            $sql .= " AND (nome LIKE :busca OR codigo_patrimonio LIKE :busca OR numero_serie LIKE :busca)";
+            $sql .= " AND (a.nome LIKE :busca OR a.codigo_patrimonio LIKE :busca OR a.numero_serie LIKE :busca)";
             $params['busca'] = '%' . $filtros['busca'] . '%';
         }
 
-        $sql .= " ORDER BY criado_em DESC";
+        $sql .= " ORDER BY a.criado_em DESC";
 
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
@@ -44,7 +51,7 @@ class AtivoRepository
 
     public function buscarPorId(int $id): ?array
     {
-        $stmt = $this->pdo->prepare("SELECT * FROM ativos WHERE id = ? LIMIT 1");
+        $stmt = $this->pdo->prepare(self::SELECT_COM_CATALOGOS . " WHERE a.id = ? LIMIT 1");
         $stmt->execute([$id]);
 
         $item = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -59,7 +66,7 @@ class AtivoRepository
         }
 
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
-        $stmt = $this->pdo->prepare("SELECT * FROM ativos WHERE id IN ($placeholders) ORDER BY tipo, nome");
+        $stmt = $this->pdo->prepare(self::SELECT_COM_CATALOGOS . " WHERE a.id IN ($placeholders) ORDER BY a.tipo, a.nome");
         $stmt->execute($ids);
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -69,9 +76,9 @@ class AtivoRepository
     {
         $stmt = $this->pdo->prepare("
             INSERT INTO ativos
-            (tipo, codigo_patrimonio, nome, marca, modelo, numero_serie, setor, localizacao, responsavel, status, ip, snmp_habilitado, snmp_community, observacoes, detalhes)
+            (tipo, codigo_patrimonio, nome, marca, modelo, numero_serie, setor_id, localizacao_id, responsavel, status, ip, snmp_habilitado, snmp_community, observacoes, detalhes)
             VALUES
-            (:tipo, :codigo_patrimonio, :nome, :marca, :modelo, :numero_serie, :setor, :localizacao, :responsavel, :status, :ip, :snmp_habilitado, :snmp_community, :observacoes, :detalhes)
+            (:tipo, :codigo_patrimonio, :nome, :marca, :modelo, :numero_serie, :setor_id, :localizacao_id, :responsavel, :status, :ip, :snmp_habilitado, :snmp_community, :observacoes, :detalhes)
         ");
 
         $stmt->execute([
@@ -81,8 +88,8 @@ class AtivoRepository
             'marca' => $dados['marca'],
             'modelo' => $dados['modelo'],
             'numero_serie' => $dados['numero_serie'],
-            'setor' => $dados['setor'],
-            'localizacao' => $dados['localizacao'],
+            'setor_id' => $dados['setor_id'],
+            'localizacao_id' => $dados['localizacao_id'],
             'responsavel' => $dados['responsavel'],
             'status' => $dados['status'],
             'ip' => $dados['ip'],
@@ -103,8 +110,8 @@ class AtivoRepository
                    marca = :marca,
                    modelo = :modelo,
                    numero_serie = :numero_serie,
-                   setor = :setor,
-                   localizacao = :localizacao,
+                   setor_id = :setor_id,
+                   localizacao_id = :localizacao_id,
                    responsavel = :responsavel,
                    status = :status,
                    ip = :ip,
@@ -121,8 +128,8 @@ class AtivoRepository
             'marca' => $dados['marca'],
             'modelo' => $dados['modelo'],
             'numero_serie' => $dados['numero_serie'],
-            'setor' => $dados['setor'],
-            'localizacao' => $dados['localizacao'],
+            'setor_id' => $dados['setor_id'],
+            'localizacao_id' => $dados['localizacao_id'],
             'responsavel' => $dados['responsavel'],
             'status' => $dados['status'],
             'ip' => $dados['ip'],
@@ -316,7 +323,7 @@ class AtivoRepository
 
     public function recentes(int $limite = 8): array
     {
-        $stmt = $this->pdo->prepare("SELECT * FROM ativos ORDER BY criado_em DESC LIMIT ?");
+        $stmt = $this->pdo->prepare(self::SELECT_COM_CATALOGOS . " ORDER BY a.criado_em DESC LIMIT ?");
         $stmt->bindValue(1, $limite, PDO::PARAM_INT);
         $stmt->execute();
 
@@ -335,6 +342,59 @@ class AtivoRepository
     {
         $stmt = $this->pdo->prepare("SELECT * FROM ativos_alertas WHERE ativo_id = ? ORDER BY coletado_em DESC LIMIT 100");
         $stmt->execute([$ativoId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function criarComando(int $ativoId, string $comando, ?string $solicitadoPor): int
+    {
+        $stmt = $this->pdo->prepare("
+            INSERT INTO ativos_comandos (ativo_id, comando, solicitado_por)
+            VALUES (?, ?, ?)
+        ");
+        $stmt->execute([$ativoId, $comando, $solicitadoPor]);
+
+        return (int)$this->pdo->lastInsertId();
+    }
+
+    public function comandosPendentes(int $ativoId): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT * FROM ativos_comandos
+            WHERE ativo_id = ? AND status = 'pendente'
+            ORDER BY id
+        ");
+        $stmt->execute([$ativoId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function marcarComandosEntregues(array $ids): void
+    {
+        if (empty($ids)) {
+            return;
+        }
+
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $stmt = $this->pdo->prepare("
+            UPDATE ativos_comandos
+               SET status = 'entregue', entregue_em = NOW()
+             WHERE id IN ($placeholders)
+        ");
+        $stmt->execute($ids);
+    }
+
+    public function historicoComandos(int $ativoId, int $limite = 10): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT * FROM ativos_comandos
+            WHERE ativo_id = ?
+            ORDER BY id DESC
+            LIMIT ?
+        ");
+        $stmt->bindValue(1, $ativoId, PDO::PARAM_INT);
+        $stmt->bindValue(2, $limite, PDO::PARAM_INT);
+        $stmt->execute();
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
