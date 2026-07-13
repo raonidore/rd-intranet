@@ -178,6 +178,7 @@ public static class CollectorService
         payload.Ip = payload.Redes.Count > 0 ? payload.Redes[0].Ip : null;
         payload.Volumes = ObterVolumes();
         payload.Portas = ObterPortas();
+        payload.MemoriaModulos = ObterModulosMemoria();
         payload.Programas = ObterProgramasInstalados();
         payload.Alertas = ObterAlertas(eventosDesde ?? DateTime.Now.AddHours(-24));
 
@@ -213,7 +214,13 @@ public static class CollectorService
         return redes;
     }
 
-    /// <summary>Volumes lógicos (unidades com letra, ex: C:, D:) -- diferente do Armazenamento acima, que é o disco físico inteiro.</summary>
+    /// <summary>
+    /// Volumes lógicos (unidades com letra, ex: C:, D:) -- diferente do
+    /// Armazenamento acima, que é o disco físico inteiro. Tenta associar
+    /// cada volume ao disco físico por trás dele (modelo/fabricante/série)
+    /// via ManagementObject.GetRelated -- nem sempre disponível (discos
+    /// removíveis, alguns controladores RAID/virtuais não expõem isso).
+    /// </summary>
     private static List<VolumeItem> ObterVolumes()
     {
         var volumes = new List<VolumeItem>();
@@ -227,15 +234,68 @@ public static class CollectorService
             var totalGb = Convert.ToInt64(disco["Size"]) / 1024.0 / 1024.0 / 1024.0;
             var livreGb = disco["FreeSpace"] != null ? Convert.ToInt64(disco["FreeSpace"]) / 1024.0 / 1024.0 / 1024.0 : 0;
 
-            volumes.Add(new VolumeItem
+            var volume = new VolumeItem
             {
                 Unidade = disco["DeviceID"]?.ToString() ?? "",
                 TotalGb = Math.Round(totalGb, 1),
                 UsadoGb = Math.Round(Math.Max(0, totalGb - livreGb), 1)
-            });
+            };
+
+            try
+            {
+                foreach (ManagementObject particao in disco.GetRelated("Win32_DiskPartition"))
+                {
+                    foreach (ManagementObject discoFisico in particao.GetRelated("Win32_DiskDrive"))
+                    {
+                        volume.ModeloDisco = discoFisico["Model"]?.ToString();
+                        volume.FabricanteDisco = discoFisico["Manufacturer"]?.ToString();
+                        volume.SerialDisco = discoFisico["SerialNumber"]?.ToString()?.Trim();
+                        break;
+                    }
+                    break;
+                }
+            }
+            catch
+            {
+                // associacao disco-fisico -> volume pode falhar em discos
+                // removiveis/de rede -- segue sem esses dados extras
+            }
+
+            volumes.Add(volume);
         }
 
         return volumes;
+    }
+
+    private static List<MemoriaItem> ObterModulosMemoria()
+    {
+        var modulos = new List<MemoriaItem>();
+
+        using var busca = new ManagementObjectSearcher("SELECT Manufacturer, PartNumber, Capacity, ConfiguredClockSpeed, Speed, SerialNumber FROM Win32_PhysicalMemory");
+
+        foreach (ManagementObject m in busca.Get())
+        {
+            int? frequencia = null;
+            if (m["ConfiguredClockSpeed"] != null)
+            {
+                frequencia = Convert.ToInt32(m["ConfiguredClockSpeed"]);
+            }
+            else if (m["Speed"] != null)
+            {
+                frequencia = Convert.ToInt32(m["Speed"]);
+            }
+
+            modulos.Add(new MemoriaItem
+            {
+                Fabricante = m["Manufacturer"]?.ToString()?.Trim(),
+                Modelo = m["PartNumber"]?.ToString()?.Trim(),
+                CapacidadeGb = m["Capacity"] != null ? Math.Round(Convert.ToInt64(m["Capacity"]) / 1024.0 / 1024.0 / 1024.0, 1) : null,
+                FrequenciaMhz = frequencia,
+                NumeroSerie = m["SerialNumber"]?.ToString()?.Trim()
+            });
+        }
+
+        return modulos;
     }
 
     /// <summary>

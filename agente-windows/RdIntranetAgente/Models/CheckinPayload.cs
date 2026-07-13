@@ -78,6 +78,9 @@ public class CheckinPayload
     [JsonPropertyName("portas")]
     public List<PortaItem> Portas { get; set; } = new();
 
+    [JsonPropertyName("memoria_modulos")]
+    public List<MemoriaItem> MemoriaModulos { get; set; } = new();
+
     [JsonPropertyName("programas")]
     public List<ProgramaItem> Programas { get; set; } = new();
 
@@ -119,6 +122,33 @@ public class VolumeItem
 
     [JsonPropertyName("usado_gb")]
     public double UsadoGb { get; set; }
+
+    [JsonPropertyName("modelo_disco")]
+    public string? ModeloDisco { get; set; }
+
+    [JsonPropertyName("fabricante_disco")]
+    public string? FabricanteDisco { get; set; }
+
+    [JsonPropertyName("serial_disco")]
+    public string? SerialDisco { get; set; }
+}
+
+public class MemoriaItem
+{
+    [JsonPropertyName("fabricante")]
+    public string? Fabricante { get; set; }
+
+    [JsonPropertyName("modelo")]
+    public string? Modelo { get; set; }
+
+    [JsonPropertyName("capacidade_gb")]
+    public double? CapacidadeGb { get; set; }
+
+    [JsonPropertyName("frequencia_mhz")]
+    public int? FrequenciaMhz { get; set; }
+
+    [JsonPropertyName("numero_serie")]
+    public string? NumeroSerie { get; set; }
 }
 
 public class PortaItem

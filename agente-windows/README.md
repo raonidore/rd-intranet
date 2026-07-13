@@ -64,12 +64,14 @@ em `%LocalAppData%\RDIntranetAgent\config.json`, por usuário).
   de admin).
 - A cada N minutos (configurável, padrão 15), coleta hardware/SO,
   uptime (ligado desde), componentes (processador, memória total/em
-  uso, tipo de memória, placa-mãe, placa de vídeo, placa de som), rede
-  (MAC/IP por adaptador), volumes lógicos (uso por unidade), portas
-  físicas (USB conectado + seriais), programas instalados (via
-  registro, não via `Win32_Product`, com data de instalação quando
-  disponível) e alertas novos do Visualizador de Eventos
-  (System/Application, Erro/Aviso), e envia pro servidor.
+  uso, tipo de memória, placa-mãe, placa de vídeo, placa de som),
+  módulos de memória (fabricante/modelo/frequência/série, um por
+  pente), rede (MAC/IP por adaptador), volumes lógicos (uso por
+  unidade + modelo/fabricante/série do disco físico associado, quando
+  disponível), portas físicas (USB conectado + seriais), programas
+  instalados (via registro, não via `Win32_Product`, com data de
+  instalação quando disponível) e alertas novos do Visualizador de
+  Eventos (System/Application, Erro/Aviso), e envia pro servidor.
 - Busca e executa comandos remotos pendentes (Desligar/Reiniciar,
   enviados pela ficha do ativo no RD Intranet) -- sempre com um aviso
   nativo do Windows de 5 minutos antes de executar (`shutdown.exe /t`),
