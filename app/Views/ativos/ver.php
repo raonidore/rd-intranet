@@ -75,8 +75,11 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
         <small class="text-muted"><a href="<?= url('/ativos/lista') ?>"><i class="bi bi-arrow-left"></i> Lista de Ativos</a></small>
         <h4 class="mb-1 mt-1">
             <i class="bi <?= AtivoService::TIPOS[$ativo['tipo']]['icone'] ?> me-1"></i>
-            <?= htmlspecialchars($ativo['nome']) ?>
+            <?= htmlspecialchars($ativo['apelido'] ?: $ativo['nome']) ?>
         </h4>
+        <?php if (!empty($ativo['apelido'])): ?>
+            <div class="text-muted small mb-1">Nome: <?= htmlspecialchars($ativo['nome']) ?></div>
+        <?php endif; ?>
         <span class="font-monospace text-muted"><?= htmlspecialchars($ativo['codigo_patrimonio']) ?></span>
         <?= Badge::make(htmlspecialchars(AtivoService::STATUS[$ativo['status']] ?? $ativo['status']), $statusCores[$ativo['status']] ?? 'secondary') ?>
         <?php if ($ativo['origem'] === 'agente'): ?>

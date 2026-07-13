@@ -58,6 +58,18 @@ $tipoAtual = $ativo['tipo'] ?? $tipoSelecionado;
             </div>
 
             <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <label class="form-label">Apelido</label>
+                    <input type="text" name="apelido" class="form-control" value="<?= htmlspecialchars($ativo['apelido'] ?? '') ?>" placeholder="Ex: Notebook da Ana">
+                    <?php if (($ativo['origem'] ?? null) === 'agente'): ?>
+                        <small class="text-muted">Diferente do Nome (que o agente sobrescreve a cada check-in com o hostname do Windows), o apelido é só seu -- fica do jeito que você definir. Aparece na etiqueta.</small>
+                    <?php else: ?>
+                        <small class="text-muted">Um nome informal, à sua escolha, pra facilitar a identificação. Aparece na etiqueta.</small>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="row g-3 mb-3">
                 <div class="col-md-3">
                     <label class="form-label">Marca / Fabricante</label>
                     <input type="text" name="marca" class="form-control" value="<?= htmlspecialchars($ativo['marca'] ?? '') ?>">

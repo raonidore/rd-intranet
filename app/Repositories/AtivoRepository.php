@@ -76,15 +76,16 @@ class AtivoRepository
     {
         $stmt = $this->pdo->prepare("
             INSERT INTO ativos
-            (tipo, codigo_patrimonio, nome, marca, modelo, numero_serie, setor_id, localizacao_id, responsavel, status, ip, snmp_habilitado, snmp_community, observacoes, detalhes)
+            (tipo, codigo_patrimonio, nome, apelido, marca, modelo, numero_serie, setor_id, localizacao_id, responsavel, status, ip, snmp_habilitado, snmp_community, observacoes, detalhes)
             VALUES
-            (:tipo, :codigo_patrimonio, :nome, :marca, :modelo, :numero_serie, :setor_id, :localizacao_id, :responsavel, :status, :ip, :snmp_habilitado, :snmp_community, :observacoes, :detalhes)
+            (:tipo, :codigo_patrimonio, :nome, :apelido, :marca, :modelo, :numero_serie, :setor_id, :localizacao_id, :responsavel, :status, :ip, :snmp_habilitado, :snmp_community, :observacoes, :detalhes)
         ");
 
         $stmt->execute([
             'tipo' => $dados['tipo'],
             'codigo_patrimonio' => $dados['codigo_patrimonio'],
             'nome' => $dados['nome'],
+            'apelido' => $dados['apelido'],
             'marca' => $dados['marca'],
             'modelo' => $dados['modelo'],
             'numero_serie' => $dados['numero_serie'],
@@ -107,6 +108,7 @@ class AtivoRepository
         $stmt = $this->pdo->prepare("
             UPDATE ativos
                SET nome = :nome,
+                   apelido = :apelido,
                    marca = :marca,
                    modelo = :modelo,
                    numero_serie = :numero_serie,
@@ -125,6 +127,7 @@ class AtivoRepository
         return $stmt->execute([
             'id' => $id,
             'nome' => $dados['nome'],
+            'apelido' => $dados['apelido'],
             'marca' => $dados['marca'],
             'modelo' => $dados['modelo'],
             'numero_serie' => $dados['numero_serie'],

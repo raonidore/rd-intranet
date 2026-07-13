@@ -52,7 +52,7 @@ use App\Services\AtivoService;
             <div class="info">
                 <div class="tipo"><?= htmlspecialchars(AtivoService::TIPOS[$a['tipo']]['label'] ?? $a['tipo']) ?></div>
                 <div class="codigo"><?= htmlspecialchars($a['codigo_patrimonio']) ?></div>
-                <div class="nome" title="<?= htmlspecialchars($a['nome']) ?>"><?= htmlspecialchars($a['nome']) ?></div>
+                <div class="nome" title="<?= htmlspecialchars($a['nome']) ?>"><?= htmlspecialchars($a['apelido'] ?: $a['nome']) ?></div>
                 <div class="empresa"><?= htmlspecialchars($empresaNome) ?> - TI</div>
             </div>
         </div>

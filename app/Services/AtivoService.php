@@ -133,6 +133,7 @@ class AtivoService
             'tipo' => $tipo,
             'codigo_patrimonio' => $this->proximoCodigo($tipo),
             'nome' => trim($post['nome'] ?? ''),
+            'apelido' => trim($post['apelido'] ?? '') ?: null,
             'marca' => trim($post['marca'] ?? '') ?: null,
             'modelo' => trim($post['modelo'] ?? '') ?: null,
             'numero_serie' => trim($post['numero_serie'] ?? '') ?: null,
@@ -172,6 +173,7 @@ class AtivoService
 
         $dados = [
             'nome' => trim($post['nome'] ?? ''),
+            'apelido' => trim($post['apelido'] ?? '') ?: null,
             'marca' => trim($post['marca'] ?? '') ?: null,
             'modelo' => trim($post['modelo'] ?? '') ?: null,
             'numero_serie' => trim($post['numero_serie'] ?? '') ?: null,
