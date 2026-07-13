@@ -1,8 +1,11 @@
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Win32;
+using RdIntranetAgente.Models;
 
 namespace RdIntranetAgente;
 
@@ -122,6 +125,8 @@ public class TrayApplicationContext : ApplicationContext
                 var icone = resultado.Sucesso ? ToolTipIcon.Info : ToolTipIcon.Error;
                 _icone.ShowBalloonTip(4000, "RD Intranet", resultado.Mensagem, icone);
             }
+
+            ExecutarComandosPendentes(resultado.Comandos);
         }
         catch (Exception ex)
         {
@@ -192,7 +197,49 @@ public class TrayApplicationContext : ApplicationContext
             Directory.CreateDirectory(pasta);
         }
 
-        System.Diagnostics.Process.Start("explorer.exe", pasta);
+        Process.Start("explorer.exe", pasta);
+    }
+
+    private const int TempoAvisoSegundos = 300;
+
+    /// <summary>
+    /// Comandos remotos (desligar/reiniciar) vindos junto da resposta do
+    /// checkin. Usa o shutdown.exe nativo do Windows com um tempo de
+    /// aviso -- mostra um alerta do sistema pro usuário, com chance de
+    /// cancelar localmente (shutdown /a) antes do prazo acabar.
+    /// </summary>
+    private void ExecutarComandosPendentes(List<ComandoItem> comandos)
+    {
+        foreach (var comando in comandos)
+        {
+            try
+            {
+                string argumentos = comando.Comando switch
+                {
+                    "desligar" => $"/s /t {TempoAvisoSegundos} /c \"RD Intranet: este computador será desligado remotamente pelo suporte de TI em 5 minutos. Salve seu trabalho.\"",
+                    "reiniciar" => $"/r /t {TempoAvisoSegundos} /c \"RD Intranet: este computador será reiniciado remotamente pelo suporte de TI em 5 minutos. Salve seu trabalho.\"",
+                    _ => ""
+                };
+
+                if (argumentos == "")
+                {
+                    continue;
+                }
+
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "shutdown.exe",
+                    Arguments = argumentos,
+                    CreateNoWindow = true,
+                    UseShellExecute = false
+                });
+            }
+            catch
+            {
+                // se o shutdown.exe falhar (ex: sem permissão), não derruba
+                // o resto do checkin -- só não executa o comando
+            }
+        }
     }
 
     private void Encerrar()

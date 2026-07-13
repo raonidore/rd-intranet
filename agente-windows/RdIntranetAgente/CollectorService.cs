@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using System.Management;
 using Microsoft.Win32;
@@ -40,9 +41,9 @@ public static class CollectorService
         payload.NumeroSerie = serialBios;
 
         // ----------------------------------------------------------
-        // Sistema operacional / tipo do ativo
+        // Sistema operacional / tipo do ativo / uptime
         // ProductType: 1 = estacao de trabalho, 2 = controlador de dominio, 3 = servidor
-        using (var buscaSistema = new ManagementObjectSearcher("SELECT Caption, ProductType FROM Win32_OperatingSystem"))
+        using (var buscaSistema = new ManagementObjectSearcher("SELECT Caption, ProductType, LastBootUpTime FROM Win32_OperatingSystem"))
         {
             foreach (ManagementObject so in buscaSistema.Get())
             {
@@ -52,6 +53,12 @@ public static class CollectorService
                 payload.SistemaOperacional = caption;
                 payload.Tipo = productType == 1 ? "computador" : "servidor";
                 payload.Funcao = payload.Tipo == "servidor" ? caption : null;
+
+                if (so["LastBootUpTime"] is string ultimoBootCim)
+                {
+                    var ultimoBoot = ManagementDateTimeConverter.ToDateTime(ultimoBootCim);
+                    payload.LigadoDesde = ultimoBoot.ToString("yyyy-MM-dd HH:mm:ss");
+                }
             }
         }
 

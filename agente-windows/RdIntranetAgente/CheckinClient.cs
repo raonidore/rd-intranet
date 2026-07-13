@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -13,6 +14,7 @@ public class ResultadoCheckin
     public string Mensagem { get; set; } = "";
     public long BytesEnviados { get; set; }
     public long BytesRecebidos { get; set; }
+    public List<ComandoItem> Comandos { get; set; } = new();
 }
 
 public class CheckinClient
@@ -54,15 +56,20 @@ public class CheckinClient
             var textoResposta = await resposta.Content.ReadAsStringAsync();
             var bytesRecebidos = Encoding.UTF8.GetByteCount(textoResposta);
 
-            string mensagem;
+            string mensagem = textoResposta;
+            var comandos = new List<ComandoItem>();
             try
             {
-                using var doc = JsonDocument.Parse(textoResposta);
-                mensagem = doc.RootElement.TryGetProperty("message", out var m) ? (m.GetString() ?? "") : textoResposta;
+                var corpo = JsonSerializer.Deserialize<RespostaCheckin>(textoResposta);
+                if (corpo != null)
+                {
+                    mensagem = corpo.Message ?? textoResposta;
+                    comandos = corpo.Comandos;
+                }
             }
             catch
             {
-                mensagem = textoResposta;
+                // resposta nao veio no formato esperado -- mostra o texto cru mesmo
             }
 
             return new ResultadoCheckin
@@ -70,7 +77,8 @@ public class CheckinClient
                 Sucesso = resposta.IsSuccessStatusCode,
                 Mensagem = mensagem,
                 BytesEnviados = bytesEnvio.LongLength,
-                BytesRecebidos = bytesRecebidos
+                BytesRecebidos = bytesRecebidos,
+                Comandos = comandos
             };
         }
         catch (Exception ex)

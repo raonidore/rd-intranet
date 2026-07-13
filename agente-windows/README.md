@@ -63,9 +63,14 @@ em `%LocalAppData%\RDIntranetAgent\config.json`, por usuário).
 - Registra-se pra iniciar com o Windows (`HKCU\...\Run`, sem precisar
   de admin).
 - A cada N minutos (configurável, padrão 15), coleta hardware/SO,
-  programas instalados (via registro, não via `Win32_Product`) e
-  alertas novos do Visualizador de Eventos (System/Application,
-  Erro/Aviso), e envia pro servidor.
+  uptime (ligado desde), programas instalados (via registro, não via
+  `Win32_Product`) e alertas novos do Visualizador de Eventos
+  (System/Application, Erro/Aviso), e envia pro servidor.
+- Busca e executa comandos remotos pendentes (Desligar/Reiniciar,
+  enviados pela ficha do ativo no RD Intranet) -- sempre com um aviso
+  nativo do Windows de 5 minutos antes de executar (`shutdown.exe /t`),
+  que dá tempo do usuário salvar o trabalho ou cancelar localmente
+  (`shutdown /a`).
 - Mostra no tooltip do ícone da bandeja: horário do último checkin e
   volume de dados enviado/recebido (última coleta + total acumulado).
 - Menu de contexto (botão direito no ícone): "Coletar agora",

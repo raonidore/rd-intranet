@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
 namespace RdIntranetAgente.Models;
@@ -53,6 +54,9 @@ public class CheckinPayload
     [JsonPropertyName("virtualizado")]
     public string? Virtualizado { get; set; }
 
+    [JsonPropertyName("ligado_desde")]
+    public string? LigadoDesde { get; set; }
+
     [JsonPropertyName("programas")]
     public List<ProgramaItem> Programas { get; set; } = new();
 
@@ -82,4 +86,26 @@ public class AlertaItem
 
     [JsonPropertyName("ocorrido_em")]
     public string? OcorridoEm { get; set; }
+}
+
+/// <summary>Comando remoto (desligar/reiniciar) que veio na resposta do checkin.</summary>
+public class ComandoItem
+{
+    [JsonPropertyName("id")]
+    public int Id { get; set; }
+
+    [JsonPropertyName("comando")]
+    public string Comando { get; set; } = "";
+}
+
+public class RespostaCheckin
+{
+    [JsonPropertyName("success")]
+    public bool Success { get; set; }
+
+    [JsonPropertyName("message")]
+    public string? Message { get; set; }
+
+    [JsonPropertyName("comandos")]
+    public List<ComandoItem> Comandos { get; set; } = new();
 }
