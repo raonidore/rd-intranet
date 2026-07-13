@@ -31,7 +31,7 @@ public class TrayApplicationContext : ApplicationContext
 
         _icone = new NotifyIcon
         {
-            Icon = SystemIcons.Application,
+            Icon = ObterIconeApp(),
             Text = "RD Intranet - Agente",
             Visible = true,
             ContextMenuStrip = menu
@@ -172,6 +172,24 @@ public class TrayApplicationContext : ApplicationContext
         }
 
         return $"{valor:0.#} {unidades[i]}";
+    }
+
+    /// <summary>
+    /// Reaproveita o mesmo ícone embutido no .exe (via ApplicationIcon no
+    /// .csproj) pro ícone da bandeja, em vez de carregar um arquivo .ico
+    /// separado -- evita depender de um arquivo extra do lado de fora do
+    /// publish em arquivo único.
+    /// </summary>
+    private static Icon ObterIconeApp()
+    {
+        try
+        {
+            return Icon.ExtractAssociatedIcon(Application.ExecutablePath) ?? SystemIcons.Application;
+        }
+        catch
+        {
+            return SystemIcons.Application;
+        }
     }
 
     private static void RegistrarInicioAutomatico()

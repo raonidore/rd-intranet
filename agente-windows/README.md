@@ -38,7 +38,10 @@ perfil com:
 - **Produzir arquivo único**: marcado.
 
 Isso gera um único `RdIntranetAgente.exe` que já roda em qualquer
-Windows 10/11/Server 2016+ sem instalar nada.
+Windows 10/11/Server 2016+ sem instalar nada. O ícone (`assets/icone.ico`)
+já vem embutido no `.exe` (propriedade `ApplicationIcon` do `.csproj`) --
+aparece no Explorer, na barra de tarefas e no ícone da bandeja, sem
+precisar de nenhum arquivo extra junto do `.exe`.
 
 ## Distribuição em massa (opcional)
 

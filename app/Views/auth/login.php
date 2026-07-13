@@ -7,6 +7,8 @@ unset($_SESSION['flash_msg'], $_SESSION['flash_tipo']);
 <head>
     <meta charset="UTF-8">
     <title>Login - RD Intranet</title>
+    <link rel="icon" href="<?= url('/favicon.ico') ?>" sizes="any">
+    <link rel="icon" href="<?= url('/assets/img/favicon.png') ?>" type="image/png">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 

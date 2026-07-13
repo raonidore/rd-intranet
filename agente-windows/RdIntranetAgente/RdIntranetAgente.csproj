@@ -11,6 +11,7 @@
     <Product>RD Intranet - Agente</Product>
     <Version>1.0.0</Version>
     <InvariantGlobalization>true</InvariantGlobalization>
+    <ApplicationIcon>assets/icone.ico</ApplicationIcon>
 
     <!-- Necessario pro SDK gerar ApplicationConfiguration.Initialize() usado no Program.cs -->
     <ApplicationVisualStyles>true</ApplicationVisualStyles>
