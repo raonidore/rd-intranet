@@ -108,9 +108,13 @@ class AcessoRemotoService
     /**
      * Gera um link de compartilhamento de uso único (sem exigir login
      * separado no MeshCentral -- é a peça que permite embutir a tela
-     * remota num iframe na ficha do ativo). Inclui desktop + arquivos
-     * (--type desktop,files), então o mesmo link já dá acesso a subir/
-     * baixar arquivos da máquina remota, sem precisar gerar outro.
+     * remota num iframe na ficha do ativo). Inclui desktop + arquivos +
+     * terminal (--type desktop,files,terminal), então o mesmo link já dá
+     * área de trabalho, subir/baixar arquivo e shell remoto, sem precisar
+     * gerar outro link pra cada coisa. Área de transferência (clipboard)
+     * do sistema fica de fora -- o próprio MeshCentral desabilita isso na
+     * página de link de convidado (`QV('DeskClip', false)` no código
+     * deles), só existe no console completo com login de verdade.
      * Diferente dos outros comandos do meshctrl, "DeviceSharing --add"
      * NÃO respeita --json (bug/limitação da própria ferramenta --
      * confirmado testando ao vivo), sempre devolve texto simples
@@ -126,7 +130,7 @@ class AcessoRemotoService
         $cmd .= ' DeviceSharing';
         $cmd .= ' --id ' . escapeshellarg($meshDeviceId);
         $cmd .= ' --add ' . escapeshellarg($convidado);
-        $cmd .= ' --type desktop,files';
+        $cmd .= ' --type desktop,files,terminal';
         $cmd .= ' --consent notify';
         $cmd .= ' --duration ' . escapeshellarg((string)$duracaoMinutos);
         $cmd .= ' --loginuser ' . escapeshellarg($this->usuarioTokenAtual());
