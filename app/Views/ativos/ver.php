@@ -575,13 +575,12 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     if (!botao) return;
 
     const modalEl = document.getElementById('modalTelaRemota');
-    const modal = new bootstrap.Modal(modalEl);
     const corpo = document.getElementById('corpoTelaRemota');
     const statusInicial = corpo.innerHTML;
 
     botao.addEventListener('click', async function () {
         corpo.innerHTML = statusInicial;
-        modal.show();
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
 
         const dados = new URLSearchParams();
         dados.set('ativo_id', botao.dataset.id);
