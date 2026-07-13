@@ -65,8 +65,11 @@ class AtivoController extends Controller
             'programas' => $this->service->listarProgramas($id),
             'alertas' => $this->service->listarAlertas($id),
             'comandos' => $this->service->historicoComandos($id),
-            'estaLigada' => $this->service->estaLigada($ativo),
-            'uptime' => $this->service->uptimeTexto($ativo),
+            'redes' => $this->service->listarRedes($id),
+            'volumes' => $this->service->listarVolumes($id),
+            'portas' => $this->service->listarPortas($id),
+            'estaLigada' => AtivoService::estaLigada($ativo),
+            'uptime' => AtivoService::uptimeTexto($ativo),
         ]);
     }
 

@@ -231,7 +231,7 @@ class AtivoRepository
             return;
         }
 
-        $stmt = $this->pdo->prepare("INSERT INTO ativos_programas (ativo_id, nome, versao) VALUES (?, ?, ?)");
+        $stmt = $this->pdo->prepare("INSERT INTO ativos_programas (ativo_id, nome, versao, data_instalacao) VALUES (?, ?, ?, ?)");
 
         foreach ($programas as $p) {
             $nome = trim((string)($p['nome'] ?? ''));
@@ -239,8 +239,111 @@ class AtivoRepository
                 continue;
             }
             $versao = trim((string)($p['versao'] ?? ''));
-            $stmt->execute([$ativoId, $nome, $versao !== '' ? $versao : null]);
+            $dataInstalacao = trim((string)($p['data_instalacao'] ?? ''));
+            $stmt->execute([
+                $ativoId,
+                $nome,
+                $versao !== '' ? $versao : null,
+                $dataInstalacao !== '' ? $dataInstalacao : null,
+            ]);
         }
+    }
+
+    public function substituirRedes(int $ativoId, array $redes): void
+    {
+        $this->pdo->prepare("DELETE FROM ativos_redes WHERE ativo_id = ?")->execute([$ativoId]);
+
+        if (empty($redes)) {
+            return;
+        }
+
+        $stmt = $this->pdo->prepare("INSERT INTO ativos_redes (ativo_id, nome_adaptador, mac, ip) VALUES (?, ?, ?, ?)");
+
+        foreach ($redes as $r) {
+            $mac = trim((string)($r['mac'] ?? ''));
+            $ip = trim((string)($r['ip'] ?? ''));
+            if ($mac === '' && $ip === '') {
+                continue;
+            }
+
+            $nomeAdaptador = trim((string)($r['nome_adaptador'] ?? ''));
+            $stmt->execute([
+                $ativoId,
+                $nomeAdaptador !== '' ? $nomeAdaptador : null,
+                $mac !== '' ? $mac : null,
+                $ip !== '' ? $ip : null,
+            ]);
+        }
+    }
+
+    public function listarRedes(int $ativoId): array
+    {
+        $stmt = $this->pdo->prepare("SELECT * FROM ativos_redes WHERE ativo_id = ? ORDER BY nome_adaptador");
+        $stmt->execute([$ativoId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function substituirVolumes(int $ativoId, array $volumes): void
+    {
+        $this->pdo->prepare("DELETE FROM ativos_volumes WHERE ativo_id = ?")->execute([$ativoId]);
+
+        if (empty($volumes)) {
+            return;
+        }
+
+        $stmt = $this->pdo->prepare("INSERT INTO ativos_volumes (ativo_id, unidade, total_gb, usado_gb) VALUES (?, ?, ?, ?)");
+
+        foreach ($volumes as $v) {
+            $unidade = trim((string)($v['unidade'] ?? ''));
+            if ($unidade === '') {
+                continue;
+            }
+
+            $stmt->execute([
+                $ativoId,
+                $unidade,
+                isset($v['total_gb']) ? (float)$v['total_gb'] : null,
+                isset($v['usado_gb']) ? (float)$v['usado_gb'] : null,
+            ]);
+        }
+    }
+
+    public function listarVolumes(int $ativoId): array
+    {
+        $stmt = $this->pdo->prepare("SELECT * FROM ativos_volumes WHERE ativo_id = ? ORDER BY unidade");
+        $stmt->execute([$ativoId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function substituirPortas(int $ativoId, array $portas): void
+    {
+        $this->pdo->prepare("DELETE FROM ativos_portas WHERE ativo_id = ?")->execute([$ativoId]);
+
+        if (empty($portas)) {
+            return;
+        }
+
+        $stmt = $this->pdo->prepare("INSERT INTO ativos_portas (ativo_id, tipo, descricao) VALUES (?, ?, ?)");
+
+        foreach ($portas as $p) {
+            $descricao = trim((string)($p['descricao'] ?? ''));
+            if ($descricao === '') {
+                continue;
+            }
+
+            $tipo = in_array($p['tipo'] ?? '', ['usb', 'serial'], true) ? $p['tipo'] : 'usb';
+            $stmt->execute([$ativoId, $tipo, $descricao]);
+        }
+    }
+
+    public function listarPortas(int $ativoId): array
+    {
+        $stmt = $this->pdo->prepare("SELECT * FROM ativos_portas WHERE ativo_id = ? ORDER BY tipo, descricao");
+        $stmt->execute([$ativoId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function inserirAlertas(int $ativoId, array $alertas): void

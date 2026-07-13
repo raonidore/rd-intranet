@@ -34,8 +34,12 @@ class AtivoService
             'sistema_operacional' => 'Sistema operacional',
             'processador' => 'Processador',
             'memoria_ram' => 'Memória RAM',
+            'memoria_usada' => 'Memória em uso',
+            'tipo_memoria' => 'Tipo de memória',
             'armazenamento' => 'Armazenamento',
             'placa_mae' => 'Placa-mãe',
+            'placa_video' => 'Placa de vídeo',
+            'placa_som' => 'Placa de som',
             'usuario_logado' => 'Usuário',
             'ligado_desde' => 'Ligado desde',
             'snmp_sys_descr' => 'Descrição (SNMP)',
@@ -45,7 +49,11 @@ class AtivoService
             'sistema_operacional' => 'Sistema operacional',
             'processador' => 'Processador',
             'memoria_ram' => 'Memória RAM',
+            'memoria_usada' => 'Memória em uso',
+            'tipo_memoria' => 'Tipo de memória',
             'armazenamento' => 'Armazenamento',
+            'placa_video' => 'Placa de vídeo',
+            'placa_som' => 'Placa de som',
             'funcao' => 'Função',
             'virtualizado' => 'Virtualizado',
             'ligado_desde' => 'Ligado desde',
@@ -223,6 +231,21 @@ class AtivoService
     public function listarAlertas(int $ativoId): array
     {
         return $this->repository->listarAlertas($ativoId);
+    }
+
+    public function listarRedes(int $ativoId): array
+    {
+        return $this->repository->listarRedes($ativoId);
+    }
+
+    public function listarVolumes(int $ativoId): array
+    {
+        return $this->repository->listarVolumes($ativoId);
+    }
+
+    public function listarPortas(int $ativoId): array
+    {
+        return $this->repository->listarPortas($ativoId);
     }
 
     private function proximoCodigo(string $tipo): string
@@ -457,6 +480,9 @@ class AtivoService
 
         $this->repository->substituirProgramas($id, array_slice($payload['programas'] ?? [], 0, 500));
         $this->repository->inserirAlertas($id, array_slice($payload['alertas'] ?? [], 0, 200));
+        $this->repository->substituirRedes($id, array_slice($payload['redes'] ?? [], 0, 20));
+        $this->repository->substituirVolumes($id, array_slice($payload['volumes'] ?? [], 0, 20));
+        $this->repository->substituirPortas($id, array_slice($payload['portas'] ?? [], 0, 100));
 
         // Comandos remotos pendentes (desligar/reiniciar) -- entregues
         // agora, junto com a resposta deste checkin. O agente é quem
@@ -527,7 +553,7 @@ class AtivoService
      * intervalo exato configurado em cada agente, então usamos uma janela
      * generosa (30 min) como aproximação razoável.
      */
-    public function estaLigada(array $ativo): bool
+    public static function estaLigada(array $ativo): bool
     {
         if (empty($ativo['ultimo_checkin'])) {
             return false;
@@ -536,7 +562,11 @@ class AtivoService
         return (time() - strtotime($ativo['ultimo_checkin'])) <= 30 * 60;
     }
 
-    public function uptimeTexto(array $ativo): ?string
+    /**
+     * "X dias, HH:MM:SS" -- precisão total, não arredondado, pra bater
+     * exatamente com o que o usuário pediu.
+     */
+    public static function uptimeTexto(array $ativo): ?string
     {
         $detalhes = is_array($ativo['detalhes'] ?? null)
             ? $ativo['detalhes']
@@ -555,12 +585,13 @@ class AtivoService
         $segundos = max(0, time() - $timestamp);
         $dias = intdiv($segundos, 86400);
         $horas = intdiv($segundos % 86400, 3600);
-
-        if ($dias > 0) {
-            return "{$dias}d {$horas}h";
-        }
-
         $minutos = intdiv($segundos % 3600, 60);
-        return "{$horas}h {$minutos}min";
+        $segs = $segundos % 60;
+
+        $hms = sprintf('%02d:%02d:%02d', $horas, $minutos, $segs);
+
+        return $dias > 0
+            ? "{$dias} dia" . ($dias > 1 ? 's' : '') . ", {$hms}"
+            : $hms;
     }
 }
