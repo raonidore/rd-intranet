@@ -1,6 +1,7 @@
 <?php
 ob_start();
 
+use App\Components\Alert;
 use App\Services\AtivoService;
 
 $statusCores = [
@@ -10,6 +11,8 @@ $statusCores = [
     'baixado' => 'danger',
 ];
 ?>
+
+<?= Alert::flash() ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <div>
@@ -94,7 +97,7 @@ $statusCores = [
                     instalados detectam a versão nova sozinhos e se atualizam no próximo check-in, sem precisar
                     reinstalar máquina por máquina.
                 </p>
-                <form method="post" action="<?= url('/ativos/agente/exe/upload') ?>" enctype="multipart/form-data" class="row g-2 align-items-end">
+                <form action="<?= url('/ativos/agente/exe/upload') ?>" enctype="multipart/form-data" class="row g-2 align-items-end" id="formUploadAgente">
                     <div class="col-auto">
                         <label class="form-label small mb-0">Versão</label>
                         <input type="text" name="versao" class="form-control form-control-sm" style="width:110px" placeholder="1.0.1" pattern="\d+\.\d+\.\d+" required>
@@ -104,9 +107,12 @@ $statusCores = [
                         <input type="file" name="arquivo" accept=".exe" class="form-control form-control-sm" required>
                     </div>
                     <div class="col-auto">
-                        <button type="submit" class="btn btn-sm btn-outline-primary"><i class="bi bi-upload"></i> Enviar</button>
+                        <button type="submit" class="btn btn-sm btn-outline-primary" id="botaoUploadAgente"><i class="bi bi-upload"></i> Enviar</button>
                     </div>
                 </form>
+                <div class="progress mt-2 d-none" id="progressoUploadAgente" style="height:20px">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width:0%">0%</div>
+                </div>
             </div>
         </div>
 
@@ -232,6 +238,48 @@ $statusCores = [
             if (!confirm('Isso invalida a chave atual -- agentes já instalados vão parar de funcionar até você reinstalar o script com a nova chave. Continuar?')) {
                 e.preventDefault();
             }
+        });
+    }
+
+    const formUpload = document.getElementById('formUploadAgente');
+    if (formUpload) {
+        const botao = document.getElementById('botaoUploadAgente');
+        const progresso = document.getElementById('progressoUploadAgente');
+        const barra = progresso.querySelector('.progress-bar');
+
+        formUpload.addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            botao.disabled = true;
+            progresso.classList.remove('d-none');
+            barra.style.width = '0%';
+            barra.textContent = '0%';
+
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', formUpload.action, true);
+
+            xhr.upload.addEventListener('progress', function (evento) {
+                if (!evento.lengthComputable) return;
+                const pct = Math.round((evento.loaded / evento.total) * 100);
+                barra.style.width = pct + '%';
+                barra.textContent = pct + '%';
+            });
+
+            xhr.addEventListener('load', function () {
+                // O envio chegou ao servidor -- recarrega pra mostrar a
+                // mensagem de resultado (Alert::flash) e o status
+                // atualizado. Falha de rede antes de chegar lá cai no
+                // listener de 'error' abaixo, sem recarregar.
+                window.location.href = <?= json_encode(url('/ativos')) ?>;
+            });
+
+            xhr.addEventListener('error', function () {
+                botao.disabled = false;
+                progresso.classList.add('d-none');
+                alert('Falha de rede ao enviar o arquivo. Tente novamente.');
+            });
+
+            xhr.send(new FormData(formUpload));
         });
     }
 })();
