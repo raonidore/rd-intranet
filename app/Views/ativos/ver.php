@@ -769,13 +769,16 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     });
 })();
 
-(function () {
+// window.addEventListener('load', ...) porque bootstrap.bundle.min.js só
+// carrega no fim do layout (depois deste conteúdo) -- chamar
+// new bootstrap.Tooltip(...) direto aqui (antes do "load") lança
+// ReferenceError e derruba o resto deste <script>, incluindo o filtro de
+// busca de alertas logo abaixo.
+window.addEventListener('load', function () {
     document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
         new bootstrap.Tooltip(el);
     });
-})();
 
-(function () {
     const campoBusca = document.getElementById('buscaAlertas');
     if (!campoBusca) return;
 
@@ -794,7 +797,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
 
         contador.textContent = termo ? visiveis + ' de ' + linhas.length + ' alertas' : '';
     });
-})();
+});
 </script>
 
 <?php

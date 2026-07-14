@@ -127,13 +127,16 @@ $statusCores = [
 </form>
 
 <script>
-(function () {
+// Tudo dentro de window.addEventListener('load', ...): o bootstrap.bundle.min.js
+// só é carregado no fim do layout (depois deste conteúdo), então "bootstrap"
+// ainda não existe se a gente chamar new bootstrap.Tooltip(...) direto aqui --
+// isso derrubava (ReferenceError) o resto do script, incluindo a lógica de
+// "Selecionar todos"/imprimir em lote logo abaixo, que nunca chegava a rodar.
+window.addEventListener('load', function () {
     document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
         new bootstrap.Tooltip(el);
     });
-})();
 
-(function () {
     const marcarTodos = document.getElementById('marcarTodos');
     const checkboxes = document.querySelectorAll('.checkbox-ativo');
     const botaoLote = document.getElementById('botaoEtiquetasLote');
@@ -151,7 +154,7 @@ $statusCores = [
     }
 
     checkboxes.forEach(function (c) { c.addEventListener('change', atualizarBotao); });
-})();
+});
 </script>
 
 <?php
