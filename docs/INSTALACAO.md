@@ -1,9 +1,13 @@
 # Instalação em um servidor novo
 
-> Primeira versão deste guia — cobre o caminho feliz num Ubuntu 24.04 limpo.
-> Ainda não foi validado num servidor de teste de verdade (só existe o
-> servidor de produção atual). Revise o `scripts/install.sh` antes de rodar
-> em um servidor real.
+> Guia validado numa instalação real (servidor `srvarquivos`, 2026-07-14) —
+> essa instalação revelou que `database/schema.sql` estava desatualizado (só
+> 14 das 46 tabelas reais), corrigido nesse mesmo commit. Veja
+> "Mantendo o schema.sql atualizado" mais abaixo: rode
+> `scripts/gerar_schema.sh` sempre que uma migration nova criar tabela,
+> senão servidores novos ficam sem ela — `scripts/install.sh` marca todas as
+> migrations como já aplicadas ao carregar o `schema.sql`, sem checar se ele
+> reflete de verdade o que está em `database/migrations/`.
 
 ## Pré-requisitos
 
@@ -145,6 +149,33 @@ merge uma mudança em `main` no GitHub, um admin abre
 "Atualizar agora" (ou espera a verificação diária avisar). Não é mais
 necessário repetir este guia — ele serve só pra levantar um servidor do
 zero.
+
+## Mantendo o `schema.sql` atualizado
+
+`database/schema.sql` é uma foto da estrutura final do banco (só
+`CREATE TABLE`, sem dados) — é o que `scripts/install.sh` carrega num
+servidor novo, **antes** de marcar todo `database/migrations/*.sql` como
+já aplicado. Ou seja: se uma migration nova cria uma tabela e ninguém
+regenera o `schema.sql`, um servidor instalado do zero fica **sem essa
+tabela pra sempre** (a migration nunca roda de verdade, porque já foi
+marcada como aplicada) — foi exatamente isso que quebrou a tela
+**Administração > Atualizações** no `srvarquivos` logo após a instalação
+(faltava a tabela `passos_manuais_confirmacoes`, entre outras 31).
+
+Sempre que adicionar uma migration que cria tabela nova, regenere o
+schema antes de dar merge:
+
+```bash
+bash scripts/gerar_schema.sh
+git diff database/schema.sql   # confira que só apareceu o que era esperado
+```
+
+Dados semeados por migration (`INSERT IGNORE` de config padrão, grants
+em `usuario_modulos`) não entram no `schema.sql` — mas isso não costuma
+ser crítico: `ConfigService::get($chave, $padrao)` sempre tem um valor
+padrão no próprio código PHP, e o usuário `admin` padrão bypassa a
+checagem de `usuario_modulos` por ter `perfil = 'admin'`. O que
+realmente importa manter em dia são as tabelas.
 
 ## Rodando atrás de nginx
 
