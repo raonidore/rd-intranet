@@ -38,7 +38,8 @@ use App\Services\AtivoService;
 <div class="barra-acoes bg-white border-bottom p-3 d-flex justify-content-between align-items-center">
     <strong><i class="bi bi-qr-code"></i> <?= count($ativos) ?> etiqueta<?= count($ativos) === 1 ? '' : 's' ?></strong>
     <div class="d-flex gap-2">
-        <button class="btn btn-primary" onclick="window.print()"><i class="bi bi-printer"></i> Imprimir</button>
+        <button class="btn btn-outline-secondary" id="botaoImprimirZebra"><i class="bi bi-printer"></i> Imprimir na Zebra</button>
+        <button class="btn btn-primary" onclick="window.print()"><i class="bi bi-printer"></i> Imprimir (navegador)</button>
         <a href="javascript:window.close()" class="btn btn-outline-secondary">Fechar</a>
     </div>
 </div>
@@ -58,6 +59,54 @@ use App\Services\AtivoService;
         </div>
     <?php endforeach; ?>
 </div>
+
+<script>
+(function () {
+    const botao = document.getElementById('botaoImprimirZebra');
+    if (!botao) return;
+
+    const ids = <?= json_encode(array_column($ativos, 'id')) ?>;
+    const PORTA_AGENTE_LOCAL = 8734;
+    const textoOriginal = botao.innerHTML;
+
+    botao.addEventListener('click', async function () {
+        botao.disabled = true;
+        let sucesso = 0, falhas = 0;
+
+        for (const id of ids) {
+            botao.innerHTML = '<i class="bi bi-hourglass-split"></i> Imprimindo ' + (sucesso + falhas + 1) + '/' + ids.length + '...';
+
+            try {
+                const resZpl = await fetch(<?= json_encode(url('/ativos/etiqueta/zpl')) ?> + '?id=' + id);
+                const dadosZpl = await resZpl.json();
+                if (!dadosZpl.success) { falhas++; continue; }
+
+                // Chama o agente Windows rodando NESTA maquina (o
+                // navegador), nao o servidor -- precisa da impressora
+                // Zebra ligada aqui, com o agente configurado.
+                const resImpressao = await fetch('http://127.0.0.1:' + PORTA_AGENTE_LOCAL + '/imprimir', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ zpl: dadosZpl.zpl })
+                });
+                const resultado = await resImpressao.json();
+                if (resultado.success) sucesso++; else falhas++;
+            } catch (e) {
+                falhas++;
+            }
+        }
+
+        botao.disabled = false;
+        botao.innerHTML = textoOriginal;
+
+        let mensagem = sucesso + ' etiqueta(s) enviada(s) com sucesso.';
+        if (falhas > 0) {
+            mensagem += ' ' + falhas + ' falharam -- confirme que o agente RD Intranet está rodando nesta máquina (ícone na bandeja) e com a impressora Zebra configurada.';
+        }
+        alert(mensagem);
+    });
+})();
+</script>
 
 </body>
 </html>
