@@ -29,6 +29,7 @@ class EtiquetaConfigController extends Controller
             'config' => $config,
             'camposDisponiveis' => EtiquetaService::CAMPOS_DISPONIVEIS,
             'previewHtml' => $this->service->gerarPreviewHtml($config, $ativo),
+            'codigoDigitos' => $this->ativoService->codigoDigitos(),
         ]);
     }
 
@@ -37,6 +38,7 @@ class EtiquetaConfigController extends Controller
         AuthMiddleware::checkModulo('ativos_etiqueta_config');
 
         $this->service->salvarConfiguracao($_POST);
+        $this->ativoService->salvarCodigoDigitos((int)($_POST['codigo_digitos'] ?? 6));
 
         header('Location: ' . url('/ativos/etiqueta-config'));
         exit;
@@ -73,6 +75,7 @@ class EtiquetaConfigController extends Controller
             'apelido' => 'Notebook de Exemplo',
             'setor_nome' => 'TI',
             'localizacao_nome' => 'Sala 1',
+            'ip' => '192.168.1.10',
         ];
     }
 }

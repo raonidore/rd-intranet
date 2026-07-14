@@ -22,6 +22,9 @@ use App\Components\Alert;
     font-size: 6mm;
     color: #999;
 }
+.rd-etiqueta-qr-img {
+    flex-shrink: 0;
+}
 .rd-etiqueta-texto {
     min-width: 0;
     display: flex;
@@ -77,6 +80,43 @@ use App\Components\Alert;
                                 <?php endforeach; ?>
                             </select>
                             <small class="text-muted">203dpi é o padrão dos 3 modelos citados -- confira na etiqueta de identificação da própria impressora se não tiver certeza.</small>
+                        </div>
+                    </div>
+
+                    <label class="form-label">Ajuste fino de impressão (calibração)</label>
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-4">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">Início horizontal</span>
+                                <input type="number" step="0.1" min="0" max="15" name="offset_x_mm" id="campoOffsetX" class="form-control" value="<?= htmlspecialchars((string)$config['offset_x_mm']) ?>">
+                                <span class="input-group-text">mm</span>
+                            </div>
+                        </div>
+                        <div class="col-sm-4">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">Início vertical</span>
+                                <input type="number" step="0.1" min="0" max="15" name="offset_y_mm" id="campoOffsetY" class="form-control" value="<?= htmlspecialchars((string)$config['offset_y_mm']) ?>">
+                                <span class="input-group-text">mm</span>
+                            </div>
+                        </div>
+                        <div class="col-sm-4 d-flex align-items-center">
+                            <small class="text-muted">Se a impressão sair colada na borda da etiqueta, aumente aqui até sobrar uma margem.</small>
+                        </div>
+                    </div>
+
+                    <label class="form-label">Código de patrimônio</label>
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-4">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">Dígitos</span>
+                                <input type="number" step="1" min="1" max="10" name="codigo_digitos" class="form-control" value="<?= htmlspecialchars((string)$codigoDigitos) ?>">
+                            </div>
+                        </div>
+                        <div class="col-sm-8 d-flex align-items-center">
+                            <small class="text-muted">
+                                Só vale pra ativos novos (não reescreve os já cadastrados). Ex: 4 dígitos ->
+                                RD-PC-0001 (até 9.999 por tipo).
+                            </small>
                         </div>
                     </div>
 
@@ -137,6 +177,8 @@ use App\Components\Alert;
     const largura = document.getElementById('campoLargura');
     const altura = document.getElementById('campoAltura');
     const dpi = document.getElementById('campoDpi');
+    const offsetX = document.getElementById('campoOffsetX');
+    const offsetY = document.getElementById('campoOffsetY');
     const checkboxes = document.querySelectorAll('.campo-etiqueta');
     const fontes = document.querySelectorAll('.campo-fonte');
     const preview = document.getElementById('previewContainer');
@@ -158,6 +200,8 @@ use App\Components\Alert;
         dados.set('largura_mm', largura.value);
         dados.set('altura_mm', altura.value);
         dados.set('dpi', dpi.value);
+        dados.set('offset_x_mm', offsetX.value);
+        dados.set('offset_y_mm', offsetY.value);
         checkboxes.forEach(function (c) { if (c.checked) dados.append('campos[]', c.value); });
         fontes.forEach(function (f) { dados.set('fontes[' + f.name.match(/\[(.+)\]/)[1] + ']', f.value); });
 
@@ -173,7 +217,7 @@ use App\Components\Alert;
         }
     }
 
-    [largura, altura, dpi].forEach(function (campo) {
+    [largura, altura, dpi, offsetX, offsetY].forEach(function (campo) {
         campo.addEventListener('input', atualizarPreview);
     });
     checkboxes.forEach(function (c) { c.addEventListener('change', atualizarPreview); });

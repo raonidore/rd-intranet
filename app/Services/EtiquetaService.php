@@ -26,6 +26,7 @@ class EtiquetaService
         'nome' => 'Nome / Apelido',
         'setor' => 'Setor',
         'localizacao' => 'Localização',
+        'ip' => 'Endereço IP',
         'empresa' => 'Rodapé (nome da empresa)',
     ];
 
@@ -41,11 +42,15 @@ class EtiquetaService
         'nome' => ['fonte_mm' => 3.2, 'linhas' => 2],
         'setor' => ['fonte_mm' => 2.6, 'linhas' => 1],
         'localizacao' => ['fonte_mm' => 2.6, 'linhas' => 1],
+        'ip' => ['fonte_mm' => 2.4, 'linhas' => 1],
         'empresa' => ['fonte_mm' => 2.2, 'linhas' => 1],
     ];
 
     private const FONTE_MIN_MM = 1.5;
     private const FONTE_MAX_MM = 12.0;
+
+    private const OFFSET_MIN_MM = 0.0;
+    private const OFFSET_MAX_MM = 15.0;
 
     private const MARGEM_MM = 1.8;
     private const ESPACO_LINHA_MM = 0.8;
@@ -62,7 +67,16 @@ class EtiquetaService
             'dpi' => (int)(ConfigService::get('etiqueta_dpi', '203') ?? 203),
             'campos' => is_array($camposSalvos) ? $camposSalvos : self::CAMPOS_PADRAO,
             'fontes' => $this->mesclarFontes(json_decode(ConfigService::get('etiqueta_fontes', '') ?: '', true)),
+            'offset_x_mm' => $this->clampOffset(ConfigService::get('etiqueta_offset_x_mm', '0')),
+            'offset_y_mm' => $this->clampOffset(ConfigService::get('etiqueta_offset_y_mm', '0')),
         ];
+    }
+
+    private function clampOffset(mixed $valor): float
+    {
+        $valor = (float)$valor;
+
+        return max(self::OFFSET_MIN_MM, min(self::OFFSET_MAX_MM, $valor));
     }
 
     /** Tamanho padrão (mm) de cada campo de texto -- ponto de partida da tela de configuração e fallback de quem nunca customizou. */
@@ -84,7 +98,7 @@ class EtiquetaService
         return $fontes;
     }
 
-    /** Monta a configuração (dimensões/dpi/campos/fontes) a partir do POST do formulário -- usado tanto pra salvar quanto pra pré-visualização ao vivo. */
+    /** Monta a configuração (dimensões/dpi/campos/fontes/ajuste de impressão) a partir do POST do formulário -- usado tanto pra salvar quanto pra pré-visualização ao vivo. */
     public function configuracaoDoPost(array $post): array
     {
         return [
@@ -93,6 +107,8 @@ class EtiquetaService
             'dpi' => (int)($post['dpi'] ?? 203),
             'campos' => array_values(array_intersect((array)($post['campos'] ?? []), array_keys(self::CAMPOS_DISPONIVEIS))),
             'fontes' => $this->mesclarFontes($post['fontes'] ?? []),
+            'offset_x_mm' => $this->clampOffset(str_replace(',', '.', $post['offset_x_mm'] ?? '0')),
+            'offset_y_mm' => $this->clampOffset(str_replace(',', '.', $post['offset_y_mm'] ?? '0')),
         ];
     }
 
@@ -120,6 +136,8 @@ class EtiquetaService
         ConfigService::set('etiqueta_dpi', (string)$config['dpi']);
         ConfigService::set('etiqueta_campos', json_encode($config['campos']));
         ConfigService::set('etiqueta_fontes', json_encode($config['fontes']));
+        ConfigService::set('etiqueta_offset_x_mm', (string)$config['offset_x_mm']);
+        ConfigService::set('etiqueta_offset_y_mm', (string)$config['offset_y_mm']);
 
         AuditService::registrar('Ativos', 'Configuração de Etiqueta', "Tamanho {$config['largura_mm']}x{$config['altura_mm']}mm, {$config['dpi']}dpi, campos: " . implode(', ', $config['campos']) . '.');
         NotificationService::success('Configuração de etiqueta salva.');
@@ -149,6 +167,7 @@ class EtiquetaService
             'nome' => $ativo['apelido'] ?? '' ?: ($ativo['nome'] ?? ''),
             'setor' => $ativo['setor_nome'] ?? '',
             'localizacao' => $ativo['localizacao_nome'] ?? '',
+            'ip' => $ativo['ip'] ?? '',
             'empresa' => trim((ConfigService::get('empresa_nome', 'RD Tecnologia') ?? 'RD Tecnologia') . ' - TI'),
         ];
 
@@ -174,6 +193,9 @@ class EtiquetaService
      * ^CI28 liga UTF-8 -- sem isso, acento (ex: "Área", "Localização")
      * sai errado. ^FB quebra linha automaticamente dentro da largura
      * disponível, em vez de estourar a etiqueta com texto mais longo.
+     * ^LH desloca a origem de impressão -- ajuste de calibração pra
+     * compensar a posição física real da etiqueta na impressora (sensor
+     * de gap, folga do rolo), quando o conteúdo sai colado na borda.
      */
     public function gerarZpl(array $config, array $ativo): string
     {
@@ -183,13 +205,15 @@ class EtiquetaService
         $larguraDots = $mmParaDots($config['largura_mm']);
         $alturaDots = $mmParaDots($config['altura_mm']);
         $margemDots = $mmParaDots(self::MARGEM_MM);
+        $offsetXDots = max(0, $mmParaDots($config['offset_x_mm'] ?? 0));
+        $offsetYDots = max(0, $mmParaDots($config['offset_y_mm'] ?? 0));
 
         $conteudo = $this->montarConteudo($config, $ativo);
 
         $qrLadoDots = 0;
         $textoXDots = $margemDots;
 
-        $zpl = "^XA\n^CI28\n^PW{$larguraDots}\n^LL{$alturaDots}\n";
+        $zpl = "^XA\n^CI28\n^PW{$larguraDots}\n^LL{$alturaDots}\n^LH{$offsetXDots},{$offsetYDots}\n";
 
         if ($conteudo['qrcode'] !== null) {
             // Magnificacao em ZPL e "dots por modulo" do QR, nao um tamanho
@@ -232,22 +256,33 @@ class EtiquetaService
 
     /**
      * Mesmo conteúdo/posicionamento do ZPL, mas como HTML/CSS em mm --
-     * usado só pra pré-visualização na tela de configuração, sem
-     * depender de nenhum serviço externo pra "desenhar" a etiqueta.
+     * usado tanto na pré-visualização da tela de configuração (sem QR
+     * real, só um ícone -- não depende de nenhum serviço externo) quanto
+     * na página de impressão/etiqueta HTML (com $qrCodeBase64 de
+     * verdade, pra sair escaneável mesmo impressa numa impressora comum).
      */
-    public function gerarPreviewHtml(array $config, array $ativo): string
+    public function gerarPreviewHtml(array $config, array $ativo, ?string $qrCodeBase64 = null): string
     {
         $conteudo = $this->montarConteudo($config, $ativo);
         $margem = self::MARGEM_MM;
+        $offsetX = $config['offset_x_mm'] ?? 0;
+        $offsetY = $config['offset_y_mm'] ?? 0;
 
         // overflow:hidden de proposito -- se o conteudo nao couber, o
         // preview corta igual a impressora vai cortar (nao desenha fora
         // da etiqueta), pra ficar visualmente óbvio que passou do limite.
-        $html = '<div class="rd-etiqueta-preview" style="width:' . $config['largura_mm'] . 'mm;height:' . $config['altura_mm'] . 'mm;padding:' . $margem . 'mm;overflow:hidden;">';
+        // padding-top/left somam o ajuste de calibracao (^LH no ZPL), pra
+        // o preview mostrar onde o conteudo realmente vai comecar.
+        $html = '<div class="rd-etiqueta-preview" style="width:' . $config['largura_mm'] . 'mm;height:' . $config['altura_mm'] . 'mm;'
+            . 'padding:' . ($margem + $offsetY) . 'mm ' . $margem . 'mm ' . $margem . 'mm ' . ($margem + $offsetX) . 'mm;overflow:hidden;">';
 
         if ($conteudo['qrcode'] !== null) {
             $ladoQr = min($config['altura_mm'] - 2 * $margem, 20);
-            $html .= '<div class="rd-etiqueta-qr" style="width:' . $ladoQr . 'mm;height:' . $ladoQr . 'mm;"><i class="bi bi-qr-code"></i></div>';
+            if ($qrCodeBase64 !== null) {
+                $html .= '<img class="rd-etiqueta-qr-img" src="data:image/png;base64,' . $qrCodeBase64 . '" style="width:' . $ladoQr . 'mm;height:' . $ladoQr . 'mm;" alt="QR code">';
+            } else {
+                $html .= '<div class="rd-etiqueta-qr" style="width:' . $ladoQr . 'mm;height:' . $ladoQr . 'mm;"><i class="bi bi-qr-code"></i></div>';
+            }
         }
 
         $html .= '<div class="rd-etiqueta-texto">';

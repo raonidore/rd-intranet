@@ -270,7 +270,26 @@ class AtivoService
             $numero = (int)$m[1];
         }
 
-        return sprintf('%s-%s-%06d', $this->siglaEmpresa(), $prefixo, $numero + 1);
+        return sprintf('%s-%s-%0' . $this->codigoDigitos() . 'd', $this->siglaEmpresa(), $prefixo, $numero + 1);
+    }
+
+    /** Quantidade de dígitos do número sequencial do código de patrimônio (ex: 4 dígitos -> RD-PC-0001). Só vale pra códigos novos -- não reescreve os já existentes. */
+    public function codigoDigitos(): int
+    {
+        return max(1, min(10, (int)(ConfigService::get('ativos_codigo_digitos', '6') ?? 6)));
+    }
+
+    public function salvarCodigoDigitos(int $digitos): bool
+    {
+        if ($digitos < 1 || $digitos > 10) {
+            NotificationService::error('Quantidade de dígitos inválida (use um valor entre 1 e 10).');
+            return false;
+        }
+
+        ConfigService::set('ativos_codigo_digitos', (string)$digitos);
+        AuditService::registrar('Ativos', 'Configuração de Etiqueta', "Código de patrimônio passa a usar {$digitos} dígitos.");
+
+        return true;
     }
 
     public function nomeEmpresa(): string

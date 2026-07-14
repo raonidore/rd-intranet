@@ -175,11 +175,7 @@ class AtivoController extends Controller
             exit;
         }
 
-        $this->view('ativos/etiqueta', [
-            'ativos' => [$ativo],
-            'qrCodes' => [$id => $this->service->gerarEtiquetaQrCodeBase64($id)],
-            'empresaNome' => $this->service->nomeEmpresa(),
-        ]);
+        $this->renderEtiquetas([$ativo]);
     }
 
     /** ZPL pronto pra este ativo, buscado pelo navegador e mandado direto pro agente Windows local (impressora Zebra). */
@@ -217,15 +213,33 @@ class AtivoController extends Controller
 
         $ativos = $this->service->buscarPorIds($ids);
 
-        $qrCodes = [];
+        $this->renderEtiquetas($ativos);
+    }
+
+    /**
+     * Monta cada etiqueta em HTML respeitando a MESMA configuração de
+     * Ativos > Configurações de Etiqueta (tamanho, campos, fontes) --
+     * antes essa tela tinha um layout próprio, fixo, que não batia com o
+     * que a pré-visualização (nem a impressão na Zebra) mostravam.
+     */
+    private function renderEtiquetas(array $ativos): void
+    {
+        $etiquetaService = new EtiquetaService();
+        $config = $etiquetaService->configuracao();
+
+        $blocosHtml = [];
         foreach ($ativos as $ativo) {
-            $qrCodes[$ativo['id']] = $this->service->gerarEtiquetaQrCodeBase64((int)$ativo['id']);
+            $qrBase64 = in_array('qrcode', $config['campos'], true)
+                ? $this->service->gerarEtiquetaQrCodeBase64((int)$ativo['id'])
+                : null;
+
+            $blocosHtml[] = $etiquetaService->gerarPreviewHtml($config, $ativo, $qrBase64);
         }
 
         $this->view('ativos/etiqueta', [
             'ativos' => $ativos,
-            'qrCodes' => $qrCodes,
-            'empresaNome' => $this->service->nomeEmpresa(),
+            'blocosHtml' => $blocosHtml,
+            'config' => $config,
         ]);
     }
 

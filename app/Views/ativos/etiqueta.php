@@ -1,6 +1,8 @@
 <?php
-
-use App\Services\AtivoService;
+// Layout/campos/fontes vem de EtiquetaService (Ativos > Configurações de
+// Etiqueta) -- cada item de $blocosHtml já é o mesmo HTML/CSS usado na
+// pré-visualização daquela tela, só que com o QR code de verdade
+// (escaneável) em vez do ícone de placeholder.
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -8,35 +10,64 @@ use App\Services\AtivoService;
     <meta charset="UTF-8">
     <title>Etiquetas de Ativos - RD Intranet</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <style>
         @page { size: A4; margin: 10mm; }
         body { background: #e9ecef; }
         .barra-acoes { position: sticky; top: 0; z-index: 10; }
         .grade-etiquetas { display: flex; flex-wrap: wrap; gap: 4mm; padding: 6mm; }
-        .etiqueta {
-            width: 62mm; height: 40mm; border: 1px solid #999; border-radius: 3mm;
-            background: #fff; padding: 3mm; display: flex; align-items: center; gap: 3mm;
-            page-break-inside: avoid; box-sizing: border-box;
+
+        .rd-etiqueta-preview {
+            border: 1px solid #999;
+            display: flex;
+            align-items: center;
+            gap: 2mm;
+            box-sizing: border-box;
+            background: #fff;
+            page-break-inside: avoid;
         }
-        .etiqueta img { width: 30mm; height: 30mm; flex-shrink: 0; }
-        .etiqueta .info { min-width: 0; }
-        .etiqueta .codigo { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 14pt; font-weight: 700; line-height: 1.1; }
-        .etiqueta .tipo { font-size: 8pt; text-transform: uppercase; letter-spacing: .05em; color: #666; }
-        .etiqueta .nome { font-size: 9pt; color: #333; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .etiqueta .empresa { font-size: 7pt; color: #999; margin-top: 2mm; }
+        .rd-etiqueta-qr {
+            flex-shrink: 0;
+            border: 1px dashed #ccc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 6mm;
+            color: #999;
+        }
+        .rd-etiqueta-qr-img { flex-shrink: 0; }
+        .rd-etiqueta-texto {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            width: 100%;
+        }
+        .rd-etiqueta-linha {
+            font-weight: 700;
+            line-height: 1.2;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .rd-etiqueta-espaco {
+            margin-top: 2mm;
+            font-weight: 400;
+            color: #666;
+        }
 
         @media print {
             body { background: #fff; }
             .barra-acoes { display: none; }
             .grade-etiquetas { padding: 0; }
-            .etiqueta { border: 1px dashed #ccc; }
+            .rd-etiqueta-preview { border: 1px dashed #ccc; }
         }
     </style>
 </head>
 <body>
 
 <div class="barra-acoes bg-white border-bottom p-3 d-flex justify-content-between align-items-center">
-    <strong><i class="bi bi-qr-code"></i> <?= count($ativos) ?> etiqueta<?= count($ativos) === 1 ? '' : 's' ?></strong>
+    <strong><i class="bi bi-qr-code"></i> <?= count($blocosHtml) ?> etiqueta<?= count($blocosHtml) === 1 ? '' : 's' ?></strong>
     <div class="d-flex gap-2">
         <button class="btn btn-outline-secondary" id="botaoImprimirZebra"><i class="bi bi-printer"></i> Imprimir na Zebra</button>
         <button class="btn btn-primary" onclick="window.print()"><i class="bi bi-printer"></i> Imprimir (navegador)</button>
@@ -45,18 +76,8 @@ use App\Services\AtivoService;
 </div>
 
 <div class="grade-etiquetas">
-    <?php foreach ($ativos as $a): ?>
-        <div class="etiqueta">
-            <?php if (!empty($qrCodes[$a['id']])): ?>
-                <img src="data:image/png;base64,<?= $qrCodes[$a['id']] ?>" alt="QR code">
-            <?php endif; ?>
-            <div class="info">
-                <div class="tipo"><?= htmlspecialchars(AtivoService::TIPOS[$a['tipo']]['label'] ?? $a['tipo']) ?></div>
-                <div class="codigo"><?= htmlspecialchars($a['codigo_patrimonio']) ?></div>
-                <div class="nome" title="<?= htmlspecialchars($a['nome']) ?>"><?= htmlspecialchars($a['apelido'] ?: $a['nome']) ?></div>
-                <div class="empresa"><?= htmlspecialchars($empresaNome) ?> - TI</div>
-            </div>
-        </div>
+    <?php foreach ($blocosHtml as $bloco): ?>
+        <?= $bloco ?>
     <?php endforeach; ?>
 </div>
 
