@@ -124,9 +124,10 @@ use App\Components\Alert;
 
         <div class="alert alert-light border small mt-3 mb-0">
             <i class="bi bi-info-circle"></i>
-            A impressão em si (envio pra impressora Zebra via USB) depende de uma atualização no
-            agente Windows que ainda vai ser feita -- por enquanto, esta tela só define e mostra
-            como a etiqueta vai ficar.
+            Esta tela só define e mostra como a etiqueta vai ficar. Pra imprimir de verdade numa
+            Zebra, use o botão <strong>"Imprimir etiqueta (Zebra)"</strong> na ficha do ativo (ou
+            "Imprimir na Zebra" na tela de etiqueta) -- precisa do agente Windows atualizado e
+            com a impressora selecionada em Configurações.
         </div>
     </div>
 </div>
