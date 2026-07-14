@@ -8,21 +8,66 @@
 ## Pré-requisitos
 
 - Servidor com **Ubuntu 24.04 LTS** e acesso root (SSH).
+- Esse usuário (`ti` ou outro, é o `REPO_USER` do passo seguinte) precisa
+  existir no sistema antes de rodar o script (`adduser ti`).
 - Uma **deploy key** do GitHub com acesso de leitura ao repositório
-  `rd-intranet`, já configurada no servidor para o usuário que vai ser dono
-  do checkout (`REPO_USER`, padrão `ti`) — sem isso o `git clone` do passo 2
-  do script falha. Isso é o mesmo tipo de chave já usada em produção
-  (`~/.ssh/id_ed25519_rd_intranet` + `~/.ssh/config` apontando pra
-  `github.com`), só que gerada pra este servidor novo e cadastrada como
-  "Deploy key" (somente leitura) no GitHub.
-- Esse usuário (`ti` ou outro) precisa existir no sistema antes de rodar o
-  script (`adduser ti`).
+  `rd-intranet`, configurada no servidor para esse usuário -- sem isso o
+  `git clone` do passo 2 do script falha.
+
+### Gerando e cadastrando a deploy key
+
+Como o `REPO_USER` (ex: `ti`), **no servidor novo** (não no seu computador
+nem em outro servidor):
+
+```bash
+ssh-keygen -t ed25519 -C "nome-do-servidor" -f ~/.ssh/id_ed25519_rd_intranet -N ""
+
+cat >> ~/.ssh/config << 'EOF'
+Host github.com
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/id_ed25519_rd_intranet
+    IdentitiesOnly yes
+EOF
+chmod 600 ~/.ssh/config
+
+cat ~/.ssh/id_ed25519_rd_intranet.pub
+```
+
+(`-N ""` gera sem senha na chave -- necessário porque as atualizações
+automáticas depois rodam sozinhas, sem alguém pra digitar a senha; troque
+`"nome-do-servidor"` só pelo comentário, não afeta nada funcionalmente.)
+
+Copie a saída do último comando (começa com `ssh-ed25519 AAAA...`) e
+cadastre em **GitHub > repositório `rd-intranet` > Settings > Deploy keys
+> Add deploy key**:
+
+- **Title**: qualquer nome que identifique o servidor (ex: o hostname).
+- **Key**: cole o conteúdo da chave **pública** copiado acima.
+- **Allow write access**: deixe **desmarcado** -- só precisa ler
+  (`git clone`/`git pull`), nunca dar push a partir de um servidor de
+  produção.
+
+Teste antes de seguir pro próximo passo:
+
+```bash
+ssh -T git@github.com
+```
+
+Deve responder algo como `Hi raonidore/rd-intranet! You've successfully
+authenticated, but GitHub does not provide shell access.` -- se der
+`Permission denied`, confira se a chave certa foi colada (a `.pub`, não a
+privada) e se o `~/.ssh/config` está com o `IdentityFile` apontando pro
+arquivo certo.
 
 ## Passo a passo
 
+A deploy key fica no `~/.ssh` do `REPO_USER` (ex: `ti`), não no do root --
+por isso este primeiro clone (só pra pegar o `scripts/install.sh`) roda
+como esse usuário (`sudo -u`), e só o script em si roda como root:
+
 ```bash
-# como root
-git clone <url-do-repo> /tmp/rd-intranet-instalador
+sudo -u ti git clone git@github.com:raonidore/rd-intranet.git /tmp/rd-intranet-instalador
 cd /tmp/rd-intranet-instalador
 sudo DOMINIO=intranet.suaempresa.com.br bash scripts/install.sh
 ```
