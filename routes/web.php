@@ -45,6 +45,7 @@ use App\Controllers\AntivirusController;
 use App\Controllers\AtivoController;
 use App\Controllers\AtivoAgenteController;
 use App\Controllers\AcessoRemotoController;
+use App\Controllers\EtiquetaConfigController;
 use App\Controllers\EmpresaController;
 
 $router->get('/', [DashboardController::class, 'index']);
@@ -413,5 +414,8 @@ $router->post('/ativos/acesso-remoto/credenciais', [AcessoRemotoController::clas
 $router->post('/ativos/acesso-remoto/vincular', [AcessoRemotoController::class, 'vincular']);
 $router->post('/ativos/acesso-remoto/compartilhar', [AcessoRemotoController::class, 'compartilhar']);
 $router->post('/ativos/acesso-remoto/liberar-porta', [AcessoRemotoController::class, 'liberarPorta']);
+$router->get('/ativos/etiqueta-config', [EtiquetaConfigController::class, 'index']);
+$router->post('/ativos/etiqueta-config/salvar', [EtiquetaConfigController::class, 'salvar']);
+$router->post('/ativos/etiqueta-config/preview', [EtiquetaConfigController::class, 'preview']);
 
 $router->post('/ativos/comando', [AtivoController::class, 'enviarComando']);

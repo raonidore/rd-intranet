@@ -193,7 +193,8 @@ $abrirAtivos = $rdSecaoAtiva(['/ativos']);
         || PermissionService::temAcesso('ativos_lista')
         || PermissionService::temAcesso('ativos_novo')
         || PermissionService::temAcesso('ativos_cadastros')
-        || PermissionService::temAcesso('ativos_acesso_remoto');
+        || PermissionService::temAcesso('ativos_acesso_remoto')
+        || PermissionService::temAcesso('ativos_etiqueta_config');
     ?>
     <?php if ($temAtivos): ?>
     <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuAtivos"
@@ -229,6 +230,12 @@ $abrirAtivos = $rdSecaoAtiva(['/ativos']);
         <?php if (PermissionService::temAcesso('ativos_acesso_remoto')): ?>
         <a href="<?= url('/ativos/acesso-remoto') ?>" class="<?= str_starts_with($uriAtual, '/ativos/acesso-remoto') ? 'active' : '' ?>">
             <i class="bi bi-display me-2"></i> Acesso Remoto
+        </a>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('ativos_etiqueta_config')): ?>
+        <a href="<?= url('/ativos/etiqueta-config') ?>" class="<?= str_starts_with($uriAtual, '/ativos/etiqueta-config') ? 'active' : '' ?>">
+            <i class="bi bi-qr-code me-2"></i> Configurações de Etiqueta
         </a>
         <?php endif; ?>
     </div>
