@@ -8,6 +8,7 @@ use App\Services\AtivoCatalogoService;
 use App\Services\AtivoService;
 use App\Services\AuditService;
 use App\Services\CronService;
+use App\Services\EtiquetaService;
 use App\Services\NotificationService;
 
 class AtivoController extends Controller
@@ -179,6 +180,27 @@ class AtivoController extends Controller
             'qrCodes' => [$id => $this->service->gerarEtiquetaQrCodeBase64($id)],
             'empresaNome' => $this->service->nomeEmpresa(),
         ]);
+    }
+
+    /** ZPL pronto pra este ativo, buscado pelo navegador e mandado direto pro agente Windows local (impressora Zebra). */
+    public function etiquetaZpl(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = (int)($_GET['id'] ?? 0);
+        $ativo = $this->service->buscar($id);
+
+        if (!$ativo) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'message' => 'Ativo não encontrado.']);
+            return;
+        }
+
+        $etiquetaService = new EtiquetaService();
+        $config = $etiquetaService->configuracao();
+
+        echo json_encode(['success' => true, 'zpl' => $etiquetaService->gerarZpl($config, $ativo)]);
     }
 
     public function etiquetasLote(): void

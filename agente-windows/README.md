@@ -64,6 +64,36 @@ O agente se autoatualiza. O fluxo:
 Se nenhum `.exe` for enviado ainda, essa checagem simplesmente não
 encontra nada e não faz nada (sem erro visível pro usuário).
 
+## Impressão de etiquetas Zebra (TLP2844, GC420t, ZD420t)
+
+O agente também funciona como "ponte" entre o navegador e uma impressora
+Zebra ligada por USB nesta máquina -- mesmo princípio do Zebra Browser
+Print oficial, só que nosso:
+
+1. Em **Configurações...** (menu do ícone da bandeja), escolha a
+   impressora Zebra na lista (aparecem as mesmas instaladas no Windows).
+2. O agente sobe um servidor local, só em `127.0.0.1:8734`, nunca
+   acessível pela rede.
+3. Na ficha do ativo no RD Intranet, o botão "Imprimir etiqueta (Zebra)"
+   busca o ZPL pronto (gerado conforme **Ativos > Configurações de
+   Etiqueta**) e manda direto pro `127.0.0.1:8734/imprimir` -- o agente
+   grava esse ZPL cru (RAW, sem passar pelo driver "desenhar página")
+   direto na fila de impressão via a API do Windows (`winspool.drv`,
+   `RawPrinterHelper.cs`), igual sistemas de ponto-de-venda fazem há
+   décadas. Funciona nos 3 modelos porque todos falam ZPL.
+
+Só aceita pedidos cujo `Origin` bate com o `ServerUrl` configurado --
+outra aba/site não consegue mandar imprimir sem querer. Se a porta 8734
+já estiver em uso (outra instância, outro programa), o agente
+simplesmente não sobe esse listener e segue funcionando normal pro
+resto (checkin/coleta).
+
+**Não testado em hardware real** (sem Windows nem impressora Zebra
+neste ambiente) -- o ZPL gerado pelo servidor foi validado
+visualmente via [Labelary](http://labelary.com/) (renderizador ZPL
+público), mas o envio via `winspool.drv`/`HttpListener` em si só vai
+ser confirmado quando alguém testar numa máquina de verdade.
+
 ## Distribuição em massa (opcional)
 
 Pra não precisar configurar servidor/chave manualmente em cada máquina,
@@ -114,6 +144,9 @@ em `%LocalAppData%\RDIntranetAgent\config.json`, por usuário).
   volume de dados enviado/recebido (última coleta + total acumulado).
 - Menu de contexto (botão direito no ícone): "Coletar agora",
   "Configurações...", "Abrir pasta de logs", "Sair".
+- Se uma impressora Zebra estiver configurada, escuta local
+  (`127.0.0.1:8734`) pra imprimir etiquetas sob demanda vindas do RD
+  Intranet (ver seção própria abaixo).
 
 ## Onde ficam os dados locais
 

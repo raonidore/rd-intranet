@@ -1,3 +1,4 @@
+using System.Drawing.Printing;
 using System.Windows.Forms;
 
 namespace RdIntranetAgente;
@@ -12,6 +13,7 @@ public class ConfigForm : Form
     private readonly TextBox _campoServidor;
     private readonly TextBox _campoChave;
     private readonly NumericUpDown _campoIntervalo;
+    private readonly ComboBox _campoImpressora;
 
     public Config ConfigResultante { get; private set; }
 
@@ -21,7 +23,7 @@ public class ConfigForm : Form
 
         Text = "RD Intranet - Configuração do Agente";
         Width = 460;
-        Height = 260;
+        Height = 340;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -44,8 +46,26 @@ public class ConfigForm : Form
             Value = Math.Clamp(configAtual.IntervaloMinutos <= 0 ? 15 : configAtual.IntervaloMinutos, 5, 240)
         };
 
-        var botaoSalvar = new Button { Text = "Salvar", Left = 260, Top = 180, Width = 80, DialogResult = DialogResult.OK };
-        var botaoCancelar = new Button { Text = "Cancelar", Left = 350, Top = 180, Width = 80, DialogResult = DialogResult.Cancel };
+        var rotuloImpressora = new Label { Text = "Impressora de etiquetas (Zebra) -- opcional, só se for imprimir daqui", Left = 15, Top = 180, Width = 420 };
+        _campoImpressora = new ComboBox { Left = 15, Top = 203, Width = 420, DropDownStyle = ComboBoxStyle.DropDownList };
+        _campoImpressora.Items.Add("(nenhuma)");
+        try
+        {
+            foreach (string nome in PrinterSettings.InstalledPrinters)
+            {
+                _campoImpressora.Items.Add(nome);
+            }
+        }
+        catch
+        {
+            // sem impressoras instaladas ou erro ao enumerar -- so fica com "(nenhuma)"
+        }
+
+        var indiceAtual = _campoImpressora.Items.IndexOf(configAtual.ImpressoraEtiqueta);
+        _campoImpressora.SelectedIndex = indiceAtual >= 0 ? indiceAtual : 0;
+
+        var botaoSalvar = new Button { Text = "Salvar", Left = 260, Top = 250, Width = 80, DialogResult = DialogResult.OK };
+        var botaoCancelar = new Button { Text = "Cancelar", Left = 350, Top = 250, Width = 80, DialogResult = DialogResult.Cancel };
 
         botaoSalvar.Click += (s, e) =>
         {
@@ -57,11 +77,14 @@ public class ConfigForm : Form
                 return;
             }
 
+            var impressoraSelecionada = _campoImpressora.SelectedItem as string;
+
             ConfigResultante = new Config
             {
                 ServerUrl = _campoServidor.Text.Trim().TrimEnd('/'),
                 ApiKey = _campoChave.Text.Trim(),
-                IntervaloMinutos = (int)_campoIntervalo.Value
+                IntervaloMinutos = (int)_campoIntervalo.Value,
+                ImpressoraEtiqueta = (impressoraSelecionada == "(nenhuma)" ? null : impressoraSelecionada) ?? ""
             };
         };
 
@@ -70,6 +93,7 @@ public class ConfigForm : Form
             rotuloServidor, _campoServidor,
             rotuloChave, _campoChave,
             rotuloIntervalo, _campoIntervalo,
+            rotuloImpressora, _campoImpressora,
             botaoSalvar, botaoCancelar
         });
 

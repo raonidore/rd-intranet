@@ -108,6 +108,9 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             </div>
         <?php endif; ?>
         <a href="<?= url('/ativos/etiqueta?id=' . $ativo['id']) ?>" target="_blank" class="btn btn-outline-secondary"><i class="bi bi-qr-code"></i> Etiqueta</a>
+        <button type="button" class="btn btn-outline-secondary" id="botaoImprimirZebra" data-id="<?= (int)$ativo['id'] ?>">
+            <i class="bi bi-printer"></i> Imprimir etiqueta (Zebra)
+        </button>
         <a href="<?= url('/ativos/editar?id=' . $ativo['id']) ?>" class="btn btn-primary"><i class="bi bi-pencil"></i> Editar</a>
         <a href="<?= url('/ativos/excluir?id=' . $ativo['id']) ?>" class="btn btn-outline-danger"><i class="bi bi-trash"></i></a>
     </div>
@@ -595,6 +598,47 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
         } finally {
             botao.disabled = false;
             botao.innerHTML = '<i class="bi bi-arrow-repeat"></i> Coletar via SNMP';
+        }
+    });
+})();
+
+(function () {
+    const botao = document.getElementById('botaoImprimirZebra');
+    if (!botao) return;
+
+    const PORTA_AGENTE_LOCAL = 8734;
+    const textoOriginal = botao.innerHTML;
+
+    botao.addEventListener('click', async function () {
+        botao.disabled = true;
+        botao.innerHTML = '<i class="bi bi-hourglass-split"></i> Gerando etiqueta...';
+
+        try {
+            const resZpl = await fetch(<?= json_encode(url('/ativos/etiqueta/zpl')) ?> + '?id=' + botao.dataset.id);
+            const dadosZpl = await resZpl.json();
+
+            if (!dadosZpl.success) {
+                alert(dadosZpl.message || 'Falha ao gerar a etiqueta.');
+                return;
+            }
+
+            botao.innerHTML = '<i class="bi bi-hourglass-split"></i> Enviando pra impressora...';
+
+            // Chama o agente Windows rodando NESTA maquina (o navegador),
+            // nao o servidor -- e por isso que precisa da impressora Zebra
+            // ligada no PC de quem esta clicando, com o agente configurado.
+            const resImpressao = await fetch('http://127.0.0.1:' + PORTA_AGENTE_LOCAL + '/imprimir', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ zpl: dadosZpl.zpl })
+            });
+            const resultado = await resImpressao.json();
+            alert(resultado.message || (resultado.success ? 'Enviado pra impressora.' : 'Falha ao imprimir.'));
+        } catch (e) {
+            alert('Não foi possível falar com o agente RD Intranet nesta máquina. Confirme que ele está rodando (ícone na bandeja) e com uma impressora Zebra configurada em Configurações...');
+        } finally {
+            botao.disabled = false;
+            botao.innerHTML = textoOriginal;
         }
     });
 })();

@@ -390,6 +390,7 @@ $router->post('/ativos/editar', [AtivoController::class, 'editar']);
 $router->get('/ativos/excluir', [AtivoController::class, 'excluirForm']);
 $router->post('/ativos/excluir', [AtivoController::class, 'excluir']);
 $router->get('/ativos/etiqueta', [AtivoController::class, 'etiqueta']);
+$router->get('/ativos/etiqueta/zpl', [AtivoController::class, 'etiquetaZpl']);
 $router->get('/ativos/etiquetas/lote', [AtivoController::class, 'etiquetasLote']);
 $router->post('/ativos/coletar-snmp', [AtivoController::class, 'coletarSnmp']);
 $router->post('/ativos/snmp/config', [AtivoController::class, 'salvarConfigSnmp']);

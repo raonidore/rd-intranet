@@ -16,12 +16,19 @@ public class TrayApplicationContext : ApplicationContext
     private readonly System.Windows.Forms.Timer _timer;
     private Config _config;
     private readonly AppState _estado;
+    private readonly PrintListener _printListener;
     private bool _coletando;
 
     public TrayApplicationContext()
     {
         _config = Config.Carregar();
         _estado = AppState.Carregar();
+
+        // Escuta local pra imprimir etiqueta sob demanda (sem esperar o
+        // proximo checkin) -- sempre tenta iniciar; so imprime de verdade
+        // se uma impressora estiver configurada (menu Configuracoes).
+        _printListener = new PrintListener(() => _config);
+        _printListener.Iniciar();
 
         var menu = new ContextMenuStrip();
         menu.Items.Add("Coletar agora", null, async (s, e) => await ColetarEEnviarAsync(manual: true));
@@ -375,6 +382,7 @@ del ""%~f0""
     {
         _icone.Visible = false;
         _timer.Stop();
+        _printListener.Dispose();
         Application.Exit();
     }
 }
