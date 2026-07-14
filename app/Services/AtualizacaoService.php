@@ -71,10 +71,23 @@ class AtualizacaoService
      */
     public function commitsPendentes(): array
     {
+        return $this->commitsEntre('HEAD', 'origin/' . self::BRANCH);
+    }
+
+    /**
+     * Lista de commits (mais recente primeiro) entre duas referencias --
+     * usado tanto pros pendentes (HEAD..origin/main) quanto pra descricao
+     * de uma atualizacao ja aplicada (commit_antes..commit_depois do
+     * historico).
+     *
+     * @return array<int, array{hash: string, autor: string, data: string, assunto: string}>
+     */
+    private function commitsEntre(string $de, string $para): array
+    {
         $formato = "%H\t%an\t%ad\t%s";
         $resultado = $this->linux->executar(
             $this->gitPrefixo()
-            . ' log HEAD..origin/' . self::BRANCH
+            . ' log ' . escapeshellarg($de . '..' . $para)
             . ' --date=iso --format=' . escapeshellarg($formato)
         );
 
@@ -96,6 +109,29 @@ class AtualizacaoService
         }
 
         return $commits;
+    }
+
+    /**
+     * O que uma entrada do histórico (aplicar/reverter) trouxe/desfez, em
+     * commits legíveis -- pra "Descrição" no histórico, em vez de só o
+     * intervalo de hash. Num 'aplicar', o intervalo cronológico é
+     * commit_antes..commit_depois (o que entrou); num 'reverter', é o
+     * inverso -- commit_depois é o alvo (mais antigo) e commit_antes é de
+     * onde saiu, então os commits "desfeitos" são commit_depois..commit_antes.
+     *
+     * @return array<int, array{hash: string, autor: string, data: string, assunto: string}>
+     */
+    public function descricaoHistorico(int $id): array
+    {
+        $registro = $this->repo->buscarPorId($id);
+
+        if (!$registro || !$registro['commit_antes'] || !$registro['commit_depois']) {
+            return [];
+        }
+
+        return $registro['tipo'] === 'reverter'
+            ? $this->commitsEntre($registro['commit_depois'], $registro['commit_antes'])
+            : $this->commitsEntre($registro['commit_antes'], $registro['commit_depois']);
     }
 
     public function podeReverter(): bool

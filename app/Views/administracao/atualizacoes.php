@@ -203,6 +203,7 @@ $blocoPasso = function (array $p): string {
                         <th>Commit</th>
                         <th>Usuário</th>
                         <th>Status</th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -215,11 +216,32 @@ $blocoPasso = function (array $p): string {
                             </td>
                             <td><?= htmlspecialchars($h['usuario_nome'] ?? 'Sistema') ?></td>
                             <td><?= (int)$h['sucesso'] === 1 ? Badge::make('Sucesso', 'success') : Badge::make('Falha', 'danger') ?></td>
+                            <td class="text-end">
+                                <?php if ($h['commit_antes'] && $h['commit_depois']): ?>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary botao-descricao" data-id="<?= (int)$h['id'] ?>">
+                                        Descrição
+                                    </button>
+                                <?php endif; ?>
+                            </td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
             </table>
         <?php endif; ?>
+    </div>
+</div>
+
+<div class="modal fade" id="modalDescricao" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-list-ul"></i> O que foi atualizado</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modalDescricaoCorpo">
+                <div class="text-center text-muted py-3"><i class="bi bi-hourglass-split"></i> Carregando...</div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -299,6 +321,37 @@ $blocoPasso = function (array $p): string {
             executar(URLS.checagemDiaria, 'Ativando verificação diária');
         });
     }
+
+    document.querySelectorAll('.botao-descricao').forEach(function (botao) {
+        botao.addEventListener('click', async function () {
+            const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalDescricao'));
+            const corpo = document.getElementById('modalDescricaoCorpo');
+            corpo.innerHTML = '<div class="text-center text-muted py-3"><i class="bi bi-hourglass-split"></i> Carregando...</div>';
+            modal.show();
+
+            try {
+                const res = await fetch(<?= json_encode(url('/administracao/atualizacoes/descricao')) ?> + '?id=' + botao.dataset.id);
+                const dados = await res.json();
+
+                if (!dados.commits || dados.commits.length === 0) {
+                    corpo.innerHTML = '<div class="text-muted">Nenhum detalhe disponível (commit antigo/removido do histórico do git).</div>';
+                    return;
+                }
+
+                let html = '<ul class="list-group list-group-flush">';
+                dados.commits.forEach(function (c) {
+                    html += '<li class="list-group-item px-0">'
+                        + '<div>' + c.assunto.replace(/</g, '&lt;') + '</div>'
+                        + '<div class="small text-muted font-monospace">' + c.hash.substring(0, 7) + ' · ' + c.autor.replace(/</g, '&lt;') + ' · ' + c.data + '</div>'
+                        + '</li>';
+                });
+                html += '</ul>';
+                corpo.innerHTML = html;
+            } catch (e) {
+                corpo.innerHTML = '<div class="alert alert-danger mb-0">Erro ao comunicar com o servidor.</div>';
+            }
+        });
+    });
 })();
 </script>
 

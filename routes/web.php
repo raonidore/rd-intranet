@@ -327,6 +327,7 @@ $router->get('/administracao/usuarios/excluir', [UserController::class, 'excluir
 $router->post('/administracao/usuarios/excluir', [UserController::class, 'excluir']);
 
 $router->get('/administracao/atualizacoes', [AtualizacaoController::class, 'index']);
+$router->get('/administracao/atualizacoes/descricao', [AtualizacaoController::class, 'descricao']);
 $router->post('/administracao/atualizacoes/verificar', [AtualizacaoController::class, 'verificar']);
 $router->post('/administracao/atualizacoes/aplicar', [AtualizacaoController::class, 'aplicar']);
 $router->post('/administracao/atualizacoes/reverter', [AtualizacaoController::class, 'reverter']);

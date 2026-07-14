@@ -47,6 +47,22 @@ class AtualizacaoRepository
         return $item ?: null;
     }
 
+    public function buscarPorId(int $id): ?array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT a.*, u.nome AS usuario_nome
+              FROM atualizacoes_log a
+              LEFT JOIN usuarios u ON u.id = a.usuario_id
+             WHERE a.id = ?
+             LIMIT 1
+        ");
+        $stmt->execute([$id]);
+
+        $item = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $item ?: null;
+    }
+
     public function listar(int $limite = 20): array
     {
         $limite = max(1, min($limite, 100));
