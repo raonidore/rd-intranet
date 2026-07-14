@@ -29,19 +29,37 @@ foi compilado nem testado aqui -- isso precisa acontecer no seu Windows.
 
 ## Publicar um .exe pra distribuir
 
-No Visual Studio: botão direito no projeto > **Publicar** > pasta local >
-perfil com:
+Duas formas de publicar -- a diferença é só se a máquina de destino já
+tem o **.NET 8 Desktop Runtime** instalado ou não (não confundir com o
+".NET Runtime" genérico -- o Desktop Runtime é a versão com suporte a
+WinForms, tem instalador próprio no site da Microsoft).
 
-- Modo de implantação: **Autocontido** (self-contained) -- assim a
-  máquina de destino não precisa ter o .NET instalado.
-- Runtime de destino: **win-x64**.
-- **Produzir arquivo único**: marcado.
+**Framework-dependent (recomendado se você já instala o Desktop Runtime
+nas máquinas)** -- `.exe` bem menor (poucos MB, só o código da
+aplicação):
 
-Isso gera um único `RdIntranetAgente.exe` que já roda em qualquer
-Windows 10/11/Server 2016+ sem instalar nada. O ícone (`assets/icone.ico`)
-já vem embutido no `.exe` (propriedade `ApplicationIcon` do `.csproj`) --
-aparece no Explorer, na barra de tarefas e no ícone da bandeja, sem
-precisar de nenhum arquivo extra junto do `.exe`.
+```powershell
+dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o .\publicar
+```
+
+**Autocontido (self-contained)** -- `.exe` maior (~60-100MB, empacota o
+runtime inteiro junto), mas roda em qualquer Windows 10/11/Server 2016+
+sem precisar instalar nada antes:
+
+```powershell
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o .\publicar
+```
+
+(O mesmo dá pra fazer pelo Visual Studo: botão direito no projeto >
+**Publicar** > pasta local > escolher "Autocontido" ou "Dependente de
+framework" no assistente, runtime **win-x64**, **Produzir arquivo
+único** marcado.)
+
+Os dois geram um único `RdIntranetAgente.exe`. O ícone
+(`assets/icone.ico`) já vem embutido nele (propriedade
+`ApplicationIcon` do `.csproj`) -- aparece no Explorer, na barra de
+tarefas e no ícone da bandeja, sem precisar de nenhum arquivo extra
+junto do `.exe`.
 
 ## Atualizando os agentes já instalados (sem reinstalar máquina por máquina)
 
