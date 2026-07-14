@@ -230,6 +230,16 @@ fi
 chown -R "$REPO_USER:$REPO_USER" "$REPO_DIR"
 chmod -R u+rwX,g+rwX,o+rX-w "$REPO_DIR"
 
+# storage/uploads (.gitignore -- nao vem do git clone), storage/cache e
+# storage/logs sao excecao de proposito: www-data GRAVA neles em tempo
+# de execucao (upload de arquivo, ex: .exe do agente em Ativos >
+# Dashboard; cache; log da aplicacao), diferente do resto do checkout,
+# que so REPO_USER grava. Sem isso, qualquer feature de upload falha com
+# "Falha ao criar a pasta de destino no servidor" -- www-data nao
+# consegue nem criar a pasta, quanto mais escrever nela.
+mkdir -p "$REPO_DIR/storage/uploads" "$REPO_DIR/storage/cache" "$REPO_DIR/storage/logs"
+chown -R www-data:www-data "$REPO_DIR/storage/uploads" "$REPO_DIR/storage/cache" "$REPO_DIR/storage/logs"
+
 # ---------------------------------------------------------------------
 # 9) Vhost Apache (HTTP; rode o modulo Certificado pela propria tela depois
 #    do primeiro login pra ativar HTTPS)

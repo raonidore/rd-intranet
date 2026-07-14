@@ -118,7 +118,11 @@ O script (`scripts/install.sh`) faz, nessa ordem:
    histórico anterior pra preservar (diferente de
    `scripts/grant-sudo-atualizacao.sh`, que é só pra servidores que já
    existiam antes do módulo de Atualizações).
-8. Ajusta dono/permissão do checkout.
+8. Ajusta dono/permissão do checkout (`REPO_USER` grava, `www-data` só
+   lê) -- com exceção de `storage/uploads`, `storage/cache` e
+   `storage/logs`, que ficam com `www-data` como dono, porque são
+   escritos em tempo de execução pela própria aplicação (upload de
+   arquivo, cache, log), não pelo deploy.
 9. Cria o vhost do Apache em HTTP, mais um `Alias /rd.intranet` apontando
    pra `public/` — a aplicação usa `/rd.intranet` como prefixo de URL por
    padrão (`base_url` em `configuracoes`), e o `.htaccess` (`RewriteBase
