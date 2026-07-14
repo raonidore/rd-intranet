@@ -31,7 +31,10 @@ class EtiquetaService
 
     private const CAMPOS_PADRAO = ['qrcode', 'codigo', 'tipo', 'nome', 'empresa'];
 
-    /** Altura de fonte (mm) e nº máximo de linhas de cada campo de texto, na ordem de empilhamento. */
+    /**
+     * Altura de fonte padrão (mm, ajustável na tela de configuração) e
+     * nº máximo de linhas de cada campo de texto, na ordem de empilhamento.
+     */
     private const CAMPOS_TEXTO = [
         'codigo' => ['fonte_mm' => 4.2, 'linhas' => 1],
         'tipo' => ['fonte_mm' => 2.8, 'linhas' => 1],
@@ -40,6 +43,9 @@ class EtiquetaService
         'localizacao' => ['fonte_mm' => 2.6, 'linhas' => 1],
         'empresa' => ['fonte_mm' => 2.2, 'linhas' => 1],
     ];
+
+    private const FONTE_MIN_MM = 1.5;
+    private const FONTE_MAX_MM = 12.0;
 
     private const MARGEM_MM = 1.8;
     private const ESPACO_LINHA_MM = 0.8;
@@ -55,37 +61,67 @@ class EtiquetaService
             'altura_mm' => (float)(ConfigService::get('etiqueta_altura_mm', '25') ?? 25),
             'dpi' => (int)(ConfigService::get('etiqueta_dpi', '203') ?? 203),
             'campos' => is_array($camposSalvos) ? $camposSalvos : self::CAMPOS_PADRAO,
+            'fontes' => $this->mesclarFontes(json_decode(ConfigService::get('etiqueta_fontes', '') ?: '', true)),
+        ];
+    }
+
+    /** Tamanho padrão (mm) de cada campo de texto -- ponto de partida da tela de configuração e fallback de quem nunca customizou. */
+    public function fontesPadrao(): array
+    {
+        return array_map(fn(array $estilo) => $estilo['fonte_mm'], self::CAMPOS_TEXTO);
+    }
+
+    private function mesclarFontes(mixed $salvas): array
+    {
+        $salvas = is_array($salvas) ? $salvas : [];
+        $fontes = [];
+
+        foreach (self::CAMPOS_TEXTO as $campo => $estilo) {
+            $valor = isset($salvas[$campo]) ? (float)$salvas[$campo] : $estilo['fonte_mm'];
+            $fontes[$campo] = ($valor >= self::FONTE_MIN_MM && $valor <= self::FONTE_MAX_MM) ? $valor : $estilo['fonte_mm'];
+        }
+
+        return $fontes;
+    }
+
+    /** Monta a configuração (dimensões/dpi/campos/fontes) a partir do POST do formulário -- usado tanto pra salvar quanto pra pré-visualização ao vivo. */
+    public function configuracaoDoPost(array $post): array
+    {
+        return [
+            'largura_mm' => (float)str_replace(',', '.', $post['largura_mm'] ?? '55'),
+            'altura_mm' => (float)str_replace(',', '.', $post['altura_mm'] ?? '25'),
+            'dpi' => (int)($post['dpi'] ?? 203),
+            'campos' => array_values(array_intersect((array)($post['campos'] ?? []), array_keys(self::CAMPOS_DISPONIVEIS))),
+            'fontes' => $this->mesclarFontes($post['fontes'] ?? []),
         ];
     }
 
     public function salvarConfiguracao(array $post): bool
     {
-        $largura = (float)str_replace(',', '.', $post['largura_mm'] ?? '');
-        $altura = (float)str_replace(',', '.', $post['altura_mm'] ?? '');
-        $dpi = (int)($post['dpi'] ?? 0);
-        $campos = array_values(array_intersect((array)($post['campos'] ?? []), array_keys(self::CAMPOS_DISPONIVEIS)));
+        $config = $this->configuracaoDoPost($post);
 
-        if ($largura < 20 || $largura > 200) {
+        if ($config['largura_mm'] < 20 || $config['largura_mm'] > 200) {
             NotificationService::error('Largura inválida (use um valor entre 20 e 200mm).');
             return false;
         }
 
-        if ($altura < 10 || $altura > 200) {
+        if ($config['altura_mm'] < 10 || $config['altura_mm'] > 200) {
             NotificationService::error('Altura inválida (use um valor entre 10 e 200mm).');
             return false;
         }
 
-        if (!in_array($dpi, [152, 203, 300, 600], true)) {
+        if (!in_array($config['dpi'], [152, 203, 300, 600], true)) {
             NotificationService::error('DPI inválido -- use 152, 203, 300 ou 600 (o manual da impressora informa qual é).');
             return false;
         }
 
-        ConfigService::set('etiqueta_largura_mm', (string)$largura);
-        ConfigService::set('etiqueta_altura_mm', (string)$altura);
-        ConfigService::set('etiqueta_dpi', (string)$dpi);
-        ConfigService::set('etiqueta_campos', json_encode($campos));
+        ConfigService::set('etiqueta_largura_mm', (string)$config['largura_mm']);
+        ConfigService::set('etiqueta_altura_mm', (string)$config['altura_mm']);
+        ConfigService::set('etiqueta_dpi', (string)$config['dpi']);
+        ConfigService::set('etiqueta_campos', json_encode($config['campos']));
+        ConfigService::set('etiqueta_fontes', json_encode($config['fontes']));
 
-        AuditService::registrar('Ativos', 'Configuração de Etiqueta', "Tamanho {$largura}x{$altura}mm, {$dpi}dpi, campos: " . implode(', ', $campos) . '.');
+        AuditService::registrar('Ativos', 'Configuração de Etiqueta', "Tamanho {$config['largura_mm']}x{$config['altura_mm']}mm, {$config['dpi']}dpi, campos: " . implode(', ', $config['campos']) . '.');
         NotificationService::success('Configuração de etiqueta salva.');
 
         return true;
@@ -125,7 +161,7 @@ class EtiquetaService
             $linhas[] = [
                 'campo' => $campo,
                 'texto' => $texto,
-                'fonte_mm' => $estilo['fonte_mm'],
+                'fonte_mm' => $config['fontes'][$campo] ?? $estilo['fonte_mm'],
                 'linhas' => $estilo['linhas'],
             ];
         }

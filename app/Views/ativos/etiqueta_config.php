@@ -83,10 +83,18 @@ use App\Components\Alert;
                     <label class="form-label">Campos exibidos na etiqueta</label>
                     <div class="mb-3">
                         <?php foreach ($camposDisponiveis as $chave => $label): ?>
-                            <div class="form-check">
-                                <input type="checkbox" name="campos[]" value="<?= $chave ?>" class="form-check-input campo-etiqueta" id="campo_<?= $chave ?>"
-                                       <?= in_array($chave, $config['campos'], true) ? 'checked' : '' ?>>
-                                <label class="form-check-label" for="campo_<?= $chave ?>"><?= htmlspecialchars($label) ?></label>
+                            <div class="d-flex align-items-center justify-content-between border-bottom py-2">
+                                <div class="form-check mb-0">
+                                    <input type="checkbox" name="campos[]" value="<?= $chave ?>" class="form-check-input campo-etiqueta" id="campo_<?= $chave ?>"
+                                           <?= in_array($chave, $config['campos'], true) ? 'checked' : '' ?>>
+                                    <label class="form-check-label" for="campo_<?= $chave ?>"><?= htmlspecialchars($label) ?></label>
+                                </div>
+                                <?php if (isset($config['fontes'][$chave])): ?>
+                                    <div class="input-group input-group-sm" style="width:110px">
+                                        <input type="number" step="0.1" min="1.5" max="12" name="fontes[<?= $chave ?>]" class="form-control campo-fonte" value="<?= htmlspecialchars((string)$config['fontes'][$chave]) ?>">
+                                        <span class="input-group-text">mm</span>
+                                    </div>
+                                <?php endif; ?>
                             </div>
                         <?php endforeach; ?>
                     </div>
@@ -129,6 +137,7 @@ use App\Components\Alert;
     const altura = document.getElementById('campoAltura');
     const dpi = document.getElementById('campoDpi');
     const checkboxes = document.querySelectorAll('.campo-etiqueta');
+    const fontes = document.querySelectorAll('.campo-fonte');
     const preview = document.getElementById('previewContainer');
     const tamanho = document.getElementById('tamanhoPreview');
 
@@ -149,6 +158,7 @@ use App\Components\Alert;
         dados.set('altura_mm', altura.value);
         dados.set('dpi', dpi.value);
         checkboxes.forEach(function (c) { if (c.checked) dados.append('campos[]', c.value); });
+        fontes.forEach(function (f) { dados.set('fontes[' + f.name.match(/\[(.+)\]/)[1] + ']', f.value); });
 
         try {
             const res = await fetch(<?= json_encode(url('/ativos/etiqueta-config/preview')) ?>, { method: 'POST', body: dados });
@@ -166,6 +176,7 @@ use App\Components\Alert;
         campo.addEventListener('input', atualizarPreview);
     });
     checkboxes.forEach(function (c) { c.addEventListener('change', atualizarPreview); });
+    fontes.forEach(function (f) { f.addEventListener('input', atualizarPreview); });
 
     atualizarTamanho();
 })();

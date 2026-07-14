@@ -48,12 +48,7 @@ class EtiquetaConfigController extends Controller
         AuthMiddleware::checkModulo('ativos_etiqueta_config');
         header('Content-Type: application/json');
 
-        $config = [
-            'largura_mm' => (float)str_replace(',', '.', $_POST['largura_mm'] ?? '55'),
-            'altura_mm' => (float)str_replace(',', '.', $_POST['altura_mm'] ?? '25'),
-            'dpi' => (int)($_POST['dpi'] ?? 203),
-            'campos' => array_values(array_intersect((array)($_POST['campos'] ?? []), array_keys(EtiquetaService::CAMPOS_DISPONIVEIS))),
-        ];
+        $config = $this->service->configuracaoDoPost($_POST);
 
         if ($config['largura_mm'] <= 0) $config['largura_mm'] = 55;
         if ($config['altura_mm'] <= 0) $config['altura_mm'] = 25;
