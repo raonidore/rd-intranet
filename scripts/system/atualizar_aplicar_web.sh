@@ -63,6 +63,12 @@ for SETUP in setup_acl_admin setup_db_secret_key setup_iptables_persistencia set
   fi
 done
 
+SAIDA_STORAGE=$(bash "$REPO_DIR/scripts/system/setup_storage_uploads.sh" "$REPO_DIR" 2>&1)
+if [ $? -ne 0 ]; then
+  echo "{\"success\":false,\"message\":\"Codigo atualizado, mas falhou ao preparar storage/uploads: ${SAIDA_STORAGE//\"/\\\"}\"}"
+  exit 1
+fi
+
 SAIDA_SAMBA=$(bash "$REPO_DIR/scripts/system/setup_samba_base.sh" "$REPO_DIR" 2>&1)
 if [ $? -ne 0 ]; then
   echo "{\"success\":false,\"message\":\"Codigo atualizado, mas falhou ao preparar base do Samba: ${SAIDA_SAMBA//\"/\\\"}\"}"
