@@ -3,7 +3,7 @@
 -- cria todas as tabelas ja no estado final, sem precisar repetir o
 -- historico incremental de database/migrations/ (algumas dessas
 -- migrations usam ALTER TABLE, que nao e seguro reaplicar aqui).
--- Gerado em 2026-07-14 22:06:10.
+-- Gerado em 2026-07-14 22:34:04.
 
 -- Import nao respeita ordem de dependencia entre tabelas (algumas tem FK
 -- pra tabelas que so aparecem depois neste arquivo) -- desliga a checagem
@@ -66,6 +66,8 @@ CREATE TABLE IF NOT EXISTS `ativos` (
   `machine_guid` varchar(64) DEFAULT NULL,
   `mesh_device_id` varchar(160) DEFAULT NULL,
   `ultimo_checkin` timestamp NULL DEFAULT NULL,
+  `ultimo_heartbeat` timestamp NULL DEFAULT NULL,
+  `checkin_solicitado_em` timestamp NULL DEFAULT NULL,
   `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
   `atualizado_em` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),

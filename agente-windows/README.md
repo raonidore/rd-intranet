@@ -5,12 +5,20 @@ Versão em C#/WinForms do agente de inventário -- mesma função do script
 bandeja do Windows, com status visível e contadores de upload/download,
 em vez de uma Tarefa Agendada silenciosa.
 
-Os dois clientes falam com o **mesmo endpoint** do servidor
+Os dois clientes falam com o **mesmo endpoint** de checkin completo
 (`POST /api/ativos/checkin`, autenticado pelo header `X-RD-Agente-Chave`)
 e mandam exatamente o mesmo formato de JSON -- nenhuma mudança no lado
 PHP foi necessária. Use o `.ps1` para servidores/máquinas sem usuário
 logado com frequência; use este app de bandeja para estações de
 trabalho, onde faz sentido ter algo visível pro usuário/suporte.
+
+**Diferença importante**: só este app de bandeja manda o heartbeat de
+"estou ligado" (ver seção própria abaixo) -- o `.ps1` roda como uma
+Tarefa Agendada de tempos em tempos (um processo que nasce, coleta,
+envia e morre), não como um processo residente, então não tem como
+mandar um ping a cada 1-60 segundos sem virar outra coisa. Pra um ativo
+aparecer com o status Ligado/Desligado em tempo real, ele precisa estar
+rodando o `.exe`, não o `.ps1`.
 
 ## Como abrir no Visual Studio
 
@@ -82,6 +90,32 @@ O agente se autoatualiza. O fluxo:
 Se nenhum `.exe` for enviado ainda, essa checagem simplesmente não
 encontra nada e não faz nada (sem erro visível pro usuário).
 
+## Detecção de ligado/desligado em tempo real (heartbeat)
+
+Separado do checkin completo (hardware/programas/alertas, que é pesado e
+roda a cada N minutos), o agente manda um ping bem leve --
+`POST /api/ativos/heartbeat` só com o `machine_guid` -- num intervalo
+curto e configurável em segundos (**Ativos > Dashboard**, padrão 1s).
+No servidor isso é só uma `UPDATE` numa coluna indexada por chave única,
+por isso aguenta esse intervalo curto sem pesar.
+
+- O `machine_guid` é calculado uma vez só, no início do processo
+  (`CollectorService.ObterMachineGuid()`), e reaproveitado em todo
+  heartbeat -- o ping em si nunca chama WMI.
+- A resposta do heartbeat também carrega `forcar_checkin`: se um admin
+  clicou em "Forçar coleta agora" na ficha do ativo, o próximo ping já
+  volta com esse aviso e o agente roda o checkin completo na hora, sem
+  esperar o ciclo normal de N minutos. Isso resolve o problema de ter
+  que esperar até 2x o intervalo de checkin só pra confirmar que uma
+  máquina está ligada ou pra atualizar os dados dela sob demanda.
+- O badge "Ligado"/"Desligado" na lista e na ficha do ativo passa a
+  usar o heartbeat (janela de 3x o intervalo configurado, mínimo 5s) em
+  vez do checkin completo -- muito mais próximo de tempo real do que os
+  até 30-60 minutos de antes.
+- Best-effort: falha de rede num heartbeat não gera erro visível pro
+  usuário nem derruba o agente, só tenta de novo no próximo tick (1s
+  depois, por padrão).
+
 ## Impressão de etiquetas Zebra (TLP2844, GC420t, ZD420t)
 
 O agente também funciona como "ponte" entre o navegador e uma impressora
@@ -122,7 +156,8 @@ coloque um `config.json` na mesma pasta do `.exe` antes de distribuir
 {
   "ServerUrl": "https://rd.intranet",
   "ApiKey": "cole-aqui-a-chave-do-dashboard",
-  "IntervaloMinutos": 15
+  "IntervaloMinutos": 15,
+  "HeartbeatSegundos": 1
 }
 ```
 
@@ -134,6 +169,8 @@ em `%LocalAppData%\RDIntranetAgent\config.json`, por usuário).
 
 - Registra-se pra iniciar com o Windows (`HKCU\...\Run`, sem precisar
   de admin).
+- A cada N segundos (configurável, padrão 1), manda o heartbeat de
+  "estou ligado" -- ver seção própria acima.
 - A cada N minutos (configurável em Ativos > Dashboard no RD Intranet,
   padrão 15), coleta hardware/SO, uptime (ligado desde), componentes
   (processador, memória total/em uso, tipo de memória, placa-mãe,

@@ -31,6 +31,7 @@ class AtivoController extends Controller
             'coletaSnmpAtiva' => $this->coletaSnmpAtiva(),
             'chaveAgente' => $this->service->chaveAgente(),
             'intervaloComunicacao' => $this->service->intervaloComunicacao(),
+            'heartbeatIntervalo' => $this->service->heartbeatIntervaloSegundos(),
             'versaoAgenteExe' => $this->service->versaoAgenteExe(),
             'agenteExeDisponivel' => $this->service->agenteExeDisponivel(),
         ]));
@@ -78,6 +79,7 @@ class AtivoController extends Controller
             'estaLigada' => AtivoService::estaLigada($ativo),
             'uptime' => AtivoService::uptimeTexto($ativo),
             'minutosDesdeCheckin' => AtivoService::minutosDesdeUltimoCheckin($ativo),
+            'segundosDesdeHeartbeat' => AtivoService::segundosDesdeUltimoHeartbeat($ativo),
             'intervaloComunicacao' => $this->service->intervaloComunicacao(),
         ]);
     }
@@ -309,6 +311,26 @@ class AtivoController extends Controller
 
         header('Location: ' . url('/ativos'));
         exit;
+    }
+
+    public function salvarIntervaloHeartbeat(): void
+    {
+        AuthMiddleware::checkModulo('ativos_dashboard');
+
+        $this->service->salvarHeartbeatIntervaloSegundos((int)($_POST['segundos'] ?? 1));
+
+        header('Location: ' . url('/ativos'));
+        exit;
+    }
+
+    public function solicitarCheckin(): void
+    {
+        AuthMiddleware::checkModulo('ativos_novo');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+
+        echo json_encode($this->service->solicitarCheckin($id));
     }
 
     public function regenerarChaveAgente(): void

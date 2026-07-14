@@ -8,6 +8,7 @@ public class Config
     public string ServerUrl { get; set; } = "";
     public string ApiKey { get; set; } = "";
     public int IntervaloMinutos { get; set; } = 15;
+    public int HeartbeatSegundos { get; set; } = 1;
     public string ImpressoraEtiqueta { get; set; } = "";
 
     public bool EstaConfigurado => !string.IsNullOrWhiteSpace(ServerUrl) && !string.IsNullOrWhiteSpace(ApiKey);

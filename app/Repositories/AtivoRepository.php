@@ -245,6 +245,41 @@ class AtivoRepository
         ]);
     }
 
+    /**
+     * Ping leve de "estou ligado" -- so toca ultimo_heartbeat, sem tocar
+     * ultimo_checkin (que continua marcando a última coleta completa).
+     * Devolve null se o machine_guid ainda não tem ativo cadastrado (agente
+     * nunca fez um check-in completo ainda) -- nesse caso não há id pra
+     * atualizar, o primeiro checkin normal é quem cria a linha.
+     */
+    public function registrarHeartbeat(string $machineGuid): ?array
+    {
+        $stmt = $this->pdo->prepare("SELECT id, checkin_solicitado_em FROM ativos WHERE machine_guid = ? LIMIT 1");
+        $stmt->execute([$machineGuid]);
+        $ativo = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$ativo) {
+            return null;
+        }
+
+        $this->pdo->prepare("UPDATE ativos SET ultimo_heartbeat = NOW() WHERE id = ?")->execute([$ativo['id']]);
+
+        return [
+            'id' => (int)$ativo['id'],
+            'forcar_checkin' => $ativo['checkin_solicitado_em'] !== null,
+        ];
+    }
+
+    public function solicitarCheckin(int $id): void
+    {
+        $this->pdo->prepare("UPDATE ativos SET checkin_solicitado_em = NOW() WHERE id = ?")->execute([$id]);
+    }
+
+    public function limparSolicitacaoCheckin(int $id): void
+    {
+        $this->pdo->prepare("UPDATE ativos SET checkin_solicitado_em = NULL WHERE id = ?")->execute([$id]);
+    }
+
     public function substituirProgramas(int $ativoId, array $programas): void
     {
         $this->pdo->prepare("DELETE FROM ativos_programas WHERE ativo_id = ?")->execute([$ativoId]);

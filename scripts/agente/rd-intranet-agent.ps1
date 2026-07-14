@@ -23,6 +23,16 @@
       -- so usa modulos nativos do Windows (CIM/WMI, registro,
       Get-WinEvent, Task Scheduler).
 
+    Limitacao conhecida (status Ligado/Desligado):
+      Este script roda como Tarefa Agendada (nasce, coleta, envia,
+      termina) -- nao tem como manter o heartbeat de "estou ligado" a
+      cada poucos segundos que o agente de bandeja (.exe, veja
+      agente-windows/) manda, ja que isso exige um processo residente.
+      Maquinas rodando so este .ps1 tem o status Ligado/Desligado
+      aproximado pelo horario do ultimo checkin completo (janela de 2x
+      o intervalo configurado), nao em tempo real. Se precisar de
+      deteccao ao vivo, use o agente de bandeja nessa maquina.
+
     Como instalar:
       1. Baixe este arquivo pela tela Ativos > Dashboard do RD Intranet
          (ja vem com o endereco do servidor e a chave de API preenchidos).

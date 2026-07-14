@@ -13,6 +13,7 @@ public class ConfigForm : Form
     private readonly TextBox _campoServidor;
     private readonly TextBox _campoChave;
     private readonly NumericUpDown _campoIntervalo;
+    private readonly NumericUpDown _campoHeartbeat;
     private readonly ComboBox _campoImpressora;
 
     public Config ConfigResultante { get; private set; }
@@ -35,7 +36,7 @@ public class ConfigForm : Form
         var rotuloChave = new Label { Text = "Chave de API do agente (Ativos > Dashboard, no RD Intranet)", Left = 15, Top = 70, Width = 420 };
         _campoChave = new TextBox { Left = 15, Top = 93, Width = 420, Text = configAtual.ApiKey };
 
-        var rotuloIntervalo = new Label { Text = "Intervalo entre coletas (minutos)", Left = 15, Top = 125, Width = 250 };
+        var rotuloIntervalo = new Label { Text = "Intervalo entre coletas completas (minutos)", Left = 15, Top = 125, Width = 220 };
         _campoIntervalo = new NumericUpDown
         {
             Left = 15,
@@ -44,6 +45,17 @@ public class ConfigForm : Form
             Minimum = 5,
             Maximum = 240,
             Value = Math.Clamp(configAtual.IntervaloMinutos <= 0 ? 15 : configAtual.IntervaloMinutos, 5, 240)
+        };
+
+        var rotuloHeartbeat = new Label { Text = "Heartbeat -- \"estou ligado\" (segundos)", Left = 245, Top = 125, Width = 190 };
+        _campoHeartbeat = new NumericUpDown
+        {
+            Left = 245,
+            Top = 148,
+            Width = 80,
+            Minimum = 1,
+            Maximum = 60,
+            Value = Math.Clamp(configAtual.HeartbeatSegundos <= 0 ? 1 : configAtual.HeartbeatSegundos, 1, 60)
         };
 
         var rotuloImpressora = new Label { Text = "Impressora de etiquetas (Zebra) -- opcional, só se for imprimir daqui", Left = 15, Top = 180, Width = 420 };
@@ -84,6 +96,7 @@ public class ConfigForm : Form
                 ServerUrl = _campoServidor.Text.Trim().TrimEnd('/'),
                 ApiKey = _campoChave.Text.Trim(),
                 IntervaloMinutos = (int)_campoIntervalo.Value,
+                HeartbeatSegundos = (int)_campoHeartbeat.Value,
                 ImpressoraEtiqueta = (impressoraSelecionada == "(nenhuma)" ? null : impressoraSelecionada) ?? ""
             };
         };
@@ -93,6 +106,7 @@ public class ConfigForm : Form
             rotuloServidor, _campoServidor,
             rotuloChave, _campoChave,
             rotuloIntervalo, _campoIntervalo,
+            rotuloHeartbeat, _campoHeartbeat,
             rotuloImpressora, _campoImpressora,
             botaoSalvar, botaoCancelar
         });

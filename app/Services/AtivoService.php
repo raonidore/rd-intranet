@@ -607,6 +607,10 @@ class AtivoService
         $this->repository->substituirMemoria($id, array_slice($payload['memoria_modulos'] ?? [], 0, 32));
         $this->repository->substituirAtualizacoesWindows($id, array_slice($payload['atualizacoes_windows'] ?? [], 0, 500));
 
+        // Limpa um eventual pedido de "forçar checkin" -- esse checkin que
+        // acabou de chegar já é o que estava sendo esperado.
+        $this->repository->limparSolicitacaoCheckin($id);
+
         // Comandos remotos pendentes (desligar/reiniciar/desinstalar) --
         // entregues agora, junto com a resposta deste checkin. O agente
         // é quem decide como/quando executar (com aviso pro usuário,
@@ -698,10 +702,12 @@ class AtivoService
     }
 
     /**
-     * Intervalo esperado entre checkins, configurável em Ativos >
-     * Dashboard. Usado pra (a) calcular a janela de "está ligada" e
-     * (b) ser gravado no .ps1 baixado a partir de agora -- agentes já
-     * instalados mantêm o intervalo antigo até serem reinstalados.
+     * Intervalo esperado entre checkins COMPLETOS (hardware/programas/
+     * alertas), configurável em Ativos > Dashboard. Não tem mais relação
+     * com "está ligada" -- isso agora vem do heartbeat (ver
+     * heartbeatIntervaloSegundos()/estaLigada()) -- é só gravado no .ps1
+     * baixado a partir de agora -- agentes já instalados mantêm o intervalo
+     * antigo até serem reinstalados.
      */
     public function intervaloComunicacao(): int
     {
@@ -717,9 +723,38 @@ class AtivoService
 
         ConfigService::set('ativos_intervalo_comunicacao_min', (string)$minutos);
 
-        AuditService::registrar('Ativos', 'Config. Comunicação', "Intervalo de comunicação com agentes alterado para {$minutos} min.");
+        AuditService::registrar('Ativos', 'Config. Comunicação', "Intervalo de coleta completa alterado para {$minutos} min.");
 
         NotificationService::success('Intervalo salvo. Vale pra novos agentes instalados a partir de agora -- os já instalados mantêm o intervalo com que foram configurados.');
+
+        return true;
+    }
+
+    /**
+     * Intervalo do "ping" de ligado/desligado -- bem mais curto que o
+     * checkin completo, porque é só o agente mandando o machine_guid
+     * (uma UPDATE só, indexada por chave única) pra confirmar que está
+     * ligado. É esse canal, também, que carrega o aviso de "forçar
+     * checkin" pedido pelo portal -- por isso ele chega em poucos segundos
+     * em vez de esperar o próximo ciclo completo.
+     */
+    public function heartbeatIntervaloSegundos(): int
+    {
+        return (int)(ConfigService::get('ativos_heartbeat_intervalo_seg', '1') ?? 1);
+    }
+
+    public function salvarHeartbeatIntervaloSegundos(int $segundos): bool
+    {
+        if ($segundos < 1 || $segundos > 60) {
+            NotificationService::error('O intervalo de heartbeat deve ser entre 1 e 60 segundos.');
+            return false;
+        }
+
+        ConfigService::set('ativos_heartbeat_intervalo_seg', (string)$segundos);
+
+        AuditService::registrar('Ativos', 'Config. Comunicação', "Intervalo de heartbeat alterado para {$segundos}s.");
+
+        NotificationService::success('Intervalo de heartbeat salvo. Vale pra novos agentes instalados a partir de agora -- os já instalados mantêm o intervalo com que foram configurados.');
 
         return true;
     }
@@ -731,12 +766,21 @@ class AtivoService
     }
 
     /**
-     * "Ligada" é uma inferência, não um dado direto: se o último checkin
-     * foi recente, assumimos que a máquina está ligada. A janela usa 2x
-     * o intervalo configurado, como margem de uma coleta perdida.
+     * "Ligada" agora vem do heartbeat (ping leve, a cada poucos segundos),
+     * não mais do checkin completo -- janela de tolerância de 3x o
+     * intervalo configurado (mínimo 5s), como margem de um ping perdido.
+     * Ativos com agente antigo (ainda sem heartbeat) ou sem nenhum
+     * heartbeat ainda caem no fallback via ultimo_checkin, pra não virar
+     * "Desligado" incorretamente logo após a atualização do agente.
      */
     public static function estaLigada(array $ativo): bool
     {
+        if (!empty($ativo['ultimo_heartbeat'])) {
+            $segundos = (int)(ConfigService::get('ativos_heartbeat_intervalo_seg', '1') ?? 1);
+
+            return (time() - strtotime($ativo['ultimo_heartbeat'])) <= max(5, $segundos * 3);
+        }
+
         if (empty($ativo['ultimo_checkin'])) {
             return false;
         }
@@ -744,6 +788,50 @@ class AtivoService
         $minutos = (int)(ConfigService::get('ativos_intervalo_comunicacao_min', '15') ?? 15);
 
         return (time() - strtotime($ativo['ultimo_checkin'])) <= $minutos * 2 * 60;
+    }
+
+    /**
+     * Ping leve de "estou ligado" -- chamado pelo agente a cada
+     * heartbeatIntervaloSegundos(). Devolve se há um checkin completo
+     * pendente de ser forçado (pedido pelo portal via solicitarCheckin()).
+     */
+    public function registrarHeartbeat(string $machineGuid): array
+    {
+        $resultado = $this->repository->registrarHeartbeat($machineGuid);
+
+        if ($resultado === null) {
+            return ['success' => false, 'message' => 'Ativo ainda não cadastrado -- aguardando o primeiro check-in completo.'];
+        }
+
+        return ['success' => true, 'forcar_checkin' => $resultado['forcar_checkin']];
+    }
+
+    /**
+     * Pedido pelo admin, pelo portal, de rodar a coleta completa fora do
+     * ciclo normal. Não é entregue direto ao agente (ele não escuta
+     * conexões de fora) -- fica marcado no banco e é entregue na resposta
+     * do próximo heartbeat, que já chega em poucos segundos.
+     */
+    public function solicitarCheckin(int $ativoId): array
+    {
+        $ativo = $this->repository->buscarPorId($ativoId);
+
+        if (!$ativo) {
+            return ['success' => false, 'message' => 'Ativo não encontrado.'];
+        }
+
+        if ($ativo['origem'] !== 'agente') {
+            return ['success' => false, 'message' => 'Este ativo não tem o agente Windows instalado.'];
+        }
+
+        $this->repository->solicitarCheckin($ativoId);
+
+        AuditService::registrar('Ativos', 'Forçar check-in', "Check-in completo solicitado para {$ativo['codigo_patrimonio']} ({$ativo['nome']}).");
+
+        return [
+            'success' => true,
+            'message' => 'Solicitado! Deve chegar em até ' . $this->heartbeatIntervaloSegundos() . 's (próximo heartbeat do agente).',
+        ];
     }
 
     /**
@@ -757,6 +845,16 @@ class AtivoService
         }
 
         return (int)floor((time() - strtotime($ativo['ultimo_checkin'])) / 60);
+    }
+
+    /** Segundos desde o último heartbeat -- null se nunca recebeu um. */
+    public static function segundosDesdeUltimoHeartbeat(array $ativo): ?int
+    {
+        if (empty($ativo['ultimo_heartbeat'])) {
+            return null;
+        }
+
+        return (int)floor(time() - strtotime($ativo['ultimo_heartbeat']));
     }
 
     /**

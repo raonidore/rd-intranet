@@ -21,24 +21,8 @@ public static class CollectorService
             Nome = Environment.MachineName
         };
 
-        // ----------------------------------------------------------
-        // Identificacao estavel da maquina -- preferimos o numero de
-        // serie da BIOS (sobrevive a reinstalacao do Windows); se vier
-        // vazio ou for um valor generico de fabricante/VM sem serial
-        // real, caimos pro MachineGuid do registro.
-        string? serialBios = null;
-        using (var buscaBios = new ManagementObjectSearcher("SELECT SerialNumber FROM Win32_BIOS"))
-        {
-            foreach (ManagementObject bios in buscaBios.Get())
-            {
-                serialBios = bios["SerialNumber"]?.ToString();
-            }
-        }
-
-        var serialValido = serialBios != null && !SeriaisInvalidos.Contains(serialBios.Trim());
-        payload.MachineGuid = serialValido
-            ? $"BIOS-{serialBios!.Trim()}"
-            : $"REG-{ObterMachineGuidRegistro()}";
+        var (machineGuid, serialBios) = ObterMachineGuidComSerial();
+        payload.MachineGuid = machineGuid;
         payload.NumeroSerie = serialBios;
 
         // ----------------------------------------------------------
@@ -186,6 +170,38 @@ public static class CollectorService
         payload.Alertas = ObterAlertas(eventosDesde ?? DateTime.Now.AddHours(-24));
 
         return payload;
+    }
+
+    /// <summary>
+    /// Mesma identificação estável usada no checkin completo, mas isolada
+    /// aqui pra poder ser chamada sozinha (sem o resto da coleta via WMI,
+    /// que é cara) -- é assim que o heartbeat, chamado a cada poucos
+    /// segundos, consegue ser barato: o valor é calculado uma vez só, no
+    /// início do processo, e reaproveitado em todo ping seguinte.
+    /// </summary>
+    public static string ObterMachineGuid() => ObterMachineGuidComSerial().MachineGuid;
+
+    private static (string MachineGuid, string? SerialBios) ObterMachineGuidComSerial()
+    {
+        // Identificacao estavel da maquina -- preferimos o numero de
+        // serie da BIOS (sobrevive a reinstalacao do Windows); se vier
+        // vazio ou for um valor generico de fabricante/VM sem serial
+        // real, caimos pro MachineGuid do registro.
+        string? serialBios = null;
+        using (var buscaBios = new ManagementObjectSearcher("SELECT SerialNumber FROM Win32_BIOS"))
+        {
+            foreach (ManagementObject bios in buscaBios.Get())
+            {
+                serialBios = bios["SerialNumber"]?.ToString();
+            }
+        }
+
+        var serialValido = serialBios != null && !SeriaisInvalidos.Contains(serialBios.Trim());
+        var machineGuid = serialValido
+            ? $"BIOS-{serialBios!.Trim()}"
+            : $"REG-{ObterMachineGuidRegistro()}";
+
+        return (machineGuid, serialBios);
     }
 
     private static string ObterMachineGuidRegistro()

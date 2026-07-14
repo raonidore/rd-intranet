@@ -113,11 +113,27 @@ $statusCores = [
         <div class="card border-0 shadow-sm mb-3">
             <div class="card-header bg-white"><strong>Comunicação com Agentes</strong></div>
             <div class="card-body">
-                <p class="text-muted small mb-3">
-                    Intervalo esperado entre uma coleta e outra. Usado pra decidir quando um ativo aparece
-                    como "Desligado" (2x esse valor sem se comunicar) e gravado automaticamente no script
-                    <code>.ps1</code> baixado a partir de agora -- agentes já instalados mantêm o intervalo
-                    com que foram configurados até serem reinstalados.
+                <p class="text-muted small mb-2">
+                    <i class="bi bi-broadcast"></i> <strong>Heartbeat</strong> -- ping bem leve que só confirma
+                    "estou ligado", em tempo quase real. É o que decide o badge Ligado/Desligado na lista e na
+                    ficha do ativo (considerado "Desligado" depois de 3x esse valor sem receber um ping, mínimo 5s).
+                </p>
+                <form method="post" action="<?= url('/ativos/heartbeat/salvar') ?>" class="row g-2 align-items-end mb-3">
+                    <div class="col-auto">
+                        <label class="form-label small mb-0">Intervalo (segundos)</label>
+                        <input type="number" name="segundos" class="form-control form-control-sm" style="width:100px"
+                               min="1" max="60" value="<?= (int)$heartbeatIntervalo ?>">
+                    </div>
+                    <div class="col-auto">
+                        <button class="btn btn-sm btn-outline-secondary">Salvar</button>
+                    </div>
+                </form>
+                <p class="text-muted small mb-2">
+                    <i class="bi bi-hdd-stack"></i> <strong>Coleta completa</strong> -- hardware, programas
+                    instalados e alertas do Visualizador de Eventos. Mais pesada, por isso roda num intervalo
+                    maior. Gravado automaticamente no script <code>.ps1</code> baixado a partir de agora --
+                    agentes já instalados mantêm o intervalo com que foram configurados até serem reinstalados.
+                    Pra forçar uma coleta fora do ciclo, use o botão "Forçar coleta agora" na ficha do ativo.
                 </p>
                 <form method="post" action="<?= url('/ativos/comunicacao/salvar') ?>" class="row g-2 align-items-end">
                     <div class="col-auto">
@@ -127,9 +143,6 @@ $statusCores = [
                     </div>
                     <div class="col-auto">
                         <button class="btn btn-sm btn-outline-secondary">Salvar</button>
-                    </div>
-                    <div class="col-auto">
-                        <span class="text-muted small">Considerado "Desligado" após <?= (int)$intervaloComunicacao * 2 ?> min sem comunicação.</span>
                     </div>
                 </form>
             </div>

@@ -14,15 +14,31 @@ public class TrayApplicationContext : ApplicationContext
 {
     private readonly NotifyIcon _icone;
     private readonly System.Windows.Forms.Timer _timer;
+    private readonly System.Windows.Forms.Timer _heartbeatTimer;
     private Config _config;
     private readonly AppState _estado;
     private readonly PrintListener _printListener;
+    private readonly string? _machineGuid;
     private bool _coletando;
+    private bool _enviandoHeartbeat;
 
     public TrayApplicationContext()
     {
         _config = Config.Carregar();
         _estado = AppState.Carregar();
+
+        // Calculado uma vez só (BIOS/registro não mudam em tempo de
+        // execução) -- reaproveitado em todo heartbeat, que roda a cada
+        // poucos segundos e não pode pagar o custo de WMI de novo a
+        // cada tick.
+        try
+        {
+            _machineGuid = CollectorService.ObterMachineGuid();
+        }
+        catch
+        {
+            _machineGuid = null;
+        }
 
         // Escuta local pra imprimir etiqueta sob demanda (sem esperar o
         // proximo checkin) -- sempre tenta iniciar; so imprime de verdade
@@ -57,6 +73,9 @@ public class TrayApplicationContext : ApplicationContext
             await VerificarAtualizacaoAsync();
         };
 
+        _heartbeatTimer = new System.Windows.Forms.Timer { Interval = HeartbeatIntervaloEmMs() };
+        _heartbeatTimer.Tick += async (s, e) => await EnviarHeartbeatAsync();
+
         if (!_config.EstaConfigurado)
         {
             AbrirConfiguracoes();
@@ -65,12 +84,14 @@ public class TrayApplicationContext : ApplicationContext
         if (_config.EstaConfigurado)
         {
             _timer.Start();
+            _heartbeatTimer.Start();
             _ = ColetarEEnviarAsync(manual: false);
             _ = VerificarAtualizacaoAsync();
         }
     }
 
     private int IntervaloEmMs() => Math.Max(5, _config.IntervaloMinutos) * 60 * 1000;
+    private int HeartbeatIntervaloEmMs() => Math.Max(1, _config.HeartbeatSegundos) * 1000;
 
     private void AbrirConfiguracoes()
     {
@@ -84,12 +105,43 @@ public class TrayApplicationContext : ApplicationContext
         _config = form.ConfigResultante;
         _config.Salvar();
         _timer.Interval = IntervaloEmMs();
+        _heartbeatTimer.Interval = HeartbeatIntervaloEmMs();
 
         if (_config.EstaConfigurado)
         {
             _timer.Stop();
             _timer.Start();
+            _heartbeatTimer.Stop();
+            _heartbeatTimer.Start();
             _ = ColetarEEnviarAsync(manual: true);
+        }
+    }
+
+    private async Task EnviarHeartbeatAsync()
+    {
+        if (_enviandoHeartbeat || !_config.EstaConfigurado || _machineGuid == null)
+        {
+            return;
+        }
+
+        _enviandoHeartbeat = true;
+
+        try
+        {
+            var resultado = await new HeartbeatClient(_config).EnviarAsync(_machineGuid);
+
+            if (resultado.Sucesso && resultado.ForcarCheckin && !_coletando)
+            {
+                _ = ColetarEEnviarAsync(manual: false);
+            }
+        }
+        catch
+        {
+            // best-effort -- tenta de novo no proximo tick, sem incomodar o usuario
+        }
+        finally
+        {
+            _enviandoHeartbeat = false;
         }
     }
 
@@ -382,6 +434,7 @@ del ""%~f0""
     {
         _icone.Visible = false;
         _timer.Stop();
+        _heartbeatTimer.Stop();
         _printListener.Dispose();
         Application.Exit();
     }

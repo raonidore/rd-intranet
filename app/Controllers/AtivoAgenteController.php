@@ -47,6 +47,37 @@ class AtivoAgenteController extends Controller
         echo json_encode($this->service->checkinAgente($payload));
     }
 
+    /**
+     * Ping leve de "estou ligado", chamado pelo agente a cada poucos
+     * segundos -- ver AtivoService::registrarHeartbeat(). Propositalmente
+     * mais simples que checkin(): só uma UPDATE indexada por machine_guid,
+     * pra aguentar ser chamado com muito mais frequência sem pesar no
+     * servidor.
+     */
+    public function heartbeat(): void
+    {
+        header('Content-Type: application/json');
+
+        $chaveEnviada = $_SERVER['HTTP_X_RD_AGENTE_CHAVE'] ?? '';
+
+        if ($chaveEnviada === '' || !hash_equals($this->service->chaveAgente(), $chaveEnviada)) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'message' => 'Chave de API inválida.']);
+            return;
+        }
+
+        $payload = json_decode(file_get_contents('php://input'), true);
+        $machineGuid = trim((string)($payload['machine_guid'] ?? ''));
+
+        if ($machineGuid === '') {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'machine_guid é obrigatório.']);
+            return;
+        }
+
+        echo json_encode($this->service->registrarHeartbeat($machineGuid));
+    }
+
     public function baixarScript(): void
     {
         AuthMiddleware::checkModulo('ativos_dashboard');

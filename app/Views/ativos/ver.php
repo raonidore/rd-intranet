@@ -98,6 +98,9 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             </button>
         <?php endif; ?>
         <?php if ($ativo['origem'] === 'agente'): ?>
+            <button type="button" class="btn btn-outline-secondary" id="botaoForcarCheckin" data-id="<?= (int)$ativo['id'] ?>">
+                <i class="bi bi-arrow-repeat"></i> Forçar coleta agora
+            </button>
             <div class="btn-group">
                 <button type="button" class="btn btn-outline-warning botao-comando" data-id="<?= (int)$ativo['id'] ?>" data-comando="reiniciar">
                     <i class="bi bi-arrow-clockwise"></i> Reiniciar
@@ -117,23 +120,33 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
 </div>
 
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
-    <?php if (!empty($ativo['ultimo_checkin'])): ?>
+    <?php if ($ativo['origem'] === 'agente'): ?>
+        <div class="alert alert-light border small mb-0 py-2">
+            <i class="bi bi-broadcast"></i>
+            <?php if ($segundosDesdeHeartbeat !== null): ?>
+                Status Ligado/Desligado ao vivo -- último ping há <strong><?= $segundosDesdeHeartbeat ?>s</strong>.
+            <?php else: ?>
+                Ainda sem heartbeat (agente antigo ou recém-instalado) -- status Ligado/Desligado está usando o
+                último check-in completo como aproximação.
+            <?php endif; ?>
+            <?php if (!empty($ativo['ultimo_checkin'])): ?>
+                <br><i class="bi bi-hdd-stack"></i> Dados completos (hardware/programas/alertas): última coleta há
+                <strong><?= $minutosDesdeCheckin ?> min</strong> (<?= htmlspecialchars(data_br($ativo['ultimo_checkin'])) ?>),
+                próxima esperada em até <strong><?= $intervaloComunicacao ?> min</strong>
+                -- ou use "Forçar coleta agora".
+            <?php endif; ?>
+            <?php if ($estaLigada && $uptime): ?>
+                <br>Ligado há <?= htmlspecialchars($uptime) ?>
+                <?php if (!empty($detalhes['ligado_desde'])): ?>
+                    (desde <?= htmlspecialchars(data_br($detalhes['ligado_desde'])) ?>)
+                <?php endif; ?>
+            <?php endif; ?>
+        </div>
+    <?php elseif (!empty($ativo['ultimo_checkin'])): ?>
         <div class="alert alert-light border small mb-0 py-2">
             <i class="bi bi-clock-history"></i>
-            <?php if ($ativo['origem'] === 'agente'): ?>
-                Não é ao vivo: última comunicação com o agente foi há <strong><?= $minutosDesdeCheckin ?> min</strong>
-                (<?= htmlspecialchars(data_br($ativo['ultimo_checkin'])) ?>), próxima esperada em até
-                <strong><?= $intervaloComunicacao ?> min</strong>.
-                <?php if ($estaLigada && $uptime): ?>
-                    · ligado há <?= htmlspecialchars($uptime) ?>
-                    <?php if (!empty($detalhes['ligado_desde'])): ?>
-                        (desde <?= htmlspecialchars(data_br($detalhes['ligado_desde'])) ?>)
-                    <?php endif; ?>
-                <?php endif; ?>
-            <?php else: ?>
-                Última atualização: <?= htmlspecialchars(data_br($ativo['ultimo_checkin'])) ?>
-                via <?= $ativo['origem'] === 'snmp' ? 'SNMP' : 'manual' ?>
-            <?php endif; ?>
+            Última atualização: <?= htmlspecialchars(data_br($ativo['ultimo_checkin'])) ?>
+            via <?= $ativo['origem'] === 'snmp' ? 'SNMP' : 'manual' ?>
         </div>
     <?php endif; ?>
 
@@ -681,6 +694,28 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
 
     modalEl.addEventListener('hidden.bs.modal', function () {
         corpo.innerHTML = statusInicial;
+    });
+})();
+
+(function () {
+    const botao = document.getElementById('botaoForcarCheckin');
+    if (!botao) return;
+
+    botao.addEventListener('click', async function () {
+        botao.disabled = true;
+
+        const dados = new URLSearchParams();
+        dados.set('id', botao.dataset.id);
+
+        try {
+            const res = await fetch(<?= json_encode(url('/ativos/solicitar-checkin')) ?>, { method: 'POST', body: dados });
+            const resultado = await res.json();
+            alert(resultado.message || (resultado.success ? 'Solicitado.' : 'Falha ao solicitar.'));
+        } catch (e) {
+            alert('Erro ao comunicar com o servidor.');
+        } finally {
+            botao.disabled = false;
+        }
     });
 })();
 
