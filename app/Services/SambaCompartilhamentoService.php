@@ -199,7 +199,16 @@ class SambaCompartilhamentoService
         );
 
         if (!$resultadoAcl['success']) {
-            NotificationService::error('Erro ao aplicar permissões no sistema.', $resultadoAcl['output']);
+            if (str_contains($resultadoAcl['output'], 'NT_STATUS_BAD_NETWORK_NAME')) {
+                NotificationService::error(
+                    'Este compartilhamento ainda não foi aplicado na configuração do Samba -- '
+                        . 'vá em Deploy (menu lateral) e clique em "Aplicar Configuração" antes '
+                        . 'de definir permissões de usuário nele.',
+                    $resultadoAcl['output']
+                );
+            } else {
+                NotificationService::error('Erro ao aplicar permissões no sistema.', $resultadoAcl['output']);
+            }
             return false;
         }
 
