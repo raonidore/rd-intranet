@@ -72,6 +72,15 @@ public class CheckinClient
                 // resposta nao veio no formato esperado -- mostra o texto cru mesmo
             }
 
+            // Se o corpo veio vazio (ex.: erro 500 do servidor sem saida,
+            // proxy cortando a resposta) "mensagem" tambem fica vazia --
+            // troca por um texto que pelo menos aponta o status HTTP, pra
+            // dar pra diagnosticar em vez de só falhar calado.
+            if (string.IsNullOrWhiteSpace(mensagem))
+            {
+                mensagem = $"Servidor respondeu sem mensagem (HTTP {(int)resposta.StatusCode}).";
+            }
+
             return new ResultadoCheckin
             {
                 Sucesso = resposta.IsSuccessStatusCode,

@@ -277,7 +277,15 @@ public class TrayApplicationContext : ApplicationContext
             if (manual)
             {
                 var icone = resultado.Sucesso ? ToolTipIcon.Info : ToolTipIcon.Error;
-                _icone.ShowBalloonTip(4000, "RD Intranet", resultado.Mensagem, icone);
+                // ShowBalloonTip lanca ArgumentException se o texto vier vazio
+                // -- resultado.Mensagem vem de uma resposta HTTP externa
+                // (podia ser um 500 com corpo vazio, por exemplo), entao nunca
+                // confia que ela vem preenchida. Sem essa guarda, a excecao
+                // era capturada pelo catch geral la embaixo e ABORTAVA o
+                // resto do fluxo (comandos pendentes e checagem de
+                // atualizacao nunca rodavam nesse checkin).
+                var textoBalao = string.IsNullOrWhiteSpace(resultado.Mensagem) ? "Operação concluída." : resultado.Mensagem;
+                _icone.ShowBalloonTip(4000, "RD Intranet", textoBalao, icone);
             }
 
             await ExecutarComandosPendentesAsync(resultado.Comandos);
