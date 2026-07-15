@@ -73,10 +73,11 @@ junto do `.exe`.
 
 O agente se autoatualiza. O fluxo:
 
-1. Publique um `.exe` novo (seção acima) e **suba o número de versão em
-   `<Version>` no `RdIntranetAgente.csproj`** antes de compilar (ex: de
-   `1.0.0` pra `1.0.1`) -- é essa versão que o agente compara com a do
-   servidor.
+1. O número de versão em `<Version>` no `RdIntranetAgente.csproj` já vem
+   atualizado a cada mudança no código do agente (ex: `1.0.1` pra
+   `1.0.2`) -- é essa versão que o agente compara com a do servidor, e
+   que aparece na tela de abertura e em Configurações. Só falta você
+   publicar o `.exe` (seção acima).
 2. No RD Intranet, em **Ativos > Dashboard**, no card "Atualizar agente
    (.exe)", envie o `.exe` publicado e informe a mesma versão (formato
    `X.Y.Z`).
@@ -167,6 +168,11 @@ em `%LocalAppData%\RDIntranetAgent\config.json`, por usuário).
 
 ## O que ele faz sozinho
 
+- Mostra uma tela de abertura (~2s, `SplashForm.cs`) com o logo, uma
+  barra de progresso e a versão em execução -- só pra deixar claro,
+  visualmente, quando uma atualização entrou em ação de verdade (evita
+  a dúvida "será que atualizou mesmo?"). A versão também aparece em
+  Configurações (menu do ícone da bandeja).
 - Registra-se pra iniciar com o Windows (`HKCU\...\Run`, sem precisar
   de admin).
 - A cada N segundos (configurável, padrão 1), manda o heartbeat de

@@ -1,4 +1,6 @@
+using System.Drawing;
 using System.Drawing.Printing;
+using System.Reflection;
 using System.Windows.Forms;
 
 namespace RdIntranetAgente;
@@ -76,6 +78,16 @@ public class ConfigForm : Form
         var indiceAtual = _campoImpressora.Items.IndexOf(configAtual.ImpressoraEtiqueta);
         _campoImpressora.SelectedIndex = indiceAtual >= 0 ? indiceAtual : 0;
 
+        var rotuloVersao = new Label
+        {
+            Text = "Versão do agente: v" + ObterVersao(),
+            Left = 15,
+            Top = 256,
+            Width = 220,
+            ForeColor = Color.Gray,
+            Font = new Font("Segoe UI", 8F)
+        };
+
         var botaoSalvar = new Button { Text = "Salvar", Left = 260, Top = 250, Width = 80, DialogResult = DialogResult.OK };
         var botaoCancelar = new Button { Text = "Cancelar", Left = 350, Top = 250, Width = 80, DialogResult = DialogResult.Cancel };
 
@@ -108,10 +120,17 @@ public class ConfigForm : Form
             rotuloIntervalo, _campoIntervalo,
             rotuloHeartbeat, _campoHeartbeat,
             rotuloImpressora, _campoImpressora,
+            rotuloVersao,
             botaoSalvar, botaoCancelar
         });
 
         AcceptButton = botaoSalvar;
         CancelButton = botaoCancelar;
+    }
+
+    private static string ObterVersao()
+    {
+        var versao = Assembly.GetExecutingAssembly().GetName().Version;
+        return versao == null ? "?" : $"{versao.Major}.{versao.Minor}.{versao.Build}";
     }
 }

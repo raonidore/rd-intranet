@@ -18,6 +18,12 @@ internal static class Program
         }
 
         ApplicationConfiguration.Initialize();
+
+        using (var splash = new SplashForm())
+        {
+            Application.Run(splash);
+        }
+
         Application.Run(new TrayApplicationContext());
     }
 }
