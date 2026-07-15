@@ -228,6 +228,9 @@ public class ComandoItem
 
     [JsonPropertyName("alvo")]
     public string? Alvo { get; set; }
+
+    [JsonPropertyName("alvo_label")]
+    public string? AlvoLabel { get; set; }
 }
 
 public class RespostaCheckin

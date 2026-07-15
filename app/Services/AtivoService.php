@@ -694,6 +694,7 @@ class AtivoService
                 'id' => (int)$c['id'],
                 'comando' => $c['comando'],
                 'alvo' => $c['alvo'],
+                'alvo_label' => $c['alvo_label'],
             ], $pendentes),
         ];
     }
@@ -721,21 +722,29 @@ class AtivoService
 
     private const COMANDOS_VALIDOS = [
         'desligar', 'reiniciar', 'desinstalar_atualizacao', 'desinstalar_programa',
-        'executar_arquivo', 'encerrar_processo',
+        'executar_arquivo', 'encerrar_processo', 'renomear_arquivo', 'enviar_arquivo',
     ];
 
-    public function enviarComando(int $ativoId, string $comando, ?string $solicitadoPor, ?string $alvo = null, ?string $alvoLabel = null): array
+    public function enviarComando(int $ativoId, string $comando, ?string $solicitadoPor, ?string $alvo = null, ?string $alvoLabel = null, ?string $arquivoAnexo = null): array
     {
         if (!in_array($comando, self::COMANDOS_VALIDOS, true)) {
             return ['success' => false, 'message' => 'Comando inválido.'];
         }
 
-        if (in_array($comando, ['desinstalar_atualizacao', 'desinstalar_programa', 'executar_arquivo'], true) && empty($alvo)) {
-            return ['success' => false, 'message' => 'Informe o que deve ser desinstalado/executado.'];
+        if (in_array($comando, ['desinstalar_atualizacao', 'desinstalar_programa', 'executar_arquivo', 'renomear_arquivo'], true) && empty($alvo)) {
+            return ['success' => false, 'message' => 'Informe o que deve ser desinstalado/executado/renomeado.'];
+        }
+
+        if ($comando === 'renomear_arquivo' && empty($alvoLabel)) {
+            return ['success' => false, 'message' => 'Informe o novo nome.'];
         }
 
         if ($comando === 'encerrar_processo' && !ctype_digit((string)$alvo)) {
             return ['success' => false, 'message' => 'PID inválido.'];
+        }
+
+        if ($comando === 'enviar_arquivo' && (empty($alvo) || empty($arquivoAnexo))) {
+            return ['success' => false, 'message' => 'Selecione um arquivo pra enviar.'];
         }
 
         $ativo = $this->repository->buscarPorId($ativoId);
@@ -747,7 +756,7 @@ class AtivoService
             return ['success' => false, 'message' => 'Este ativo não tem o agente Windows instalado -- não é possível enviar comandos remotos.'];
         }
 
-        $this->repository->criarComando($ativoId, $comando, $solicitadoPor, $alvo, $alvoLabel);
+        $this->repository->criarComando($ativoId, $comando, $solicitadoPor, $alvo, $alvoLabel, $arquivoAnexo);
 
         // Comandos são entregues na resposta do checkin completo -- forçar
         // um agora (mesmo canal do botão "Forçar coleta agora") evita
@@ -762,6 +771,8 @@ class AtivoService
             'desinstalar_programa' => 'Desinstalação de ' . $alvoLabel,
             'executar_arquivo' => 'Execução de ' . $alvoLabel,
             'encerrar_processo' => 'Encerramento do processo ' . ($alvoLabel ?: $alvo),
+            'renomear_arquivo' => 'Renomeação para ' . $alvoLabel,
+            'enviar_arquivo' => 'Envio de ' . $alvoLabel,
         ];
         $label = $labels[$comando];
 
@@ -780,6 +791,41 @@ class AtivoService
     public function historicoComandos(int $ativoId): array
     {
         return $this->repository->historicoComandos($ativoId);
+    }
+
+    private function pastaTransferencias(): string
+    {
+        return __DIR__ . '/../../storage/uploads/ativos_transferencias';
+    }
+
+    /** Agente (autenticado por machine_guid) baixando o anexo de um comando 'enviar_arquivo'. */
+    public function buscarAnexoComando(string $machineGuid, int $comandoId): ?array
+    {
+        $ativo = $this->repository->buscarPorMachineGuid($machineGuid);
+        if (!$ativo) {
+            return null;
+        }
+
+        $comando = $this->repository->buscarComandoPorId($comandoId);
+        if (!$comando || (int)$comando['ativo_id'] !== (int)$ativo['id'] || empty($comando['arquivo_anexo'])) {
+            return null;
+        }
+
+        if (!is_file($comando['arquivo_anexo'])) {
+            return null;
+        }
+
+        return ['caminho' => $comando['arquivo_anexo'], 'nome' => $comando['alvo_label'] ?? basename($comando['arquivo_anexo'])];
+    }
+
+    /** Chamado depois de servir o anexo (sucesso ou não) -- não deixa cópia de arquivo enviado pra sempre no servidor. */
+    public function limparAnexoComando(int $comandoId): void
+    {
+        $comando = $this->repository->buscarComandoPorId($comandoId);
+        if ($comando && !empty($comando['arquivo_anexo']) && is_file($comando['arquivo_anexo'])) {
+            @unlink($comando['arquivo_anexo']);
+        }
+        $this->repository->limparAnexoComando($comandoId);
     }
 
     /**
@@ -893,6 +939,7 @@ class AtivoService
                 'id' => (int)$s['id'],
                 'tipo' => $s['tipo'],
                 'parametro' => $s['parametro'],
+                'elevado' => (bool)$s['elevado'],
             ], $solicitacoes),
         ];
     }
@@ -933,12 +980,18 @@ class AtivoService
      |---------------------------------------------------------
      */
 
-    private const TIPOS_SOLICITACAO_VALIDOS = ['listar_arquivos', 'listar_processos'];
+    private const TIPOS_SOLICITACAO_VALIDOS = [
+        'listar_arquivos', 'listar_processos', 'baixar_arquivo', 'executar_cmd', 'executar_powershell',
+    ];
 
-    public function solicitarListagem(int $ativoId, string $tipo, ?string $parametro): array
+    public function solicitarListagem(int $ativoId, string $tipo, ?string $parametro, ?string $solicitadoPor = null, bool $elevado = false): array
     {
         if (!in_array($tipo, self::TIPOS_SOLICITACAO_VALIDOS, true)) {
             return ['success' => false, 'message' => 'Tipo de solicitação inválido.'];
+        }
+
+        if (in_array($tipo, ['baixar_arquivo', 'executar_cmd', 'executar_powershell'], true) && empty($parametro)) {
+            return ['success' => false, 'message' => 'Informe o caminho do arquivo/comando.'];
         }
 
         $ativo = $this->repository->buscarPorId($ativoId);
@@ -950,7 +1003,16 @@ class AtivoService
             return ['success' => false, 'message' => 'Este ativo não tem o agente Windows instalado.'];
         }
 
-        $id = $this->repository->criarSolicitacao($ativoId, $tipo, $parametro);
+        $id = $this->repository->criarSolicitacao($ativoId, $tipo, $parametro, $solicitadoPor, $elevado);
+
+        if (in_array($tipo, ['executar_cmd', 'executar_powershell'], true)) {
+            AuditService::registrar(
+                'Ativos',
+                'Comando remoto',
+                ($tipo === 'executar_cmd' ? 'CMD' : 'PowerShell') . ($elevado ? ' (elevado)' : '') . ' em '
+                    . $ativo['codigo_patrimonio'] . ' (' . $ativo['nome'] . '): ' . $parametro
+            );
+        }
 
         return ['success' => true, 'id' => $id];
     }
@@ -971,10 +1033,16 @@ class AtivoService
             return ['success' => true, 'status' => 'erro', 'mensagem' => $solicitacao['erro_mensagem']];
         }
 
+        $resultado = json_decode($solicitacao['resultado'] ?? '', true) ?: [];
+
+        if (!empty($solicitacao['arquivo_resultado'])) {
+            $resultado['arquivo_pronto'] = is_file($solicitacao['arquivo_resultado']);
+        }
+
         return [
             'success' => true,
             'status' => 'concluido',
-            'resultado' => json_decode($solicitacao['resultado'] ?? '', true) ?: [],
+            'resultado' => $resultado,
         ];
     }
 
@@ -1002,6 +1070,73 @@ class AtivoService
         $this->repository->marcarSolicitacaoConcluida($id, json_encode($resultado, JSON_UNESCAPED_UNICODE));
 
         return ['success' => true];
+    }
+
+    /** Agente devolvendo o CONTEÚDO de um arquivo (solicitação 'baixar_arquivo') -- endpoint separado do JSON acima, é upload de verdade. */
+    public function responderSolicitacaoComArquivo(string $machineGuid, int $id, string $caminhoTemporario, string $nomeOriginal): array
+    {
+        $ativo = $this->repository->buscarPorMachineGuid($machineGuid);
+        if (!$ativo) {
+            return ['success' => false, 'message' => 'Ativo não encontrado.'];
+        }
+
+        $solicitacao = $this->repository->buscarSolicitacao($id);
+        if (!$solicitacao || (int)$solicitacao['ativo_id'] !== (int)$ativo['id']) {
+            return ['success' => false, 'message' => 'Solicitação não encontrada.'];
+        }
+
+        if (!is_uploaded_file($caminhoTemporario)) {
+            return ['success' => false, 'message' => 'Upload inválido.'];
+        }
+
+        $pasta = $this->pastaTransferencias();
+        if (!is_dir($pasta) && !@mkdir($pasta, 0777, true) && !is_dir($pasta)) {
+            return ['success' => false, 'message' => 'Falha ao criar pasta de destino no servidor.'];
+        }
+
+        $nomeSanitizado = preg_replace('/[^A-Za-z0-9._-]/', '_', $nomeOriginal) ?: 'arquivo';
+        $destino = $pasta . '/baixado_' . uniqid('', true) . '_' . $nomeSanitizado;
+
+        if (!@move_uploaded_file($caminhoTemporario, $destino)) {
+            return ['success' => false, 'message' => 'Falha ao salvar o arquivo no servidor.'];
+        }
+
+        $this->repository->marcarSolicitacaoConcluidaComArquivo($id, $destino, $nomeOriginal);
+
+        return ['success' => true];
+    }
+
+    /** Admin (sessão) baixando o resultado de uma solicitação 'baixar_arquivo'. */
+    public function baixarResultadoArquivo(int $id, int $ativoId): ?array
+    {
+        $solicitacao = $this->repository->buscarSolicitacao($id);
+
+        if (!$solicitacao || (int)$solicitacao['ativo_id'] !== $ativoId || empty($solicitacao['arquivo_resultado'])) {
+            return null;
+        }
+
+        if (!is_file($solicitacao['arquivo_resultado'])) {
+            return null;
+        }
+
+        $meta = json_decode($solicitacao['resultado'] ?? '', true) ?: [];
+
+        return ['caminho' => $solicitacao['arquivo_resultado'], 'nome' => $meta['arquivo_nome'] ?? basename($solicitacao['arquivo_resultado'])];
+    }
+
+    /** Chamado depois de servir o download pro admin -- não deixa cópia pra sempre no servidor. */
+    public function limparArquivoResultado(int $id): void
+    {
+        $solicitacao = $this->repository->buscarSolicitacao($id);
+        if ($solicitacao && !empty($solicitacao['arquivo_resultado']) && is_file($solicitacao['arquivo_resultado'])) {
+            @unlink($solicitacao['arquivo_resultado']);
+        }
+        $this->repository->limparArquivoResultado($id);
+    }
+
+    public function historicoSolicitacoesExecucao(int $ativoId): array
+    {
+        return $this->repository->historicoSolicitacoesExecucao($ativoId);
     }
 
     /**

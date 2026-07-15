@@ -3,7 +3,7 @@
 -- cria todas as tabelas ja no estado final, sem precisar repetir o
 -- historico incremental de database/migrations/ (algumas dessas
 -- migrations usam ALTER TABLE, que nao e seguro reaplicar aqui).
--- Gerado em 2026-07-15 03:58:40.
+-- Gerado em 2026-07-15 13:00:27.
 
 -- Import nao respeita ordem de dependencia entre tabelas (algumas tem FK
 -- pra tabelas que so aparecem depois neste arquivo) -- desliga a checagem
@@ -131,9 +131,10 @@ CREATE TABLE IF NOT EXISTS `ativos_catalogos` (
 CREATE TABLE IF NOT EXISTS `ativos_comandos` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `ativo_id` int(11) NOT NULL,
-  `comando` enum('desligar','reiniciar','desinstalar_atualizacao','desinstalar_programa','executar_arquivo','encerrar_processo') NOT NULL,
+  `comando` enum('desligar','reiniciar','desinstalar_atualizacao','desinstalar_programa','executar_arquivo','encerrar_processo','renomear_arquivo','enviar_arquivo') NOT NULL,
   `alvo` varchar(500) DEFAULT NULL,
   `alvo_label` varchar(255) DEFAULT NULL,
+  `arquivo_anexo` varchar(500) DEFAULT NULL,
   `status` enum('pendente','entregue') NOT NULL DEFAULT 'pendente',
   `solicitado_por` varchar(150) DEFAULT NULL,
   `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
@@ -228,10 +229,13 @@ CREATE TABLE IF NOT EXISTS `ativos_redes` (
 CREATE TABLE IF NOT EXISTS `ativos_solicitacoes` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `ativo_id` int(11) NOT NULL,
-  `tipo` enum('listar_arquivos','listar_processos') NOT NULL,
+  `tipo` enum('listar_arquivos','listar_processos','baixar_arquivo','executar_cmd','executar_powershell') NOT NULL,
   `parametro` varchar(500) DEFAULT NULL,
+  `solicitado_por` varchar(150) DEFAULT NULL,
+  `elevado` tinyint(1) NOT NULL DEFAULT 0,
   `status` enum('pendente','concluido','erro') NOT NULL DEFAULT 'pendente',
   `resultado` longtext DEFAULT NULL,
+  `arquivo_resultado` varchar(500) DEFAULT NULL,
   `erro_mensagem` varchar(500) DEFAULT NULL,
   `solicitado_em` timestamp NOT NULL DEFAULT current_timestamp(),
   `respondido_em` timestamp NULL DEFAULT NULL,

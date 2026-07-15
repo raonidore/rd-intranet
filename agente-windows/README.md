@@ -131,10 +131,34 @@ remotos já existente (mesma fila/confirmação de Desligar/Reiniciar,
 entrega forçada via `solicitarCheckin()` assim que o comando é
 enviado).
 
+Também dá pra **renomear** arquivo/pasta, **baixar** um arquivo da
+máquina remota pro seu navegador e **enviar** um arquivo do seu
+navegador pra pasta que está sendo explorada. Renomear/enviar
+reaproveitam o sistema de comandos (`ativos_comandos`, nova coluna
+`arquivo_anexo` guarda o upload do admin até o agente buscar);
+baixar usa o mesmo canal de solicitação (`ativos_solicitacoes`, nova
+coluna `arquivo_resultado`) -- `TransferenciaClient.cs` no agente cuida
+das duas direções (`EnviarArquivoAsync`/`BaixarAnexoComandoAsync`).
+Arquivo temporário no servidor é apagado assim que servido (upload pro
+admin ou download pro agente) -- não fica cópia parada.
+
+Também dá pra **executar comandos CMD ou PowerShell** direto na ficha
+do ativo (card "Executar comando", abaixo do histórico de comandos), com
+opção de **elevação** (como administrador). Sem UAC interativo -- a
+elevação usa um truque padrão de Agendador de Tarefas (cria uma tarefa
+temporária com "Executar com privilégios mais altos", dispara na hora,
+apaga em seguida); só funciona de verdade se a conta que roda o agente
+já for administrador local da máquina -- não existe truque que dê
+privilégio pra quem não tem, a elevação só evita o prompt que travaria
+uma execução remota desassistida. Saída (stdout/stderr/código) volta
+pelo mesmo canal de solicitação e fica registrada no histórico, junto
+com quem pediu (`solicitado_por`).
+
 **Poder de verdade, use com critério**: quem tiver acesso ao módulo
 Ativos com permissão de enviar comando (`ativos_novo`) consegue rodar
-qualquer arquivo ou encerrar qualquer processo em qualquer máquina com
-o agente instalado -- é essencialmente controle remoto total. Não tem
+qualquer arquivo, comando CMD/PowerShell (com ou sem elevação),
+encerrar qualquer processo ou mover arquivos em qualquer máquina com o
+agente instalado -- é essencialmente controle remoto total. Não tem
 confirmação em duas etapas nem aviso na tela do usuário (diferente de
 Desligar/Reiniciar, que tem um contador de 5 minutos visível). Trate o
 acesso a esse módulo com o mesmo cuidado que uma conta de administrador

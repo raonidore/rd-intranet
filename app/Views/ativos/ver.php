@@ -612,16 +612,92 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                     <p class="text-muted p-3 mb-0">Nenhum comando enviado ainda.</p>
                 <?php else: ?>
                     <table class="table table-sm mb-0">
+                        <thead>
+                            <tr><th>Comando</th><th>Status</th><th>Solicitado por</th><th class="text-end">Quando</th></tr>
+                        </thead>
                         <tbody>
                             <?php foreach ($comandos as $c): ?>
                                 <tr>
                                     <td class="text-capitalize"><?= htmlspecialchars(str_replace('_', ' ', $c['comando'])) ?><?= !empty($c['alvo_label']) ? ': ' . htmlspecialchars($c['alvo_label']) : '' ?></td>
                                     <td><?= Badge::make($c['status'] === 'entregue' ? 'Entregue' : 'Pendente', $c['status'] === 'entregue' ? 'success' : 'secondary') ?></td>
+                                    <td class="text-muted small"><?= htmlspecialchars($c['solicitado_por'] ?? '—') ?></td>
                                     <td class="text-muted small text-end"><?= htmlspecialchars(data_br($c['criado_em'])) ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
                     </table>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mt-3">
+            <div class="card-header bg-white"><strong><i class="bi bi-terminal"></i> Executar comando (CMD / PowerShell)</strong></div>
+            <div class="card-body">
+                <p class="text-muted small mb-2">
+                    Roda na hora (chega em poucos segundos pelo heartbeat) e devolve a saída aqui. Sem confirmação em
+                    duas etapas -- confira o comando antes de executar, principalmente com elevação marcada.
+                </p>
+                <div class="row g-2 align-items-end mb-2">
+                    <div class="col-auto">
+                        <label class="form-label small mb-0">Tipo</label>
+                        <select class="form-select form-select-sm" id="campoTipoComando">
+                            <option value="executar_cmd">CMD</option>
+                            <option value="executar_powershell">PowerShell</option>
+                        </select>
+                    </div>
+                    <div class="col-auto">
+                        <div class="form-check mb-1">
+                            <input class="form-check-input" type="checkbox" id="campoElevado">
+                            <label class="form-check-label small" for="campoElevado">
+                                Executar com elevação (como administrador)
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="hitech-panel mb-2">
+                    <textarea class="form-control form-control-sm" id="campoComando" rows="2"
+                              style="background:#0d1117; color:#c9d1d9; border:0; font-family:'SFMono-Regular',Consolas,monospace; resize:vertical"
+                              placeholder="ex: ipconfig /all"></textarea>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-primary" id="botaoExecutarComando">
+                    <i class="bi bi-play-fill"></i> Executar
+                </button>
+
+                <div class="hitech-panel mt-3 d-none" id="painelSaidaComando">
+                    <div class="hitech-topbar">
+                        <span class="hitech-breadcrumb"><i class="bi bi-terminal"></i> Saída</span>
+                        <span class="text-muted small" id="statusSaidaComando"></span>
+                    </div>
+                    <div class="hitech-body" style="max-height:280px">
+                        <pre class="m-0 p-3" id="conteudoSaidaComando" style="white-space:pre-wrap; word-break:break-word; font-size:12px; color:#c9d1d9;"></pre>
+                    </div>
+                </div>
+
+                <?php if (!empty($historicoComandosExecucao)): ?>
+                    <hr>
+                    <p class="text-muted small mb-2">Histórico (últimos <?= count($historicoComandosExecucao) ?>):</p>
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0">
+                            <thead>
+                                <tr><th>Tipo</th><th>Comando</th><th>Elevado</th><th>Solicitado por</th><th>Status</th><th class="text-end">Quando</th></tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($historicoComandosExecucao as $h): ?>
+                                    <tr>
+                                        <td class="small"><?= $h['tipo'] === 'executar_cmd' ? 'CMD' : 'PowerShell' ?></td>
+                                        <td class="small font-monospace" style="max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap"><?= htmlspecialchars($h['parametro']) ?></td>
+                                        <td><?= $h['elevado'] ? Badge::make('Sim', 'warning') : '—' ?></td>
+                                        <td class="text-muted small"><?= htmlspecialchars($h['solicitado_por'] ?? '—') ?></td>
+                                        <td><?= Badge::make(
+                                            $h['status'] === 'concluido' ? 'Concluído' : ($h['status'] === 'erro' ? 'Erro' : 'Pendente'),
+                                            $h['status'] === 'concluido' ? 'success' : ($h['status'] === 'erro' ? 'danger' : 'secondary')
+                                        ) ?></td>
+                                        <td class="text-muted small text-end"><?= htmlspecialchars(data_br($h['solicitado_em'])) ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
                 <?php endif; ?>
             </div>
         </div>
@@ -696,6 +772,14 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                     </div>
                     <div class="hitech-body" id="corpoExplorador">
                         <div class="hitech-loading"><div class="spinner-border" role="status"></div><div class="mt-2">Consultando arquivos...</div></div>
+                    </div>
+                    <div class="hitech-topbar" style="border-top:1px solid #30363d; border-bottom:0">
+                        <div class="d-flex align-items-center gap-2 w-100">
+                            <i class="bi bi-upload text-muted"></i>
+                            <input type="file" id="inputEnviarArquivo" class="form-control form-control-sm" style="max-width:320px">
+                            <button type="button" class="hitech-btn" id="botaoEnviarArquivo"><i class="bi bi-upload"></i> Enviar</button>
+                            <span class="text-muted small ms-auto">envia pra pasta atual</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -840,7 +924,7 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro) {
         const poll = await resPoll.json();
 
         if (!poll.success) throw new Error(poll.message || 'Falha ao consultar resultado.');
-        if (poll.status === 'concluido') return poll.resultado;
+        if (poll.status === 'concluido') return { id: id, resultado: poll.resultado };
         if (poll.status === 'erro') throw new Error(poll.mensagem || 'O agente reportou um erro.');
         // status "pendente" -- continua esperando
     }
@@ -918,8 +1002,19 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro) {
 
             tdTamanho.className = 'text-muted';
             tdModificado.className = 'text-muted';
-            tdAcao.className = 'text-end';
+            tdAcao.className = 'text-end d-flex gap-1 justify-content-end';
             tdModificado.textContent = item.modificado_em || '';
+
+            const botaoRenomear = document.createElement('button');
+            botaoRenomear.type = 'button';
+            botaoRenomear.className = 'hitech-btn';
+            botaoRenomear.title = 'Renomear';
+            botaoRenomear.innerHTML = '<i class="bi bi-pencil"></i>';
+            botaoRenomear.addEventListener('click', function (e) {
+                e.stopPropagation();
+                const separador = caminhoAtual.endsWith('\\') ? '' : '\\';
+                renomearItem(caminhoAtual + separador + item.nome, item.nome);
+            });
 
             if (item.tipo === 'pasta') {
                 tr.className = 'linha-pasta';
@@ -927,6 +1022,7 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro) {
                 tdNome.appendChild(icone);
                 tdNome.appendChild(document.createTextNode(' ' + item.nome));
                 tdTamanho.textContent = '--';
+                tdAcao.appendChild(botaoRenomear);
 
                 tr.addEventListener('click', function () {
                     const separador = caminhoAtual.endsWith('\\') ? '' : '\\';
@@ -938,15 +1034,30 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro) {
                 tdNome.appendChild(document.createTextNode(' ' + item.nome));
                 tdTamanho.textContent = formatarTamanho(item.tamanho);
 
+                const botaoBaixar = document.createElement('button');
+                botaoBaixar.type = 'button';
+                botaoBaixar.className = 'hitech-btn';
+                botaoBaixar.title = 'Baixar';
+                botaoBaixar.innerHTML = '<i class="bi bi-download"></i>';
+                botaoBaixar.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    const separador = caminhoAtual.endsWith('\\') ? '' : '\\';
+                    baixarArquivo(caminhoAtual + separador + item.nome, botaoBaixar);
+                });
+
                 const botaoExecutar = document.createElement('button');
                 botaoExecutar.type = 'button';
                 botaoExecutar.className = 'hitech-btn';
-                botaoExecutar.innerHTML = '<i class="bi bi-play-fill"></i> Executar';
+                botaoExecutar.title = 'Executar';
+                botaoExecutar.innerHTML = '<i class="bi bi-play-fill"></i>';
                 botaoExecutar.addEventListener('click', function (e) {
                     e.stopPropagation();
                     const separador = caminhoAtual.endsWith('\\') ? '' : '\\';
                     executarArquivo(caminhoAtual + separador + item.nome, item.nome);
                 });
+
+                tdAcao.appendChild(botaoRenomear);
+                tdAcao.appendChild(botaoBaixar);
                 tdAcao.appendChild(botaoExecutar);
             }
 
@@ -969,8 +1080,8 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro) {
         corpoEl.innerHTML = '<div class="hitech-loading"><div class="spinner-border" role="status"></div><div class="mt-2">Consultando...</div></div>';
 
         try {
-            const itens = await pedirEAguardarSolicitacao(ativoId, 'listar_arquivos', caminho);
-            renderTabela(itens);
+            const resposta = await pedirEAguardarSolicitacao(ativoId, 'listar_arquivos', caminho);
+            renderTabela(resposta.resultado);
         } catch (e) {
             corpoEl.innerHTML = '';
             const div = document.createElement('div');
@@ -999,6 +1110,86 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro) {
         } catch (e) {
             alert('Erro ao comunicar com o servidor.');
         }
+    }
+
+    async function renomearItem(caminhoAtualCompleto, nomeAtual) {
+        const nomeNovo = prompt('Novo nome para "' + nomeAtual + '":', nomeAtual);
+        if (!nomeNovo || nomeNovo === nomeAtual) return;
+
+        const dados = new URLSearchParams();
+        dados.set('id', ativoId);
+        dados.set('comando', 'renomear_arquivo');
+        dados.set('alvo', caminhoAtualCompleto);
+        dados.set('alvo_label', nomeNovo);
+
+        try {
+            const res = await fetch(<?= json_encode(url('/ativos/comando')) ?>, { method: 'POST', body: dados });
+            const resultado = await res.json();
+            alert(resultado.message || (resultado.success ? 'Enviado.' : 'Falha ao enviar.'));
+            if (resultado.success) {
+                setTimeout(function () { carregarPasta(caminhoAtual); }, 3000);
+            }
+        } catch (e) {
+            alert('Erro ao comunicar com o servidor.');
+        }
+    }
+
+    async function baixarArquivo(caminhoCompleto, botao) {
+        const textoOriginal = botao.innerHTML;
+        botao.disabled = true;
+        botao.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+
+        try {
+            const resposta = await pedirEAguardarSolicitacao(ativoId, 'baixar_arquivo', caminhoCompleto);
+            if (!resposta.resultado.arquivo_pronto) {
+                throw new Error('O agente não conseguiu enviar o arquivo.');
+            }
+            window.location.href = <?= json_encode(url('/ativos/solicitacoes/arquivo')) ?> + '?id=' + resposta.id + '&ativo_id=' + ativoId;
+        } catch (e) {
+            alert('Falha ao baixar: ' + e.message);
+        } finally {
+            botao.disabled = false;
+            botao.innerHTML = textoOriginal;
+        }
+    }
+
+    const inputEnviar = document.getElementById('inputEnviarArquivo');
+    const botaoEnviar = document.getElementById('botaoEnviarArquivo');
+    if (inputEnviar && botaoEnviar) {
+        botaoEnviar.addEventListener('click', async function () {
+            const arquivo = inputEnviar.files[0];
+            if (!arquivo) {
+                alert('Escolha um arquivo primeiro.');
+                return;
+            }
+
+            if (!confirm('Enviar "' + arquivo.name + '" pra pasta atual (' + caminhoAtual + ') nesta máquina?')) {
+                return;
+            }
+
+            const dados = new FormData();
+            dados.set('id', ativoId);
+            dados.set('destino', caminhoAtual);
+            dados.set('arquivo', arquivo);
+
+            botaoEnviar.disabled = true;
+            botaoEnviar.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+
+            try {
+                const res = await fetch(<?= json_encode(url('/ativos/comando/enviar-arquivo')) ?>, { method: 'POST', body: dados });
+                const resultado = await res.json();
+                alert(resultado.message || (resultado.success ? 'Enviado.' : 'Falha ao enviar.'));
+                if (resultado.success) {
+                    inputEnviar.value = '';
+                    setTimeout(function () { carregarPasta(caminhoAtual); }, 3000);
+                }
+            } catch (e) {
+                alert('Erro ao comunicar com o servidor.');
+            } finally {
+                botaoEnviar.disabled = false;
+                botaoEnviar.innerHTML = '<i class="bi bi-upload"></i> Enviar';
+            }
+        });
     }
 
     botoes.forEach(function (botao) {
@@ -1087,8 +1278,8 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro) {
         totalEl.textContent = '';
 
         try {
-            const itens = await pedirEAguardarSolicitacao(ativoId, 'listar_processos', null);
-            renderTabela(itens);
+            const resposta = await pedirEAguardarSolicitacao(ativoId, 'listar_processos', null);
+            renderTabela(resposta.resultado);
         } catch (e) {
             corpoEl.innerHTML = '';
             const div = document.createElement('div');
@@ -1130,6 +1321,101 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro) {
             }
         });
     }
+})();
+
+(function () {
+    const botaoExecutar = document.getElementById('botaoExecutarComando');
+    if (!botaoExecutar) return;
+
+    const ativoId = <?= (int)$ativo['id'] ?>;
+    const campoTipo = document.getElementById('campoTipoComando');
+    const campoElevado = document.getElementById('campoElevado');
+    const campoComando = document.getElementById('campoComando');
+    const painelSaida = document.getElementById('painelSaidaComando');
+    const statusSaida = document.getElementById('statusSaidaComando');
+    const conteudoSaida = document.getElementById('conteudoSaidaComando');
+
+    botaoExecutar.addEventListener('click', async function () {
+        const comando = campoComando.value.trim();
+        if (!comando) {
+            alert('Digite um comando primeiro.');
+            return;
+        }
+
+        const tipo = campoTipo.value;
+        const elevado = campoElevado.checked;
+        const tipoLabel = tipo === 'executar_cmd' ? 'CMD' : 'PowerShell';
+
+        if (!confirm(
+            'Executar via ' + tipoLabel + (elevado ? ' (ELEVADO -- como administrador)' : '') + '?\n\n' +
+            comando + '\n\nRoda imediatamente nesta máquina, sem confirmação na tela do usuário.'
+        )) {
+            return;
+        }
+
+        botaoExecutar.disabled = true;
+        painelSaida.classList.remove('d-none');
+        statusSaida.textContent = 'Executando...';
+        conteudoSaida.textContent = '';
+
+        // Não usa o pedirEAguardarSolicitacao() compartilhado aqui porque
+        // esse comando precisa mandar "elevado" também, e o helper genérico
+        // só manda id/tipo/parametro -- por isso repete a lógica de
+        // solicitar+aguardar aqui, com o campo extra.
+        try {
+            const dadosSolicitar = new URLSearchParams();
+            dadosSolicitar.set('id', ativoId);
+            dadosSolicitar.set('tipo', tipo);
+            dadosSolicitar.set('parametro', comando);
+            if (elevado) dadosSolicitar.set('elevado', '1');
+
+            const resSolicitar = await fetch(<?= json_encode(url('/ativos/solicitacoes/listar')) ?>, { method: 'POST', body: dadosSolicitar });
+            const dadosResultado = await resSolicitar.json();
+
+            if (!dadosResultado.success) {
+                throw new Error(dadosResultado.message || 'Falha ao solicitar.');
+            }
+
+            const id = dadosResultado.id;
+            const inicio = Date.now();
+            let concluido = false;
+
+            while (Date.now() - inicio < 45000) {
+                await new Promise(function (resolve) { setTimeout(resolve, 700); });
+
+                const resPoll = await fetch(<?= json_encode(url('/ativos/solicitacoes/resultado')) ?> + '?id=' + id + '&ativo_id=' + ativoId);
+                const poll = await resPoll.json();
+
+                if (!poll.success) throw new Error(poll.message || 'Falha ao consultar resultado.');
+
+                if (poll.status === 'concluido') {
+                    concluido = true;
+                    const r = poll.resultado;
+                    statusSaida.textContent = 'Código de saída: ' + r.codigo_saida;
+                    conteudoSaida.textContent = (r.saida || '') + (r.erro ? '\n--- erro ---\n' + r.erro : '') || '(sem saída)';
+                    break;
+                }
+                if (poll.status === 'erro') {
+                    concluido = true;
+                    statusSaida.textContent = 'Erro';
+                    conteudoSaida.textContent = poll.mensagem || 'O agente reportou um erro.';
+                    break;
+                }
+            }
+
+            if (!concluido) {
+                statusSaida.textContent = 'Sem resposta';
+                conteudoSaida.textContent = 'Sem resposta do agente em 45s (a máquina está ligada e conectada?).';
+            } else {
+                setTimeout(function () { location.reload(); }, 2000);
+            }
+        } catch (e) {
+            statusSaida.textContent = 'Falha';
+            conteudoSaida.textContent = e.message;
+        } finally {
+            botaoExecutar.disabled = false;
+        }
+    });
 })();
 
 (function () {

@@ -104,6 +104,62 @@ class AtivoAgenteController extends Controller
         echo json_encode($this->service->responderSolicitacao($machineGuid, $id, $payload));
     }
 
+    /** Agente envia (upload multipart) o conteúdo de um arquivo pra uma solicitação 'baixar_arquivo'. */
+    public function responderSolicitacaoArquivo(): void
+    {
+        header('Content-Type: application/json');
+
+        $chaveEnviada = $_SERVER['HTTP_X_RD_AGENTE_CHAVE'] ?? '';
+
+        if ($chaveEnviada === '' || !hash_equals($this->service->chaveAgente(), $chaveEnviada)) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'message' => 'Chave de API inválida.']);
+            return;
+        }
+
+        $machineGuid = trim((string)($_POST['machine_guid'] ?? ''));
+        $id = (int)($_POST['id'] ?? 0);
+        $nomeOriginal = trim((string)($_POST['nome'] ?? '')) ?: 'arquivo';
+        $arquivo = $_FILES['arquivo'] ?? null;
+
+        if ($machineGuid === '' || $id <= 0 || !$arquivo || $arquivo['error'] !== UPLOAD_ERR_OK) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Parâmetros inválidos ou upload falhou.']);
+            return;
+        }
+
+        echo json_encode($this->service->responderSolicitacaoComArquivo($machineGuid, $id, $arquivo['tmp_name'], $nomeOriginal));
+    }
+
+    /** Agente baixa o anexo de um comando 'enviar_arquivo' pendente. */
+    public function baixarAnexoComando(): void
+    {
+        $chaveEnviada = $_SERVER['HTTP_X_RD_AGENTE_CHAVE'] ?? '';
+
+        if ($chaveEnviada === '' || !hash_equals($this->service->chaveAgente(), $chaveEnviada)) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'message' => 'Chave de API inválida.']);
+            return;
+        }
+
+        $machineGuid = trim((string)($_GET['machine_guid'] ?? ''));
+        $comandoId = (int)($_GET['id'] ?? 0);
+
+        $anexo = $this->service->buscarAnexoComando($machineGuid, $comandoId);
+
+        if ($anexo === null) {
+            http_response_code(404);
+            return;
+        }
+
+        header('Content-Type: application/octet-stream');
+        header('Content-Disposition: attachment; filename="' . basename($anexo['nome']) . '"');
+        header('Content-Length: ' . filesize($anexo['caminho']));
+        readfile($anexo['caminho']);
+
+        $this->service->limparAnexoComando($comandoId);
+    }
+
     public function baixarScript(): void
     {
         AuthMiddleware::checkModulo('ativos_dashboard');

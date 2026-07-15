@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -33,7 +32,8 @@ public class SolicitacaoClient
         return cliente;
     }
 
-    public async Task<bool> ResponderAsync(string machineGuid, int id, List<Dictionary<string, object?>> resultado)
+    /// <summary>resultado aceita qualquer coisa serializável -- lista (listar_arquivos/processos) ou objeto único (executar_cmd/powershell).</summary>
+    public async Task<bool> ResponderAsync(string machineGuid, int id, object resultado)
     {
         return await EnviarAsync(new { machine_guid = machineGuid, id, resultado });
     }

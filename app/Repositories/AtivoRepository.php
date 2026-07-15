@@ -658,15 +658,30 @@ class AtivoRepository
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public function criarComando(int $ativoId, string $comando, ?string $solicitadoPor, ?string $alvo = null, ?string $alvoLabel = null): int
+    public function criarComando(int $ativoId, string $comando, ?string $solicitadoPor, ?string $alvo = null, ?string $alvoLabel = null, ?string $arquivoAnexo = null): int
     {
         $stmt = $this->pdo->prepare("
-            INSERT INTO ativos_comandos (ativo_id, comando, alvo, alvo_label, solicitado_por)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO ativos_comandos (ativo_id, comando, alvo, alvo_label, solicitado_por, arquivo_anexo)
+            VALUES (?, ?, ?, ?, ?, ?)
         ");
-        $stmt->execute([$ativoId, $comando, $alvo, $alvoLabel, $solicitadoPor]);
+        $stmt->execute([$ativoId, $comando, $alvo, $alvoLabel, $solicitadoPor, $arquivoAnexo]);
 
         return (int)$this->pdo->lastInsertId();
+    }
+
+    public function buscarComandoPorId(int $id): ?array
+    {
+        $stmt = $this->pdo->prepare("SELECT * FROM ativos_comandos WHERE id = ? LIMIT 1");
+        $stmt->execute([$id]);
+
+        $item = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $item ?: null;
+    }
+
+    public function limparAnexoComando(int $id): void
+    {
+        $this->pdo->prepare("UPDATE ativos_comandos SET arquivo_anexo = NULL WHERE id = ?")->execute([$id]);
     }
 
     public function comandosPendentes(int $ativoId): array
@@ -718,13 +733,13 @@ class AtivoRepository
      |---------------------------------------------------------
      */
 
-    public function criarSolicitacao(int $ativoId, string $tipo, ?string $parametro): int
+    public function criarSolicitacao(int $ativoId, string $tipo, ?string $parametro, ?string $solicitadoPor = null, bool $elevado = false): int
     {
         $stmt = $this->pdo->prepare("
-            INSERT INTO ativos_solicitacoes (ativo_id, tipo, parametro)
-            VALUES (?, ?, ?)
+            INSERT INTO ativos_solicitacoes (ativo_id, tipo, parametro, solicitado_por, elevado)
+            VALUES (?, ?, ?, ?, ?)
         ");
-        $stmt->execute([$ativoId, $tipo, $parametro]);
+        $stmt->execute([$ativoId, $tipo, $parametro, $solicitadoPor, $elevado ? 1 : 0]);
 
         return (int)$this->pdo->lastInsertId();
     }
@@ -742,7 +757,7 @@ class AtivoRepository
     public function solicitacoesPendentes(int $ativoId): array
     {
         $stmt = $this->pdo->prepare("
-            SELECT id, tipo, parametro FROM ativos_solicitacoes
+            SELECT id, tipo, parametro, elevado FROM ativos_solicitacoes
             WHERE ativo_id = ? AND status = 'pendente'
             ORDER BY id
         ");
@@ -759,6 +774,36 @@ class AtivoRepository
              WHERE id = ? AND status = 'pendente'
         ");
         $stmt->execute([$resultadoJson, $id]);
+    }
+
+    public function marcarSolicitacaoConcluidaComArquivo(int $id, string $caminhoArquivo, string $nomeOriginal): void
+    {
+        $stmt = $this->pdo->prepare("
+            UPDATE ativos_solicitacoes
+               SET status = 'concluido', arquivo_resultado = ?, resultado = ?, respondido_em = NOW()
+             WHERE id = ? AND status = 'pendente'
+        ");
+        $stmt->execute([$caminhoArquivo, json_encode(['arquivo_nome' => $nomeOriginal], JSON_UNESCAPED_UNICODE), $id]);
+    }
+
+    public function limparArquivoResultado(int $id): void
+    {
+        $this->pdo->prepare("UPDATE ativos_solicitacoes SET arquivo_resultado = NULL WHERE id = ?")->execute([$id]);
+    }
+
+    public function historicoSolicitacoesExecucao(int $ativoId, int $limite = 15): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT * FROM ativos_solicitacoes
+            WHERE ativo_id = ? AND tipo IN ('executar_cmd', 'executar_powershell')
+            ORDER BY id DESC
+            LIMIT ?
+        ");
+        $stmt->bindValue(1, $ativoId, PDO::PARAM_INT);
+        $stmt->bindValue(2, $limite, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function marcarSolicitacaoErro(int $id, string $mensagem): void

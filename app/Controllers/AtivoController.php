@@ -73,6 +73,7 @@ class AtivoController extends Controller
             'programas' => $this->service->listarProgramas($id),
             'alertas' => $this->service->listarAlertas($id),
             'comandos' => $this->service->historicoComandos($id),
+            'historicoComandosExecucao' => $this->service->historicoSolicitacoesExecucao($id),
             'redes' => $this->service->listarRedes($id),
             'volumes' => $this->service->listarVolumes($id),
             'portas' => $this->service->listarPortas($id),
@@ -428,15 +429,65 @@ class AtivoController extends Controller
             }
             $alvo = $atualizacao['kb'];
             $alvoLabel = $atualizacao['kb'];
-        } elseif ($comando === 'executar_arquivo' || $comando === 'encerrar_processo') {
+        } elseif ($comando === 'executar_arquivo' || $comando === 'encerrar_processo' || $comando === 'renomear_arquivo') {
             // Caminho/PID vem direto do resultado que o próprio agente já
             // mandou (explorador de arquivos/processos) -- não tem um
             // cadastro server-side pra buscar por id, como nos outros.
+            // Em renomear_arquivo, alvo_label é o NOME NOVO (só o nome,
+            // sem caminho) -- o agente monta o caminho completo de destino.
             $alvo = trim((string)($_POST['alvo'] ?? ''));
             $alvoLabel = trim((string)($_POST['alvo_label'] ?? '')) ?: null;
         }
 
         $resultado = $this->service->enviarComando($id, $comando, $usuario, $alvo, $alvoLabel);
+
+        echo json_encode($resultado);
+    }
+
+    /** Upload do arquivo (multipart) pra ser entregue ao agente via comando 'enviar_arquivo'. */
+    public function enviarArquivo(): void
+    {
+        AuthMiddleware::checkModulo('ativos_novo');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $destino = trim((string)($_POST['destino'] ?? ''));
+        $usuario = $_SESSION['usuario']['nome'] ?? null;
+        $arquivo = $_FILES['arquivo'] ?? null;
+
+        if ($destino === '') {
+            echo json_encode(['success' => false, 'message' => 'Informe a pasta de destino.']);
+            return;
+        }
+
+        if (!$arquivo || $arquivo['error'] !== UPLOAD_ERR_OK) {
+            echo json_encode(['success' => false, 'message' => self::mensagemErroUpload($arquivo['error'] ?? -1)]);
+            return;
+        }
+
+        $pasta = __DIR__ . '/../../storage/uploads/ativos_transferencias';
+        if (!is_dir($pasta) && !@mkdir($pasta, 0777, true) && !is_dir($pasta)) {
+            echo json_encode(['success' => false, 'message' => 'Falha ao criar pasta de destino no servidor.']);
+            return;
+        }
+
+        $nomeOriginal = basename($arquivo['name']);
+        $nomeSanitizado = preg_replace('/[^A-Za-z0-9._-]/', '_', $nomeOriginal) ?: 'arquivo';
+        $caminhoServidor = $pasta . '/enviar_' . uniqid('', true) . '_' . $nomeSanitizado;
+
+        if (!@move_uploaded_file($arquivo['tmp_name'], $caminhoServidor)) {
+            echo json_encode(['success' => false, 'message' => 'Falha ao salvar o arquivo no servidor.']);
+            return;
+        }
+
+        $separador = str_ends_with($destino, '\\') ? '' : '\\';
+        $caminhoCompleto = $destino . $separador . $nomeOriginal;
+
+        $resultado = $this->service->enviarComando($id, 'enviar_arquivo', $usuario, $caminhoCompleto, $nomeOriginal, $caminhoServidor);
+
+        if (!$resultado['success']) {
+            @unlink($caminhoServidor);
+        }
 
         echo json_encode($resultado);
     }
@@ -449,8 +500,37 @@ class AtivoController extends Controller
         $id = (int)($_POST['id'] ?? 0);
         $tipo = $_POST['tipo'] ?? '';
         $parametro = trim((string)($_POST['parametro'] ?? '')) ?: null;
+        $elevado = !empty($_POST['elevado']);
+        $usuario = $_SESSION['usuario']['nome'] ?? null;
 
-        echo json_encode($this->service->solicitarListagem($id, $tipo, $parametro));
+        if (in_array($tipo, ['executar_cmd', 'executar_powershell'], true)) {
+            AuthMiddleware::checkModulo('ativos_novo');
+        }
+
+        echo json_encode($this->service->solicitarListagem($id, $tipo, $parametro, $usuario, $elevado));
+    }
+
+    public function baixarSolicitacaoArquivo(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+
+        $id = (int)($_GET['id'] ?? 0);
+        $ativoId = (int)($_GET['ativo_id'] ?? 0);
+
+        $arquivo = $this->service->baixarResultadoArquivo($id, $ativoId);
+
+        if ($arquivo === null) {
+            http_response_code(404);
+            echo 'Arquivo não encontrado (pode já ter expirado -- baixe de novo pelo explorador).';
+            return;
+        }
+
+        header('Content-Type: application/octet-stream');
+        header('Content-Disposition: attachment; filename="' . basename($arquivo['nome']) . '"');
+        header('Content-Length: ' . filesize($arquivo['caminho']));
+        readfile($arquivo['caminho']);
+
+        $this->service->limparArquivoResultado($id);
     }
 
     public function resultadoSolicitacao(): void

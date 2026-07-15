@@ -25,6 +25,9 @@ public class SolicitacaoItem
 
     [JsonPropertyName("parametro")]
     public string? Parametro { get; set; }
+
+    [JsonPropertyName("elevado")]
+    public bool Elevado { get; set; }
 }
 
 /// <summary>

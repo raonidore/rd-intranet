@@ -171,12 +171,57 @@ public class TrayApplicationContext : ApplicationContext
                         var processos = await Task.Run(() => ExploradorService.ListarProcessos());
                         await cliente.ResponderAsync(_machineGuid!, solicitacao.Id, processos);
                         break;
+
+                    case "baixar_arquivo":
+                        await ProcessarBaixarArquivoAsync(cliente, solicitacao);
+                        break;
+
+                    case "executar_cmd":
+                    case "executar_powershell":
+                        var (saida, erro, codigo) = await Task.Run(() => solicitacao.Tipo == "executar_cmd"
+                            ? ExploradorService.ExecutarCmd(solicitacao.Parametro ?? "", solicitacao.Elevado)
+                            : ExploradorService.ExecutarPowerShell(solicitacao.Parametro ?? "", solicitacao.Elevado));
+
+                        await cliente.ResponderAsync(_machineGuid!, solicitacao.Id, new
+                        {
+                            saida,
+                            erro,
+                            codigo_saida = codigo
+                        });
+                        break;
                 }
             }
             catch (Exception ex)
             {
                 await cliente.ResponderErroAsync(_machineGuid!, solicitacao.Id, ex.Message);
             }
+        }
+    }
+
+    private const long TamanhoMaximoDownload = 200L * 1024 * 1024; // mesmo teto configurado no PHP (upload_max_filesize)
+
+    private async Task ProcessarBaixarArquivoAsync(SolicitacaoClient cliente, SolicitacaoItem solicitacao)
+    {
+        var caminho = solicitacao.Parametro ?? "";
+        var info = new FileInfo(caminho);
+
+        if (!info.Exists)
+        {
+            await cliente.ResponderErroAsync(_machineGuid!, solicitacao.Id, "Arquivo não encontrado (pode ter sido movido/apagado).");
+            return;
+        }
+
+        if (info.Length > TamanhoMaximoDownload)
+        {
+            await cliente.ResponderErroAsync(_machineGuid!, solicitacao.Id, $"Arquivo maior que {TamanhoMaximoDownload / 1024 / 1024}MB -- baixe por outro meio.");
+            return;
+        }
+
+        var enviado = await new TransferenciaClient(_config).EnviarArquivoAsync(_machineGuid!, solicitacao.Id, caminho, info.Name);
+
+        if (!enviado)
+        {
+            await cliente.ResponderErroAsync(_machineGuid!, solicitacao.Id, "Falha ao enviar o arquivo pro servidor.");
         }
     }
 
@@ -226,7 +271,7 @@ public class TrayApplicationContext : ApplicationContext
                 _icone.ShowBalloonTip(4000, "RD Intranet", resultado.Mensagem, icone);
             }
 
-            ExecutarComandosPendentes(resultado.Comandos);
+            await ExecutarComandosPendentesAsync(resultado.Comandos);
 
             if (resultado.Sucesso)
             {
@@ -424,7 +469,7 @@ del ""%~f0""
     /// melhor esforço: MSI sai silencioso, instaladores não-MSI rodam
     /// como estão (podem abrir uma tela local, sem garantia de silêncio).
     /// </summary>
-    private void ExecutarComandosPendentes(List<ComandoItem> comandos)
+    private async Task ExecutarComandosPendentesAsync(List<ComandoItem> comandos)
     {
         foreach (var comando in comandos)
         {
@@ -478,6 +523,16 @@ del ""%~f0""
                             processo.Kill();
                         }
                         break;
+
+                    case "renomear_arquivo":
+                        if (string.IsNullOrWhiteSpace(comando.Alvo) || string.IsNullOrWhiteSpace(comando.AlvoLabel)) break;
+                        RenomearArquivoOuPasta(comando.Alvo, comando.AlvoLabel);
+                        break;
+
+                    case "enviar_arquivo":
+                        if (string.IsNullOrWhiteSpace(comando.Alvo)) break;
+                        await new TransferenciaClient(_config).BaixarAnexoComandoAsync(_machineGuid ?? "", comando.Id, comando.Alvo);
+                        break;
                 }
             }
             catch
@@ -485,6 +540,29 @@ del ""%~f0""
                 // se o comando falhar (ex: sem permissão, KB já removido),
                 // não derruba o resto do checkin -- só não executa esse item
             }
+        }
+    }
+
+    /// <summary>
+    /// Renomeia arquivo OU pasta -- comando.Alvo é o caminho completo
+    /// atual, comando.AlvoLabel é só o NOME novo (sem caminho); o
+    /// destino final é montado juntando a pasta de comando.Alvo com esse
+    /// nome novo.
+    /// </summary>
+    private static void RenomearArquivoOuPasta(string caminhoAtual, string nomeNovo)
+    {
+        var pasta = Path.GetDirectoryName(caminhoAtual);
+        if (string.IsNullOrEmpty(pasta)) return;
+
+        var destino = Path.Combine(pasta, nomeNovo);
+
+        if (Directory.Exists(caminhoAtual))
+        {
+            Directory.Move(caminhoAtual, destino);
+        }
+        else if (File.Exists(caminhoAtual))
+        {
+            File.Move(caminhoAtual, destino);
         }
     }
 
