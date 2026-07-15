@@ -654,6 +654,40 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                         </div>
                     </div>
                 </div>
+
+                <div class="hitech-panel mb-2 p-2">
+                    <div class="d-flex justify-content-between align-items-center mb-2 small flex-wrap gap-1">
+                        <span class="text-muted"><i class="bi bi-shield-lock"></i> Credencial de administrador desta máquina -- só usada quando "elevação" estiver marcado acima</span>
+                        <?php if ($elevacaoConfigurada): ?>
+                            <span class="text-success"><i class="bi bi-check-circle"></i> Configurada (<?= htmlspecialchars($elevacaoUsuarioAtual) ?>)</span>
+                        <?php else: ?>
+                            <span class="text-warning"><i class="bi bi-exclamation-triangle"></i> Não configurada -- só funciona se a conta do agente já for administradora aqui</span>
+                        <?php endif; ?>
+                    </div>
+                    <p class="text-muted small mb-2">
+                        Cada máquina normalmente tem sua própria conta de administrador local, com senha diferente
+                        -- por isso a credencial é configurada aqui, por máquina, não uma só pra frota inteira.
+                    </p>
+                    <form method="post" action="<?= url('/ativos/elevacao/credenciais') ?>" class="row g-2 align-items-end">
+                        <input type="hidden" name="id" value="<?= (int)$ativo['id'] ?>">
+                        <div class="col-sm-5">
+                            <input type="text" name="usuario" class="form-control form-control-sm" value="<?= htmlspecialchars($elevacaoUsuarioAtual) ?>" placeholder=".\admin ou nome do usuário admin local">
+                        </div>
+                        <div class="col-sm-5">
+                            <input type="password" name="senha" class="form-control form-control-sm" placeholder="<?= $elevacaoConfigurada ? '••••••••  (deixe em branco pra manter)' : 'senha' ?>">
+                        </div>
+                        <div class="col-sm-2">
+                            <button type="submit" class="btn btn-sm btn-primary w-100">Salvar</button>
+                        </div>
+                    </form>
+                    <?php if ($elevacaoConfigurada): ?>
+                        <form method="post" action="<?= url('/ativos/elevacao/remover') ?>" class="mt-2" id="formRemoverElevacaoAtivo">
+                            <input type="hidden" name="id" value="<?= (int)$ativo['id'] ?>">
+                            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> Remover credencial desta máquina</button>
+                        </form>
+                    <?php endif; ?>
+                </div>
+
                 <div class="hitech-panel mb-2">
                     <textarea class="form-control form-control-sm" id="campoComando" rows="2"
                               style="background:#0d1117; color:#c9d1d9; border:0; font-family:'SFMono-Regular',Consolas,monospace; resize:vertical"
@@ -1510,6 +1544,17 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro) {
             conteudoSaida.textContent = e.message;
         } finally {
             botaoExecutar.disabled = false;
+        }
+    });
+})();
+
+(function () {
+    const formRemoverElevacao = document.getElementById('formRemoverElevacaoAtivo');
+    if (!formRemoverElevacao) return;
+
+    formRemoverElevacao.addEventListener('submit', function (e) {
+        if (!confirm('Remover a credencial de administrador desta máquina? "Executar com elevação" só vai funcionar se a conta que roda o agente aqui já for administradora local.')) {
+            e.preventDefault();
         }
     });
 })();

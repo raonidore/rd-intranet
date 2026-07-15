@@ -467,70 +467,81 @@ class AtivoService
 
     /*
      |---------------------------------------------------------
-     | Credenciais de elevação -- uma conta local/domínio ÚNICA,
-     | compartilhada por toda a frota (mesmo critério da chave de API),
-     | usada pelo agente pra rodar CMD/PowerShell "como administrador"
-     | via schtasks /ru /rp quando a própria conta que roda o agente não
-     | é administradora da máquina. Senha cifrada em repouso
-     | (CryptoService, mesma AES-256-GCM já usada pra senha de conexão de
-     | banco de clientes) -- nunca é reexibida depois de salva.
+     | Credenciais de elevação -- POR MÁQUINA (coluna em `ativos`), não
+     | uma conta única pra frota inteira: cada Windows normalmente tem sua
+     | própria conta de administrador local, com senha diferente. Usada
+     | pelo agente pra rodar CMD/PowerShell "como administrador" via
+     | schtasks /ru /rp quando a própria conta que roda o agente não é
+     | administradora da máquina -- se já for administradora, o Windows
+     | só mostra o prompt de confirmação do UAC (Sim/Não), sem precisar de
+     | usuário/senha nenhum, e é exatamente o que a tarefa agendada sem
+     | /ru já contorna sozinha (ver ExecutarElevado no agente). Senha
+     | cifrada em repouso (CryptoService, mesma AES-256-GCM já usada pra
+     | senha de conexão de banco de clientes) -- nunca é reexibida depois
+     | de salva.
      |---------------------------------------------------------
      */
 
-    public function credenciaisElevacaoConfiguradas(): bool
+    public function credenciaisElevacaoConfiguradas(int $ativoId): bool
     {
-        return (ConfigService::get('ativos_elevacao_usuario', '') ?: '') !== ''
-            && (ConfigService::get('ativos_elevacao_senha_cifrada', '') ?: '') !== '';
+        $ativo = $this->repository->buscarPorId($ativoId);
+
+        return $ativo !== null
+            && trim((string)($ativo['elevacao_usuario'] ?? '')) !== ''
+            && trim((string)($ativo['elevacao_senha_cifrada'] ?? '')) !== '';
     }
 
-    public function usuarioElevacaoAtual(): string
+    public function usuarioElevacaoAtual(int $ativoId): string
     {
-        return ConfigService::get('ativos_elevacao_usuario', '') ?: '';
+        $ativo = $this->repository->buscarPorId($ativoId);
+
+        return trim((string)($ativo['elevacao_usuario'] ?? ''));
     }
 
-    public function salvarCredenciaisElevacao(string $usuario, string $senha): bool
+    public function salvarCredenciaisElevacao(int $ativoId, string $usuario, string $senha): bool
     {
         $usuario = trim($usuario);
         $senha = trim($senha);
 
         // Senha em branco mantém a atual (só o usuário está sendo trocado) --
         // só exige senha nova quando ainda não havia nenhuma configurada.
-        if ($usuario === '' || ($senha === '' && !$this->credenciaisElevacaoConfiguradas())) {
-            NotificationService::error('Informe o usuário e a senha da conta administradora.');
+        if ($usuario === '' || ($senha === '' && !$this->credenciaisElevacaoConfiguradas($ativoId))) {
+            NotificationService::error('Informe o usuário e a senha da conta administradora desta máquina.');
             return false;
         }
 
-        ConfigService::set('ativos_elevacao_usuario', $usuario);
-        if ($senha !== '') {
-            ConfigService::set('ativos_elevacao_senha_cifrada', CryptoService::encriptar($senha));
-        }
+        $senhaCifrada = $senha !== '' ? CryptoService::encriptar($senha) : null;
+        $this->repository->salvarCredenciaisElevacao($ativoId, $usuario, $senhaCifrada);
 
-        AuditService::registrar('Ativos', 'Credenciais de elevação', "Credenciais de elevação atualizadas (usuário: {$usuario}).");
-        NotificationService::success('Credenciais de elevação salvas.');
+        AuditService::registrar('Ativos', 'Credenciais de elevação', "Credenciais de elevação do ativo #{$ativoId} atualizadas (usuário: {$usuario}).");
+        NotificationService::success('Credenciais de elevação salvas para esta máquina.');
 
         return true;
     }
 
-    public function removerCredenciaisElevacao(): void
+    public function removerCredenciaisElevacao(int $ativoId): void
     {
-        ConfigService::set('ativos_elevacao_usuario', '');
-        ConfigService::set('ativos_elevacao_senha_cifrada', '');
+        $this->repository->salvarCredenciaisElevacao($ativoId, null, null);
 
-        AuditService::registrar('Ativos', 'Credenciais de elevação', 'Credenciais de elevação removidas.');
-        NotificationService::success('Credenciais de elevação removidas -- elevação volta a depender da própria conta do agente já ser administradora.');
+        AuditService::registrar('Ativos', 'Credenciais de elevação', "Credenciais de elevação do ativo #{$ativoId} removidas.");
+        NotificationService::success('Credenciais de elevação removidas -- elevação volta a depender da própria conta do agente já ser administradora nesta máquina.');
     }
 
     /** Só chamado internamente ao montar a resposta do heartbeat pra uma solicitação elevada -- nunca exposto pra fora. */
-    private function credenciaisElevacaoParaAgente(): ?array
+    private function credenciaisElevacaoParaAgente(int $ativoId): ?array
     {
-        if (!$this->credenciaisElevacaoConfiguradas()) {
+        $ativo = $this->repository->buscarPorId($ativoId);
+        $senhaCifrada = trim((string)($ativo['elevacao_senha_cifrada'] ?? ''));
+        $usuario = trim((string)($ativo['elevacao_usuario'] ?? ''));
+
+        if ($usuario === '' || $senhaCifrada === '') {
             return null;
         }
 
         try {
             return [
-                'usuario' => $this->usuarioElevacaoAtual(),
-                'senha' => CryptoService::decriptar(ConfigService::get('ativos_elevacao_senha_cifrada')),
+                'usuario' => $usuario,
+                'senha' => CryptoService::decriptar($senhaCifrada),
             ];
         } catch (\RuntimeException $e) {
             return null;
@@ -1002,12 +1013,13 @@ class AtivoService
             return ['success' => false, 'message' => 'Ativo ainda não cadastrado -- aguardando o primeiro check-in completo.'];
         }
 
-        $solicitacoes = $this->repository->solicitacoesPendentes($resultado['id']);
+        $ativoId = (int)$resultado['id'];
+        $solicitacoes = $this->repository->solicitacoesPendentes($ativoId);
 
         return [
             'success' => true,
             'forcar_checkin' => $resultado['forcar_checkin'],
-            'solicitacoes' => array_map(function ($s) {
+            'solicitacoes' => array_map(function ($s) use ($ativoId) {
                 $item = [
                     'id' => (int)$s['id'],
                     'tipo' => $s['tipo'],
@@ -1017,9 +1029,10 @@ class AtivoService
 
                 // So manda a credencial (decifrada) quando de fato precisa
                 // dela -- nao em todo heartbeat, so na resposta da
-                // solicitacao elevada que vai usa-la na hora.
+                // solicitacao elevada que vai usa-la na hora. Credencial e
+                // POR MAQUINA (ativoId), nao global pra frota.
                 if ($item['elevado']) {
-                    $credencial = $this->credenciaisElevacaoParaAgente();
+                    $credencial = $this->credenciaisElevacaoParaAgente($ativoId);
                     if ($credencial !== null) {
                         $item['usuario_elevacao'] = $credencial['usuario'];
                         $item['senha_elevacao'] = $credencial['senha'];

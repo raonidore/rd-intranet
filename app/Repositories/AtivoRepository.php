@@ -143,6 +143,23 @@ class AtivoRepository
         ]);
     }
 
+    /** $senhaCifrada null mantém a senha atual (só o usuário mudou); usuario+senha null juntos removem a credencial. */
+    public function salvarCredenciaisElevacao(int $id, ?string $usuario, ?string $senhaCifrada): bool
+    {
+        if ($senhaCifrada === null && $usuario === null) {
+            $stmt = $this->pdo->prepare("UPDATE ativos SET elevacao_usuario = NULL, elevacao_senha_cifrada = NULL WHERE id = :id");
+            return $stmt->execute(['id' => $id]);
+        }
+
+        if ($senhaCifrada === null) {
+            $stmt = $this->pdo->prepare("UPDATE ativos SET elevacao_usuario = :usuario WHERE id = :id");
+            return $stmt->execute(['id' => $id, 'usuario' => $usuario]);
+        }
+
+        $stmt = $this->pdo->prepare("UPDATE ativos SET elevacao_usuario = :usuario, elevacao_senha_cifrada = :senha WHERE id = :id");
+        return $stmt->execute(['id' => $id, 'usuario' => $usuario, 'senha' => $senhaCifrada]);
+    }
+
     public function atualizarDetalhesSnmp(int $id, string $detalhesJson): bool
     {
         $stmt = $this->pdo->prepare("

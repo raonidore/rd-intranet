@@ -36,8 +36,6 @@ class AtivoController extends Controller
             'agenteExeDisponivel' => $this->service->agenteExeDisponivel(),
             'dotnetRuntimeDisponivel' => $this->service->dotnetRuntimeDisponivel(),
             'dotnetRuntimeLabel' => $this->service->dotnetRuntimeLabel(),
-            'elevacaoConfigurada' => $this->service->credenciaisElevacaoConfiguradas(),
-            'elevacaoUsuarioAtual' => $this->service->usuarioElevacaoAtual(),
         ]));
     }
 
@@ -87,6 +85,8 @@ class AtivoController extends Controller
             'minutosDesdeCheckin' => AtivoService::minutosDesdeUltimoCheckin($ativo),
             'segundosDesdeHeartbeat' => AtivoService::segundosDesdeUltimoHeartbeat($ativo),
             'intervaloComunicacao' => $this->service->intervaloComunicacao(),
+            'elevacaoConfigurada' => $this->service->credenciaisElevacaoConfiguradas($id),
+            'elevacaoUsuarioAtual' => $this->service->usuarioElevacaoAtual($id),
         ]);
     }
 
@@ -355,24 +355,29 @@ class AtivoController extends Controller
 
     public function salvarCredenciaisElevacao(): void
     {
-        AuthMiddleware::checkModulo('ativos_dashboard');
+        AuthMiddleware::checkModulo('ativos_novo');
+
+        $id = (int)($_POST['id'] ?? 0);
 
         $this->service->salvarCredenciaisElevacao(
+            $id,
             $_POST['usuario'] ?? '',
             $_POST['senha'] ?? ''
         );
 
-        header('Location: ' . url('/ativos'));
+        header('Location: ' . url('/ativos/ver?id=' . $id));
         exit;
     }
 
     public function removerCredenciaisElevacao(): void
     {
-        AuthMiddleware::checkModulo('ativos_dashboard');
+        AuthMiddleware::checkModulo('ativos_novo');
 
-        $this->service->removerCredenciaisElevacao();
+        $id = (int)($_POST['id'] ?? 0);
 
-        header('Location: ' . url('/ativos'));
+        $this->service->removerCredenciaisElevacao($id);
+
+        header('Location: ' . url('/ativos/ver?id=' . $id));
         exit;
     }
 

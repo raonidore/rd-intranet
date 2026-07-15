@@ -158,17 +158,21 @@ junto com quem pediu (`solicitado_por`).
 Se a conta que roda o agente **não** for administradora (caso comum --
 o agente normalmente registra em `HKCU\...\Run`, contexto do próprio
 usuário logado, não elevado), cadastre uma **credencial de elevação**
-em Ativos > Dashboard (card "Elevação"): um usuário administrador local
-ou de domínio (ex.: `DOMINIO\admin` ou `.\admin`) + senha, únicos pra
-toda a frota (mesmo critério da chave de API do agente). A senha fica
-cifrada no banco (`CryptoService`, AES-256-GCM, mesma chave já usada
-pra senha de conexão de banco de clientes) e só é enviada ao agente,
-decifrada, no momento em que uma solicitação com elevação marcada está
-pendente pra aquele ativo -- nunca em todo heartbeat, nunca fica
-gravada em log/auditoria (só o nome de usuário é auditado). Quando essa
-credencial existe, a tarefa agendada roda com `/ru "usuario" /rp
-"senha"` em vez de depender da conta do agente já ser admin -- vale
-mesmo com o agente rodando como usuário comum. Sem credencial
+direto na ficha do ativo (card "Executar comando", `ativos.elevacao_usuario`
+/ `elevacao_senha_cifrada`) -- **por máquina, não uma só pra frota
+inteira**: cada Windows normalmente tem sua própria conta de
+administrador local, com senha diferente (diferente da chave de API do
+agente, que essa sim é única pra frota). Usuário local ou de domínio
+(ex.: `DOMINIO\admin` ou `.\admin`) + senha. A senha fica cifrada no
+banco (`CryptoService`, AES-256-GCM, mesma chave já usada pra senha de
+conexão de banco de clientes) e só é enviada ao agente, decifrada, no
+momento em que uma solicitação com elevação marcada está pendente pra
+aquele ativo específico -- nunca em todo heartbeat, nunca fica gravada
+em log/auditoria (só o nome de usuário é auditado), nunca vaza pra
+outra máquina. Quando essa credencial existe, a tarefa agendada roda
+com `/ru "usuario" /rp "senha"` em vez de depender da conta do agente
+já ser admin -- vale mesmo com o agente rodando como usuário comum. Sem
+credencial
 cadastrada, cai de volta no comportamento padrão (`/rl highest`,
 depende da conta do agente).
 
