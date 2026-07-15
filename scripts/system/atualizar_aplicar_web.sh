@@ -55,7 +55,7 @@ if [ -f composer.lock ] && [ "$LOCK_ANTES" != "$LOCK_DEPOIS" ] && command -v com
   fi
 fi
 
-for SETUP in setup_acl_admin setup_db_secret_key setup_iptables_persistencia setup_rotas_extras; do
+for SETUP in setup_timezone setup_acl_admin setup_db_secret_key setup_iptables_persistencia setup_rotas_extras; do
   SAIDA_SETUP=$(bash "$REPO_DIR/scripts/system/${SETUP}.sh" 2>&1)
   if [ $? -ne 0 ]; then
     echo "{\"success\":false,\"message\":\"Codigo atualizado, mas falhou em ${SETUP}.sh: ${SAIDA_SETUP//\"/\\\"}\"}"

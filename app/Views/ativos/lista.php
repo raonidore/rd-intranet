@@ -99,8 +99,18 @@ $statusCores = [
                                 <td><?= Badge::make(htmlspecialchars(AtivoService::STATUS[$a['status']] ?? $a['status']), $statusCores[$a['status']] ?? 'secondary') ?></td>
                                 <td>
                                     <?php if ($a['origem'] === 'agente'): ?>
-                                        <?php $minutosAtras = AtivoService::minutosDesdeUltimoCheckin($a); ?>
-                                        <span data-bs-toggle="tooltip" title="<?= $minutosAtras !== null ? 'Visto há ' . $minutosAtras . ' min (não é ao vivo)' : 'Nunca se comunicou' ?>">
+                                        <?php
+                                            $segundosHeartbeat = AtivoService::segundosDesdeUltimoHeartbeat($a);
+                                            if ($segundosHeartbeat !== null) {
+                                                $dicaStatus = 'Ao vivo -- último ping há ' . $segundosHeartbeat . 's';
+                                            } else {
+                                                $minutosAtras = AtivoService::minutosDesdeUltimoCheckin($a);
+                                                $dicaStatus = $minutosAtras !== null
+                                                    ? 'Sem heartbeat ainda (agente antigo) -- baseado no último check-in completo, há ' . $minutosAtras . ' min'
+                                                    : 'Nunca se comunicou';
+                                            }
+                                        ?>
+                                        <span data-bs-toggle="tooltip" title="<?= htmlspecialchars($dicaStatus) ?>">
                                             <?= Badge::make(AtivoService::estaLigada($a) ? 'Ligado' : 'Desligado', AtivoService::estaLigada($a) ? 'success' : 'secondary') ?>
                                         </span>
                                     <?php else: ?>

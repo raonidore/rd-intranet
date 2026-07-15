@@ -94,10 +94,16 @@ O script (`scripts/install.sh`) faz, nessa ordem:
 4. Cria `/opt/rdtecnologia/{scripts,logs}` e sincroniza
    `scripts/system/*.sh` pra lá (mesmo mecanismo usado depois de cada
    atualização, ver `scripts/sync-system-scripts.sh`). Em seguida roda os
-   scripts de setup que criam conta/chave/serviço privilegiado (ACL do
-   Samba, chave de criptografia do Console SQL, persistência de
-   iptables/rotas extras) — de propósito fora do sudoers automático do
-   `www-data`, então precisam ser chamados aqui explicitamente.
+   scripts de setup que criam conta/chave/serviço privilegiado (fuso
+   horário do sistema, ACL do Samba, chave de criptografia do Console
+   SQL, persistência de iptables/rotas extras) — de propósito fora do
+   sudoers automático do `www-data`, então precisam ser chamados aqui
+   explicitamente. O fuso horário (`America/Sao_Paulo`) é importante:
+   o PHP já assume `America/Recife` (mesmo horário, fixo no código) e o
+   MariaDB usa `time_zone=SYSTEM` — se o SO ficar em UTC (padrão comum
+   de imagem de nuvem), qualquer "há quanto tempo" calculado a partir de
+   um timestamp do banco (ex: status Ligado/Desligado de um ativo) sai
+   errado em exatas 3 horas.
 5. Cria o banco `rd_intranet`, o usuário do MySQL (senha aleatória, exibida
    só uma vez no final) e `app/Config/database.php` a partir do
    `app/Config/database.example.php`.

@@ -118,7 +118,7 @@ bash "$REPO_DIR/scripts/sync-system-scripts.sh"
 #      _web.sh), entao o install.sh precisa rodar cada um explicitamente.
 #      Todos idempotentes.
 # ---------------------------------------------------------------------
-for SETUP in setup_acl_admin setup_db_secret_key setup_iptables_persistencia setup_rotas_extras; do
+for SETUP in setup_timezone setup_acl_admin setup_db_secret_key setup_iptables_persistencia setup_rotas_extras; do
   bash "$REPO_DIR/scripts/system/${SETUP}.sh"
 done
 
