@@ -37,4 +37,18 @@ class Controller
         header('Location: ' . $urlRedirecionamento);
         exit;
     }
+
+    /** Traduz os códigos nativos de erro de upload do PHP (UPLOAD_ERR_*) pra algo acionável. */
+    protected static function mensagemErroUpload(int $err): string
+    {
+        return match ($err) {
+            UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'Arquivo maior que o limite configurado no servidor (upload_max_filesize/post_max_size do php.ini). Aumente esses valores e reinicie o Apache.',
+            UPLOAD_ERR_PARTIAL => 'O upload foi interrompido no meio (conexão caiu). Tente novamente.',
+            UPLOAD_ERR_NO_FILE => 'Nenhum arquivo foi enviado.',
+            UPLOAD_ERR_NO_TMP_DIR => 'Falta uma pasta temporária no servidor pra receber o upload.',
+            UPLOAD_ERR_CANT_WRITE => 'Falha ao gravar o arquivo temporário no servidor (disco cheio ou sem permissão).',
+            UPLOAD_ERR_EXTENSION => 'Upload bloqueado por uma extensão do PHP.',
+            default => "Erro no upload (código {$err}).",
+        };
+    }
 }

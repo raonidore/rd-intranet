@@ -75,7 +75,7 @@ class AcessoRemotoController extends Controller
         $arquitetura = $_POST['arquitetura'] ?? '';
 
         if (!$arquivo || $arquivo['error'] !== UPLOAD_ERR_OK) {
-            NotificationService::error('Falha no upload do arquivo.');
+            NotificationService::error(self::mensagemErroUpload($arquivo['error'] ?? -1));
         } else {
             $this->service->salvarMeshAgente($arquitetura, $arquivo['tmp_name']);
         }

@@ -169,7 +169,7 @@ class AtivoAgenteController extends Controller
         $versao = trim($_POST['versao'] ?? '');
 
         if (!$arquivo || $arquivo['error'] !== UPLOAD_ERR_OK) {
-            NotificationService::error('Falha no upload do arquivo.');
+            NotificationService::error(self::mensagemErroUpload($arquivo['error'] ?? -1));
         } else {
             $this->service->salvarNovoAgenteExe($arquivo['tmp_name'], $versao);
         }
@@ -204,7 +204,7 @@ class AtivoAgenteController extends Controller
         $label = trim($_POST['label'] ?? '');
 
         if (!$arquivo || $arquivo['error'] !== UPLOAD_ERR_OK) {
-            NotificationService::error('Falha no upload do arquivo.');
+            NotificationService::error(self::mensagemErroUpload($arquivo['error'] ?? -1));
         } else {
             $this->service->salvarDotnetRuntime($arquivo['tmp_name'], $label);
         }
