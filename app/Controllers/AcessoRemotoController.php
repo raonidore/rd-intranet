@@ -80,8 +80,7 @@ class AcessoRemotoController extends Controller
             $this->service->salvarMeshAgente($arquitetura, $arquivo['tmp_name']);
         }
 
-        header('Location: ' . url('/ativos/acesso-remoto'));
-        exit;
+        $this->redirecionarAposUpload(url('/ativos/acesso-remoto'));
     }
 
     public function liberarPorta(): void

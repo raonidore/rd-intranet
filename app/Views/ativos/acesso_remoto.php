@@ -283,6 +283,7 @@ use App\Components\Badge;
 
         const xhr = new XMLHttpRequest();
         xhr.open('POST', form.action, true);
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
 
         xhr.upload.addEventListener('progress', function (evento) {
             if (!evento.lengthComputable) return;

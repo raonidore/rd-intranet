@@ -174,8 +174,7 @@ class AtivoAgenteController extends Controller
             $this->service->salvarNovoAgenteExe($arquivo['tmp_name'], $versao);
         }
 
-        header('Location: ' . url('/ativos'));
-        exit;
+        $this->redirecionarAposUpload(url('/ativos'));
     }
 
     /** Download manual do instalador do .NET Desktop Runtime pelo admin. */
@@ -210,7 +209,6 @@ class AtivoAgenteController extends Controller
             $this->service->salvarDotnetRuntime($arquivo['tmp_name'], $label);
         }
 
-        header('Location: ' . url('/ativos'));
-        exit;
+        $this->redirecionarAposUpload(url('/ativos'));
     }
 }
