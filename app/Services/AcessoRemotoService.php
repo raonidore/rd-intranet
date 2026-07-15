@@ -233,4 +233,72 @@ class AcessoRemotoService
 
         return $confirmado;
     }
+
+    /*
+     |---------------------------------------------------------
+     | Instaladores do MeshAgent -- o próprio MeshCentral oferece 3
+     | variantes (x86-32, x86-64, ARM-64) no diálogo "Adicionar Agente
+     | Mesh" do console dele. Hospedar aqui evita ter que entrar no
+     | console só pra baixar o instalador de novo em cada máquina.
+     |---------------------------------------------------------
+     */
+    public const ARQUITETURAS_MESH_AGENTE = [
+        'x86' => 'Windows x86-32 (.exe)',
+        'x64' => 'Windows x86-64 (.exe)',
+        'arm64' => 'Windows ARM-64 (.exe)',
+    ];
+
+    private function caminhoMeshAgente(string $arquitetura): ?string
+    {
+        if (!isset(self::ARQUITETURAS_MESH_AGENTE[$arquitetura])) {
+            return null;
+        }
+
+        return __DIR__ . "/../../storage/uploads/mesh/{$arquitetura}.exe";
+    }
+
+    public function meshAgenteDisponivel(string $arquitetura): bool
+    {
+        $caminho = $this->caminhoMeshAgente($arquitetura);
+
+        return $caminho !== null && file_exists($caminho);
+    }
+
+    public function caminhoMeshAgentePublico(string $arquitetura): ?string
+    {
+        return $this->meshAgenteDisponivel($arquitetura) ? $this->caminhoMeshAgente($arquitetura) : null;
+    }
+
+    public function salvarMeshAgente(string $arquitetura, string $caminhoTemporario): array
+    {
+        $destino = $this->caminhoMeshAgente($arquitetura);
+
+        if ($destino === null) {
+            NotificationService::error('Arquitetura inválida.');
+            return ['success' => false];
+        }
+
+        if (!is_uploaded_file($caminhoTemporario)) {
+            NotificationService::error('Upload inválido.');
+            return ['success' => false];
+        }
+
+        $pasta = dirname($destino);
+
+        if (!is_dir($pasta) && !@mkdir($pasta, 0777, true) && !is_dir($pasta)) {
+            NotificationService::error('Falha ao criar a pasta de destino no servidor.');
+            return ['success' => false];
+        }
+
+        if (!@move_uploaded_file($caminhoTemporario, $destino)) {
+            NotificationService::error('Falha ao salvar o arquivo no servidor (permissão de escrita?).');
+            return ['success' => false];
+        }
+
+        $label = self::ARQUITETURAS_MESH_AGENTE[$arquitetura];
+        AuditService::registrar('Ativos', 'Acesso Remoto', "Instalador do MeshAgent enviado: {$label}.");
+        NotificationService::success("Instalador \"{$label}\" enviado.");
+
+        return ['success' => true];
+    }
 }

@@ -7,6 +7,7 @@ use App\Middleware\AuthMiddleware;
 use App\Services\AcessoRemotoService;
 use App\Services\AtivoService;
 use App\Services\AuditService;
+use App\Services\NotificationService;
 
 class AcessoRemotoController extends Controller
 {
@@ -26,6 +27,11 @@ class AcessoRemotoController extends Controller
         $rodando = $this->service->rodando();
         $credenciaisConfiguradas = $this->service->credenciaisConfiguradas();
 
+        $meshAgentesDisponiveis = [];
+        foreach (array_keys(AcessoRemotoService::ARQUITETURAS_MESH_AGENTE) as $arquitetura) {
+            $meshAgentesDisponiveis[$arquitetura] = $this->service->meshAgenteDisponivel($arquitetura);
+        }
+
         $this->view('ativos/acesso_remoto', [
             'instalado' => $this->service->instalado(),
             'rodando' => $rodando,
@@ -36,7 +42,46 @@ class AcessoRemotoController extends Controller
             'dispositivos' => ($rodando && $credenciaisConfiguradas) ? $this->service->listarDispositivos() : [],
             'ativos' => $this->ativoService->listar(),
             'portaLiberada' => $this->service->portaLiberadaNoFirewall(),
+            'arquiteturasMeshAgente' => AcessoRemotoService::ARQUITETURAS_MESH_AGENTE,
+            'meshAgentesDisponiveis' => $meshAgentesDisponiveis,
         ]);
+    }
+
+    /** Download manual de um dos instaladores do MeshAgent pelo admin. */
+    public function baixarMeshAgente(): void
+    {
+        AuthMiddleware::checkModulo('ativos_acesso_remoto');
+
+        $arquitetura = $_GET['arquitetura'] ?? '';
+        $caminho = $this->service->caminhoMeshAgentePublico($arquitetura);
+
+        if ($caminho === null) {
+            http_response_code(404);
+            echo 'Nenhum instalador enviado ainda pra essa arquitetura.';
+            return;
+        }
+
+        header('Content-Type: application/octet-stream');
+        header('Content-Disposition: attachment; filename="MeshAgent-' . $arquitetura . '.exe"');
+        header('Content-Length: ' . filesize($caminho));
+        readfile($caminho);
+    }
+
+    public function uploadMeshAgente(): void
+    {
+        AuthMiddleware::checkModulo('ativos_acesso_remoto');
+
+        $arquivo = $_FILES['arquivo'] ?? null;
+        $arquitetura = $_POST['arquitetura'] ?? '';
+
+        if (!$arquivo || $arquivo['error'] !== UPLOAD_ERR_OK) {
+            NotificationService::error('Falha no upload do arquivo.');
+        } else {
+            $this->service->salvarMeshAgente($arquitetura, $arquivo['tmp_name']);
+        }
+
+        header('Location: ' . url('/ativos/acesso-remoto'));
+        exit;
     }
 
     public function liberarPorta(): void

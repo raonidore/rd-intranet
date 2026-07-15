@@ -75,6 +75,50 @@ use App\Components\Badge;
     </div>
 </div>
 
+<?php if ($instalado): ?>
+<div class="card border-0 shadow-sm mt-3" style="max-width:720px">
+    <div class="card-body">
+        <strong>Instaladores do MeshAgent</strong>
+        <p class="text-muted small mt-2 mb-2">
+            O MeshCentral oferece 3 variantes no diálogo "Adicionar Agente Mesh" do console dele. Envie os
+            instaladores aqui pra disponibilizar o download direto por este portal, sem precisar entrar no
+            console toda vez que uma máquina nova precisar do agente.
+        </p>
+        <div class="d-flex flex-wrap gap-2 mb-3">
+            <?php foreach ($arquiteturasMeshAgente as $chave => $label): ?>
+                <?php if ($meshAgentesDisponiveis[$chave]): ?>
+                    <a href="<?= url('/ativos/acesso-remoto/mesh-agente?arquitetura=' . $chave) ?>" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-download"></i> <?= htmlspecialchars($label) ?>
+                    </a>
+                <?php else: ?>
+                    <span class="btn btn-sm btn-outline-secondary disabled"><?= htmlspecialchars($label) ?> -- não enviado</span>
+                <?php endif; ?>
+            <?php endforeach; ?>
+        </div>
+        <form action="<?= url('/ativos/acesso-remoto/mesh-agente/upload') ?>" enctype="multipart/form-data" class="row g-2 align-items-end" id="formUploadMeshAgente">
+            <div class="col-auto">
+                <label class="form-label small mb-0">Arquitetura</label>
+                <select name="arquitetura" class="form-select form-select-sm" style="width:190px" required>
+                    <?php foreach ($arquiteturasMeshAgente as $chave => $label): ?>
+                        <option value="<?= htmlspecialchars($chave) ?>"><?= htmlspecialchars($label) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-auto">
+                <label class="form-label small mb-0">Arquivo (.exe)</label>
+                <input type="file" name="arquivo" accept=".exe" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-sm btn-outline-primary" id="botaoUploadMeshAgente"><i class="bi bi-upload"></i> Enviar</button>
+            </div>
+        </form>
+        <div class="progress mt-2 d-none" id="progressoUploadMeshAgente" style="height:20px">
+            <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width:0%">0%</div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
 <?php if ($instalado && $rodando): ?>
 <div class="card border-0 shadow-sm mt-3" style="max-width:720px">
     <div class="card-body">
@@ -218,6 +262,46 @@ use App\Components\Badge;
             botao.disabled = false;
             botao.innerHTML = '<i class="bi bi-unlock"></i> Liberar no Firewall';
         }
+    });
+})();
+
+(function () {
+    const form = document.getElementById('formUploadMeshAgente');
+    if (!form) return;
+
+    const botao = document.getElementById('botaoUploadMeshAgente');
+    const progresso = document.getElementById('progressoUploadMeshAgente');
+    const barra = progresso.querySelector('.progress-bar');
+
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+
+        botao.disabled = true;
+        progresso.classList.remove('d-none');
+        barra.style.width = '0%';
+        barra.textContent = '0%';
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', form.action, true);
+
+        xhr.upload.addEventListener('progress', function (evento) {
+            if (!evento.lengthComputable) return;
+            const pct = Math.round((evento.loaded / evento.total) * 100);
+            barra.style.width = pct + '%';
+            barra.textContent = pct + '%';
+        });
+
+        xhr.addEventListener('load', function () {
+            window.location.href = <?= json_encode(url('/ativos/acesso-remoto')) ?>;
+        });
+
+        xhr.addEventListener('error', function () {
+            botao.disabled = false;
+            progresso.classList.add('d-none');
+            alert('Falha de rede ao enviar o arquivo. Tente novamente.');
+        });
+
+        xhr.send(new FormData(form));
     });
 })();
 </script>

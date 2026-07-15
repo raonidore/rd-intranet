@@ -526,6 +526,71 @@ class AtivoService
         return ['success' => true];
     }
 
+    /*
+     |---------------------------------------------------------
+     | .NET Desktop Runtime -- o agente .exe framework-dependent (menor)
+     | precisa disso instalado na máquina pra rodar. Hospedar aqui evita
+     | ter que buscar no site da Microsoft toda vez que uma máquina nova
+     | for configurada. Não tem versão comparada por código nenhuma (não
+     | é autoatualizável, é só um instalador que a gente aponta manualmente
+     | pra máquina) -- o rótulo é livre, só pra identificar o que foi
+     | enviado (ex: "8.0.11 (win-x64)").
+     |---------------------------------------------------------
+     */
+    private function caminhoDotnetRuntime(): string
+    {
+        return __DIR__ . '/../../storage/uploads/agente/dotnet-desktop-runtime.exe';
+    }
+
+    public function dotnetRuntimeLabel(): string
+    {
+        return ConfigService::get('ativos_dotnet_runtime_label', '') ?: '';
+    }
+
+    public function dotnetRuntimeDisponivel(): bool
+    {
+        return file_exists($this->caminhoDotnetRuntime());
+    }
+
+    public function caminhoDotnetRuntimePublico(): ?string
+    {
+        return $this->dotnetRuntimeDisponivel() ? $this->caminhoDotnetRuntime() : null;
+    }
+
+    public function salvarDotnetRuntime(string $caminhoTemporario, string $label): array
+    {
+        $label = trim($label);
+
+        if ($label === '') {
+            NotificationService::error('Informe um rótulo pra identificar a versão enviada (ex: 8.0.11 win-x64).');
+            return ['success' => false];
+        }
+
+        if (!is_uploaded_file($caminhoTemporario)) {
+            NotificationService::error('Upload inválido.');
+            return ['success' => false];
+        }
+
+        $destino = $this->caminhoDotnetRuntime();
+        $pasta = dirname($destino);
+
+        if (!is_dir($pasta) && !@mkdir($pasta, 0777, true) && !is_dir($pasta)) {
+            NotificationService::error('Falha ao criar a pasta de destino no servidor.');
+            return ['success' => false];
+        }
+
+        if (!@move_uploaded_file($caminhoTemporario, $destino)) {
+            NotificationService::error('Falha ao salvar o arquivo no servidor (permissão de escrita?).');
+            return ['success' => false];
+        }
+
+        ConfigService::set('ativos_dotnet_runtime_label', $label);
+        AuditService::registrar('Ativos', 'Agente Windows', "Novo .NET Desktop Runtime enviado: {$label}.");
+        NotificationService::success("Runtime \"{$label}\" enviado.");
+
+        return ['success' => true];
+    }
+
     public function vincularDispositivoMesh(int $ativoId, ?string $meshDeviceId): bool
     {
         $meshDeviceId = $meshDeviceId === '' ? null : $meshDeviceId;

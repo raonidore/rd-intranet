@@ -402,6 +402,8 @@ $router->post('/ativos/solicitar-checkin', [AtivoController::class, 'solicitarCh
 $router->get('/ativos/agente/script', [AtivoAgenteController::class, 'baixarScript']);
 $router->get('/ativos/agente/exe', [AtivoAgenteController::class, 'baixarExecutavel']);
 $router->post('/ativos/agente/exe/upload', [AtivoAgenteController::class, 'uploadExecutavel']);
+$router->get('/ativos/agente/dotnet', [AtivoAgenteController::class, 'baixarDotnetRuntime']);
+$router->post('/ativos/agente/dotnet/upload', [AtivoAgenteController::class, 'uploadDotnetRuntime']);
 $router->post('/api/ativos/checkin', [AtivoAgenteController::class, 'checkin']);
 $router->post('/api/ativos/heartbeat', [AtivoAgenteController::class, 'heartbeat']);
 $router->get('/api/ativos/agente/versao', [AtivoAgenteController::class, 'versaoExecutavel']);
@@ -418,6 +420,8 @@ $router->post('/ativos/acesso-remoto/credenciais', [AcessoRemotoController::clas
 $router->post('/ativos/acesso-remoto/vincular', [AcessoRemotoController::class, 'vincular']);
 $router->post('/ativos/acesso-remoto/compartilhar', [AcessoRemotoController::class, 'compartilhar']);
 $router->post('/ativos/acesso-remoto/liberar-porta', [AcessoRemotoController::class, 'liberarPorta']);
+$router->get('/ativos/acesso-remoto/mesh-agente', [AcessoRemotoController::class, 'baixarMeshAgente']);
+$router->post('/ativos/acesso-remoto/mesh-agente/upload', [AcessoRemotoController::class, 'uploadMeshAgente']);
 $router->get('/ativos/etiqueta-config', [EtiquetaConfigController::class, 'index']);
 $router->post('/ativos/etiqueta-config/salvar', [EtiquetaConfigController::class, 'salvar']);
 $router->post('/ativos/etiqueta-config/preview', [EtiquetaConfigController::class, 'preview']);

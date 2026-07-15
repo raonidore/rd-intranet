@@ -77,9 +77,19 @@ $statusCores = [
                 <?php if ($agenteExeDisponivel): ?>
                     <a href="<?= url('/ativos/agente/exe') ?>" class="btn btn-sm btn-primary"><i class="bi bi-download"></i> Baixar agente (.exe) -- v<?= htmlspecialchars($versaoAgenteExe) ?></a>
                 <?php endif; ?>
+                <?php if ($dotnetRuntimeDisponivel): ?>
+                    <a href="<?= url('/ativos/agente/dotnet') ?>" class="btn btn-sm btn-outline-primary"><i class="bi bi-download"></i> Baixar .NET Desktop Runtime -- <?= htmlspecialchars($dotnetRuntimeLabel) ?></a>
+                <?php endif; ?>
                 <form method="post" action="<?= url('/ativos/agente/regenerar-chave') ?>" class="d-inline" id="formRegenerarChave">
                     <button class="btn btn-sm btn-outline-danger"><i class="bi bi-arrow-repeat"></i> Gerar nova chave</button>
                 </form>
+                <?php if (!$dotnetRuntimeDisponivel): ?>
+                    <p class="text-muted small mt-2 mb-0">
+                        <i class="bi bi-info-circle"></i> O agente <code>.exe</code> framework-dependent (menor)
+                        precisa do <strong>.NET 8 Desktop Runtime</strong> instalado na máquina pra rodar. Envie o
+                        instalador no card "Atualizar agente (.exe)" pra disponibilizar o download aqui também.
+                    </p>
+                <?php endif; ?>
             </div>
         </div>
 
@@ -111,6 +121,36 @@ $statusCores = [
                     </div>
                 </form>
                 <div class="progress mt-2 d-none" id="progressoUploadAgente" style="height:20px">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width:0%">0%</div>
+                </div>
+
+                <hr>
+
+                <p class="text-muted small mb-2">
+                    <?php if ($dotnetRuntimeDisponivel): ?>
+                        .NET Desktop Runtime disponível: <strong><?= htmlspecialchars($dotnetRuntimeLabel) ?></strong>.
+                    <?php else: ?>
+                        Nenhum .NET Desktop Runtime enviado ainda.
+                    <?php endif; ?>
+                    Baixe o instalador em
+                    <a href="https://dotnet.microsoft.com/download/dotnet/8.0" target="_blank">dotnet.microsoft.com</a>
+                    (".NET Desktop Runtime", <em>não</em> o SDK) e envie aqui -- fica disponível pra baixar direto
+                    do card "Agente Windows" acima, sem precisar ir buscar no site da Microsoft em cada máquina nova.
+                </p>
+                <form action="<?= url('/ativos/agente/dotnet/upload') ?>" enctype="multipart/form-data" class="row g-2 align-items-end" id="formUploadDotnet">
+                    <div class="col-auto">
+                        <label class="form-label small mb-0">Rótulo</label>
+                        <input type="text" name="label" class="form-control form-control-sm" style="width:170px" placeholder="8.0.11 (win-x64)" required>
+                    </div>
+                    <div class="col-auto">
+                        <label class="form-label small mb-0">Arquivo (.exe)</label>
+                        <input type="file" name="arquivo" accept=".exe" class="form-control form-control-sm" required>
+                    </div>
+                    <div class="col-auto">
+                        <button type="submit" class="btn btn-sm btn-outline-primary" id="botaoUploadDotnet"><i class="bi bi-upload"></i> Enviar</button>
+                    </div>
+                </form>
+                <div class="progress mt-2 d-none" id="progressoUploadDotnet" style="height:20px">
                     <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width:0%">0%</div>
                 </div>
             </div>
@@ -241,13 +281,15 @@ $statusCores = [
         });
     }
 
-    const formUpload = document.getElementById('formUploadAgente');
-    if (formUpload) {
-        const botao = document.getElementById('botaoUploadAgente');
-        const progresso = document.getElementById('progressoUploadAgente');
+    function configurarUploadComProgresso(idForm, idBotao, idProgresso) {
+        const form = document.getElementById(idForm);
+        if (!form) return;
+
+        const botao = document.getElementById(idBotao);
+        const progresso = document.getElementById(idProgresso);
         const barra = progresso.querySelector('.progress-bar');
 
-        formUpload.addEventListener('submit', function (e) {
+        form.addEventListener('submit', function (e) {
             e.preventDefault();
 
             botao.disabled = true;
@@ -256,7 +298,7 @@ $statusCores = [
             barra.textContent = '0%';
 
             const xhr = new XMLHttpRequest();
-            xhr.open('POST', formUpload.action, true);
+            xhr.open('POST', form.action, true);
 
             xhr.upload.addEventListener('progress', function (evento) {
                 if (!evento.lengthComputable) return;
@@ -279,9 +321,12 @@ $statusCores = [
                 alert('Falha de rede ao enviar o arquivo. Tente novamente.');
             });
 
-            xhr.send(new FormData(formUpload));
+            xhr.send(new FormData(form));
         });
     }
+
+    configurarUploadComProgresso('formUploadAgente', 'botaoUploadAgente', 'progressoUploadAgente');
+    configurarUploadComProgresso('formUploadDotnet', 'botaoUploadDotnet', 'progressoUploadDotnet');
 })();
 </script>
 

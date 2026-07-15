@@ -177,4 +177,40 @@ class AtivoAgenteController extends Controller
         header('Location: ' . url('/ativos'));
         exit;
     }
+
+    /** Download manual do instalador do .NET Desktop Runtime pelo admin. */
+    public function baixarDotnetRuntime(): void
+    {
+        AuthMiddleware::checkModulo('ativos_dashboard');
+
+        $caminho = $this->service->caminhoDotnetRuntimePublico();
+
+        if ($caminho === null) {
+            http_response_code(404);
+            echo 'Nenhum instalador do .NET Desktop Runtime foi enviado ainda.';
+            return;
+        }
+
+        header('Content-Type: application/octet-stream');
+        header('Content-Disposition: attachment; filename="windowsdesktop-runtime-win-x64.exe"');
+        header('Content-Length: ' . filesize($caminho));
+        readfile($caminho);
+    }
+
+    public function uploadDotnetRuntime(): void
+    {
+        AuthMiddleware::checkModulo('ativos_dashboard');
+
+        $arquivo = $_FILES['arquivo'] ?? null;
+        $label = trim($_POST['label'] ?? '');
+
+        if (!$arquivo || $arquivo['error'] !== UPLOAD_ERR_OK) {
+            NotificationService::error('Falha no upload do arquivo.');
+        } else {
+            $this->service->salvarDotnetRuntime($arquivo['tmp_name'], $label);
+        }
+
+        header('Location: ' . url('/ativos'));
+        exit;
+    }
 }

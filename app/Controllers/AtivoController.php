@@ -34,6 +34,8 @@ class AtivoController extends Controller
             'heartbeatIntervalo' => $this->service->heartbeatIntervaloSegundos(),
             'versaoAgenteExe' => $this->service->versaoAgenteExe(),
             'agenteExeDisponivel' => $this->service->agenteExeDisponivel(),
+            'dotnetRuntimeDisponivel' => $this->service->dotnetRuntimeDisponivel(),
+            'dotnetRuntimeLabel' => $this->service->dotnetRuntimeLabel(),
         ]));
     }
 
