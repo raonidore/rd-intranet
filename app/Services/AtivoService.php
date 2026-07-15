@@ -465,6 +465,78 @@ class AtivoService
         return $chave;
     }
 
+    /*
+     |---------------------------------------------------------
+     | Credenciais de elevação -- uma conta local/domínio ÚNICA,
+     | compartilhada por toda a frota (mesmo critério da chave de API),
+     | usada pelo agente pra rodar CMD/PowerShell "como administrador"
+     | via schtasks /ru /rp quando a própria conta que roda o agente não
+     | é administradora da máquina. Senha cifrada em repouso
+     | (CryptoService, mesma AES-256-GCM já usada pra senha de conexão de
+     | banco de clientes) -- nunca é reexibida depois de salva.
+     |---------------------------------------------------------
+     */
+
+    public function credenciaisElevacaoConfiguradas(): bool
+    {
+        return (ConfigService::get('ativos_elevacao_usuario', '') ?: '') !== ''
+            && (ConfigService::get('ativos_elevacao_senha_cifrada', '') ?: '') !== '';
+    }
+
+    public function usuarioElevacaoAtual(): string
+    {
+        return ConfigService::get('ativos_elevacao_usuario', '') ?: '';
+    }
+
+    public function salvarCredenciaisElevacao(string $usuario, string $senha): bool
+    {
+        $usuario = trim($usuario);
+        $senha = trim($senha);
+
+        // Senha em branco mantém a atual (só o usuário está sendo trocado) --
+        // só exige senha nova quando ainda não havia nenhuma configurada.
+        if ($usuario === '' || ($senha === '' && !$this->credenciaisElevacaoConfiguradas())) {
+            NotificationService::error('Informe o usuário e a senha da conta administradora.');
+            return false;
+        }
+
+        ConfigService::set('ativos_elevacao_usuario', $usuario);
+        if ($senha !== '') {
+            ConfigService::set('ativos_elevacao_senha_cifrada', CryptoService::encriptar($senha));
+        }
+
+        AuditService::registrar('Ativos', 'Credenciais de elevação', "Credenciais de elevação atualizadas (usuário: {$usuario}).");
+        NotificationService::success('Credenciais de elevação salvas.');
+
+        return true;
+    }
+
+    public function removerCredenciaisElevacao(): void
+    {
+        ConfigService::set('ativos_elevacao_usuario', '');
+        ConfigService::set('ativos_elevacao_senha_cifrada', '');
+
+        AuditService::registrar('Ativos', 'Credenciais de elevação', 'Credenciais de elevação removidas.');
+        NotificationService::success('Credenciais de elevação removidas -- elevação volta a depender da própria conta do agente já ser administradora.');
+    }
+
+    /** Só chamado internamente ao montar a resposta do heartbeat pra uma solicitação elevada -- nunca exposto pra fora. */
+    private function credenciaisElevacaoParaAgente(): ?array
+    {
+        if (!$this->credenciaisElevacaoConfiguradas()) {
+            return null;
+        }
+
+        try {
+            return [
+                'usuario' => $this->usuarioElevacaoAtual(),
+                'senha' => CryptoService::decriptar(ConfigService::get('ativos_elevacao_senha_cifrada')),
+            ];
+        } catch (\RuntimeException $e) {
+            return null;
+        }
+    }
+
     /**
      * Distribuição do agente Windows em C#/WinForms (.exe) -- diferente do
      * .ps1 (que é texto, gerado sob demanda a cada download), o .exe é um
@@ -935,12 +1007,27 @@ class AtivoService
         return [
             'success' => true,
             'forcar_checkin' => $resultado['forcar_checkin'],
-            'solicitacoes' => array_map(fn($s) => [
-                'id' => (int)$s['id'],
-                'tipo' => $s['tipo'],
-                'parametro' => $s['parametro'],
-                'elevado' => (bool)$s['elevado'],
-            ], $solicitacoes),
+            'solicitacoes' => array_map(function ($s) {
+                $item = [
+                    'id' => (int)$s['id'],
+                    'tipo' => $s['tipo'],
+                    'parametro' => $s['parametro'],
+                    'elevado' => (bool)$s['elevado'],
+                ];
+
+                // So manda a credencial (decifrada) quando de fato precisa
+                // dela -- nao em todo heartbeat, so na resposta da
+                // solicitacao elevada que vai usa-la na hora.
+                if ($item['elevado']) {
+                    $credencial = $this->credenciaisElevacaoParaAgente();
+                    if ($credencial !== null) {
+                        $item['usuario_elevacao'] = $credencial['usuario'];
+                        $item['senha_elevacao'] = $credencial['senha'];
+                    }
+                }
+
+                return $item;
+            }, $solicitacoes),
         ];
     }
 
@@ -1134,9 +1221,9 @@ class AtivoService
         $this->repository->limparArquivoResultado($id);
     }
 
-    public function historicoSolicitacoesExecucao(int $ativoId): array
+    public function historicoSolicitacoesExecucao(int $ativoId, int $limite = 5): array
     {
-        return $this->repository->historicoSolicitacoesExecucao($ativoId);
+        return $this->repository->historicoSolicitacoesExecucao($ativoId, $limite);
     }
 
     /**

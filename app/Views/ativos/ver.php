@@ -675,15 +675,22 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
 
                 <?php if (!empty($historicoComandosExecucao)): ?>
                     <hr>
-                    <p class="text-muted small mb-2">Histórico (últimos <?= count($historicoComandosExecucao) ?>):</p>
+                    <p class="text-muted small mb-2">Últimos <?= count($historicoComandosExecucao) ?> comandos (clique numa linha pra ver a saída):</p>
                     <div class="table-responsive">
-                        <table class="table table-sm mb-0">
+                        <table class="table table-sm mb-0" id="tabelaHistoricoComandos">
                             <thead>
                                 <tr><th>Tipo</th><th>Comando</th><th>Elevado</th><th>Solicitado por</th><th>Status</th><th class="text-end">Quando</th></tr>
                             </thead>
-                            <tbody>
+                            <tbody id="corpoHistoricoComandos">
                                 <?php foreach ($historicoComandosExecucao as $h): ?>
-                                    <tr>
+                                    <?php
+                                        $resultadoH = json_decode($h['resultado'] ?? '', true) ?: [];
+                                        $saidaH = trim((string)($resultadoH['saida'] ?? '')) . (!empty($resultadoH['erro']) ? "\n--- erro ---\n" . $resultadoH['erro'] : '');
+                                        if ($h['status'] === 'erro') {
+                                            $saidaH = $h['erro_mensagem'] ?? '';
+                                        }
+                                    ?>
+                                    <tr class="linha-historico-comando" style="cursor:pointer" data-alvo="detalheHistorico<?= (int)$h['id'] ?>">
                                         <td class="small"><?= $h['tipo'] === 'executar_cmd' ? 'CMD' : 'PowerShell' ?></td>
                                         <td class="small font-monospace" style="max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap"><?= htmlspecialchars($h['parametro']) ?></td>
                                         <td><?= $h['elevado'] ? Badge::make('Sim', 'warning') : '—' ?></td>
@@ -693,6 +700,11 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                             $h['status'] === 'concluido' ? 'success' : ($h['status'] === 'erro' ? 'danger' : 'secondary')
                                         ) ?></td>
                                         <td class="text-muted small text-end"><?= htmlspecialchars(data_br($h['solicitado_em'])) ?></td>
+                                    </tr>
+                                    <tr class="d-none" id="detalheHistorico<?= (int)$h['id'] ?>">
+                                        <td colspan="6" class="p-0">
+                                            <pre class="m-0 p-2 small" style="background:#0d1117; color:#c9d1d9; white-space:pre-wrap; word-break:break-word; max-height:220px; overflow:auto;"><?= htmlspecialchars($saidaH !== '' ? $saidaH : '(sem saída)') ?></pre>
+                                        </td>
                                     </tr>
                                 <?php endforeach; ?>
                             </tbody>
@@ -1334,6 +1346,89 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro) {
     const painelSaida = document.getElementById('painelSaidaComando');
     const statusSaida = document.getElementById('statusSaidaComando');
     const conteudoSaida = document.getElementById('conteudoSaidaComando');
+    const corpoHistorico = document.getElementById('corpoHistoricoComandos');
+    const nomeUsuarioAtual = <?= json_encode($_SESSION['usuario']['nome'] ?? '') ?>;
+
+    const MAX_HISTORICO = 5;
+
+    // Delegacao de evento no tbody -- funciona tanto pras linhas que já
+    // vieram prontas do servidor quanto pras que a gente insere depois de
+    // executar um comando, sem precisar religar listener toda hora.
+    if (corpoHistorico) {
+        corpoHistorico.addEventListener('click', function (e) {
+            const linha = e.target.closest('.linha-historico-comando');
+            if (!linha) return;
+            const detalhe = document.getElementById(linha.dataset.alvo);
+            if (detalhe) detalhe.classList.toggle('d-none');
+        });
+    }
+
+    function adicionarNoHistorico(tipoLabelCurto, comandoTexto, elevadoFlag, status, saidaTexto) {
+        if (!corpoHistorico) return;
+
+        const idDetalhe = 'detalheHistoricoNovo' + Date.now();
+
+        const tr = document.createElement('tr');
+        tr.className = 'linha-historico-comando';
+        tr.style.cursor = 'pointer';
+        tr.dataset.alvo = idDetalhe;
+
+        const tdTipo = document.createElement('td');
+        tdTipo.className = 'small';
+        tdTipo.textContent = tipoLabelCurto;
+
+        const tdComando = document.createElement('td');
+        tdComando.className = 'small font-monospace';
+        tdComando.style.cssText = 'max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap';
+        tdComando.textContent = comandoTexto;
+
+        const tdElevado = document.createElement('td');
+        if (elevadoFlag) {
+            const badge = document.createElement('span');
+            badge.className = 'badge text-bg-warning';
+            badge.textContent = 'Sim';
+            tdElevado.appendChild(badge);
+        } else {
+            tdElevado.textContent = '—';
+        }
+
+        const tdQuem = document.createElement('td');
+        tdQuem.className = 'text-muted small';
+        tdQuem.textContent = nomeUsuarioAtual || '—';
+
+        const tdStatus = document.createElement('td');
+        const badgeStatus = document.createElement('span');
+        badgeStatus.className = 'badge text-bg-' + (status === 'concluido' ? 'success' : 'danger');
+        badgeStatus.textContent = status === 'concluido' ? 'Concluído' : 'Erro';
+        tdStatus.appendChild(badgeStatus);
+
+        const tdQuando = document.createElement('td');
+        tdQuando.className = 'text-muted small text-end';
+        tdQuando.textContent = 'agora';
+
+        tr.append(tdTipo, tdComando, tdElevado, tdQuem, tdStatus, tdQuando);
+
+        const trDetalhe = document.createElement('tr');
+        trDetalhe.id = idDetalhe;
+        trDetalhe.className = 'd-none';
+        const tdDetalhe = document.createElement('td');
+        tdDetalhe.colSpan = 6;
+        tdDetalhe.className = 'p-0';
+        const pre = document.createElement('pre');
+        pre.className = 'm-0 p-2 small';
+        pre.style.cssText = 'background:#0d1117; color:#c9d1d9; white-space:pre-wrap; word-break:break-word; max-height:220px; overflow:auto;';
+        pre.textContent = saidaTexto || '(sem saída)';
+        tdDetalhe.appendChild(pre);
+        trDetalhe.appendChild(tdDetalhe);
+
+        corpoHistorico.insertBefore(trDetalhe, corpoHistorico.firstChild);
+        corpoHistorico.insertBefore(tr, trDetalhe);
+
+        // Mantem so os ultimos MAX_HISTORICO (cada entrada = 2 <tr>: linha + detalhe)
+        while (corpoHistorico.children.length > MAX_HISTORICO * 2) {
+            corpoHistorico.removeChild(corpoHistorico.lastChild);
+        }
+    }
 
     botaoExecutar.addEventListener('click', async function () {
         const comando = campoComando.value.trim();
@@ -1391,14 +1486,17 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro) {
                 if (poll.status === 'concluido') {
                     concluido = true;
                     const r = poll.resultado;
+                    const saidaCompleta = (r.saida || '') + (r.erro ? '\n--- erro ---\n' + r.erro : '');
                     statusSaida.textContent = 'Código de saída: ' + r.codigo_saida;
-                    conteudoSaida.textContent = (r.saida || '') + (r.erro ? '\n--- erro ---\n' + r.erro : '') || '(sem saída)';
+                    conteudoSaida.textContent = saidaCompleta || '(sem saída)';
+                    adicionarNoHistorico(tipoLabel, comando, elevado, 'concluido', saidaCompleta);
                     break;
                 }
                 if (poll.status === 'erro') {
                     concluido = true;
                     statusSaida.textContent = 'Erro';
                     conteudoSaida.textContent = poll.mensagem || 'O agente reportou um erro.';
+                    adicionarNoHistorico(tipoLabel, comando, elevado, 'erro', poll.mensagem);
                     break;
                 }
             }
@@ -1406,8 +1504,6 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro) {
             if (!concluido) {
                 statusSaida.textContent = 'Sem resposta';
                 conteudoSaida.textContent = 'Sem resposta do agente em 45s (a máquina está ligada e conectada?).';
-            } else {
-                setTimeout(function () { location.reload(); }, 2000);
             }
         } catch (e) {
             statusSaida.textContent = 'Falha';

@@ -195,6 +195,43 @@ $statusCores = [
         </div>
 
         <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white"><strong>Elevação (executar como administrador)</strong></div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">
+                    Usada pelo <a href="<?= url('/ativos/lista') ?>">explorador de arquivos</a> quando um comando
+                    (CMD/PowerShell) é enviado com "Executar como administrador" marcado. Necessária porque o
+                    agente roda com a conta do próprio usuário logado na máquina -- se essa conta não for
+                    administradora local, marcar a caixinha sozinho não basta. Informe aqui uma conta que seja
+                    administradora local nas máquinas (pode ser local ou de domínio, ex.: <code>DOMINIO\usuario</code>)
+                    -- fica cifrada no banco e só é enviada ao agente no momento de uma execução elevada.
+                </p>
+                <form method="post" action="<?= url('/ativos/elevacao/credenciais') ?>" class="row g-2 align-items-end mb-2">
+                    <div class="col-sm-5">
+                        <label class="form-label small mb-1">Usuário administrador</label>
+                        <input type="text" name="usuario" class="form-control form-control-sm" value="<?= htmlspecialchars($elevacaoUsuarioAtual) ?>" placeholder="DOMINIO\admin ou .\admin">
+                    </div>
+                    <div class="col-sm-5">
+                        <label class="form-label small mb-1">Senha</label>
+                        <input type="password" name="senha" class="form-control form-control-sm" placeholder="<?= $elevacaoConfigurada ? '••••••••  (deixe em branco pra manter)' : '' ?>">
+                    </div>
+                    <div class="col-sm-2">
+                        <button type="submit" class="btn btn-sm btn-primary w-100">Salvar</button>
+                    </div>
+                </form>
+                <div class="d-flex justify-content-between align-items-center">
+                    <?php if ($elevacaoConfigurada): ?>
+                        <span class="text-success small"><i class="bi bi-check-circle"></i> Credenciais configuradas (<?= htmlspecialchars($elevacaoUsuarioAtual) ?>)</span>
+                        <form method="post" action="<?= url('/ativos/elevacao/remover') ?>" id="formRemoverElevacao">
+                            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> Remover</button>
+                        </form>
+                    <?php else: ?>
+                        <span class="text-muted small"><i class="bi bi-exclamation-triangle"></i> Sem credenciais -- elevação só funciona se a conta que roda o agente já for administradora.</span>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-3">
             <div class="card-header bg-white"><strong>Coleta via SNMP</strong></div>
             <div class="card-body">
                 <form method="post" action="<?= url('/ativos/snmp/config') ?>" class="row g-2 align-items-end mb-3">
@@ -269,6 +306,15 @@ $statusCores = [
             navigator.clipboard.writeText(document.getElementById('campoChaveAgente').value);
             botaoCopiar.innerHTML = '<i class="bi bi-check-lg"></i>';
             setTimeout(function () { botaoCopiar.innerHTML = '<i class="bi bi-clipboard"></i>'; }, 1500);
+        });
+    }
+
+    const formRemoverElevacao = document.getElementById('formRemoverElevacao');
+    if (formRemoverElevacao) {
+        formRemoverElevacao.addEventListener('submit', function (e) {
+            if (!confirm('Remover as credenciais de elevação? Comandos com "Executar como administrador" só vão funcionar se a conta que roda o agente na máquina já for administradora local.')) {
+                e.preventDefault();
+            }
         });
     }
 

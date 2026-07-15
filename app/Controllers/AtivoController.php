@@ -36,6 +36,8 @@ class AtivoController extends Controller
             'agenteExeDisponivel' => $this->service->agenteExeDisponivel(),
             'dotnetRuntimeDisponivel' => $this->service->dotnetRuntimeDisponivel(),
             'dotnetRuntimeLabel' => $this->service->dotnetRuntimeLabel(),
+            'elevacaoConfigurada' => $this->service->credenciaisElevacaoConfiguradas(),
+            'elevacaoUsuarioAtual' => $this->service->usuarioElevacaoAtual(),
         ]));
     }
 
@@ -346,6 +348,29 @@ class AtivoController extends Controller
         AuditService::registrar('Ativos', 'Regenerar chave do agente', 'Chave de API do agente Windows regenerada.');
 
         NotificationService::success('Nova chave gerada. Agentes já instalados precisam do script atualizado para continuar funcionando.');
+
+        header('Location: ' . url('/ativos'));
+        exit;
+    }
+
+    public function salvarCredenciaisElevacao(): void
+    {
+        AuthMiddleware::checkModulo('ativos_dashboard');
+
+        $this->service->salvarCredenciaisElevacao(
+            $_POST['usuario'] ?? '',
+            $_POST['senha'] ?? ''
+        );
+
+        header('Location: ' . url('/ativos'));
+        exit;
+    }
+
+    public function removerCredenciaisElevacao(): void
+    {
+        AuthMiddleware::checkModulo('ativos_dashboard');
+
+        $this->service->removerCredenciaisElevacao();
 
         header('Location: ' . url('/ativos'));
         exit;

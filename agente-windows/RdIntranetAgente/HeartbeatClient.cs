@@ -28,6 +28,13 @@ public class SolicitacaoItem
 
     [JsonPropertyName("elevado")]
     public bool Elevado { get; set; }
+
+    /// <summary>Só vem preenchido quando Elevado=true e o servidor tem uma credencial de elevação configurada.</summary>
+    [JsonPropertyName("usuario_elevacao")]
+    public string? UsuarioElevacao { get; set; }
+
+    [JsonPropertyName("senha_elevacao")]
+    public string? SenhaElevacao { get; set; }
 }
 
 /// <summary>

@@ -147,12 +147,30 @@ do ativo (card "Executar comando", abaixo do histórico de comandos), com
 opção de **elevação** (como administrador). Sem UAC interativo -- a
 elevação usa um truque padrão de Agendador de Tarefas (cria uma tarefa
 temporária com "Executar com privilégios mais altos", dispara na hora,
-apaga em seguida); só funciona de verdade se a conta que roda o agente
-já for administrador local da máquina -- não existe truque que dê
-privilégio pra quem não tem, a elevação só evita o prompt que travaria
-uma execução remota desassistida. Saída (stdout/stderr/código) volta
-pelo mesmo canal de solicitação e fica registrada no histórico, junto
-com quem pediu (`solicitado_por`).
+apaga em seguida). Por padrão só funciona de verdade se a conta que roda
+o agente já for administrador local da máquina -- não existe truque que
+dê privilégio pra quem não tem, a elevação só evita o prompt que
+travaria uma execução remota desassistida. Saída (stdout/stderr/código)
+volta pelo mesmo canal de solicitação e fica registrada no histórico
+(últimos 5 comandos, com saída completa, expansível clicando na linha),
+junto com quem pediu (`solicitado_por`).
+
+Se a conta que roda o agente **não** for administradora (caso comum --
+o agente normalmente registra em `HKCU\...\Run`, contexto do próprio
+usuário logado, não elevado), cadastre uma **credencial de elevação**
+em Ativos > Dashboard (card "Elevação"): um usuário administrador local
+ou de domínio (ex.: `DOMINIO\admin` ou `.\admin`) + senha, únicos pra
+toda a frota (mesmo critério da chave de API do agente). A senha fica
+cifrada no banco (`CryptoService`, AES-256-GCM, mesma chave já usada
+pra senha de conexão de banco de clientes) e só é enviada ao agente,
+decifrada, no momento em que uma solicitação com elevação marcada está
+pendente pra aquele ativo -- nunca em todo heartbeat, nunca fica
+gravada em log/auditoria (só o nome de usuário é auditado). Quando essa
+credencial existe, a tarefa agendada roda com `/ru "usuario" /rp
+"senha"` em vez de depender da conta do agente já ser admin -- vale
+mesmo com o agente rodando como usuário comum. Sem credencial
+cadastrada, cai de volta no comportamento padrão (`/rl highest`,
+depende da conta do agente).
 
 **Poder de verdade, use com critério**: quem tiver acesso ao módulo
 Ativos com permissão de enviar comando (`ativos_novo`) consegue rodar

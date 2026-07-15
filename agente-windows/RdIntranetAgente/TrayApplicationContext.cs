@@ -179,8 +179,8 @@ public class TrayApplicationContext : ApplicationContext
                     case "executar_cmd":
                     case "executar_powershell":
                         var (saida, erro, codigo) = await Task.Run(() => solicitacao.Tipo == "executar_cmd"
-                            ? ExploradorService.ExecutarCmd(solicitacao.Parametro ?? "", solicitacao.Elevado)
-                            : ExploradorService.ExecutarPowerShell(solicitacao.Parametro ?? "", solicitacao.Elevado));
+                            ? ExploradorService.ExecutarCmd(solicitacao.Parametro ?? "", solicitacao.Elevado, solicitacao.UsuarioElevacao, solicitacao.SenhaElevacao)
+                            : ExploradorService.ExecutarPowerShell(solicitacao.Parametro ?? "", solicitacao.Elevado, solicitacao.UsuarioElevacao, solicitacao.SenhaElevacao));
 
                         await cliente.ResponderAsync(_machineGuid!, solicitacao.Id, new
                         {
