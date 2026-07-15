@@ -199,9 +199,9 @@ class AtivoRepository
     {
         $stmt = $this->pdo->prepare("
             INSERT INTO ativos
-            (tipo, codigo_patrimonio, nome, marca, modelo, numero_serie, ip, status, machine_guid, origem, ultimo_checkin, detalhes)
+            (tipo, codigo_patrimonio, nome, marca, modelo, numero_serie, ip, status, machine_guid, origem, agente_versao, ultimo_checkin, detalhes)
             VALUES
-            (:tipo, :codigo_patrimonio, :nome, :marca, :modelo, :numero_serie, :ip, 'ativo', :machine_guid, 'agente', NOW(), :detalhes)
+            (:tipo, :codigo_patrimonio, :nome, :marca, :modelo, :numero_serie, :ip, 'ativo', :machine_guid, 'agente', :agente_versao, NOW(), :detalhes)
         ");
 
         $stmt->execute([
@@ -213,6 +213,7 @@ class AtivoRepository
             'numero_serie' => $dados['numero_serie'],
             'ip' => $dados['ip'],
             'machine_guid' => $dados['machine_guid'],
+            'agente_versao' => $dados['agente_versao'] ?? null,
             'detalhes' => $dados['detalhes'],
         ]);
 
@@ -228,6 +229,7 @@ class AtivoRepository
                    modelo = COALESCE(:modelo, modelo),
                    numero_serie = COALESCE(:numero_serie, numero_serie),
                    ip = COALESCE(:ip, ip),
+                   agente_versao = COALESCE(:agente_versao, agente_versao),
                    detalhes = :detalhes,
                    origem = 'agente',
                    ultimo_checkin = NOW()
@@ -241,6 +243,7 @@ class AtivoRepository
             'modelo' => $camposBase['modelo'],
             'numero_serie' => $camposBase['numero_serie'],
             'ip' => $camposBase['ip'],
+            'agente_versao' => $camposBase['agente_versao'] ?? null,
             'detalhes' => $detalhesJson,
         ]);
     }

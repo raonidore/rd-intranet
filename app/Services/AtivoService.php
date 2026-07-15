@@ -644,6 +644,7 @@ class AtivoService
             'modelo' => trim((string)($payload['modelo'] ?? '')) ?: null,
             'numero_serie' => trim((string)($payload['numero_serie'] ?? '')) ?: null,
             'ip' => trim((string)($payload['ip'] ?? '')) ?: null,
+            'agente_versao' => trim((string)($payload['versao_agente'] ?? '')) ?: null,
         ];
 
         $camposTecnicos = $this->extrairDetalhes($tipo, $payload);

@@ -3,7 +3,7 @@
 -- cria todas as tabelas ja no estado final, sem precisar repetir o
 -- historico incremental de database/migrations/ (algumas dessas
 -- migrations usam ALTER TABLE, que nao e seguro reaplicar aqui).
--- Gerado em 2026-07-14 22:34:04.
+-- Gerado em 2026-07-15 03:23:08.
 
 -- Import nao respeita ordem de dependencia entre tabelas (algumas tem FK
 -- pra tabelas que so aparecem depois neste arquivo) -- desliga a checagem
@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS `ativos` (
   `observacoes` text DEFAULT NULL,
   `detalhes` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`detalhes`)),
   `origem` enum('manual','agente','snmp') NOT NULL DEFAULT 'manual',
+  `agente_versao` varchar(20) DEFAULT NULL,
   `machine_guid` varchar(64) DEFAULT NULL,
   `mesh_device_id` varchar(160) DEFAULT NULL,
   `ultimo_checkin` timestamp NULL DEFAULT NULL,

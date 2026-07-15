@@ -52,6 +52,7 @@ class AtivoController extends Controller
         $this->view('ativos/lista', [
             'ativos' => $this->service->listar($filtros),
             'filtros' => $filtros,
+            'versaoAgenteExeAtual' => $this->service->versaoAgenteExe(),
         ]);
     }
 

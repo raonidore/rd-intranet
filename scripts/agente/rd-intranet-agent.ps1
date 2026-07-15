@@ -32,6 +32,10 @@
       aproximado pelo horario do ultimo checkin completo (janela de 2x
       o intervalo configurado), nao em tempo real. Se precisar de
       deteccao ao vivo, use o agente de bandeja nessa maquina.
+      Pelo mesmo motivo, a coluna "Versao do Agente" na lista de ativos
+      mostra so "ps1" pra maquinas usando este script -- ele e baixado
+      direto do repositorio a cada instalacao, nao tem numero de versao
+      proprio como o .exe (<Version> do .csproj).
 
     Como instalar:
       1. Baixe este arquivo pela tela Ativos > Dashboard do RD Intranet
@@ -210,6 +214,7 @@ try {
         modelo         = $computador.Model
         numero_serie   = $serialBios
         ip             = $ip
+        versao_agente  = 'ps1'
         sistema_operacional = $sistema.Caption
         processador    = $processador.Name
         memoria_ram    = "$memoriaGb GB"

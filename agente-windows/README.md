@@ -172,7 +172,10 @@ em `%LocalAppData%\RDIntranetAgent\config.json`, por usuário).
   barra de progresso e a versão em execução -- só pra deixar claro,
   visualmente, quando uma atualização entrou em ação de verdade (evita
   a dúvida "será que atualizou mesmo?"). A versão também aparece em
-  Configurações (menu do ícone da bandeja).
+  Configurações (menu do ícone da bandeja) e vai junto em todo checkin
+  completo (`versao_agente`) -- aparece na coluna "Versão do Agente" em
+  **Ativos > Lista**, com aviso visual quando estiver diferente da
+  versão cadastrada em Ativos > Dashboard.
 - Registra-se pra iniciar com o Windows (`HKCU\...\Run`, sem precisar
   de admin).
 - A cada N segundos (configurável, padrão 1), manda o heartbeat de

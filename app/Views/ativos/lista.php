@@ -85,6 +85,7 @@ $statusCores = [
                             <th>Condição</th>
                             <th>Setor</th>
                             <th>Localização</th>
+                            <th>Versão do Agente</th>
                             <th class="text-end">Ações</th>
                         </tr>
                     </thead>
@@ -119,6 +120,19 @@ $statusCores = [
                                 </td>
                                 <td class="small text-muted"><?= htmlspecialchars($a['setor_nome'] ?? '—') ?></td>
                                 <td class="small text-muted"><?= htmlspecialchars($a['localizacao_nome'] ?? '—') ?></td>
+                                <td class="small">
+                                    <?php if (empty($a['agente_versao'])): ?>
+                                        <span class="text-muted">—</span>
+                                    <?php elseif ($a['agente_versao'] === 'ps1'): ?>
+                                        <span class="text-muted font-monospace" title="Script .ps1 -- não tem número de versão próprio, sempre baixado atualizado">script (.ps1)</span>
+                                    <?php elseif ($versaoAgenteExeAtual !== '' && $a['agente_versao'] !== $versaoAgenteExeAtual): ?>
+                                        <span class="font-monospace text-warning" data-bs-toggle="tooltip" title="Diferente da versão cadastrada no servidor (v<?= htmlspecialchars($versaoAgenteExeAtual) ?>). Se estiver desatualizado, se atualiza sozinho no próximo check-in.">
+                                            <i class="bi bi-exclamation-triangle"></i> v<?= htmlspecialchars($a['agente_versao']) ?>
+                                        </span>
+                                    <?php else: ?>
+                                        <span class="font-monospace text-success">v<?= htmlspecialchars($a['agente_versao']) ?></span>
+                                    <?php endif; ?>
+                                </td>
                                 <td class="text-end">
                                     <div class="btn-group" role="group">
                                         <a href="<?= url('/ativos/ver?id=' . $a['id']) ?>" class="btn btn-sm btn-outline-secondary" title="Ver"><i class="bi bi-eye"></i></a>

@@ -30,6 +30,9 @@ public class CheckinPayload
     [JsonPropertyName("ip")]
     public string? Ip { get; set; }
 
+    [JsonPropertyName("versao_agente")]
+    public string? VersaoAgente { get; set; }
+
     [JsonPropertyName("sistema_operacional")]
     public string? SistemaOperacional { get; set; }
 

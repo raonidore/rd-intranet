@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Management;
+using System.Reflection;
 using Microsoft.Win32;
 using RdIntranetAgente.Models;
 
@@ -20,6 +21,11 @@ public static class CollectorService
         {
             Nome = Environment.MachineName
         };
+
+        var versaoAssembly = Assembly.GetExecutingAssembly().GetName().Version;
+        payload.VersaoAgente = versaoAssembly == null
+            ? null
+            : $"{versaoAssembly.Major}.{versaoAssembly.Minor}.{versaoAssembly.Build}";
 
         var (machineGuid, serialBios) = ObterMachineGuidComSerial();
         payload.MachineGuid = machineGuid;
