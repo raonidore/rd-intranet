@@ -72,6 +72,29 @@ class NetworkConfigService
         return is_array($dados) ? $dados : ['success' => false, 'message' => 'Resposta inesperada do script: ' . $resultado['output']];
     }
 
+    /**
+     * Forca uma renovacao de concessao DHCP so nessa interface
+     * (networkctl renew), sem reescrever netplan nem mexer nas demais
+     * interfaces -- uso tipico: reserva de IP nova criada no switch/DHCP
+     * pro MAC do servidor, sem precisar esperar o proximo ciclo natural
+     * de renovacao nem reiniciar o servidor.
+     */
+    public function renovar(string $interface): array
+    {
+        if (!in_array($interface, $this->interfacesValidas(), true)) {
+            return ['success' => false, 'message' => 'Interface inválida.'];
+        }
+
+        $resultado = $this->linux->executarScript(
+            '/opt/rdtecnologia/scripts/network_renovar_web.sh',
+            [$interface]
+        );
+
+        $dados = json_decode(trim($resultado['output']), true);
+
+        return is_array($dados) ? $dados : ['success' => false, 'message' => 'Resposta inesperada do script: ' . $resultado['output']];
+    }
+
     public function statusRollback(): array
     {
         $resultado = $this->linux->executar(

@@ -114,6 +114,7 @@ $router->get('/infraestrutura/servidor/rede/editar', [NetworkController::class, 
 $router->post('/infraestrutura/servidor/rede/aplicar', [NetworkController::class, 'aplicar']);
 $router->post('/infraestrutura/servidor/rede/confirmar', [NetworkController::class, 'confirmar']);
 $router->get('/infraestrutura/servidor/rede/status', [NetworkController::class, 'status']);
+$router->post('/infraestrutura/servidor/rede/renovar', [NetworkController::class, 'renovar']);
 
 $router->get('/infraestrutura/hardware', [HardwareController::class, 'index']);
 $router->get('/infraestrutura/hardware/api', [HardwareController::class, 'api']);

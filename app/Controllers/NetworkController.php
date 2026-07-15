@@ -94,4 +94,20 @@ class NetworkController extends Controller
 
         echo json_encode($this->service->statusRollback());
     }
+
+    public function renovar(): void
+    {
+        AuthMiddleware::checkModulo('infra_rede');
+        header('Content-Type: application/json');
+
+        $interface = $_POST['interface'] ?? '';
+
+        $resultado = $this->service->renovar($interface);
+
+        if ($resultado['success'] ?? false) {
+            AuditService::registrar('Rede', 'Renovar DHCP', "Concessão DHCP renovada em {$interface}.");
+        }
+
+        echo json_encode($resultado);
+    }
 }

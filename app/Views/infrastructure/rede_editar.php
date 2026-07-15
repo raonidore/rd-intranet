@@ -43,6 +43,25 @@ $ipAtual = $atual['ipv4'][0] ?? '';
 
 <div class="card cfg-card">
     <div class="card-header">
+        <i class="bi bi-arrow-repeat me-1"></i> Renovar concessão DHCP
+    </div>
+    <div class="card-body">
+        <p class="text-muted small mb-3">
+            Força esta interface a pedir uma concessão DHCP nova agora, sem esperar o próximo ciclo
+            natural de renovação e sem precisar reiniciar o servidor -- útil depois de mudar uma
+            reserva de IP no switch/servidor DHCP pro MAC desta máquina. Só funciona se a interface
+            já estiver em modo DHCP (não em IP estático). Diferente do "Aplicar Alteração" abaixo,
+            não tem reversão automática -- o IP resultante depende do que o DHCP devolver, fora do
+            controle deste portal.
+        </p>
+        <button type="button" class="btn btn-outline-primary" id="btn-renovar">
+            <i class="bi bi-arrow-repeat"></i> Renovar agora
+        </button>
+    </div>
+</div>
+
+<div class="card cfg-card">
+    <div class="card-header">
         <i class="bi bi-diagram-3 me-1"></i> Configuração de Rede
     </div>
     <div class="card-body">
@@ -95,6 +114,8 @@ $ipAtual = $atual['ipv4'][0] ?? '';
     const APLICAR_URL   = '<?= url('/infraestrutura/servidor/rede/aplicar') ?>';
     const CONFIRMAR_URL = '<?= url('/infraestrutura/servidor/rede/confirmar') ?>';
     const STATUS_URL    = '<?= url('/infraestrutura/servidor/rede/status') ?>';
+    const RENOVAR_URL   = '<?= url('/infraestrutura/servidor/rede/renovar') ?>';
+    const INTERFACE     = '<?= htmlspecialchars($interface) ?>';
 
     const selModo   = document.getElementById('campo-modo');
     const camposEst = document.getElementById('campos-estatico');
@@ -178,6 +199,42 @@ $ipAtual = $atual['ipv4'][0] ?? '';
     });
 
     verificarStatus();
+
+    const btnRenovar = document.getElementById('btn-renovar');
+    btnRenovar.addEventListener('click', async function () {
+        if (!confirm(
+            'Forçar renovação da concessão DHCP em "' + INTERFACE + '"?\n\n' +
+            'Se você reservou um IP novo para esta máquina no switch/DHCP, é assim que ela ' +
+            'passa a valer. Se o IP mudar, você pode perder acesso a este portal pelo ' +
+            'endereço atual -- confira o novo endereço na mensagem de resultado.'
+        )) {
+            return;
+        }
+
+        btnRenovar.disabled = true;
+        btnRenovar.innerHTML = '<i class="bi bi-hourglass-split"></i> Renovando...';
+
+        try {
+            const fd = new FormData();
+            fd.set('interface', INTERFACE);
+            const res = await fetch(RENOVAR_URL, { method: 'POST', body: fd });
+            const data = await res.json();
+
+            if (data.success) {
+                const msg = data.mudou
+                    ? 'IP mudou!\n\nAntes: ' + (data.ip_antes || '-') + '\nDepois: ' + (data.ip_depois || '-')
+                    : 'Renovado, mas o endereço continua o mesmo: ' + (data.ip_depois || '-');
+                mostrarAlerta(msg, true);
+            } else {
+                mostrarAlerta(data.message || 'Falha ao renovar.', false);
+            }
+        } catch (err) {
+            mostrarAlerta('Erro ao comunicar com o servidor.', false);
+        } finally {
+            btnRenovar.disabled = false;
+            btnRenovar.innerHTML = '<i class="bi bi-arrow-repeat"></i> Renovar agora';
+        }
+    });
 })();
 </script>
 
