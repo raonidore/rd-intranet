@@ -34,6 +34,36 @@ class NetworkConfigService
         return ['nome' => $interface, 'ipv4' => [], 'ipv6' => [], 'estado' => '-', 'mac' => '-'];
     }
 
+    /**
+     * Modo (dhcp/estático), gateway e DNS de verdade da interface -- lido
+     * do estado atual gerenciado pelo systemd-networkd (networkctl/
+     * resolvectl), não de um valor gravado antes pela própria RD Intranet.
+     * Isso é o que faz a tela de edição refletir a realidade mesmo numa
+     * interface configurada por fora (cloud-init, instalação manual, etc.)
+     * -- antes disso, o formulário sempre assumia "Estático" com o
+     * gateway vazio (só o texto de exemplo aparecia no campo), mesmo numa
+     * interface em DHCP.
+     */
+    public function detalhesInterface(string $interface): array
+    {
+        $status = shell_exec('networkctl status ' . escapeshellarg($interface) . ' 2>/dev/null') ?? '';
+
+        $modo = preg_match('/^\s*DHCP4\s+Client/mi', $status) ? 'dhcp' : 'estatico';
+
+        $gateway = '';
+        if (preg_match('/^\s*Gateway:\s*(\S+)/m', $status, $m)) {
+            $gateway = $m[1];
+        }
+
+        $dns = '';
+        $dnsSaida = trim(shell_exec('resolvectl dns ' . escapeshellarg($interface) . ' 2>/dev/null') ?? '');
+        if (preg_match('/:\s*(.+)$/', $dnsSaida, $m)) {
+            $dns = implode(', ', array_filter(preg_split('/\s+/', trim($m[1]))));
+        }
+
+        return ['modo' => $modo, 'gateway' => $gateway, 'dns' => $dns];
+    }
+
     public function aplicar(string $interface, string $modo, string $ipCidr, string $gateway, string $dnsCsv): array
     {
         if (!in_array($interface, $this->interfacesValidas(), true)) {

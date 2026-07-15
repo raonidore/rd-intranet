@@ -10,22 +10,65 @@ $ipAtual = $atual['ipv4'][0] ?? '';
 .cfg-card { border:0; border-radius:14px; box-shadow:0 4px 14px rgba(0,0,0,.06); margin-bottom:1.25rem; }
 .cfg-card .card-header { background:#f8fafc; border-bottom:1px solid #e9ecef; border-radius:14px 14px 0 0; padding:14px 20px; }
 .field-help { font-size:11px; color:#9ca3af; margin-top:3px; }
+.info-rotulo { font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:#9ca3af; margin-bottom:4px; }
+.info-valor { font-size:14px; }
+.info-valor .font-monospace { font-size:13px; }
 </style>
 
 <?= Alert::flash() ?>
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h4 class="mb-1"><i class="bi bi-pencil-square me-1"></i> Editar Interface: <?= htmlspecialchars($interface) ?></h4>
-        <span class="text-muted" style="font-size:13px">
-            Estado atual: <?= $atual['estado'] === 'up' ? '<span class="badge bg-success">Up</span>' : '<span class="badge bg-secondary">Down</span>' ?>
-            &nbsp;|&nbsp; Endereços: <?= htmlspecialchars(implode(', ', array_merge($atual['ipv4'], $atual['ipv6'])) ?: '-') ?>
-            &nbsp;|&nbsp; MAC: <code><?= htmlspecialchars($atual['mac']) ?></code>
-        </span>
-    </div>
+<div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-2">
+    <h4 class="mb-0"><i class="bi bi-pencil-square me-1"></i> Editar Interface: <?= htmlspecialchars($interface) ?></h4>
     <a href="<?= url('/infraestrutura/rede') ?>" class="btn btn-outline-secondary">
         <i class="bi bi-arrow-left"></i> Voltar
     </a>
+</div>
+
+<div class="card cfg-card">
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-6 col-md-2">
+                <div class="info-rotulo">Estado</div>
+                <div class="info-valor"><?= $atual['estado'] === 'up' ? '<span class="badge bg-success">Up</span>' : '<span class="badge bg-secondary">Down</span>' ?></div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="info-rotulo">Modo detectado</div>
+                <div class="info-valor"><?= $detalhes['modo'] === 'dhcp' ? '<span class="badge bg-info text-dark">DHCP</span>' : '<span class="badge bg-secondary">Estático</span>' ?></div>
+            </div>
+            <div class="col-12 col-md-3">
+                <div class="info-rotulo">MAC</div>
+                <div class="info-valor"><code><?= htmlspecialchars($atual['mac']) ?></code></div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="info-rotulo">Gateway</div>
+                <div class="info-valor font-monospace"><?= htmlspecialchars($detalhes['gateway'] ?: '-') ?></div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="info-rotulo">DNS</div>
+                <div class="info-valor font-monospace"><?= htmlspecialchars($detalhes['dns'] ?: '-') ?></div>
+            </div>
+            <div class="col-12 col-md-6">
+                <div class="info-rotulo">IPv4</div>
+                <?php if (empty($atual['ipv4'])): ?>
+                    <div class="info-valor text-muted">-</div>
+                <?php else: ?>
+                    <?php foreach ($atual['ipv4'] as $ip): ?>
+                        <div class="info-valor font-monospace"><?= htmlspecialchars($ip) ?></div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </div>
+            <div class="col-12 col-md-6">
+                <div class="info-rotulo">IPv6</div>
+                <?php if (empty($atual['ipv6'])): ?>
+                    <div class="info-valor text-muted">-</div>
+                <?php else: ?>
+                    <?php foreach ($atual['ipv6'] as $ip): ?>
+                        <div class="info-valor font-monospace text-muted"><?= htmlspecialchars($ip) ?></div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
 </div>
 
 <div id="alerta-pendente" class="alert alert-warning d-none">
@@ -54,9 +97,16 @@ $ipAtual = $atual['ipv4'][0] ?? '';
             não tem reversão automática -- o IP resultante depende do que o DHCP devolver, fora do
             controle deste portal.
         </p>
-        <button type="button" class="btn btn-outline-primary" id="btn-renovar">
-            <i class="bi bi-arrow-repeat"></i> Renovar agora
-        </button>
+        <?php if ($detalhes['modo'] !== 'dhcp'): ?>
+            <button type="button" class="btn btn-outline-secondary" disabled title="Esta interface está em IP estático, não em DHCP">
+                <i class="bi bi-arrow-repeat"></i> Renovar agora
+            </button>
+            <div class="field-help mt-1">Modo detectado: Estático -- mude pra DHCP e aplique antes de renovar.</div>
+        <?php else: ?>
+            <button type="button" class="btn btn-outline-primary" id="btn-renovar">
+                <i class="bi bi-arrow-repeat"></i> Renovar agora
+            </button>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -71,10 +121,14 @@ $ipAtual = $atual['ipv4'][0] ?? '';
             <div class="mb-3">
                 <label class="form-label">Modo</label>
                 <select class="form-select" name="modo" id="campo-modo">
-                    <option value="estatico">IP Estático</option>
-                    <option value="dhcp">Automático (DHCP)</option>
+                    <option value="estatico" <?= $detalhes['modo'] === 'estatico' ? 'selected' : '' ?>>IP Estático</option>
+                    <option value="dhcp" <?= $detalhes['modo'] === 'dhcp' ? 'selected' : '' ?>>Automático (DHCP)</option>
                 </select>
-                <div class="field-help">DHCP obtém o endereço automaticamente do roteador/servidor DHCP da rede.</div>
+                <div class="field-help">
+                    DHCP obtém o endereço automaticamente do roteador/servidor DHCP da rede.
+                    Detectado a partir do estado atual da interface (networkctl) -- se você acabou de
+                    aplicar uma mudança, o modo aqui já reflete a config ativa, não o que estava salvo antes.
+                </div>
             </div>
 
             <div id="campos-estatico">
@@ -86,12 +140,12 @@ $ipAtual = $atual['ipv4'][0] ?? '';
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Gateway</label>
-                        <input type="text" class="form-control" name="gateway" placeholder="192.168.1.1">
+                        <input type="text" class="form-control" name="gateway" placeholder="192.168.1.1" value="<?= htmlspecialchars($detalhes['gateway']) ?>">
                         <div class="field-help">Endereço do roteador padrão desta rede</div>
                     </div>
                     <div class="col-md-12">
                         <label class="form-label">Servidores DNS</label>
-                        <input type="text" class="form-control" name="dns" placeholder="8.8.8.8, 1.1.1.1">
+                        <input type="text" class="form-control" name="dns" placeholder="8.8.8.8, 1.1.1.1" value="<?= htmlspecialchars($detalhes['dns']) ?>">
                         <div class="field-help">Separe múltiplos endereços por vírgula</div>
                     </div>
                 </div>
@@ -201,40 +255,42 @@ $ipAtual = $atual['ipv4'][0] ?? '';
     verificarStatus();
 
     const btnRenovar = document.getElementById('btn-renovar');
-    btnRenovar.addEventListener('click', async function () {
-        if (!confirm(
-            'Forçar renovação da concessão DHCP em "' + INTERFACE + '"?\n\n' +
-            'Se você reservou um IP novo para esta máquina no switch/DHCP, é assim que ela ' +
-            'passa a valer. Se o IP mudar, você pode perder acesso a este portal pelo ' +
-            'endereço atual -- confira o novo endereço na mensagem de resultado.'
-        )) {
-            return;
-        }
-
-        btnRenovar.disabled = true;
-        btnRenovar.innerHTML = '<i class="bi bi-hourglass-split"></i> Renovando...';
-
-        try {
-            const fd = new FormData();
-            fd.set('interface', INTERFACE);
-            const res = await fetch(RENOVAR_URL, { method: 'POST', body: fd });
-            const data = await res.json();
-
-            if (data.success) {
-                const msg = data.mudou
-                    ? 'IP mudou!\n\nAntes: ' + (data.ip_antes || '-') + '\nDepois: ' + (data.ip_depois || '-')
-                    : 'Renovado, mas o endereço continua o mesmo: ' + (data.ip_depois || '-');
-                mostrarAlerta(msg, true);
-            } else {
-                mostrarAlerta(data.message || 'Falha ao renovar.', false);
+    if (btnRenovar) {
+        btnRenovar.addEventListener('click', async function () {
+            if (!confirm(
+                'Forçar renovação da concessão DHCP em "' + INTERFACE + '"?\n\n' +
+                'Se você reservou um IP novo para esta máquina no switch/DHCP, é assim que ela ' +
+                'passa a valer. Se o IP mudar, você pode perder acesso a este portal pelo ' +
+                'endereço atual -- confira o novo endereço na mensagem de resultado.'
+            )) {
+                return;
             }
-        } catch (err) {
-            mostrarAlerta('Erro ao comunicar com o servidor.', false);
-        } finally {
-            btnRenovar.disabled = false;
-            btnRenovar.innerHTML = '<i class="bi bi-arrow-repeat"></i> Renovar agora';
-        }
-    });
+
+            btnRenovar.disabled = true;
+            btnRenovar.innerHTML = '<i class="bi bi-hourglass-split"></i> Renovando...';
+
+            try {
+                const fd = new FormData();
+                fd.set('interface', INTERFACE);
+                const res = await fetch(RENOVAR_URL, { method: 'POST', body: fd });
+                const data = await res.json();
+
+                if (data.success) {
+                    const msg = data.mudou
+                        ? 'IP mudou!\n\nAntes: ' + (data.ip_antes || '-') + '\nDepois: ' + (data.ip_depois || '-')
+                        : 'Renovado, mas o endereço continua o mesmo: ' + (data.ip_depois || '-');
+                    mostrarAlerta(msg, true);
+                } else {
+                    mostrarAlerta(data.message || 'Falha ao renovar.', false);
+                }
+            } catch (err) {
+                mostrarAlerta('Erro ao comunicar com o servidor.', false);
+            } finally {
+                btnRenovar.disabled = false;
+                btnRenovar.innerHTML = '<i class="bi bi-arrow-repeat"></i> Renovar agora';
+            }
+        });
+    }
 })();
 </script>
 

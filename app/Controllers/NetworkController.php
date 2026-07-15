@@ -50,6 +50,7 @@ class NetworkController extends Controller
         $this->view('infrastructure/rede_editar', [
             'interface' => $interface,
             'atual'     => $this->service->configuracaoAtual($interface),
+            'detalhes'  => $this->service->detalhesInterface($interface),
         ]);
     }
 
