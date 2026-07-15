@@ -67,11 +67,7 @@ public class TrayApplicationContext : ApplicationContext
         AtualizarTooltip();
 
         _timer = new System.Windows.Forms.Timer { Interval = IntervaloEmMs() };
-        _timer.Tick += async (s, e) =>
-        {
-            await ColetarEEnviarAsync(manual: false);
-            await VerificarAtualizacaoAsync();
-        };
+        _timer.Tick += async (s, e) => await ColetarEEnviarAsync(manual: false);
 
         _heartbeatTimer = new System.Windows.Forms.Timer { Interval = HeartbeatIntervaloEmMs() };
         _heartbeatTimer.Tick += async (s, e) => await EnviarHeartbeatAsync();
@@ -86,7 +82,6 @@ public class TrayApplicationContext : ApplicationContext
             _timer.Start();
             _heartbeatTimer.Start();
             _ = ColetarEEnviarAsync(manual: false);
-            _ = VerificarAtualizacaoAsync();
         }
     }
 
@@ -232,6 +227,14 @@ public class TrayApplicationContext : ApplicationContext
             }
 
             ExecutarComandosPendentes(resultado.Comandos);
+
+            if (resultado.Sucesso)
+            {
+                // "manual" força a checagem na hora (ignora o limite de 12h) --
+                // clique explícito do usuário/admin é um bom momento pra
+                // confirmar que pegou a versão mais nova, sem esperar.
+                await VerificarAtualizacaoAsync(forcar: manual);
+            }
         }
         catch (Exception ex)
         {
@@ -280,18 +283,22 @@ public class TrayApplicationContext : ApplicationContext
     }
 
     /// <summary>
-    /// Checa (no máximo 1x a cada 12h -- não a cada checkin) se há uma
-    /// versão nova do .exe publicada no RD Intranet. Se houver, baixa pra
-    /// uma pasta temporária e entrega a troca do arquivo pra um script
-    /// auxiliar, porque um processo Windows não consegue sobrescrever o
-    /// próprio .exe em execução -- o script espera este processo encerrar
-    /// (Application.Exit logo em seguida), move o novo arquivo por cima
-    /// do antigo e reabre. Tudo best-effort: qualquer falha aqui só
-    /// significa "tenta de novo daqui a 12h", nunca derruba o agente.
+    /// Checa se há uma versão nova do .exe publicada no RD Intranet --
+    /// no máximo 1x a cada 12h em gatilhos automáticos (ciclo periódico,
+    /// "Forçar coleta agora" vindo do portal), mas na hora quando é um
+    /// clique manual ("Coletar agora"/duplo clique no ícone), pra dar um
+    /// jeito de checar sem esperar até 12h ao testar/diagnosticar. Se
+    /// houver versão nova, baixa pra uma pasta temporária e entrega a
+    /// troca do arquivo pra um script auxiliar, porque um processo
+    /// Windows não consegue sobrescrever o próprio .exe em execução -- o
+    /// script espera este processo encerrar (Application.Exit logo em
+    /// seguida), move o novo arquivo por cima do antigo e reabre. Tudo
+    /// best-effort: qualquer falha aqui só significa "tenta de novo no
+    /// próximo gatilho", nunca derruba o agente.
     /// </summary>
-    private async Task VerificarAtualizacaoAsync()
+    private async Task VerificarAtualizacaoAsync(bool forcar = false)
     {
-        if (_estado.UltimaVerificacaoAtualizacao.HasValue &&
+        if (!forcar && _estado.UltimaVerificacaoAtualizacao.HasValue &&
             (DateTime.Now - _estado.UltimaVerificacaoAtualizacao.Value) < TimeSpan.FromHours(12))
         {
             return;
@@ -317,6 +324,8 @@ public class TrayApplicationContext : ApplicationContext
             {
                 return;
             }
+
+            _icone.ShowBalloonTip(4000, "RD Intranet", $"Atualizando para a versão {versaoServidor}...", ToolTipIcon.Info);
 
             var exeAtual = Application.ExecutablePath;
             var scriptPath = Path.Combine(pastaAtualizacao, "atualizar.bat");

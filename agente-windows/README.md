@@ -237,9 +237,16 @@ em `%LocalAppData%\RDIntranetAgent\config.json`, por usuário).
   (`msiexec /X{guid} /quiet`), instaladores não-MSI rodam como estão
   e podem abrir uma tela no computador remoto -- não há garantia de
   silêncio total nesse caso.
-- Confere a cada 12h se há uma versão nova do próprio `.exe` publicada
-  no RD Intranet e se autoatualiza sozinho quando encontra (ver seção
-  acima).
+- Confere se há uma versão nova do próprio `.exe` publicada no RD
+  Intranet e se autoatualiza sozinho quando encontra -- a cada 12h em
+  gatilhos automáticos (ciclo periódico, "Forçar coleta agora" vindo do
+  portal), mas na hora sempre que alguém clica em "Coletar agora" ou dá
+  duplo clique no ícone (não espera as 12h -- útil pra confirmar uma
+  atualização sem ter que esperar ou reinstalar manualmente). Sem
+  confirmação em duas etapas -- não pergunta permissão antes de trocar
+  o próprio executável, de propósito: quem gerencia isso é o admin pelo
+  portal, não o usuário da máquina (mesmo critério de Desligar/Reiniciar
+  remoto, só com aviso, não com pedido de permissão).
 - Mostra no tooltip do ícone da bandeja: horário do último checkin e
   volume de dados enviado/recebido (última coleta + total acumulado).
 - Menu de contexto (botão direito no ícone): "Coletar agora",
