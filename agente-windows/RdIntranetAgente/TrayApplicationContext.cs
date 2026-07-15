@@ -127,7 +127,16 @@ public class TrayApplicationContext : ApplicationContext
 
             if (resultado.Sucesso && resultado.ForcarCheckin && !_coletando)
             {
-                _ = ColetarEEnviarAsync(manual: false);
+                // "Forçar coleta agora" clicado no PORTAL (não localmente no
+                // agente) chega aqui via forcar_checkin -- é um pedido
+                // explícito do admin tanto quanto um clique local, então
+                // também deve pular o limite de 12h da checagem de
+                // atualização (forcarVerificacaoAtualizacao), senão o botão
+                // do portal nunca serve pra confirmar que o agente pegou uma
+                // versão nova. manual=false continua controlando só o
+                // feedback local (balão/MessageBox), que não faz sentido
+                // aqui já que ninguém clicou em nada nesta máquina.
+                _ = ColetarEEnviarAsync(manual: false, forcarVerificacaoAtualizacao: true);
             }
 
             if (resultado.Sucesso && resultado.Solicitacoes.Count > 0)
@@ -225,7 +234,7 @@ public class TrayApplicationContext : ApplicationContext
         }
     }
 
-    private async Task ColetarEEnviarAsync(bool manual)
+    private async Task ColetarEEnviarAsync(bool manual, bool forcarVerificacaoAtualizacao = false)
     {
         if (_coletando)
         {
@@ -275,10 +284,11 @@ public class TrayApplicationContext : ApplicationContext
 
             if (resultado.Sucesso)
             {
-                // "manual" força a checagem na hora (ignora o limite de 12h) --
-                // clique explícito do usuário/admin é um bom momento pra
-                // confirmar que pegou a versão mais nova, sem esperar.
-                await VerificarAtualizacaoAsync(forcar: manual);
+                // "manual" (clique local) OU forcarVerificacaoAtualizacao
+                // (pedido explícito vindo do portal) força a checagem na
+                // hora (ignora o limite de 12h) -- os dois são um pedido
+                // explícito de alguém, só que um é local e o outro remoto.
+                await VerificarAtualizacaoAsync(forcar: manual || forcarVerificacaoAtualizacao);
             }
         }
         catch (Exception ex)
@@ -329,10 +339,11 @@ public class TrayApplicationContext : ApplicationContext
 
     /// <summary>
     /// Checa se há uma versão nova do .exe publicada no RD Intranet --
-    /// no máximo 1x a cada 12h em gatilhos automáticos (ciclo periódico,
-    /// "Forçar coleta agora" vindo do portal), mas na hora quando é um
-    /// clique manual ("Coletar agora"/duplo clique no ícone), pra dar um
-    /// jeito de checar sem esperar até 12h ao testar/diagnosticar. Se
+    /// no máximo 1x a cada 12h só no ciclo periódico automático (timer),
+    /// mas na hora quando é um pedido explícito de alguém -- clique manual
+    /// ("Coletar agora"/duplo clique no ícone) OU "Forçar coleta agora"
+    /// vindo do portal -- pra dar um jeito de confirmar a atualização sem
+    /// esperar até 12h ao testar/diagnosticar. Se
     /// houver versão nova, baixa pra uma pasta temporária e entrega a
     /// troca do arquivo pra um script auxiliar, porque um processo
     /// Windows não consegue sobrescrever o próprio .exe em execução -- o
