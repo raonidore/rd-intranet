@@ -69,6 +69,12 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
+SAIDA_PHP_UPLOAD=$(bash "$REPO_DIR/scripts/system/setup_php_upload_limits.sh" 2>&1)
+if [ $? -ne 0 ]; then
+  echo "{\"success\":false,\"message\":\"Codigo atualizado, mas falhou ao ajustar limites de upload do PHP: ${SAIDA_PHP_UPLOAD//\"/\\\"}\"}"
+  exit 1
+fi
+
 SAIDA_SAMBA=$(bash "$REPO_DIR/scripts/system/setup_samba_base.sh" "$REPO_DIR" 2>&1)
 if [ $? -ne 0 ]; then
   echo "{\"success\":false,\"message\":\"Codigo atualizado, mas falhou ao preparar base do Samba: ${SAIDA_SAMBA//\"/\\\"}\"}"

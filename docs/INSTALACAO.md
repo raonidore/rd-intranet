@@ -122,7 +122,11 @@ O script (`scripts/install.sh`) faz, nessa ordem:
    lê) -- com exceção de `storage/uploads`, `storage/cache` e
    `storage/logs`, que ficam com `www-data` como dono, porque são
    escritos em tempo de execução pela própria aplicação (upload de
-   arquivo, cache, log), não pelo deploy.
+   arquivo, cache, log), não pelo deploy. Também sobe os limites de
+   upload do PHP (`upload_max_filesize`/`post_max_size`, padrão do PHP é
+   só 2M/8M -- pequeno demais pro instalador do agente, do .NET Desktop
+   Runtime ou pra arquivos do Samba) via
+   `/etc/php/*/apache2/conf.d/99-rd-intranet-uploads.ini`.
 9. Cria o vhost do Apache em HTTP, mais um `Alias /rd.intranet` apontando
    pra `public/` — a aplicação usa `/rd.intranet` como prefixo de URL por
    padrão (`base_url` em `configuracoes`), e o `.htaccess` (`RewriteBase

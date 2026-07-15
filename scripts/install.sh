@@ -238,6 +238,11 @@ chmod -R u+rwX,g+rwX,o+rX-w "$REPO_DIR"
 # pra servidores que foram instalados antes desse ajuste existir.
 bash "$REPO_DIR/scripts/system/setup_storage_uploads.sh" "$REPO_DIR"
 
+# Padroes do PHP (upload_max_filesize=2M, post_max_size=8M) sao pequenos
+# demais pros uploads que a RD Intranet oferece (agente .exe, .NET
+# Desktop Runtime, arquivos do Samba) -- ver comentario no proprio script.
+bash "$REPO_DIR/scripts/system/setup_php_upload_limits.sh"
+
 # ---------------------------------------------------------------------
 # 9) Vhost Apache (HTTP; rode o modulo Certificado pela propria tela depois
 #    do primeiro login pra ativar HTTPS)
