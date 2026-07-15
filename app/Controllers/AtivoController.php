@@ -428,10 +428,39 @@ class AtivoController extends Controller
             }
             $alvo = $atualizacao['kb'];
             $alvoLabel = $atualizacao['kb'];
+        } elseif ($comando === 'executar_arquivo' || $comando === 'encerrar_processo') {
+            // Caminho/PID vem direto do resultado que o próprio agente já
+            // mandou (explorador de arquivos/processos) -- não tem um
+            // cadastro server-side pra buscar por id, como nos outros.
+            $alvo = trim((string)($_POST['alvo'] ?? ''));
+            $alvoLabel = trim((string)($_POST['alvo_label'] ?? '')) ?: null;
         }
 
         $resultado = $this->service->enviarComando($id, $comando, $usuario, $alvo, $alvoLabel);
 
         echo json_encode($resultado);
+    }
+
+    public function solicitarListagem(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $tipo = $_POST['tipo'] ?? '';
+        $parametro = trim((string)($_POST['parametro'] ?? '')) ?: null;
+
+        echo json_encode($this->service->solicitarListagem($id, $tipo, $parametro));
+    }
+
+    public function resultadoSolicitacao(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = (int)($_GET['id'] ?? 0);
+        $ativoId = (int)($_GET['ativo_id'] ?? 0);
+
+        echo json_encode($this->service->resultadoSolicitacao($id, $ativoId));
     }
 }

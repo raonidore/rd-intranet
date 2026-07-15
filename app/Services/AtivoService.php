@@ -719,7 +719,10 @@ class AtivoService
      |---------------------------------------------------------
      */
 
-    private const COMANDOS_VALIDOS = ['desligar', 'reiniciar', 'desinstalar_atualizacao', 'desinstalar_programa'];
+    private const COMANDOS_VALIDOS = [
+        'desligar', 'reiniciar', 'desinstalar_atualizacao', 'desinstalar_programa',
+        'executar_arquivo', 'encerrar_processo',
+    ];
 
     public function enviarComando(int $ativoId, string $comando, ?string $solicitadoPor, ?string $alvo = null, ?string $alvoLabel = null): array
     {
@@ -727,8 +730,12 @@ class AtivoService
             return ['success' => false, 'message' => 'Comando inválido.'];
         }
 
-        if (in_array($comando, ['desinstalar_atualizacao', 'desinstalar_programa'], true) && empty($alvo)) {
-            return ['success' => false, 'message' => 'Informe o que deve ser desinstalado.'];
+        if (in_array($comando, ['desinstalar_atualizacao', 'desinstalar_programa', 'executar_arquivo'], true) && empty($alvo)) {
+            return ['success' => false, 'message' => 'Informe o que deve ser desinstalado/executado.'];
+        }
+
+        if ($comando === 'encerrar_processo' && !ctype_digit((string)$alvo)) {
+            return ['success' => false, 'message' => 'PID inválido.'];
         }
 
         $ativo = $this->repository->buscarPorId($ativoId);
@@ -742,11 +749,19 @@ class AtivoService
 
         $this->repository->criarComando($ativoId, $comando, $solicitadoPor, $alvo, $alvoLabel);
 
+        // Comandos são entregues na resposta do checkin completo -- forçar
+        // um agora (mesmo canal do botão "Forçar coleta agora") evita
+        // esperar o ciclo normal, chega em poucos segundos via o próximo
+        // heartbeat em vez de até intervaloAproximado().
+        $this->repository->solicitarCheckin($ativoId);
+
         $labels = [
             'desligar' => 'Desligamento',
             'reiniciar' => 'Reinício',
             'desinstalar_atualizacao' => 'Desinstalação da atualização ' . $alvoLabel,
             'desinstalar_programa' => 'Desinstalação de ' . $alvoLabel,
+            'executar_arquivo' => 'Execução de ' . $alvoLabel,
+            'encerrar_processo' => 'Encerramento do processo ' . ($alvoLabel ?: $alvo),
         ];
         $label = $labels[$comando];
 
@@ -758,7 +773,7 @@ class AtivoService
 
         return [
             'success' => true,
-            'message' => "{$label} agendado(a). Será entregue ao agente na próxima coleta (em até " . $this->intervaloAproximado() . ").",
+            'message' => "{$label} agendado(a) -- deve chegar em poucos segundos (próximo heartbeat).",
         ];
     }
 
@@ -869,7 +884,17 @@ class AtivoService
             return ['success' => false, 'message' => 'Ativo ainda não cadastrado -- aguardando o primeiro check-in completo.'];
         }
 
-        return ['success' => true, 'forcar_checkin' => $resultado['forcar_checkin']];
+        $solicitacoes = $this->repository->solicitacoesPendentes($resultado['id']);
+
+        return [
+            'success' => true,
+            'forcar_checkin' => $resultado['forcar_checkin'],
+            'solicitacoes' => array_map(fn($s) => [
+                'id' => (int)$s['id'],
+                'tipo' => $s['tipo'],
+                'parametro' => $s['parametro'],
+            ], $solicitacoes),
+        ];
     }
 
     /**
@@ -898,6 +923,85 @@ class AtivoService
             'success' => true,
             'message' => 'Solicitado! Deve chegar em até ' . $this->heartbeatIntervaloSegundos() . 's (próximo heartbeat do agente).',
         ];
+    }
+
+    /*
+     |---------------------------------------------------------
+     | Explorador de arquivos / gerenciador de processos -- leitura com
+     | resposta, entregue e respondida pelo canal de heartbeat (poucos
+     | segundos de ida e volta, mesmo em máquinas remotas).
+     |---------------------------------------------------------
+     */
+
+    private const TIPOS_SOLICITACAO_VALIDOS = ['listar_arquivos', 'listar_processos'];
+
+    public function solicitarListagem(int $ativoId, string $tipo, ?string $parametro): array
+    {
+        if (!in_array($tipo, self::TIPOS_SOLICITACAO_VALIDOS, true)) {
+            return ['success' => false, 'message' => 'Tipo de solicitação inválido.'];
+        }
+
+        $ativo = $this->repository->buscarPorId($ativoId);
+        if (!$ativo) {
+            return ['success' => false, 'message' => 'Ativo não encontrado.'];
+        }
+
+        if ($ativo['origem'] !== 'agente') {
+            return ['success' => false, 'message' => 'Este ativo não tem o agente Windows instalado.'];
+        }
+
+        $id = $this->repository->criarSolicitacao($ativoId, $tipo, $parametro);
+
+        return ['success' => true, 'id' => $id];
+    }
+
+    public function resultadoSolicitacao(int $id, int $ativoId): array
+    {
+        $solicitacao = $this->repository->buscarSolicitacao($id);
+
+        if (!$solicitacao || (int)$solicitacao['ativo_id'] !== $ativoId) {
+            return ['success' => false, 'message' => 'Solicitação não encontrada.'];
+        }
+
+        if ($solicitacao['status'] === 'pendente') {
+            return ['success' => true, 'status' => 'pendente'];
+        }
+
+        if ($solicitacao['status'] === 'erro') {
+            return ['success' => true, 'status' => 'erro', 'mensagem' => $solicitacao['erro_mensagem']];
+        }
+
+        return [
+            'success' => true,
+            'status' => 'concluido',
+            'resultado' => json_decode($solicitacao['resultado'] ?? '', true) ?: [],
+        ];
+    }
+
+    /** Chamado pelo agente (autenticado por chave de API) devolvendo o resultado de uma solicitação. */
+    public function responderSolicitacao(string $machineGuid, int $id, array $payload): array
+    {
+        $ativo = $this->repository->buscarPorMachineGuid($machineGuid);
+        if (!$ativo) {
+            return ['success' => false, 'message' => 'Ativo não encontrado.'];
+        }
+
+        $solicitacao = $this->repository->buscarSolicitacao($id);
+        if (!$solicitacao || (int)$solicitacao['ativo_id'] !== (int)$ativo['id']) {
+            // Solicitacao de outro ativo -- nao deixa um agente responder
+            // por algo que nao e dele.
+            return ['success' => false, 'message' => 'Solicitação não encontrada.'];
+        }
+
+        if (!empty($payload['erro'])) {
+            $this->repository->marcarSolicitacaoErro($id, (string)$payload['erro']);
+            return ['success' => true];
+        }
+
+        $resultado = is_array($payload['resultado'] ?? null) ? $payload['resultado'] : [];
+        $this->repository->marcarSolicitacaoConcluida($id, json_encode($resultado, JSON_UNESCAPED_UNICODE));
+
+        return ['success' => true];
     }
 
     /**

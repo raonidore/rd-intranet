@@ -78,6 +78,32 @@ class AtivoAgenteController extends Controller
         echo json_encode($this->service->registrarHeartbeat($machineGuid));
     }
 
+    /** Agente devolve o resultado de uma solicitação (listar arquivos/processos) recebida no heartbeat. */
+    public function responderSolicitacao(): void
+    {
+        header('Content-Type: application/json');
+
+        $chaveEnviada = $_SERVER['HTTP_X_RD_AGENTE_CHAVE'] ?? '';
+
+        if ($chaveEnviada === '' || !hash_equals($this->service->chaveAgente(), $chaveEnviada)) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'message' => 'Chave de API inválida.']);
+            return;
+        }
+
+        $payload = json_decode(file_get_contents('php://input'), true);
+        $machineGuid = trim((string)($payload['machine_guid'] ?? ''));
+        $id = (int)($payload['id'] ?? 0);
+
+        if ($machineGuid === '' || $id <= 0) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'machine_guid e id são obrigatórios.']);
+            return;
+        }
+
+        echo json_encode($this->service->responderSolicitacao($machineGuid, $id, $payload));
+    }
+
     public function baixarScript(): void
     {
         AuthMiddleware::checkModulo('ativos_dashboard');

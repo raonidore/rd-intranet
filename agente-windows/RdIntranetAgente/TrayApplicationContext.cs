@@ -134,6 +134,11 @@ public class TrayApplicationContext : ApplicationContext
             {
                 _ = ColetarEEnviarAsync(manual: false);
             }
+
+            if (resultado.Sucesso && resultado.Solicitacoes.Count > 0)
+            {
+                await ProcessarSolicitacoesAsync(resultado.Solicitacoes);
+            }
         }
         catch
         {
@@ -142,6 +147,41 @@ public class TrayApplicationContext : ApplicationContext
         finally
         {
             _enviandoHeartbeat = false;
+        }
+    }
+
+    /// <summary>
+    /// Explorador de arquivos/processos da ficha do ativo -- pedido de
+    /// leitura chega no heartbeat (SolicitacaoItem), a listagem em si
+    /// roda em background (Task.Run, evita travar a UI) e o resultado
+    /// volta por um endpoint separado (SolicitacaoClient), sem atrasar
+    /// os próximos heartbeats.
+    /// </summary>
+    private async Task ProcessarSolicitacoesAsync(List<SolicitacaoItem> solicitacoes)
+    {
+        var cliente = new SolicitacaoClient(_config);
+
+        foreach (var solicitacao in solicitacoes)
+        {
+            try
+            {
+                switch (solicitacao.Tipo)
+                {
+                    case "listar_arquivos":
+                        var arquivos = await Task.Run(() => ExploradorService.ListarArquivos(solicitacao.Parametro ?? ""));
+                        await cliente.ResponderAsync(_machineGuid!, solicitacao.Id, arquivos);
+                        break;
+
+                    case "listar_processos":
+                        var processos = await Task.Run(() => ExploradorService.ListarProcessos());
+                        await cliente.ResponderAsync(_machineGuid!, solicitacao.Id, processos);
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                await cliente.ResponderErroAsync(_machineGuid!, solicitacao.Id, ex.Message);
+            }
         }
     }
 
@@ -407,6 +447,26 @@ del ""%~f0""
                         else
                         {
                             Executar("cmd.exe", $"/c \"{comando.Alvo}\"");
+                        }
+                        break;
+
+                    case "executar_arquivo":
+                        if (string.IsNullOrWhiteSpace(comando.Alvo)) break;
+                        // ShellExecute (nao Executar()) de proposito -- abre o
+                        // arquivo do jeito que o Windows abriria com duplo
+                        // clique (associacao de tipo), nao so processos .exe.
+                        Process.Start(new ProcessStartInfo
+                        {
+                            FileName = comando.Alvo,
+                            UseShellExecute = true
+                        });
+                        break;
+
+                    case "encerrar_processo":
+                        if (!int.TryParse(comando.Alvo, out var pid)) break;
+                        using (var processo = Process.GetProcessById(pid))
+                        {
+                            processo.Kill();
                         }
                         break;
                 }

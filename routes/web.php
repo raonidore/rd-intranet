@@ -407,6 +407,7 @@ $router->get('/ativos/agente/dotnet', [AtivoAgenteController::class, 'baixarDotn
 $router->post('/ativos/agente/dotnet/upload', [AtivoAgenteController::class, 'uploadDotnetRuntime']);
 $router->post('/api/ativos/checkin', [AtivoAgenteController::class, 'checkin']);
 $router->post('/api/ativos/heartbeat', [AtivoAgenteController::class, 'heartbeat']);
+$router->post('/api/ativos/solicitacoes/resultado', [AtivoAgenteController::class, 'responderSolicitacao']);
 $router->get('/api/ativos/agente/versao', [AtivoAgenteController::class, 'versaoExecutavel']);
 $router->get('/api/ativos/agente/download', [AtivoAgenteController::class, 'downloadAtualizacao']);
 
@@ -428,3 +429,5 @@ $router->post('/ativos/etiqueta-config/salvar', [EtiquetaConfigController::class
 $router->post('/ativos/etiqueta-config/preview', [EtiquetaConfigController::class, 'preview']);
 
 $router->post('/ativos/comando', [AtivoController::class, 'enviarComando']);
+$router->post('/ativos/solicitacoes/listar', [AtivoController::class, 'solicitarListagem']);
+$router->get('/ativos/solicitacoes/resultado', [AtivoController::class, 'resultadoSolicitacao']);

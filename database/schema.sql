@@ -3,7 +3,7 @@
 -- cria todas as tabelas ja no estado final, sem precisar repetir o
 -- historico incremental de database/migrations/ (algumas dessas
 -- migrations usam ALTER TABLE, que nao e seguro reaplicar aqui).
--- Gerado em 2026-07-15 03:23:08.
+-- Gerado em 2026-07-15 03:58:40.
 
 -- Import nao respeita ordem de dependencia entre tabelas (algumas tem FK
 -- pra tabelas que so aparecem depois neste arquivo) -- desliga a checagem
@@ -131,7 +131,7 @@ CREATE TABLE IF NOT EXISTS `ativos_catalogos` (
 CREATE TABLE IF NOT EXISTS `ativos_comandos` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `ativo_id` int(11) NOT NULL,
-  `comando` enum('desligar','reiniciar','desinstalar_atualizacao','desinstalar_programa') NOT NULL,
+  `comando` enum('desligar','reiniciar','desinstalar_atualizacao','desinstalar_programa','executar_arquivo','encerrar_processo') NOT NULL,
   `alvo` varchar(500) DEFAULT NULL,
   `alvo_label` varchar(255) DEFAULT NULL,
   `status` enum('pendente','entregue') NOT NULL DEFAULT 'pendente',
@@ -220,6 +220,24 @@ CREATE TABLE IF NOT EXISTS `ativos_redes` (
   PRIMARY KEY (`id`),
   KEY `idx_ativos_redes_ativo` (`ativo_id`),
   CONSTRAINT `fk_ativos_redes_ativo` FOREIGN KEY (`ativo_id`) REFERENCES `ativos` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
+-- ativos_solicitacoes
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `ativos_solicitacoes` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `ativo_id` int(11) NOT NULL,
+  `tipo` enum('listar_arquivos','listar_processos') NOT NULL,
+  `parametro` varchar(500) DEFAULT NULL,
+  `status` enum('pendente','concluido','erro') NOT NULL DEFAULT 'pendente',
+  `resultado` longtext DEFAULT NULL,
+  `erro_mensagem` varchar(500) DEFAULT NULL,
+  `solicitado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  `respondido_em` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_ativos_solicitacoes_ativo` (`ativo_id`),
+  CONSTRAINT `fk_ativos_solicitacoes_ativo` FOREIGN KEY (`ativo_id`) REFERENCES `ativos` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ----------------------------------------------------------------

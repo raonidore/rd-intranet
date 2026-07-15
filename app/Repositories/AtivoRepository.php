@@ -710,4 +710,64 @@ class AtivoRepository
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
+
+    /*
+     |---------------------------------------------------------
+     | Explorador de arquivos / processos -- leitura com resposta,
+     | entregue via heartbeat (ver AtivoService::registrarHeartbeat()).
+     |---------------------------------------------------------
+     */
+
+    public function criarSolicitacao(int $ativoId, string $tipo, ?string $parametro): int
+    {
+        $stmt = $this->pdo->prepare("
+            INSERT INTO ativos_solicitacoes (ativo_id, tipo, parametro)
+            VALUES (?, ?, ?)
+        ");
+        $stmt->execute([$ativoId, $tipo, $parametro]);
+
+        return (int)$this->pdo->lastInsertId();
+    }
+
+    public function buscarSolicitacao(int $id): ?array
+    {
+        $stmt = $this->pdo->prepare("SELECT * FROM ativos_solicitacoes WHERE id = ? LIMIT 1");
+        $stmt->execute([$id]);
+
+        $item = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $item ?: null;
+    }
+
+    public function solicitacoesPendentes(int $ativoId): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT id, tipo, parametro FROM ativos_solicitacoes
+            WHERE ativo_id = ? AND status = 'pendente'
+            ORDER BY id
+        ");
+        $stmt->execute([$ativoId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function marcarSolicitacaoConcluida(int $id, string $resultadoJson): void
+    {
+        $stmt = $this->pdo->prepare("
+            UPDATE ativos_solicitacoes
+               SET status = 'concluido', resultado = ?, respondido_em = NOW()
+             WHERE id = ? AND status = 'pendente'
+        ");
+        $stmt->execute([$resultadoJson, $id]);
+    }
+
+    public function marcarSolicitacaoErro(int $id, string $mensagem): void
+    {
+        $stmt = $this->pdo->prepare("
+            UPDATE ativos_solicitacoes
+               SET status = 'erro', erro_mensagem = ?, respondido_em = NOW()
+             WHERE id = ? AND status = 'pendente'
+        ");
+        $stmt->execute([$mensagem, $id]);
+    }
 }

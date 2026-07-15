@@ -15,6 +15,12 @@ $statusCores = [
 $detalhes = $ativo['detalhes'] ?? [];
 $camposTipo = AtivoService::CAMPOS_DETALHES[$ativo['tipo']] ?? [];
 
+// Explorador de arquivos/processos depende do heartbeat (poucos segundos
+// de ida e volta) -- o script .ps1 roda como Tarefa Agendada (sem
+// processo residente) e nunca manda heartbeat, então nunca vai responder
+// a essas solicitações. Só oferece pra quem está no agente de bandeja (.exe).
+$agenteSuportaExplorador = $ativo['origem'] === 'agente' && ($ativo['agente_versao'] ?? '') !== 'ps1';
+
 // Campos de "Componentes" ficam numa aba própria -- o resto dos
 // detalhes técnicos (SO, funcao, snmp, etc.) fica na Visão Geral.
 $camposComponentes = ['processador', 'memoria_ram', 'tipo_memoria', 'placa_mae', 'placa_video', 'placa_som', 'armazenamento'];
@@ -66,6 +72,45 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
 }
 .gauge-valor { position: relative; z-index: 1; font-weight: 700; font-size: 15px; font-family: 'SFMono-Regular', Consolas, monospace; }
 .gauge-label { font-size: 13px; font-weight: 600; }
+
+/* Explorador de arquivos / gerenciador de processos -- painel escuro,
+   monoespaçado, visual "console remoto" pra deixar claro que é uma
+   sessão ao vivo com a máquina, não um relatório estático. */
+.hitech-panel {
+    background: #0d1117; border-radius: 12px; border: 1px solid #30363d;
+    box-shadow: 0 0 24px rgba(88,166,255,.08);
+    font-family: 'SFMono-Regular', Consolas, 'Courier New', monospace;
+    color: #c9d1d9; overflow: hidden;
+}
+.hitech-topbar {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 10px 14px; background: #161b22; border-bottom: 1px solid #30363d;
+}
+.hitech-breadcrumb { font-size: 13px; color: #58a6ff; overflow-x: auto; white-space: nowrap; }
+.hitech-breadcrumb .segmento { cursor: pointer; padding: 2px 4px; border-radius: 4px; }
+.hitech-breadcrumb .segmento:hover { background: rgba(88,166,255,.15); text-decoration: underline; }
+.hitech-breadcrumb .separador { color: #6e7681; margin: 0 2px; }
+.hitech-body { max-height: 420px; overflow-y: auto; }
+.hitech-table { width: 100%; font-size: 13px; border-collapse: collapse; }
+.hitech-table th {
+    position: sticky; top: 0; background: #161b22; color: #8b949e;
+    text-transform: uppercase; font-size: 10px; letter-spacing: .04em;
+    padding: 8px 12px; text-align: left; border-bottom: 1px solid #30363d; z-index: 1;
+}
+.hitech-table td { padding: 7px 12px; border-bottom: 1px solid #21262d; vertical-align: middle; }
+.hitech-table tr.linha-pasta { cursor: pointer; }
+.hitech-table tr.linha-pasta:hover, .hitech-table tr.linha-processo:hover { background: rgba(88,166,255,.07); }
+.hitech-table .icone-pasta { color: #58a6ff; }
+.hitech-table .icone-arquivo { color: #8b949e; }
+.hitech-empty, .hitech-loading, .hitech-erro { padding: 32px 16px; text-align: center; color: #8b949e; font-size: 13px; }
+.hitech-erro { color: #f85149; }
+.hitech-loading .spinner-border { color: #58a6ff; width: 1.6rem; height: 1.6rem; }
+.hitech-btn {
+    background: transparent; border: 1px solid #30363d; color: #c9d1d9;
+    border-radius: 6px; padding: 3px 9px; font-size: 12px; font-family: inherit;
+}
+.hitech-btn:hover { border-color: #58a6ff; color: #58a6ff; }
+.hitech-btn-danger:hover { border-color: #f85149; color: #f85149; }
 </style>
 
 <?= Alert::flash() ?>
@@ -180,6 +225,11 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     <li class="nav-item" role="presentation">
         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaAtualizacoes" type="button">Atualizações do Windows <?= !empty($atualizacoesWindows) ? '<span class="badge text-bg-secondary ms-1">' . count($atualizacoesWindows) . '</span>' : '' ?></button>
     </li>
+    <?php if ($ativo['origem'] === 'agente'): ?>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaProcessos" type="button"><i class="bi bi-cpu"></i> Processos</button>
+    </li>
+    <?php endif; ?>
 </ul>
 
 <div class="tab-content">
@@ -343,6 +393,16 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                         <?php if (!empty($v['modelo_disco'])): ?><div class="text-muted">Modelo: <?= htmlspecialchars($v['modelo_disco']) ?></div><?php endif; ?>
                                         <?php if (!empty($v['fabricante_disco'])): ?><div class="text-muted">Fabricante: <?= htmlspecialchars($v['fabricante_disco']) ?></div><?php endif; ?>
                                         <?php if (!empty($v['serial_disco'])): ?><div class="text-muted">Série: <?= htmlspecialchars($v['serial_disco']) ?></div><?php endif; ?>
+                                    </div>
+                                <?php endif; ?>
+                                <?php if ($agenteSuportaExplorador): ?>
+                                    <button type="button" class="btn btn-sm btn-outline-primary mt-2 botao-explorar-volume"
+                                            data-unidade="<?= htmlspecialchars($v['unidade']) ?>">
+                                        <i class="bi bi-folder2-open"></i> Explorar arquivos
+                                    </button>
+                                <?php elseif ($ativo['origem'] === 'agente'): ?>
+                                    <div class="text-muted mt-2" style="font-size:10px" title="Precisa do agente de bandeja (.exe), não do script .ps1">
+                                        <i class="bi bi-folder2"></i> Explorar arquivos indisponível (.ps1)
                                     </div>
                                 <?php endif; ?>
                             </div>
@@ -513,6 +573,38 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     </div>
 
     <?php if ($ativo['origem'] === 'agente'): ?>
+    <!-- Processos -->
+    <div class="tab-pane fade" id="abaProcessos">
+        <?php if (!$agenteSuportaExplorador): ?>
+            <div class="alert alert-warning small mb-0">
+                <i class="bi bi-exclamation-triangle"></i> Este ativo está usando o script <code>.ps1</code>, que roda
+                como Tarefa Agendada (sem processo residente) e não manda o heartbeat necessário pra essa função.
+                Instale o agente de bandeja (.exe) nesta máquina pra ter o gerenciador de processos ao vivo.
+            </div>
+        <?php else: ?>
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <p class="text-muted small mb-0">
+                <i class="bi bi-info-circle"></i> Ao vivo -- pede a lista de processos rodando agora nessa máquina, na hora.
+                Encerrar um processo é imediato e sem aviso ao usuário (diferente de Desligar/Reiniciar).
+            </p>
+            <button type="button" class="btn btn-sm hitech-btn" id="botaoAtualizarProcessos">
+                <i class="bi bi-arrow-repeat"></i> Atualizar
+            </button>
+        </div>
+        <div class="hitech-panel">
+            <div class="hitech-topbar">
+                <span class="hitech-breadcrumb"><i class="bi bi-terminal"></i> Gerenciador de processos</span>
+                <span class="text-muted small" id="totalProcessos"></span>
+            </div>
+            <div class="hitech-body" id="corpoProcessos">
+                <div class="hitech-loading"><div class="spinner-border" role="status"></div><div class="mt-2">Consultando processos...</div></div>
+            </div>
+        </div>
+        <?php endif; ?>
+    </div>
+    <?php endif; ?>
+
+    <?php if ($ativo['origem'] === 'agente'): ?>
         <div class="card border-0 shadow-sm mt-3">
             <div class="card-header bg-white"><strong>Comandos remotos</strong></div>
             <div class="card-body p-0">
@@ -583,6 +675,28 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             <div class="modal-body p-0 d-flex align-items-center justify-content-center bg-dark" id="corpoTelaRemota">
                 <div class="text-white-50" id="statusTelaRemota">
                     <i class="bi bi-hourglass-split"></i> Abrindo sessão remota via MeshCentral...
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal do Explorador de Arquivos -->
+<div class="modal fade" id="modalExplorador" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content bg-transparent border-0">
+            <div class="modal-header border-0 pb-0">
+                <h6 class="modal-title text-white"><i class="bi bi-folder2-open"></i> Explorador de arquivos -- <?= htmlspecialchars($ativo['nome']) ?></h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body pt-2">
+                <div class="hitech-panel">
+                    <div class="hitech-topbar">
+                        <div class="hitech-breadcrumb" id="breadcrumbExplorador"></div>
+                    </div>
+                    <div class="hitech-body" id="corpoExplorador">
+                        <div class="hitech-loading"><div class="spinner-border" role="status"></div><div class="mt-2">Consultando arquivos...</div></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -695,6 +809,327 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     modalEl.addEventListener('hidden.bs.modal', function () {
         corpo.innerHTML = statusInicial;
     });
+})();
+
+/**
+ * Solicita uma leitura ao vivo (listar_arquivos/listar_processos) e
+ * espera o agente responder via heartbeat -- ver AtivoService::
+ * solicitarListagem()/resultadoSolicitacao(). Compartilhado pelo
+ * explorador de arquivos e pelo gerenciador de processos abaixo.
+ */
+async function pedirEAguardarSolicitacao(ativoId, tipo, parametro) {
+    const dadosSolicitar = new URLSearchParams();
+    dadosSolicitar.set('id', ativoId);
+    dadosSolicitar.set('tipo', tipo);
+    if (parametro !== null) dadosSolicitar.set('parametro', parametro);
+
+    const resSolicitar = await fetch(<?= json_encode(url('/ativos/solicitacoes/listar')) ?>, { method: 'POST', body: dadosSolicitar });
+    const dadosResultado = await resSolicitar.json();
+
+    if (!dadosResultado.success) {
+        throw new Error(dadosResultado.message || 'Falha ao solicitar.');
+    }
+
+    const id = dadosResultado.id;
+    const inicio = Date.now();
+
+    while (Date.now() - inicio < 20000) {
+        await new Promise(function (resolve) { setTimeout(resolve, 700); });
+
+        const resPoll = await fetch(<?= json_encode(url('/ativos/solicitacoes/resultado')) ?> + '?id=' + id + '&ativo_id=' + ativoId);
+        const poll = await resPoll.json();
+
+        if (!poll.success) throw new Error(poll.message || 'Falha ao consultar resultado.');
+        if (poll.status === 'concluido') return poll.resultado;
+        if (poll.status === 'erro') throw new Error(poll.mensagem || 'O agente reportou um erro.');
+        // status "pendente" -- continua esperando
+    }
+
+    throw new Error('Sem resposta do agente em 20s (a máquina está ligada e conectada?).');
+}
+
+(function () {
+    const botoes = document.querySelectorAll('.botao-explorar-volume');
+    if (!botoes.length) return;
+
+    const modalEl = document.getElementById('modalExplorador');
+    const breadcrumbEl = document.getElementById('breadcrumbExplorador');
+    const corpoEl = document.getElementById('corpoExplorador');
+    const ativoId = <?= (int)$ativo['id'] ?>;
+
+    let caminhoAtual = '';
+
+    function formatarTamanho(bytes) {
+        if (bytes === null || bytes === undefined) return '';
+        const unidades = ['B', 'KB', 'MB', 'GB'];
+        let valor = bytes, i = 0;
+        while (valor >= 1024 && i < unidades.length - 1) { valor /= 1024; i++; }
+        return valor.toFixed(i === 0 ? 0 : 1) + ' ' + unidades[i];
+    }
+
+    function renderBreadcrumb(caminho) {
+        const partes = caminho.replace(/\\+$/, '').split('\\').filter(Boolean);
+        breadcrumbEl.innerHTML = '';
+
+        if (!partes.length) {
+            breadcrumbEl.textContent = caminho;
+            return;
+        }
+
+        let acumulado = '';
+        partes.forEach(function (parte, i) {
+            acumulado += parte + '\\';
+            const caminhoDoSegmento = acumulado;
+
+            const span = document.createElement('span');
+            span.className = 'segmento';
+            span.textContent = parte;
+            span.addEventListener('click', function () { carregarPasta(caminhoDoSegmento); });
+            breadcrumbEl.appendChild(span);
+
+            if (i < partes.length - 1) {
+                const sep = document.createElement('span');
+                sep.className = 'separador';
+                sep.textContent = '\\';
+                breadcrumbEl.appendChild(sep);
+            }
+        });
+    }
+
+    function renderTabela(itens) {
+        if (!itens.length) {
+            corpoEl.innerHTML = '<div class="hitech-empty">Pasta vazia.</div>';
+            return;
+        }
+
+        const tabela = document.createElement('table');
+        tabela.className = 'hitech-table';
+        const thead = document.createElement('thead');
+        thead.innerHTML = '<tr><th>Nome</th><th>Tamanho</th><th>Modificado</th><th></th></tr>';
+        const tbody = document.createElement('tbody');
+
+        itens.forEach(function (item) {
+            const tr = document.createElement('tr');
+            const tdNome = document.createElement('td');
+            const icone = document.createElement('i');
+            const tdTamanho = document.createElement('td');
+            const tdModificado = document.createElement('td');
+            const tdAcao = document.createElement('td');
+
+            tdTamanho.className = 'text-muted';
+            tdModificado.className = 'text-muted';
+            tdAcao.className = 'text-end';
+            tdModificado.textContent = item.modificado_em || '';
+
+            if (item.tipo === 'pasta') {
+                tr.className = 'linha-pasta';
+                icone.className = 'bi bi-folder-fill icone-pasta';
+                tdNome.appendChild(icone);
+                tdNome.appendChild(document.createTextNode(' ' + item.nome));
+                tdTamanho.textContent = '--';
+
+                tr.addEventListener('click', function () {
+                    const separador = caminhoAtual.endsWith('\\') ? '' : '\\';
+                    carregarPasta(caminhoAtual + separador + item.nome);
+                });
+            } else {
+                icone.className = 'bi bi-file-earmark icone-arquivo';
+                tdNome.appendChild(icone);
+                tdNome.appendChild(document.createTextNode(' ' + item.nome));
+                tdTamanho.textContent = formatarTamanho(item.tamanho);
+
+                const botaoExecutar = document.createElement('button');
+                botaoExecutar.type = 'button';
+                botaoExecutar.className = 'hitech-btn';
+                botaoExecutar.innerHTML = '<i class="bi bi-play-fill"></i> Executar';
+                botaoExecutar.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    const separador = caminhoAtual.endsWith('\\') ? '' : '\\';
+                    executarArquivo(caminhoAtual + separador + item.nome, item.nome);
+                });
+                tdAcao.appendChild(botaoExecutar);
+            }
+
+            tr.appendChild(tdNome);
+            tr.appendChild(tdTamanho);
+            tr.appendChild(tdModificado);
+            tr.appendChild(tdAcao);
+            tbody.appendChild(tr);
+        });
+
+        tabela.appendChild(thead);
+        tabela.appendChild(tbody);
+        corpoEl.innerHTML = '';
+        corpoEl.appendChild(tabela);
+    }
+
+    async function carregarPasta(caminho) {
+        caminhoAtual = caminho;
+        renderBreadcrumb(caminho);
+        corpoEl.innerHTML = '<div class="hitech-loading"><div class="spinner-border" role="status"></div><div class="mt-2">Consultando...</div></div>';
+
+        try {
+            const itens = await pedirEAguardarSolicitacao(ativoId, 'listar_arquivos', caminho);
+            renderTabela(itens);
+        } catch (e) {
+            corpoEl.innerHTML = '';
+            const div = document.createElement('div');
+            div.className = 'hitech-erro';
+            div.innerHTML = '<i class="bi bi-exclamation-triangle"></i> ';
+            div.append(e.message);
+            corpoEl.appendChild(div);
+        }
+    }
+
+    async function executarArquivo(caminhoCompleto, nome) {
+        if (!confirm('Executar "' + nome + '" remotamente nesta máquina agora?\n\nCaminho completo:\n' + caminhoCompleto + '\n\nO arquivo roda imediatamente, sem confirmação na tela do usuário.')) {
+            return;
+        }
+
+        const dados = new URLSearchParams();
+        dados.set('id', ativoId);
+        dados.set('comando', 'executar_arquivo');
+        dados.set('alvo', caminhoCompleto);
+        dados.set('alvo_label', nome);
+
+        try {
+            const res = await fetch(<?= json_encode(url('/ativos/comando')) ?>, { method: 'POST', body: dados });
+            const resultado = await res.json();
+            alert(resultado.message || (resultado.success ? 'Enviado.' : 'Falha ao enviar.'));
+        } catch (e) {
+            alert('Erro ao comunicar com o servidor.');
+        }
+    }
+
+    botoes.forEach(function (botao) {
+        botao.addEventListener('click', function () {
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+            carregarPasta(botao.dataset.unidade + '\\');
+        });
+    });
+})();
+
+(function () {
+    const botaoAtualizar = document.getElementById('botaoAtualizarProcessos');
+    if (!botaoAtualizar) return;
+
+    const corpoEl = document.getElementById('corpoProcessos');
+    const totalEl = document.getElementById('totalProcessos');
+    const ativoId = <?= (int)$ativo['id'] ?>;
+    let jaCarregouUmaVez = false;
+
+    function renderTabela(itens) {
+        totalEl.textContent = itens.length + ' processo(s)';
+
+        if (!itens.length) {
+            corpoEl.innerHTML = '<div class="hitech-empty">Nenhum processo retornado.</div>';
+            return;
+        }
+
+        const tabela = document.createElement('table');
+        tabela.className = 'hitech-table';
+        const thead = document.createElement('thead');
+        thead.innerHTML = '<tr><th>PID</th><th>Nome</th><th>Memória</th><th>Janela</th><th>Iniciado em</th><th></th></tr>';
+        const tbody = document.createElement('tbody');
+
+        itens.forEach(function (item) {
+            const tr = document.createElement('tr');
+            tr.className = 'linha-processo';
+
+            const tdPid = document.createElement('td');
+            tdPid.className = 'text-muted';
+            tdPid.textContent = item.pid;
+
+            const tdNome = document.createElement('td');
+            const icone = document.createElement('i');
+            icone.className = 'bi bi-cpu-fill icone-arquivo';
+            tdNome.appendChild(icone);
+            tdNome.appendChild(document.createTextNode(' ' + item.nome));
+
+            const tdMemoria = document.createElement('td');
+            tdMemoria.className = 'text-muted';
+            tdMemoria.textContent = item.memoria_mb + ' MB';
+
+            const tdJanela = document.createElement('td');
+            tdJanela.className = 'text-muted small';
+            tdJanela.textContent = item.janela || '—';
+
+            const tdIniciado = document.createElement('td');
+            tdIniciado.className = 'text-muted small';
+            tdIniciado.textContent = item.iniciado_em || '—';
+
+            const tdAcao = document.createElement('td');
+            tdAcao.className = 'text-end';
+            const botaoEncerrar = document.createElement('button');
+            botaoEncerrar.type = 'button';
+            botaoEncerrar.className = 'hitech-btn hitech-btn-danger';
+            botaoEncerrar.innerHTML = '<i class="bi bi-x-lg"></i> Encerrar';
+            botaoEncerrar.addEventListener('click', function () { encerrarProcesso(item.pid, item.nome); });
+            tdAcao.appendChild(botaoEncerrar);
+
+            tr.appendChild(tdPid);
+            tr.appendChild(tdNome);
+            tr.appendChild(tdMemoria);
+            tr.appendChild(tdJanela);
+            tr.appendChild(tdIniciado);
+            tr.appendChild(tdAcao);
+            tbody.appendChild(tr);
+        });
+
+        tabela.appendChild(thead);
+        tabela.appendChild(tbody);
+        corpoEl.innerHTML = '';
+        corpoEl.appendChild(tabela);
+    }
+
+    async function carregarProcessos() {
+        corpoEl.innerHTML = '<div class="hitech-loading"><div class="spinner-border" role="status"></div><div class="mt-2">Consultando processos...</div></div>';
+        totalEl.textContent = '';
+
+        try {
+            const itens = await pedirEAguardarSolicitacao(ativoId, 'listar_processos', null);
+            renderTabela(itens);
+        } catch (e) {
+            corpoEl.innerHTML = '';
+            const div = document.createElement('div');
+            div.className = 'hitech-erro';
+            div.innerHTML = '<i class="bi bi-exclamation-triangle"></i> ';
+            div.append(e.message);
+            corpoEl.appendChild(div);
+        }
+    }
+
+    async function encerrarProcesso(pid, nome) {
+        if (!confirm('Encerrar o processo "' + nome + '" (PID ' + pid + ') agora?\n\nIsso é imediato -- se tiver trabalho não salvo nesse programa, será perdido.')) {
+            return;
+        }
+
+        const dados = new URLSearchParams();
+        dados.set('id', ativoId);
+        dados.set('comando', 'encerrar_processo');
+        dados.set('alvo', pid);
+        dados.set('alvo_label', nome);
+
+        try {
+            const res = await fetch(<?= json_encode(url('/ativos/comando')) ?>, { method: 'POST', body: dados });
+            const resultado = await res.json();
+            alert(resultado.message || (resultado.success ? 'Enviado.' : 'Falha ao enviar.'));
+        } catch (e) {
+            alert('Erro ao comunicar com o servidor.');
+        }
+    }
+
+    botaoAtualizar.addEventListener('click', carregarProcessos);
+
+    const abaProcessosBotao = document.querySelector('[data-bs-target="#abaProcessos"]');
+    if (abaProcessosBotao) {
+        abaProcessosBotao.addEventListener('shown.bs.tab', function () {
+            if (!jaCarregouUmaVez) {
+                jaCarregouUmaVez = true;
+                carregarProcessos();
+            }
+        });
+    }
 })();
 
 (function () {

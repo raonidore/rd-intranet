@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -10,6 +11,20 @@ public class ResultadoHeartbeat
 {
     public bool Sucesso { get; set; }
     public bool ForcarCheckin { get; set; }
+    public List<SolicitacaoItem> Solicitacoes { get; set; } = new();
+}
+
+/// <summary>Pedido de leitura pendente (explorador de arquivos/processos) entregue no heartbeat.</summary>
+public class SolicitacaoItem
+{
+    [JsonPropertyName("id")]
+    public int Id { get; set; }
+
+    [JsonPropertyName("tipo")]
+    public string Tipo { get; set; } = "";
+
+    [JsonPropertyName("parametro")]
+    public string? Parametro { get; set; }
 }
 
 /// <summary>
@@ -62,7 +77,8 @@ public class HeartbeatClient
             return new ResultadoHeartbeat
             {
                 Sucesso = corpo?.Success ?? false,
-                ForcarCheckin = corpo?.ForcarCheckin ?? false
+                ForcarCheckin = corpo?.ForcarCheckin ?? false,
+                Solicitacoes = corpo?.Solicitacoes ?? new List<SolicitacaoItem>()
             };
         }
         catch
@@ -79,5 +95,8 @@ public class HeartbeatClient
 
         [JsonPropertyName("forcar_checkin")]
         public bool ForcarCheckin { get; set; }
+
+        [JsonPropertyName("solicitacoes")]
+        public List<SolicitacaoItem>? Solicitacoes { get; set; }
     }
 }

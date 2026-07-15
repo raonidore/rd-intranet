@@ -117,6 +117,33 @@ por isso aguenta esse intervalo curto sem pesar.
   usuário nem derruba o agente, só tenta de novo no próximo tick (1s
   depois, por padrão).
 
+## Explorador de arquivos e gerenciador de processos remoto
+
+Na ficha do ativo (**Ativos > Lista > Ver**), aba "Volumes lógicos" tem
+um botão "Explorar arquivos" por unidade, e a aba "Processos" lista o
+que está rodando na hora -- os dois pedem uma leitura ao vivo pelo mesmo
+canal do heartbeat (`SolicitacaoItem` na resposta, `ExploradorService`
+faz a leitura local, `SolicitacaoClient` devolve o resultado por
+`POST /api/ativos/solicitacoes/resultado` em segundos). Dá pra executar
+um arquivo (o Windows decide como abrir, igual duplo clique) ou encerrar
+um processo direto da tela -- os dois reaproveitam o sistema de comandos
+remotos já existente (mesma fila/confirmação de Desligar/Reiniciar,
+entrega forçada via `solicitarCheckin()` assim que o comando é
+enviado).
+
+**Poder de verdade, use com critério**: quem tiver acesso ao módulo
+Ativos com permissão de enviar comando (`ativos_novo`) consegue rodar
+qualquer arquivo ou encerrar qualquer processo em qualquer máquina com
+o agente instalado -- é essencialmente controle remoto total. Não tem
+confirmação em duas etapas nem aviso na tela do usuário (diferente de
+Desligar/Reiniciar, que tem um contador de 5 minutos visível). Trate o
+acesso a esse módulo com o mesmo cuidado que uma conta de administrador
+de domínio.
+
+Exclusivo do agente de bandeja (.exe) -- depende do heartbeat, que o
+`.ps1` não tem (ver seção acima). A tela avisa isso quando o ativo
+estiver rodando o script em vez do `.exe`.
+
 ## Impressão de etiquetas Zebra (TLP2844, GC420t, ZD420t)
 
 O agente também funciona como "ponte" entre o navegador e uma impressora
@@ -179,7 +206,16 @@ em `%LocalAppData%\RDIntranetAgent\config.json`, por usuário).
 - Registra-se pra iniciar com o Windows (`HKCU\...\Run`, sem precisar
   de admin).
 - A cada N segundos (configurável, padrão 1), manda o heartbeat de
-  "estou ligado" -- ver seção própria acima.
+  "estou ligado" -- ver seção própria acima. O mesmo canal entrega
+  pedidos de leitura ao vivo da ficha do ativo: explorador de arquivos
+  (aba Volumes lógicos > "Explorar arquivos" por unidade,
+  `ExploradorService.ListarArquivos`) e gerenciador de processos (aba
+  Processos, `ExploradorService.ListarProcessos`) -- listagem roda sob
+  demanda, resultado volta em segundos por `SolicitacaoClient`. Exclusivo
+  do agente de bandeja -- o `.ps1` não manda heartbeat, então não
+  responde a esses pedidos (a tela avisa isso pro admin). Executar um
+  arquivo ou encerrar um processo reaproveita o sistema de comandos
+  remotos já existente (mesma entrega/confirmação de Desligar/Reiniciar).
 - A cada N minutos (configurável em Ativos > Dashboard no RD Intranet,
   padrão 15), coleta hardware/SO, uptime (ligado desde), componentes
   (processador, memória total/em uso, tipo de memória, placa-mãe,
