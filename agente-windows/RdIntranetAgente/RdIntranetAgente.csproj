@@ -25,7 +25,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Embutido no proprio .exe (funciona com PublishSingleFile) -- usado na tela de start (SplashForm.cs). -->
+    <!-- Embutido no proprio .exe (funciona com PublishSingleFile), usado na tela de start (SplashForm.cs). -->
     <EmbeddedResource Include="assets/logo.png" />
   </ItemGroup>
 
