@@ -100,6 +100,31 @@ class SambaDiagnosticoService
         ];
     }
 
+    /**
+     * Logs mais completos que a seção "logs recentes" do diagnóstico
+     * padrão -- pensado pra investigar um incidente pontual (ex: conexão
+     * caindo no meio de uma operação) sem precisar de SSH: journalctl do
+     * smbd (janela maior), erro do Apache desta aplicação, indício de
+     * crash real (core dump) e o log individual de cada cliente que já
+     * conectou (Samba grava um arquivo por hostname/IP).
+     */
+    public function logsCompletos(): array
+    {
+        $resultado = $this->linux->executarScript(
+            '/opt/rdtecnologia/scripts/logs_completos_samba_web.sh'
+        );
+
+        $output = $resultado['output'] ?? '';
+
+        return [
+            'success' => $resultado['success'],
+            'journalctl_smbd' => $this->extrairSecao($output, 'JOURNALCTL_SMBD'),
+            'apache_error' => $this->extrairSecao($output, 'APACHE_ERROR'),
+            'core_dumps' => $this->extrairSecao($output, 'CORE_DUMPS'),
+            'logs_por_cliente' => $this->extrairSecao($output, 'LOGS_POR_CLIENTE'),
+        ];
+    }
+
     private function extrairPastas(string $output): array
     {
         $secao = $this->extrairSecao($output, 'PASTAS');

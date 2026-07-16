@@ -162,13 +162,26 @@ class SambaCompartilhamentoService
         return true;
     }
 
-    public function salvarUsuarios(int $id, array $post): bool
+    private const STATUS_DIR = '/var/www/rd.intranet/storage/samba_acl_status';
+
+    /**
+     * Dispara a aplicação da ACL em SEGUNDO PLANO -- pra um compartilhamento
+     * com árvore grande, --propagate-inheritance (ver
+     * aplicar_acl_compartilhamento_web.sh) é uma operação item a item via
+     * SMB que pode levar minutos, tempo demais pra segurar a requisição
+     * HTTP (foi isso, não um erro de ACL em si, que causou
+     * NT_STATUS_CONNECTION_DISCONNECTED em produção quando essa chamada
+     * ainda era síncrona). O estado autorizado (banco) é salvo na hora;
+     * o progresso da aplicação no sistema de arquivos é acompanhado à
+     * parte via statusAplicacaoAcl() (polling, ver
+     * usuariosStatus()/samba_acl_status/*.json).
+     */
+    public function salvarUsuarios(int $id, array $post): array
     {
         $compartilhamento = $this->buscar($id);
 
         if (!$compartilhamento) {
-            NotificationService::error('Compartilhamento não encontrado.');
-            return false;
+            return ['success' => false, 'message' => 'Compartilhamento não encontrado.'];
         }
 
         $usuarios = [];
@@ -193,26 +206,15 @@ class SambaCompartilhamentoService
             }
         }
 
-        $resultadoAcl = $this->linux->executarScript(
-            '/opt/rdtecnologia/scripts/aplicar_acl_compartilhamento_web.sh',
-            array_merge([$compartilhamento['nome'], $compartilhamento['grupo']], $tokensAcl)
-        );
-
-        if (!$resultadoAcl['success']) {
-            if (str_contains($resultadoAcl['output'], 'NT_STATUS_BAD_NETWORK_NAME')) {
-                NotificationService::error(
-                    'Este compartilhamento ainda não foi aplicado na configuração do Samba -- '
-                        . 'vá em Deploy (menu lateral) e clique em "Aplicar Configuração" antes '
-                        . 'de definir permissões de usuário nele.',
-                    $resultadoAcl['output']
-                );
-            } else {
-                NotificationService::error('Erro ao aplicar permissões no sistema.', $resultadoAcl['output']);
-            }
-            return false;
-        }
-
         $this->repository->salvarUsuariosAutorizados($id, $usuarios);
+
+        $this->linux->executarScriptEmSegundoPlano(
+            '/opt/rdtecnologia/scripts/aplicar_acl_compartilhamento_web.sh',
+            array_merge(
+                [$compartilhamento['nome'], $compartilhamento['grupo'], $compartilhamento['caminho']],
+                $tokensAcl
+            )
+        );
 
         (new DeployCenterService())->marcarPendente(
             'samba',
@@ -227,9 +229,45 @@ class SambaCompartilhamentoService
             'Usuários do compartilhamento '.$compartilhamento['nome'].' atualizados.'
         );
 
-        NotificationService::success('Usuários autorizados atualizados. Alterações pendentes para deploy.');
+        return [
+            'success' => true,
+            'message' => 'Usuários autorizados salvos. Aplicando permissões no sistema de arquivos em segundo plano...',
+            'compartilhamento' => $compartilhamento['nome'],
+        ];
+    }
 
-        return true;
+    /**
+     * Lê o status (escrito pelo próprio script em segundo plano) da última
+     * aplicação de ACL de um compartilhamento. Sem arquivo ainda = nunca
+     * rodou (ou o job só está começando e ainda não escreveu a primeira vez).
+     */
+    public function statusAplicacaoAcl(string $nomeCompartilhamento): array
+    {
+        $arquivo = self::STATUS_DIR . '/' . basename($nomeCompartilhamento) . '.json';
+
+        if (!is_file($arquivo)) {
+            return ['status' => 'desconhecido'];
+        }
+
+        $conteudo = json_decode((string)file_get_contents($arquivo), true);
+
+        if (!is_array($conteudo)) {
+            return ['status' => 'desconhecido'];
+        }
+
+        if (($conteudo['status'] ?? '') === 'erro') {
+            $log = self::STATUS_DIR . '/' . basename($nomeCompartilhamento) . '.log';
+            $saida = is_file($log) ? substr((string)file_get_contents($log), -8000) : '';
+
+            $conteudo['saida'] = $saida;
+            $conteudo['mensagem'] = str_contains($saida, 'NT_STATUS_BAD_NETWORK_NAME')
+                ? 'Este compartilhamento ainda não foi aplicado na configuração do Samba -- '
+                    . 'vá em Deploy (menu lateral) e clique em "Aplicar Configuração" antes '
+                    . 'de definir permissões de usuário nele.'
+                : 'Erro ao aplicar permissões no sistema.';
+        }
+
+        return $conteudo;
     }
 
     public function excluir(int $id): bool

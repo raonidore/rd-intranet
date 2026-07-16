@@ -86,6 +86,30 @@ class LinuxService
     }
 
     /**
+     * Dispara um script da RD Tecnologia em segundo plano e retorna na
+     * hora, sem esperar terminar -- usado por operações que podem demorar
+     * minutos (ex: aplicar ACL recursiva num compartilhamento grande) e
+     * que travariam a requisição HTTP (e no fim das contas a própria
+     * conexão) se rodassem de forma síncrona. "nohup ... &" desacopla o
+     * processo do ciclo de vida do request: mesmo depois do Apache/PHP
+     * finalizar essa requisição, o script continua rodando. Quem chama é
+     * responsável por acompanhar o progresso/resultado por algum outro
+     * meio (ex: um arquivo de status que o próprio script escreve).
+     */
+    public function executarScriptEmSegundoPlano(string $script, array $parametros = []): void
+    {
+        $cmd = "nohup sudo " . escapeshellarg($script);
+
+        foreach ($parametros as $valor) {
+            $cmd .= " " . escapeshellarg($valor);
+        }
+
+        $cmd .= " > /dev/null 2>&1 &";
+
+        exec($cmd);
+    }
+
+    /**
      * Lista grupos Linux.
      */
     public function grupos(): array

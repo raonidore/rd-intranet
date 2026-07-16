@@ -2,6 +2,7 @@
 /storage/logs/*
 /storage/cache/*
 /storage/uploads/*
+/storage/samba_acl_status/*
 .env
 /app/Config/database.php
 *.log

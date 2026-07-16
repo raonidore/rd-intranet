@@ -295,6 +295,75 @@ $comparacao = $diagnostico['comparacao'];
     </div>
 </div>
 
+<div class="card border-0 shadow-sm mt-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <strong><i class="bi bi-journal-text"></i> Logs completos</strong>
+        <button type="button" class="btn btn-sm btn-outline-primary" id="botaoVerLogsCompletos">
+            <i class="bi bi-search"></i> Buscar logs completos
+        </button>
+    </div>
+
+    <div class="card-body">
+        <p class="text-muted small mb-3">
+            Pra investigar um incidente pontual (ex: uma operação que caiu no meio) sem precisar de
+            SSH -- journalctl do smbd (janela maior), erro do Apache desta aplicação, indício de crash
+            real (core dump) e o log individual de cada máquina que já conectou no compartilhamento.
+        </p>
+
+        <div class="text-center text-muted small d-none" id="carregandoLogsCompletos">
+            <div class="spinner-border spinner-border-sm"></div> Buscando...
+        </div>
+
+        <div class="d-none" id="blocoLogsCompletos">
+            <ul class="nav nav-tabs" role="tablist">
+                <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabJournalctl" type="button">journalctl smbd</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabApache" type="button">Erro Apache</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabCores" type="button">Core dumps</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabClientes" type="button">Por cliente</button></li>
+            </ul>
+            <div class="tab-content border border-top-0 p-2">
+                <div class="tab-pane fade show active" id="tabJournalctl"><pre class="bg-dark text-light p-3 rounded mb-0" style="max-height:450px;overflow:auto;" id="conteudoJournalctl"></pre></div>
+                <div class="tab-pane fade" id="tabApache"><pre class="bg-dark text-light p-3 rounded mb-0" style="max-height:450px;overflow:auto;" id="conteudoApache"></pre></div>
+                <div class="tab-pane fade" id="tabCores"><pre class="bg-dark text-light p-3 rounded mb-0" style="max-height:450px;overflow:auto;" id="conteudoCores"></pre></div>
+                <div class="tab-pane fade" id="tabClientes"><pre class="bg-dark text-light p-3 rounded mb-0" style="max-height:450px;overflow:auto;" id="conteudoClientes"></pre></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const botao = document.getElementById('botaoVerLogsCompletos');
+    if (!botao) return;
+
+    const carregando = document.getElementById('carregandoLogsCompletos');
+    const bloco = document.getElementById('blocoLogsCompletos');
+
+    botao.addEventListener('click', async function () {
+        botao.disabled = true;
+        bloco.classList.add('d-none');
+        carregando.classList.remove('d-none');
+
+        try {
+            const res = await fetch(<?= json_encode(url('/samba/diagnostico/logs-completos')) ?>);
+            const dados = await res.json();
+
+            document.getElementById('conteudoJournalctl').textContent = dados.journalctl_smbd || '(vazio)';
+            document.getElementById('conteudoApache').textContent = dados.apache_error || '(vazio)';
+            document.getElementById('conteudoCores').textContent = dados.core_dumps || '(vazio)';
+            document.getElementById('conteudoClientes').textContent = dados.logs_por_cliente || '(vazio)';
+
+            bloco.classList.remove('d-none');
+        } catch (e) {
+            alert('Erro ao buscar os logs.');
+        } finally {
+            carregando.classList.add('d-none');
+            botao.disabled = false;
+        }
+    });
+})();
+</script>
+
 <?php
 $conteudo = ob_get_clean();
 $titulo = 'Diagnóstico Samba';

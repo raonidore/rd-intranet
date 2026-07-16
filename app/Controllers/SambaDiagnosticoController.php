@@ -27,4 +27,12 @@ class SambaDiagnosticoController extends Controller
             'achadosLogs' => $achadosLogs,
         ]);
     }
+
+    public function logsCompletos(): void
+    {
+        AuthMiddleware::checkModulo('samba_diagnostico');
+        header('Content-Type: application/json');
+
+        echo json_encode($this->service->logsCompletos());
+    }
 }

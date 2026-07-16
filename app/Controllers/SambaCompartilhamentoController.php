@@ -142,13 +142,21 @@ class SambaCompartilhamentoController extends Controller
     public function usuariosSalvar(): void
     {
         AuthMiddleware::checkModulo('samba_compartilhamentos');
+        header('Content-Type: application/json');
 
         $id = (int)($_POST['id'] ?? 0);
 
-        $this->service->salvarUsuarios($id, $_POST);
+        echo json_encode($this->service->salvarUsuarios($id, $_POST));
+    }
 
-        header('Location: ' . url('/samba/compartilhamentos'));
-        exit;
+    public function usuariosStatus(): void
+    {
+        AuthMiddleware::checkModulo('samba_compartilhamentos');
+        header('Content-Type: application/json');
+
+        $nome = (string)($_GET['nome'] ?? '');
+
+        echo json_encode($this->service->statusAplicacaoAcl($nome));
     }
 
     /*

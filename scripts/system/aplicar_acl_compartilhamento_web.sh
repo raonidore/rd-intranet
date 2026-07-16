@@ -1,5 +1,5 @@
 #!/bin/bash
-# aplicar_acl_compartilhamento_web.sh <nome_compartilhamento> <grupo> <login:leitura:escrita> [...]
+# aplicar_acl_compartilhamento_web.sh <nome_compartilhamento> <grupo> <caminho> <login:leitura:escrita> [...]
 # leitura/escrita = 0 ou 1
 #
 # Recalcula do zero a ACL de usuarios individuais de um compartilhamento via
@@ -42,24 +42,70 @@
 # estiver protected, ele "falha" com uma mensagem inofensiva de no-op,
 # por isso o || true -- só a chamada de verdade, a de baixo, importa pro
 # resultado).
+#
+# PROGRESSO/SEGUNDO PLANO: pra uma árvore grande (milhares de arquivos),
+# --propagate-inheritance é uma operação SMB item a item -- pode levar
+# minutos, tempo demais pra segurar uma requisição HTTP (foi exatamente o
+# que causou "NT_STATUS_CONNECTION_DISCONNECTED" em produção: a conexão
+# caiu no meio por causa do tempo, não por um erro de ACL). Este script é
+# chamado em segundo plano (LinuxService::executarScriptEmSegundoPlano) e
+# escreve o próprio progresso num arquivo de status que o portal consulta
+# por polling -- não tem como pedir uma contagem "X de Y" pro smbcacls (ele
+# só imprime linha em caso de ERRO, nada em caso de sucesso), então o
+# progresso é aproximado contando, no sistema de arquivos local (bem mais
+# rápido que perguntar por SMB), quantos itens tiveram o ctime atualizado
+# desde o início -- setar a ACL de um item sempre atualiza o ctime dele.
 
+STATUS_DIR="/var/www/rd.intranet/storage/samba_acl_status"
 AUTHFILE="/opt/rdtecnologia/scripts/.smbacl_auth"
 SHARE="$1"
 GRUPO="$2"
-shift 2
+CAMINHO="$3"
+shift 3
+
+mkdir -p "$STATUS_DIR"
+STATUS_FILE="$STATUS_DIR/${SHARE}.json"
+LOG_FILE="$STATUS_DIR/${SHARE}.log"
+
+escrever_status() {
+  local status="$1" processados="$2" total="$3"
+  php -r '
+    $status = $argv[1];
+    $processados = (int)$argv[2];
+    $total = (int)$argv[3];
+    $pct = $total > 0 ? (int)round(($processados / $total) * 100) : 100;
+    echo json_encode([
+        "status" => $status,
+        "processados" => $processados,
+        "total" => $total,
+        "percentual" => min(100, $pct),
+        "atualizado_em" => time(),
+    ]);
+  ' -- "$status" "$processados" "$total" > "$STATUS_FILE"
+  chmod 644 "$STATUS_FILE"
+}
 
 if [ ! -f "$AUTHFILE" ]; then
-  echo "Authfile nao encontrado. Rode setup_acl_admin.sh primeiro."
+  echo "Authfile nao encontrado. Rode setup_acl_admin.sh primeiro." | tee "$LOG_FILE"
+  escrever_status "erro" 0 0
   exit 1
 fi
 
 if [[ ! "$SHARE" =~ ^[A-Za-z0-9_-]+$ ]]; then
-  echo "Nome de compartilhamento invalido"
+  echo "Nome de compartilhamento invalido" | tee "$LOG_FILE"
+  escrever_status "erro" 0 0
   exit 1
 fi
 
 if [[ ! "$GRUPO" =~ ^[a-z][a-z0-9_-]*$ ]]; then
-  echo "Grupo invalido"
+  echo "Grupo invalido" | tee "$LOG_FILE"
+  escrever_status "erro" 0 0
+  exit 1
+fi
+
+if [ ! -d "$CAMINHO" ]; then
+  echo "Caminho nao encontrado no sistema: $CAMINHO" | tee "$LOG_FILE"
+  escrever_status "erro" 0 0
   exit 1
 fi
 
@@ -69,7 +115,8 @@ for ITEM in "$@"; do
   IFS=':' read -r LOGIN LEITURA ESCRITA <<< "$ITEM"
 
   if [[ ! "$LOGIN" =~ ^[a-z0-9]+$ ]]; then
-    echo "Login invalido: $LOGIN"
+    echo "Login invalido: $LOGIN" | tee "$LOG_FILE"
+    escrever_status "erro" 0 0
     exit 1
   fi
 
@@ -84,6 +131,31 @@ for ITEM in "$@"; do
   ACES="${ACES},ACL:${LOGIN}:ALLOWED/OI|CI/${MASK}"
 done
 
+TOTAL=$(find "$CAMINHO" 2>/dev/null | wc -l)
+INICIO=$(date +%s)
+
+escrever_status "rodando" 0 "$TOTAL"
+
 smbcacls "//localhost/${SHARE}" "" -A "$AUTHFILE" -I remove >/dev/null 2>&1 || true
 
-smbcacls "//localhost/${SHARE}" "" -A "$AUTHFILE" -S "$ACES" --propagate-inheritance
+smbcacls "//localhost/${SHARE}" "" -A "$AUTHFILE" -S "$ACES" --propagate-inheritance > "$LOG_FILE" 2>&1 &
+PID_SMBCACLS=$!
+
+while kill -0 "$PID_SMBCACLS" 2>/dev/null; do
+  PROCESSADOS=$(find "$CAMINHO" -newerct "@$INICIO" 2>/dev/null | wc -l)
+  escrever_status "rodando" "$PROCESSADOS" "$TOTAL"
+  sleep 3
+done
+
+wait "$PID_SMBCACLS"
+CODIGO=$?
+
+PROCESSADOS_FINAL=$(find "$CAMINHO" -newerct "@$INICIO" 2>/dev/null | wc -l)
+
+if [ "$CODIGO" -eq 0 ]; then
+  escrever_status "concluido" "$TOTAL" "$TOTAL"
+else
+  escrever_status "erro" "$PROCESSADOS_FINAL" "$TOTAL"
+fi
+
+exit "$CODIGO"

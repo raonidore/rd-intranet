@@ -77,6 +77,7 @@ $router->get('/samba/compartilhamentos/editar', [SambaCompartilhamentoController
 $router->post('/samba/compartilhamentos/editar', [SambaCompartilhamentoController::class, 'editar']);
 $router->get('/samba/compartilhamentos/usuarios', [SambaCompartilhamentoController::class, 'usuariosForm']);
 $router->post('/samba/compartilhamentos/usuarios', [SambaCompartilhamentoController::class, 'usuariosSalvar']);
+$router->get('/samba/compartilhamentos/usuarios/status', [SambaCompartilhamentoController::class, 'usuariosStatus']);
 $router->get('/samba/compartilhamentos/seguranca', [SambaCompartilhamentoController::class, 'segurancaForm']);
 $router->post('/samba/compartilhamentos/seguranca', [SambaCompartilhamentoController::class, 'segurancaSalvar']);
 $router->get('/samba/compartilhamentos/excluir', [SambaCompartilhamentoController::class, 'excluirForm']);
@@ -86,6 +87,7 @@ $router->post('/samba/lixeira/restaurar', [SambaLixeiraController::class, 'resta
 $router->post('/samba/lixeira/excluir', [SambaLixeiraController::class, 'excluir']);
 
 $router->get('/samba/diagnostico', [SambaDiagnosticoController::class, 'index']);
+$router->get('/samba/diagnostico/logs-completos', [SambaDiagnosticoController::class, 'logsCompletos']);
 $router->post('/samba/actions/importar-compartilhamento', [SambaActionController::class, 'importarCompartilhamento']);
 $router->post('/samba/actions/mover-pasta-lixeira', [SambaActionController::class, 'moverPastaParaLixeira']);
 $router->get('/samba/dashboard', [SambaDashboardController::class, 'index']);
