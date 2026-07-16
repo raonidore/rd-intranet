@@ -31,6 +31,17 @@
 # o arquivo some da listagem, dando a impressão de pasta vazia. Com essa
 # flag, o smbcacls percorre a árvore e aplica a herança nos itens
 # existentes também (marcando com a flag (I) de "inherited").
+#
+# "-S ... --propagate-inheritance" exige que a raiz já esteja marcada como
+# "protected" (não herdando de um pai) -- código-fonte do smbcacls
+# (source3/utils/smbcacls.c, prepare_inheritance_propagation): se
+# SEC_DESC_DACL_PROTECTED não estiver setada, recusa com "Inheritance
+# enabled at X, can't apply set operation". A raiz de um share nunca tem
+# pai de verdade, mas por padrão nasce "not protected" -- por isso "-I
+# remove" roda antes pra marcar/garantir esse estado (idempotente: se já
+# estiver protected, ele "falha" com uma mensagem inofensiva de no-op,
+# por isso o || true -- só a chamada de verdade, a de baixo, importa pro
+# resultado).
 
 AUTHFILE="/opt/rdtecnologia/scripts/.smbacl_auth"
 SHARE="$1"
@@ -72,5 +83,7 @@ for ITEM in "$@"; do
 
   ACES="${ACES},ACL:${LOGIN}:ALLOWED/OI|CI/${MASK}"
 done
+
+smbcacls "//localhost/${SHARE}" "" -A "$AUTHFILE" -I remove >/dev/null 2>&1 || true
 
 smbcacls "//localhost/${SHARE}" "" -A "$AUTHFILE" -S "$ACES" --propagate-inheritance
