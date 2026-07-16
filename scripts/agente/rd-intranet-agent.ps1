@@ -185,6 +185,16 @@ try {
     $memoriaLivreGb = [math]::Round($sistema.FreePhysicalMemory / 1MB, 1)
     $memoriaUsadaGb = [math]::Round($memoriaGb - $memoriaLivreGb, 1)
 
+    # LicenseStatus 1 = licenciado/ativado -- melhor esforco, alguns
+    # ambientes restritos podem nao responder essa classe WMI.
+    $windowsAtivado = $null
+    try {
+        $licenca = Get-CimInstance SoftwareLicensingProduct -Filter 'PartialProductKey IS NOT NULL' -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($licenca) { $windowsAtivado = if ($licenca.LicenseStatus -eq 1) { 'Sim' } else { 'Não' } }
+    } catch {
+        # segue sem essa informacao
+    }
+
     $discos = Get-CimInstance Win32_DiskDrive | ForEach-Object {
         '{0} ({1} GB)' -f $_.Model, [math]::Round($_.Size / 1GB, 0)
     }
@@ -225,6 +235,10 @@ try {
         placa_video    = $placaVideo
         placa_som      = $placaSom
         usuario_logado = $computador.UserName
+        windows_ativado = $windowsAtivado
+        descricao_computador = $sistema.Description
+        nome_computador = $computador.Name
+        grupo_trabalho = if ($computador.PartOfDomain) { "$($computador.Domain) (domínio)" } else { $computador.Workgroup }
         funcao         = if ($tipo -eq 'servidor') { $sistema.Caption } else { $null }
         virtualizado   = if ($computador.Model -match 'Virtual|VMware|KVM|VirtualBox') { 'Sim' } else { 'Não' }
         ligado_desde   = $sistema.LastBootUpTime.ToString('yyyy-MM-dd HH:mm:ss')
@@ -266,6 +280,22 @@ try {
         }
 
         $volume
+    })
+
+    # Unidades de rede mapeadas (ex: Z: -> \\servidor\pasta) -- DriveType 4.
+    # ProviderName e' o caminho UNC por tras da letra. Size/FreeSpace podem
+    # vir nulos se o mapeamento estiver desconectado no momento da coleta.
+    $payload.volumes += @(Get-CimInstance Win32_LogicalDisk -Filter 'DriveType = 4' -ErrorAction SilentlyContinue | ForEach-Object {
+        $totalGb = if ($_.Size) { [math]::Round($_.Size / 1GB, 1) } else { 0 }
+        $livreGb = if ($_.FreeSpace) { [math]::Round($_.FreeSpace / 1GB, 1) } else { 0 }
+
+        @{
+            unidade      = $_.DeviceID
+            total_gb     = $totalGb
+            usado_gb     = [math]::Round($totalGb - $livreGb, 1)
+            rede         = $true
+            caminho_rede = $_.ProviderName
+        }
     })
 
     # --------------------------------------------------------------

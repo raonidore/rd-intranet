@@ -63,6 +63,18 @@ public class CheckinPayload
     [JsonPropertyName("usuario_logado")]
     public string? UsuarioLogado { get; set; }
 
+    [JsonPropertyName("windows_ativado")]
+    public string? WindowsAtivado { get; set; }
+
+    [JsonPropertyName("descricao_computador")]
+    public string? DescricaoComputador { get; set; }
+
+    [JsonPropertyName("nome_computador")]
+    public string? NomeComputador { get; set; }
+
+    [JsonPropertyName("grupo_trabalho")]
+    public string? GrupoTrabalho { get; set; }
+
     [JsonPropertyName("funcao")]
     public string? Funcao { get; set; }
 
@@ -155,6 +167,12 @@ public class VolumeItem
 
     [JsonPropertyName("serial_disco")]
     public string? SerialDisco { get; set; }
+
+    [JsonPropertyName("rede")]
+    public bool Rede { get; set; }
+
+    [JsonPropertyName("caminho_rede")]
+    public string? CaminhoRede { get; set; }
 }
 
 public class MemoriaItem

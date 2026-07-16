@@ -3,7 +3,7 @@
 -- cria todas as tabelas ja no estado final, sem precisar repetir o
 -- historico incremental de database/migrations/ (algumas dessas
 -- migrations usam ALTER TABLE, que nao e seguro reaplicar aqui).
--- Gerado em 2026-07-15 17:58:30.
+-- Gerado em 2026-07-16 17:27:26.
 
 -- Import nao respeita ordem de dependencia entre tabelas (algumas tem FK
 -- pra tabelas que so aparecem depois neste arquivo) -- desliga a checagem
@@ -258,6 +258,8 @@ CREATE TABLE IF NOT EXISTS `ativos_volumes` (
   `modelo_disco` varchar(150) DEFAULT NULL,
   `fabricante_disco` varchar(100) DEFAULT NULL,
   `serial_disco` varchar(100) DEFAULT NULL,
+  `rede` tinyint(1) NOT NULL DEFAULT 0,
+  `caminho_rede` varchar(260) DEFAULT NULL,
   `coletado_em` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `idx_ativos_volumes_ativo` (`ativo_id`),

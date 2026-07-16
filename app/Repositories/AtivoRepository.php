@@ -428,8 +428,8 @@ class AtivoRepository
         }
 
         $stmt = $this->pdo->prepare("
-            INSERT INTO ativos_volumes (ativo_id, unidade, total_gb, usado_gb, modelo_disco, fabricante_disco, serial_disco)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO ativos_volumes (ativo_id, unidade, total_gb, usado_gb, modelo_disco, fabricante_disco, serial_disco, rede, caminho_rede)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
 
         foreach ($volumes as $v) {
@@ -441,6 +441,7 @@ class AtivoRepository
             $modeloDisco = trim((string)($v['modelo_disco'] ?? ''));
             $fabricanteDisco = trim((string)($v['fabricante_disco'] ?? ''));
             $serialDisco = trim((string)($v['serial_disco'] ?? ''));
+            $caminhoRede = trim((string)($v['caminho_rede'] ?? ''));
 
             $stmt->execute([
                 $ativoId,
@@ -450,6 +451,8 @@ class AtivoRepository
                 $modeloDisco !== '' ? $modeloDisco : null,
                 $fabricanteDisco !== '' ? $fabricanteDisco : null,
                 $serialDisco !== '' ? $serialDisco : null,
+                !empty($v['rede']) ? 1 : 0,
+                $caminhoRede !== '' ? $caminhoRede : null,
             ]);
         }
     }

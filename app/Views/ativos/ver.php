@@ -54,7 +54,8 @@ $memoriaTotalGb = parseGb($detalhes['memoria_ram'] ?? null);
 $memoriaUsadaGb = parseGb($detalhes['memoria_usada'] ?? null);
 $memoriaPct = $memoriaTotalGb > 0 ? ($memoriaUsadaGb / $memoriaTotalGb) * 100 : null;
 
-$volumePrincipal = $volumes[0] ?? null;
+$volumesLocais = array_values(array_filter($volumes, fn($v) => empty($v['rede'])));
+$volumePrincipal = $volumesLocais[0] ?? ($volumes[0] ?? null);
 $discoPct = null;
 if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     $discoPct = ((float)$volumePrincipal['usado_gb'] / (float)$volumePrincipal['total_gb']) * 100;
@@ -103,6 +104,11 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
 .hitech-table .icone-pasta { color: #58a6ff; }
 .hitech-table .icone-arquivo { color: #8b949e; }
 .hitech-empty, .hitech-loading, .hitech-erro { padding: 32px 16px; text-align: center; color: #8b949e; font-size: 13px; }
+/* Bootstrap ".text-muted" e feito pra fundo claro -- dentro do tema escuro
+   fica quase ilegivel (cinza escuro sobre preto). Sobrescreve pro mesmo
+   cinza claro ja usado no resto do tema escuro, sem precisar trocar a
+   classe em cada lugar que usa text-muted dentro de um hitech-panel. */
+.hitech-panel .text-muted { color: #8b949e !important; }
 .hitech-erro { color: #f85149; }
 .hitech-loading .spinner-border { color: #58a6ff; width: 1.6rem; height: 1.6rem; }
 .hitech-btn {
@@ -378,22 +384,34 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
         <?php else: ?>
             <div class="row g-3">
                 <?php foreach ($volumes as $v): ?>
-                    <?php
-                    $total = (float)$v['total_gb'];
-                    $usado = (float)$v['usado_gb'];
-                    $pct = $total > 0 ? ($usado / $total) * 100 : 0;
-                    ?>
+                    <?php $ehRede = !empty($v['rede']); ?>
                     <div class="col-md-3 col-sm-4 col-6">
                         <div class="card border-0 shadow-sm h-100">
                             <div class="card-body text-center">
-                                <?= gaugeRadial($pct, 'Unidade ' . $v['unidade'], round($usado, 1) . ' / ' . round($total, 1) . ' GB') ?>
-                                <?php if (!empty($v['modelo_disco']) || !empty($v['fabricante_disco']) || !empty($v['serial_disco'])): ?>
-                                    <hr class="my-2">
-                                    <div class="text-start" style="font-size:11px">
-                                        <?php if (!empty($v['modelo_disco'])): ?><div class="text-muted">Modelo: <?= htmlspecialchars($v['modelo_disco']) ?></div><?php endif; ?>
-                                        <?php if (!empty($v['fabricante_disco'])): ?><div class="text-muted">Fabricante: <?= htmlspecialchars($v['fabricante_disco']) ?></div><?php endif; ?>
-                                        <?php if (!empty($v['serial_disco'])): ?><div class="text-muted">Série: <?= htmlspecialchars($v['serial_disco']) ?></div><?php endif; ?>
-                                    </div>
+                                <?php if ($ehRede): ?>
+                                    <div class="mb-1"><i class="bi bi-hdd-network display-6 text-primary"></i></div>
+                                    <div class="fw-semibold">Unidade <?= htmlspecialchars($v['unidade']) ?> <span class="badge text-bg-info">Rede</span></div>
+                                    <div class="text-muted small text-break mt-1"><?= htmlspecialchars($v['caminho_rede'] ?: '(caminho de rede não informado)') ?></div>
+                                    <?php if ((float)$v['total_gb'] > 0): ?>
+                                        <div class="text-muted small mt-1"><?= round((float)$v['usado_gb'], 1) ?> / <?= round((float)$v['total_gb'], 1) ?> GB</div>
+                                    <?php else: ?>
+                                        <div class="text-muted small mt-1" style="font-size:10px">Tamanho não disponível (mapeamento desconectado no momento da coleta)</div>
+                                    <?php endif; ?>
+                                <?php else: ?>
+                                    <?php
+                                        $total = (float)$v['total_gb'];
+                                        $usado = (float)$v['usado_gb'];
+                                        $pct = $total > 0 ? ($usado / $total) * 100 : 0;
+                                    ?>
+                                    <?= gaugeRadial($pct, 'Unidade ' . $v['unidade'], round($usado, 1) . ' / ' . round($total, 1) . ' GB') ?>
+                                    <?php if (!empty($v['modelo_disco']) || !empty($v['fabricante_disco']) || !empty($v['serial_disco'])): ?>
+                                        <hr class="my-2">
+                                        <div class="text-start" style="font-size:11px">
+                                            <?php if (!empty($v['modelo_disco'])): ?><div class="text-muted">Modelo: <?= htmlspecialchars($v['modelo_disco']) ?></div><?php endif; ?>
+                                            <?php if (!empty($v['fabricante_disco'])): ?><div class="text-muted">Fabricante: <?= htmlspecialchars($v['fabricante_disco']) ?></div><?php endif; ?>
+                                            <?php if (!empty($v['serial_disco'])): ?><div class="text-muted">Série: <?= htmlspecialchars($v['serial_disco']) ?></div><?php endif; ?>
+                                        </div>
+                                    <?php endif; ?>
                                 <?php endif; ?>
                                 <?php if ($agenteSuportaExplorador): ?>
                                     <button type="button" class="btn btn-sm btn-outline-primary mt-2 botao-explorar-volume"
@@ -410,7 +428,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                     </div>
                 <?php endforeach; ?>
             </div>
-            <p class="text-muted small mt-2 mb-0">Fabricante e número de série do disco físico nem sempre são informados pelo Windows -- depende do driver/controlador de cada fabricante.</p>
+            <p class="text-muted small mt-2 mb-0">Fabricante e número de série do disco físico nem sempre são informados pelo Windows -- depende do driver/controlador de cada fabricante. Unidades de rede mapeadas (letra ligada a um caminho \\servidor\pasta) aparecem marcadas como "Rede" -- dá pra explorar os arquivos nelas do mesmo jeito.</p>
         <?php endif; ?>
     </div>
 

@@ -35,7 +35,7 @@ public static class CollectorService
         // Sistema operacional / tipo do ativo / uptime / memoria livre
         // ProductType: 1 = estacao de trabalho, 2 = controlador de dominio, 3 = servidor
         double memoriaLivreGb = 0;
-        using (var buscaSistema = new ManagementObjectSearcher("SELECT Caption, ProductType, LastBootUpTime, FreePhysicalMemory FROM Win32_OperatingSystem"))
+        using (var buscaSistema = new ManagementObjectSearcher("SELECT Caption, ProductType, LastBootUpTime, FreePhysicalMemory, Description FROM Win32_OperatingSystem"))
         {
             foreach (ManagementObject so in buscaSistema.Get())
             {
@@ -45,6 +45,13 @@ public static class CollectorService
                 payload.SistemaOperacional = caption;
                 payload.Tipo = productType == 1 ? "computador" : "servidor";
                 payload.Funcao = payload.Tipo == "servidor" ? caption : null;
+
+                // "Description" do Win32_OperatingSystem e' de fato a
+                // "Descricao do computador" da tela Propriedades do Sistema
+                // (registro HKLM\...\LanmanServer\Parameters\srvcomment),
+                // apesar do nome sugerir "descricao do SO".
+                var descricaoComputador = so["Description"]?.ToString();
+                payload.DescricaoComputador = string.IsNullOrWhiteSpace(descricaoComputador) ? null : descricaoComputador;
 
                 if (so["LastBootUpTime"] is string ultimoBootCim)
                 {
@@ -63,13 +70,22 @@ public static class CollectorService
         // ----------------------------------------------------------
         // Fabricante / modelo / memoria / usuario logado
         double memoriaTotalGb = 0;
-        using (var buscaComputador = new ManagementObjectSearcher("SELECT Manufacturer, Model, TotalPhysicalMemory, UserName FROM Win32_ComputerSystem"))
+        using (var buscaComputador = new ManagementObjectSearcher("SELECT Manufacturer, Model, TotalPhysicalMemory, UserName, Name, Workgroup, Domain, PartOfDomain FROM Win32_ComputerSystem"))
         {
             foreach (ManagementObject cs in buscaComputador.Get())
             {
                 payload.Marca = cs["Manufacturer"]?.ToString();
                 payload.Modelo = cs["Model"]?.ToString();
                 payload.UsuarioLogado = cs["UserName"]?.ToString();
+                payload.NomeComputador = cs["Name"]?.ToString();
+
+                // Sem domínio, o Windows sempre relata ALGUM workgroup (o
+                // padrão é "WORKGROUP") -- com domínio, o campo relevante
+                // passa a ser Domain, não Workgroup (que fica vazio/irrelevante).
+                var entrouEmDominio = cs["PartOfDomain"] is bool pd && pd;
+                payload.GrupoTrabalho = entrouEmDominio
+                    ? $"{cs["Domain"]} (domínio)"
+                    : cs["Workgroup"]?.ToString();
 
                 if (cs["TotalPhysicalMemory"] != null)
                 {
@@ -138,6 +154,33 @@ public static class CollectorService
                 payload.Processador = cpu["Name"]?.ToString();
                 break;
             }
+        }
+
+        // ----------------------------------------------------------
+        // Ativação do Windows -- LicenseStatus 1 = licenciado/ativado;
+        // qualquer outro valor (0=nao licenciado, 2/3/6=graça, 4=graça por
+        // nao-genuino, 5=notificacao) conta como "não" pra essa pergunta
+        // simples de Sim/Não. Melhor esforço: em alguns ambientes
+        // restritos essa classe WMI pode não responder -- nesse caso fica
+        // sem informar em vez de derrubar a coleta inteira.
+        try
+        {
+            using var buscaAtivacao = new ManagementObjectSearcher(
+                "SELECT LicenseStatus FROM SoftwareLicensingProduct WHERE PartialProductKey IS NOT NULL");
+
+            foreach (ManagementObject lic in buscaAtivacao.Get())
+            {
+                if (lic["LicenseStatus"] != null)
+                {
+                    var status = Convert.ToUInt32(lic["LicenseStatus"]);
+                    payload.WindowsAtivado = status == 1 ? "Sim" : "Não";
+                }
+                break;
+            }
+        }
+        catch
+        {
+            // segue sem essa informacao
         }
 
         // ----------------------------------------------------------
@@ -287,6 +330,29 @@ public static class CollectorService
             }
 
             volumes.Add(volume);
+        }
+
+        // Unidades de rede mapeadas (ex: Z: -> \\servidor\pasta) --
+        // DriveType 4. ProviderName e' o caminho UNC por tras da letra.
+        // Size/FreeSpace podem vir nulos se o mapeamento estiver
+        // desconectado no momento da coleta -- mostra a letra/caminho
+        // mesmo assim, só sem o medidor de uso.
+        using var buscaRede = new ManagementObjectSearcher(
+            "SELECT DeviceID, Size, FreeSpace, ProviderName FROM Win32_LogicalDisk WHERE DriveType = 4");
+
+        foreach (ManagementObject disco in buscaRede.Get())
+        {
+            var totalGb = disco["Size"] != null ? Convert.ToInt64(disco["Size"]) / 1024.0 / 1024.0 / 1024.0 : 0;
+            var livreGb = disco["FreeSpace"] != null ? Convert.ToInt64(disco["FreeSpace"]) / 1024.0 / 1024.0 / 1024.0 : 0;
+
+            volumes.Add(new VolumeItem
+            {
+                Unidade = disco["DeviceID"]?.ToString() ?? "",
+                TotalGb = Math.Round(totalGb, 1),
+                UsadoGb = Math.Round(Math.Max(0, totalGb - livreGb), 1),
+                Rede = true,
+                CaminhoRede = disco["ProviderName"]?.ToString()
+            });
         }
 
         return volumes;
