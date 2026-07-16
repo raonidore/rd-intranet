@@ -835,4 +835,78 @@ class AtivoRepository
         ");
         $stmt->execute([$mensagem, $id]);
     }
+
+    /*
+     |---------------------------------------------------------
+     | Chaves de API do agente -- historico, nao uma config unica.
+     |---------------------------------------------------------
+     */
+
+    public function criarChaveApi(string $chave, ?string $geradoPor, bool $notificarAgentes): int
+    {
+        $stmt = $this->pdo->prepare("INSERT INTO ativos_chaves_api (chave, gerada_por, notificar_agentes) VALUES (?, ?, ?)");
+        $stmt->execute([$chave, $geradoPor, $notificarAgentes ? 1 : 0]);
+
+        return (int)$this->pdo->lastInsertId();
+    }
+
+    /** Mais recente primeiro -- a [0] é a chave "atual" (embutida em novos downloads de script/exe). */
+    public function chavesAtivas(): array
+    {
+        $stmt = $this->pdo->query("SELECT * FROM ativos_chaves_api WHERE ativa = 1 ORDER BY criada_em DESC");
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Chave mais recente marcada pra rollout ativo (empurrada via heartbeat/checkin) -- pode ser mais antiga que a [0] de chavesAtivas() se a mais nova foi gerada sem notificar. */
+    public function chaveParaRollout(): ?string
+    {
+        $stmt = $this->pdo->query("SELECT chave FROM ativos_chaves_api WHERE ativa = 1 AND notificar_agentes = 1 ORDER BY criada_em DESC LIMIT 1");
+        $chave = $stmt->fetchColumn();
+
+        return $chave !== false ? $chave : null;
+    }
+
+    public function todasChaves(): array
+    {
+        $stmt = $this->pdo->query("SELECT * FROM ativos_chaves_api ORDER BY criada_em DESC");
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function buscarChaveApiPorId(int $id): ?array
+    {
+        $stmt = $this->pdo->prepare("SELECT * FROM ativos_chaves_api WHERE id = ?");
+        $stmt->execute([$id]);
+
+        $item = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $item ?: null;
+    }
+
+    public function desativarChaveApi(int $id, ?string $desativadoPor): bool
+    {
+        $stmt = $this->pdo->prepare("
+            UPDATE ativos_chaves_api
+               SET ativa = 0, desativada_por = ?, desativada_em = NOW()
+             WHERE id = ? AND ativa = 1
+        ");
+
+        return $stmt->execute([$desativadoPor, $id]) && $stmt->rowCount() > 0;
+    }
+
+    /** Quantos ativos usaram essa chave da última vez que conseguiram se autenticar -- só um indicativo de impacto, não uma trava. */
+    public function contarAtivosUsandoChave(string $chave): int
+    {
+        $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM ativos WHERE chave_api_atual = ?");
+        $stmt->execute([$chave]);
+
+        return (int)$stmt->fetchColumn();
+    }
+
+    public function atualizarChaveUsada(int $ativoId, string $chave): void
+    {
+        $stmt = $this->pdo->prepare("UPDATE ativos SET chave_api_atual = ? WHERE id = ? AND (chave_api_atual IS NULL OR chave_api_atual <> ?)");
+        $stmt->execute([$chave, $ativoId, $chave]);
+    }
 }

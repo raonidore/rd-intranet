@@ -3,7 +3,7 @@
 -- cria todas as tabelas ja no estado final, sem precisar repetir o
 -- historico incremental de database/migrations/ (algumas dessas
 -- migrations usam ALTER TABLE, que nao e seguro reaplicar aqui).
--- Gerado em 2026-07-16 17:27:26.
+-- Gerado em 2026-07-16 17:50:30.
 
 -- Import nao respeita ordem de dependencia entre tabelas (algumas tem FK
 -- pra tabelas que so aparecem depois neste arquivo) -- desliga a checagem
@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS `ativos` (
   `detalhes` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`detalhes`)),
   `origem` enum('manual','agente','snmp') NOT NULL DEFAULT 'manual',
   `agente_versao` varchar(20) DEFAULT NULL,
+  `chave_api_atual` varchar(64) DEFAULT NULL,
   `elevacao_usuario` varchar(150) DEFAULT NULL,
   `elevacao_senha_cifrada` text DEFAULT NULL,
   `machine_guid` varchar(64) DEFAULT NULL,
@@ -125,6 +126,23 @@ CREATE TABLE IF NOT EXISTS `ativos_catalogos` (
   `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_ativos_catalogos_tipo_nome` (`tipo`,`nome`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
+-- ativos_chaves_api
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `ativos_chaves_api` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `chave` varchar(64) NOT NULL,
+  `gerada_por` varchar(150) DEFAULT NULL,
+  `criada_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  `ativa` tinyint(1) NOT NULL DEFAULT 1,
+  `notificar_agentes` tinyint(1) NOT NULL DEFAULT 1,
+  `desativada_por` varchar(150) DEFAULT NULL,
+  `desativada_em` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `chave` (`chave`),
+  KEY `idx_ativos_chaves_api_ativa` (`ativa`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ----------------------------------------------------------------

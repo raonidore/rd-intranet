@@ -12,6 +12,21 @@ PHP foi necessária. Use o `.ps1` para servidores/máquinas sem usuário
 logado com frequência; use este app de bandeja para estações de
 trabalho, onde faz sentido ter algo visível pro usuário/suporte.
 
+**Chave de API tem histórico, não é um valor único**: "Gerar nova
+chave" em Ativos > Dashboard NÃO invalida a(s) chave(s) anterior(es) --
+elas continuam funcionando até serem desativadas explicitamente na
+tabela de histórico. Com "Enviar automaticamente pros agentes já
+conectados" marcado (padrão), a chave nova é entregue a esses agentes
+sozinha, via o campo `chave_api_atual` na resposta do heartbeat/checkin
+-- o app de bandeja aplica e salva sozinho (`TrayApplicationContext.
+AplicarNovaChaveApiSeNecessario`); o `.ps1` **não** faz isso (não tem
+onde persistir a chave nova além de reescrever o próprio arquivo do
+script, o que não é feito automaticamente) -- ativos rodando o `.ps1`
+continuam na chave com que foram instalados até serem baixados de novo.
+Só **desativar** uma chave (não gerar uma nova) é destrutivo de verdade
+-- derruba na hora qualquer agente que ainda esteja usando
+especificamente aquela chave.
+
 **Diferença importante**: só este app de bandeja manda o heartbeat de
 "estou ligado" (ver seção própria abaixo) -- o `.ps1` roda como uma
 Tarefa Agendada de tempos em tempos (um processo que nasce, coleta,

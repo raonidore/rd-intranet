@@ -448,29 +448,110 @@ class AtivoService
      |---------------------------------------------------------
      | Agente Windows (Fase 3) -- checkin autenticado por chave de API,
      | não por sessão. A chave é compartilhada por todo o parque
-     | (mesmo modelo do "deploy key" do OCS Inventory/GLPI), guardada
-     | via ConfigService igual qualquer outra configuração do app.
+     | (mesmo modelo do "deploy key" do OCS Inventory/GLPI). Histórico de
+     | VÁRIAS chaves (ativos_chaves_api), não uma config única: gerar uma
+     | nova NÃO invalida as anteriores automaticamente -- elas continuam
+     | valendo até serem desativadas explicitamente, então regenerar deixa
+     | de ser uma operação que derruba a frota inteira sem aviso.
      |---------------------------------------------------------
      */
 
+    /** A chave mais recente ainda ativa -- é essa que vai embutida em novos downloads de script/exe. */
     public function chaveAgente(): string
     {
-        $chave = ConfigService::get('ativos_agent_api_key');
+        $ativas = $this->repository->chavesAtivas();
 
-        if (!$chave) {
-            $chave = bin2hex(random_bytes(32));
-            ConfigService::set('ativos_agent_api_key', $chave);
+        if (!empty($ativas)) {
+            return $ativas[0]['chave'];
+        }
+
+        // Nunca deveria ficar sem nenhuma chave ativa (regenerarChaveAgente
+        // sempre cria uma nova antes de qualquer desativação ser permitida),
+        // mas se acontecer (banco zerado, primeira instalação), cria uma.
+        return $this->regenerarChaveAgente('Sistema', false);
+    }
+
+    public function chaveValida(string $chaveEnviada): bool
+    {
+        if ($chaveEnviada === '') {
+            return false;
+        }
+
+        foreach ($this->repository->chavesAtivas() as $c) {
+            if (hash_equals($c['chave'], $chaveEnviada)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function historicoChavesAgente(): array
+    {
+        $chaveAtual = $this->chaveAgente();
+        $chaves = $this->repository->todasChaves();
+
+        foreach ($chaves as &$c) {
+            $c['eh_atual'] = $c['ativa'] && hash_equals($c['chave'], $chaveAtual);
+            $c['ativos_usando'] = (int)$c['ativa'] ? $this->repository->contarAtivosUsandoChave($c['chave']) : 0;
+        }
+
+        return $chaves;
+    }
+
+    /** Chave que está sendo empurrada ativamente (via heartbeat/checkin) pros agentes já conectados -- null se nenhuma chave ativa está marcada pra rollout. */
+    public function chaveParaRollout(): ?string
+    {
+        return $this->repository->chaveParaRollout();
+    }
+
+    public function regenerarChaveAgente(string $geradoPor, bool $notificarAgentes = true): string
+    {
+        $chave = bin2hex(random_bytes(32));
+        $this->repository->criarChaveApi($chave, $geradoPor ?: null, $notificarAgentes);
+
+        if (!$notificarAgentes) {
+            // "Não notificar" só significa que os agentes já conectados não
+            // vão receber essa chave nova via heartbeat/checkin -- eles
+            // continuam funcionando normalmente com a chave anterior
+            // (que segue ativa). Só instalações NOVAS (download do
+            // script/exe a partir de agora) já saem com a chave nova.
+            AuditService::registrar('Ativos', 'Chave de API', "Nova chave de API gerada por {$geradoPor}, sem notificar agentes já conectados.");
+        } else {
+            AuditService::registrar('Ativos', 'Chave de API', "Nova chave de API gerada por {$geradoPor}.");
         }
 
         return $chave;
     }
 
-    public function regenerarChaveAgente(): string
+    /**
+     * Desativa uma chave -- ao contrário de gerar, ISSO sim quebra na hora
+     * qualquer agente que ainda esteja usando essa chave especificamente
+     * (não recebeu/não aplicou a chave nova ainda). Nunca desativa a
+     * única chave ativa restante, senão nenhum agente (novo ou existente)
+     * consegue mais se autenticar.
+     */
+    public function desativarChaveAgente(int $id, string $desativadoPor): bool
     {
-        $chave = bin2hex(random_bytes(32));
-        ConfigService::set('ativos_agent_api_key', $chave);
+        $ativas = $this->repository->chavesAtivas();
 
-        return $chave;
+        if (count($ativas) <= 1) {
+            NotificationService::error('Essa é a única chave ativa -- desativar deixaria todos os agentes (novos e já instalados) sem conseguir se autenticar.');
+            return false;
+        }
+
+        $chave = $this->repository->buscarChaveApiPorId($id);
+        if (!$chave || !$chave['ativa']) {
+            NotificationService::error('Chave não encontrada ou já desativada.');
+            return false;
+        }
+
+        $this->repository->desativarChaveApi($id, $desativadoPor);
+
+        AuditService::registrar('Ativos', 'Chave de API', "Chave de API (#{$id}) desativada por {$desativadoPor}.");
+        NotificationService::success('Chave desativada. Agentes que ainda estiverem usando ela vão parar de se autenticar.');
+
+        return true;
     }
 
     /*
@@ -717,7 +798,7 @@ class AtivoService
      * e insere os alertas enviados (o agente já manda só os novos desde
      * o último checkin, via um bookmark local dele).
      */
-    public function checkinAgente(array $payload): array
+    public function checkinAgente(array $payload, string $chaveUsada = ''): array
     {
         $machineGuid = trim((string)($payload['machine_guid'] ?? ''));
 
@@ -768,6 +849,10 @@ class AtivoService
         // acabou de chegar já é o que estava sendo esperado.
         $this->repository->limparSolicitacaoCheckin($id);
 
+        if ($chaveUsada !== '') {
+            $this->repository->atualizarChaveUsada($id, $chaveUsada);
+        }
+
         // Comandos remotos pendentes (desligar/reiniciar/desinstalar) --
         // entregues agora, junto com a resposta deste checkin. O agente
         // é quem decide como/quando executar (com aviso pro usuário,
@@ -777,7 +862,7 @@ class AtivoService
             $this->repository->marcarComandosEntregues(array_column($pendentes, 'id'));
         }
 
-        return [
+        $resposta = [
             'success' => true,
             'message' => 'Check-in recebido.',
             'ativo_id' => $id,
@@ -788,6 +873,15 @@ class AtivoService
                 'alvo_label' => $c['alvo_label'],
             ], $pendentes),
         ];
+
+        // Só manda a chave nova se essa solicitação já não veio autenticada
+        // com ela -- evita ficar reenviando à toa em todo checkin.
+        $chaveRollout = $this->chaveParaRollout();
+        if ($chaveRollout !== null && $chaveRollout !== $chaveUsada) {
+            $resposta['chave_api_atual'] = $chaveRollout;
+        }
+
+        return $resposta;
     }
 
     public function listarAtualizacoesWindows(int $ativoId): array
@@ -1013,7 +1107,7 @@ class AtivoService
      * heartbeatIntervaloSegundos(). Devolve se há um checkin completo
      * pendente de ser forçado (pedido pelo portal via solicitarCheckin()).
      */
-    public function registrarHeartbeat(string $machineGuid): array
+    public function registrarHeartbeat(string $machineGuid, string $chaveUsada = ''): array
     {
         $resultado = $this->repository->registrarHeartbeat($machineGuid);
 
@@ -1022,9 +1116,14 @@ class AtivoService
         }
 
         $ativoId = (int)$resultado['id'];
+
+        if ($chaveUsada !== '') {
+            $this->repository->atualizarChaveUsada($ativoId, $chaveUsada);
+        }
+
         $solicitacoes = $this->repository->solicitacoesPendentes($ativoId);
 
-        return [
+        $resposta = [
             'success' => true,
             'forcar_checkin' => $resultado['forcar_checkin'],
             'solicitacoes' => array_map(function ($s) use ($ativoId) {
@@ -1050,6 +1149,15 @@ class AtivoService
                 return $item;
             }, $solicitacoes),
         ];
+
+        // Empurra a chave nova pro agente adotar sozinho -- só se ele ainda
+        // não estiver usando ela (evita ficar reenviando à toa).
+        $chaveRollout = $this->chaveParaRollout();
+        if ($chaveRollout !== null && $chaveRollout !== $chaveUsada) {
+            $resposta['chave_api_atual'] = $chaveRollout;
+        }
+
+        return $resposta;
     }
 
     /**

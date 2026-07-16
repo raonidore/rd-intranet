@@ -30,6 +30,7 @@ class AtivoController extends Controller
             'comunidadePadrao' => $this->service->comunidadePadrao(),
             'coletaSnmpAtiva' => $this->coletaSnmpAtiva(),
             'chaveAgente' => $this->service->chaveAgente(),
+            'historicoChaves' => $this->service->historicoChavesAgente(),
             'intervaloComunicacao' => $this->service->intervaloComunicacao(),
             'heartbeatIntervalo' => $this->service->heartbeatIntervaloSegundos(),
             'versaoAgenteExe' => $this->service->versaoAgenteExe(),
@@ -343,11 +344,29 @@ class AtivoController extends Controller
     {
         AuthMiddleware::checkModulo('ativos_dashboard');
 
-        $this->service->regenerarChaveAgente();
+        $geradoPor = $_SESSION['usuario']['nome'] ?? 'Desconhecido';
+        $notificarAgentes = ($_POST['notificar_agentes'] ?? '1') === '1';
 
-        AuditService::registrar('Ativos', 'Regenerar chave do agente', 'Chave de API do agente Windows regenerada.');
+        $this->service->regenerarChaveAgente($geradoPor, $notificarAgentes);
 
-        NotificationService::success('Nova chave gerada. Agentes já instalados precisam do script atualizado para continuar funcionando.');
+        NotificationService::success(
+            $notificarAgentes
+                ? 'Nova chave gerada e sendo enviada automaticamente pros agentes já conectados (chegam a ela em poucos segundos, no próximo heartbeat). A chave anterior continua válida.'
+                : 'Nova chave gerada, sem notificar os agentes já conectados -- eles continuam na chave anterior até você decidir notificar ou reinstalar manualmente. Só instalações novas já saem com essa chave.'
+        );
+
+        header('Location: ' . url('/ativos'));
+        exit;
+    }
+
+    public function desativarChaveAgente(): void
+    {
+        AuthMiddleware::checkModulo('ativos_dashboard');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $desativadoPor = $_SESSION['usuario']['nome'] ?? 'Desconhecido';
+
+        $this->service->desativarChaveAgente($id, $desativadoPor);
 
         header('Location: ' . url('/ativos'));
         exit;

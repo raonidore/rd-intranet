@@ -12,6 +12,9 @@ public class ResultadoHeartbeat
     public bool Sucesso { get; set; }
     public bool ForcarCheckin { get; set; }
     public List<SolicitacaoItem> Solicitacoes { get; set; } = new();
+
+    /// <summary>Só vem preenchida quando o servidor tem uma chave mais nova marcada pra rollout automático -- ver TrayApplicationContext.</summary>
+    public string? ChaveApiAtual { get; set; }
 }
 
 /// <summary>Pedido de leitura pendente (explorador de arquivos/processos) entregue no heartbeat.</summary>
@@ -88,7 +91,8 @@ public class HeartbeatClient
             {
                 Sucesso = corpo?.Success ?? false,
                 ForcarCheckin = corpo?.ForcarCheckin ?? false,
-                Solicitacoes = corpo?.Solicitacoes ?? new List<SolicitacaoItem>()
+                Solicitacoes = corpo?.Solicitacoes ?? new List<SolicitacaoItem>(),
+                ChaveApiAtual = corpo?.ChaveApiAtual
             };
         }
         catch
@@ -108,5 +112,8 @@ public class HeartbeatClient
 
         [JsonPropertyName("solicitacoes")]
         public List<SolicitacaoItem>? Solicitacoes { get; set; }
+
+        [JsonPropertyName("chave_api_atual")]
+        public string? ChaveApiAtual { get; set; }
     }
 }

@@ -15,6 +15,7 @@ public class ResultadoCheckin
     public long BytesEnviados { get; set; }
     public long BytesRecebidos { get; set; }
     public List<ComandoItem> Comandos { get; set; } = new();
+    public string? ChaveApiAtual { get; set; }
 }
 
 public class CheckinClient
@@ -58,6 +59,7 @@ public class CheckinClient
 
             string mensagem = textoResposta;
             var comandos = new List<ComandoItem>();
+            string? chaveApiAtual = null;
             try
             {
                 var corpo = JsonSerializer.Deserialize<RespostaCheckin>(textoResposta);
@@ -65,6 +67,7 @@ public class CheckinClient
                 {
                     mensagem = corpo.Message ?? textoResposta;
                     comandos = corpo.Comandos;
+                    chaveApiAtual = corpo.ChaveApiAtual;
                 }
             }
             catch
@@ -87,7 +90,8 @@ public class CheckinClient
                 Mensagem = mensagem,
                 BytesEnviados = bytesEnvio.LongLength,
                 BytesRecebidos = bytesRecebidos,
-                Comandos = comandos
+                Comandos = comandos,
+                ChaveApiAtual = chaveApiAtual
             };
         }
         catch (Exception ex)

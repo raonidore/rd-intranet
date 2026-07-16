@@ -261,4 +261,7 @@ public class RespostaCheckin
 
     [JsonPropertyName("comandos")]
     public List<ComandoItem> Comandos { get; set; } = new();
+
+    [JsonPropertyName("chave_api_atual")]
+    public string? ChaveApiAtual { get; set; }
 }

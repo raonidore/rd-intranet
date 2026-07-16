@@ -125,6 +125,11 @@ public class TrayApplicationContext : ApplicationContext
         {
             var resultado = await new HeartbeatClient(_config).EnviarAsync(_machineGuid);
 
+            if (resultado.Sucesso)
+            {
+                AplicarNovaChaveApiSeNecessario(resultado.ChaveApiAtual);
+            }
+
             if (resultado.Sucesso && resultado.ForcarCheckin && !_coletando)
             {
                 // "Forçar coleta agora" clicado no PORTAL (não localmente no
@@ -152,6 +157,26 @@ public class TrayApplicationContext : ApplicationContext
         {
             _enviandoHeartbeat = false;
         }
+    }
+
+    /// <summary>
+    /// Adota sozinho uma chave de API nova quando o servidor manda uma
+    /// diferente da que está configurada aqui (rollout automático de
+    /// "Gerar nova chave" no portal, ver AtivoService::chaveParaRollout).
+    /// A chave ANTIGA continua válida no servidor até ser desativada
+    /// explicitamente -- então mesmo que salvar aqui falhe por algum
+    /// motivo, o agente não fica sem conseguir se autenticar, só continua
+    /// tentando adotar a nova a cada heartbeat/checkin seguinte.
+    /// </summary>
+    private void AplicarNovaChaveApiSeNecessario(string? chaveApiAtual)
+    {
+        if (string.IsNullOrWhiteSpace(chaveApiAtual) || chaveApiAtual == _config.ApiKey)
+        {
+            return;
+        }
+
+        _config.ApiKey = chaveApiAtual;
+        _config.Salvar();
     }
 
     /// <summary>
@@ -270,6 +295,7 @@ public class TrayApplicationContext : ApplicationContext
             if (resultado.Sucesso)
             {
                 _estado.MarcaEventos = DateTime.Now;
+                AplicarNovaChaveApiSeNecessario(resultado.ChaveApiAtual);
             }
 
             _estado.Salvar();

@@ -80,9 +80,9 @@ $statusCores = [
                 <?php if ($dotnetRuntimeDisponivel): ?>
                     <a href="<?= url('/ativos/agente/dotnet') ?>" class="btn btn-sm btn-outline-primary"><i class="bi bi-download"></i> Baixar .NET Desktop Runtime -- <?= htmlspecialchars($dotnetRuntimeLabel) ?></a>
                 <?php endif; ?>
-                <form method="post" action="<?= url('/ativos/agente/regenerar-chave') ?>" class="d-inline" id="formRegenerarChave">
-                    <button class="btn btn-sm btn-outline-danger"><i class="bi bi-arrow-repeat"></i> Gerar nova chave</button>
-                </form>
+                <button type="button" class="btn btn-sm btn-outline-danger" id="botaoAbrirRegenerar" data-bs-toggle="collapse" data-bs-target="#painelRegenerarChave">
+                    <i class="bi bi-arrow-repeat"></i> Gerar nova chave
+                </button>
                 <?php if (!$dotnetRuntimeDisponivel): ?>
                     <p class="text-muted small mt-2 mb-0">
                         <i class="bi bi-info-circle"></i> O agente <code>.exe</code> framework-dependent (menor)
@@ -90,6 +90,84 @@ $statusCores = [
                         instalador no card "Atualizar agente (.exe)" pra disponibilizar o download aqui também.
                     </p>
                 <?php endif; ?>
+
+                <div class="collapse mt-3" id="painelRegenerarChave">
+                    <div class="border rounded p-3 bg-light">
+                        <p class="small mb-2">
+                            <i class="bi bi-info-circle"></i> A chave <strong>atual continua válida</strong> depois de
+                            gerar uma nova -- nada quebra na hora. Só desativar uma chave explicitamente (na tabela de
+                            histórico abaixo) derruba os agentes que ainda estiverem usando ela.
+                        </p>
+                        <form method="post" action="<?= url('/ativos/agente/regenerar-chave') ?>" id="formRegenerarChave">
+                            <div class="form-check mb-2">
+                                <input type="checkbox" class="form-check-input" name="notificar_agentes" value="1" id="campoNotificarAgentes" checked>
+                                <label class="form-check-label small" for="campoNotificarAgentes">
+                                    Enviar automaticamente pros agentes já conectados (recomendado -- eles adotam a
+                                    chave nova sozinhos em segundos, via o próprio heartbeat). Desmarcado: só quem
+                                    baixar o script/exe a partir de agora sai com essa chave; os já instalados
+                                    continuam na chave anterior até você decidir notificar ou reinstalar manualmente.
+                                </label>
+                            </div>
+                            <button type="submit" class="btn btn-sm btn-danger"><i class="bi bi-arrow-repeat"></i> Confirmar geração</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#painelRegenerarChave">Cancelar</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <strong>Histórico de chaves de API</strong>
+                <span class="text-muted small"><?= count($historicoChaves) ?> chave(s)</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0 align-middle">
+                        <thead>
+                            <tr>
+                                <th>Chave</th>
+                                <th>Gerada por</th>
+                                <th>Quando</th>
+                                <th>Status</th>
+                                <th class="text-end">Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($historicoChaves as $c): ?>
+                                <tr>
+                                    <td class="font-monospace small"><?= htmlspecialchars(substr($c['chave'], 0, 8)) ?>...<?= htmlspecialchars(substr($c['chave'], -4)) ?></td>
+                                    <td class="small"><?= htmlspecialchars($c['gerada_por'] ?? '—') ?></td>
+                                    <td class="text-muted small"><?= htmlspecialchars(data_br($c['criada_em'])) ?></td>
+                                    <td class="small">
+                                        <?php if (!$c['ativa']): ?>
+                                            <span class="badge text-bg-secondary">Desativada</span>
+                                            <?php if (!empty($c['desativada_por'])): ?>
+                                                <div class="text-muted" style="font-size:10px">por <?= htmlspecialchars($c['desativada_por']) ?> em <?= htmlspecialchars(data_br($c['desativada_em'])) ?></div>
+                                            <?php endif; ?>
+                                        <?php elseif ($c['eh_atual']): ?>
+                                            <span class="badge text-bg-success">Atual</span>
+                                        <?php else: ?>
+                                            <span class="badge text-bg-info">Ativa</span>
+                                            <?php if ($c['ativos_usando'] > 0): ?>
+                                                <div class="text-muted" style="font-size:10px"><?= (int)$c['ativos_usando'] ?> ativo(s) usando</div>
+                                            <?php endif; ?>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="text-end">
+                                        <?php if ($c['ativa']): ?>
+                                            <form method="post" action="<?= url('/ativos/agente/desativar-chave') ?>" class="d-inline formDesativarChave"
+                                                  data-ativos-usando="<?= (int)$c['ativos_usando'] ?>">
+                                                <input type="hidden" name="id" value="<?= (int)$c['id'] ?>">
+                                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-slash-circle"></i> Desativar</button>
+                                            </form>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
@@ -265,9 +343,36 @@ $statusCores = [
 
     const botaoCopiar = document.getElementById('botaoCopiarChave');
     if (botaoCopiar) {
-        botaoCopiar.addEventListener('click', function () {
-            navigator.clipboard.writeText(document.getElementById('campoChaveAgente').value);
-            botaoCopiar.innerHTML = '<i class="bi bi-check-lg"></i>';
+        botaoCopiar.addEventListener('click', async function () {
+            const campo = document.getElementById('campoChaveAgente');
+            let copiou = false;
+
+            // navigator.clipboard exige contexto seguro (HTTPS/localhost) --
+            // em HTTP puro o objeto nem existe, e sem esse fallback o botão
+            // falhava calado (sem nenhum feedback de erro).
+            if (window.isSecureContext && navigator.clipboard) {
+                try {
+                    await navigator.clipboard.writeText(campo.value);
+                    copiou = true;
+                } catch (e) {
+                    copiou = false;
+                }
+            }
+
+            if (!copiou) {
+                campo.removeAttribute('readonly');
+                campo.select();
+                campo.setSelectionRange(0, 99999);
+                try {
+                    copiou = document.execCommand('copy');
+                } catch (e) {
+                    copiou = false;
+                }
+                campo.setAttribute('readonly', 'readonly');
+                window.getSelection().removeAllRanges();
+            }
+
+            botaoCopiar.innerHTML = copiou ? '<i class="bi bi-check-lg"></i>' : '<i class="bi bi-x-lg"></i>';
             setTimeout(function () { botaoCopiar.innerHTML = '<i class="bi bi-clipboard"></i>'; }, 1500);
         });
     }
@@ -275,11 +380,29 @@ $statusCores = [
     const formRegenerar = document.getElementById('formRegenerarChave');
     if (formRegenerar) {
         formRegenerar.addEventListener('submit', function (e) {
-            if (!confirm('Isso invalida a chave atual -- agentes já instalados vão parar de funcionar até você reinstalar o script com a nova chave. Continuar?')) {
+            const notificar = document.getElementById('campoNotificarAgentes').checked;
+            const mensagem = notificar
+                ? 'Gerar uma chave nova? A chave atual continua funcionando -- a nova vai ser enviada automaticamente pros agentes já conectados nos próximos segundos.'
+                : 'Gerar uma chave nova SEM notificar os agentes já conectados? Eles continuam na chave atual até você decidir notificar (ou reinstalar manualmente) -- só instalações novas já saem com a chave nova.';
+
+            if (!confirm(mensagem)) {
                 e.preventDefault();
             }
         });
     }
+
+    document.querySelectorAll('.formDesativarChave').forEach(function (form) {
+        form.addEventListener('submit', function (e) {
+            const ativosUsando = parseInt(form.dataset.ativosUsando || '0', 10);
+            const mensagem = ativosUsando > 0
+                ? `Desativar essa chave? Pelo menos ${ativosUsando} ativo(s) autenticaram com ela da última vez que se conectaram -- se ainda não adotaram uma chave mais nova, vão PARAR de conseguir se comunicar com o servidor até serem reinstalados. Essa ação não pode ser desfeita.`
+                : 'Desativar essa chave? Nenhum ativo conhecido usou ela recentemente, mas a ação não pode ser desfeita -- qualquer agente ainda configurado com ela vai parar de conseguir se comunicar. Continuar?';
+
+            if (!confirm(mensagem)) {
+                e.preventDefault();
+            }
+        });
+    });
 
     function configurarUploadComProgresso(idForm, idBotao, idProgresso) {
         const form = document.getElementById(idForm);

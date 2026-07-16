@@ -30,7 +30,7 @@ class AtivoAgenteController extends Controller
 
         $chaveEnviada = $_SERVER['HTTP_X_RD_AGENTE_CHAVE'] ?? '';
 
-        if ($chaveEnviada === '' || !hash_equals($this->service->chaveAgente(), $chaveEnviada)) {
+        if (!$this->service->chaveValida($chaveEnviada)) {
             http_response_code(401);
             echo json_encode(['success' => false, 'message' => 'Chave de API inválida.']);
             return;
@@ -44,7 +44,7 @@ class AtivoAgenteController extends Controller
             return;
         }
 
-        echo json_encode($this->service->checkinAgente($payload));
+        echo json_encode($this->service->checkinAgente($payload, $chaveEnviada));
     }
 
     /**
@@ -60,7 +60,7 @@ class AtivoAgenteController extends Controller
 
         $chaveEnviada = $_SERVER['HTTP_X_RD_AGENTE_CHAVE'] ?? '';
 
-        if ($chaveEnviada === '' || !hash_equals($this->service->chaveAgente(), $chaveEnviada)) {
+        if (!$this->service->chaveValida($chaveEnviada)) {
             http_response_code(401);
             echo json_encode(['success' => false, 'message' => 'Chave de API inválida.']);
             return;
@@ -75,7 +75,7 @@ class AtivoAgenteController extends Controller
             return;
         }
 
-        echo json_encode($this->service->registrarHeartbeat($machineGuid));
+        echo json_encode($this->service->registrarHeartbeat($machineGuid, $chaveEnviada));
     }
 
     /** Agente devolve o resultado de uma solicitação (listar arquivos/processos) recebida no heartbeat. */
@@ -85,7 +85,7 @@ class AtivoAgenteController extends Controller
 
         $chaveEnviada = $_SERVER['HTTP_X_RD_AGENTE_CHAVE'] ?? '';
 
-        if ($chaveEnviada === '' || !hash_equals($this->service->chaveAgente(), $chaveEnviada)) {
+        if (!$this->service->chaveValida($chaveEnviada)) {
             http_response_code(401);
             echo json_encode(['success' => false, 'message' => 'Chave de API inválida.']);
             return;
@@ -111,7 +111,7 @@ class AtivoAgenteController extends Controller
 
         $chaveEnviada = $_SERVER['HTTP_X_RD_AGENTE_CHAVE'] ?? '';
 
-        if ($chaveEnviada === '' || !hash_equals($this->service->chaveAgente(), $chaveEnviada)) {
+        if (!$this->service->chaveValida($chaveEnviada)) {
             http_response_code(401);
             echo json_encode(['success' => false, 'message' => 'Chave de API inválida.']);
             return;
@@ -136,7 +136,7 @@ class AtivoAgenteController extends Controller
     {
         $chaveEnviada = $_SERVER['HTTP_X_RD_AGENTE_CHAVE'] ?? '';
 
-        if ($chaveEnviada === '' || !hash_equals($this->service->chaveAgente(), $chaveEnviada)) {
+        if (!$this->service->chaveValida($chaveEnviada)) {
             http_response_code(401);
             echo json_encode(['success' => false, 'message' => 'Chave de API inválida.']);
             return;
@@ -207,7 +207,7 @@ class AtivoAgenteController extends Controller
 
         $chaveEnviada = $_SERVER['HTTP_X_RD_AGENTE_CHAVE'] ?? '';
 
-        if ($chaveEnviada === '' || !hash_equals($this->service->chaveAgente(), $chaveEnviada)) {
+        if (!$this->service->chaveValida($chaveEnviada)) {
             http_response_code(401);
             echo json_encode(['success' => false, 'message' => 'Chave de API inválida.']);
             return;
@@ -225,7 +225,7 @@ class AtivoAgenteController extends Controller
     {
         $chaveEnviada = $_SERVER['HTTP_X_RD_AGENTE_CHAVE'] ?? '';
 
-        if ($chaveEnviada === '' || !hash_equals($this->service->chaveAgente(), $chaveEnviada)) {
+        if (!$this->service->chaveValida($chaveEnviada)) {
             http_response_code(401);
             echo json_encode(['success' => false, 'message' => 'Chave de API inválida.']);
             return;
