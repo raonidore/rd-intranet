@@ -25,6 +25,30 @@ class AtivoService
     ];
 
     /**
+     * Colunas disponíveis em Ativos > Lista -- controla o menu de "quais
+     * colunas mostrar" (visibilidade é só client-side/localStorage, não
+     * precisa de round-trip; ordenação usa 'ordenar', que é validado contra
+     * AtivoRepository::ORDENACAO_PERMITIDA antes de virar SQL). 'condicao'
+     * é o status Ligado/Desligado ao vivo -- calculado, não tem coluna própria
+     * pra ordenar por ela. 'ip' e 'so' são as duas colunas novas pedidas,
+     * por isso nascem desmarcadas por padrão (não muda a visão de quem já
+     * usa a tela hoje até a pessoa optar por ligar).
+     */
+    public const COLUNAS_LISTA = [
+        'codigo' => ['label' => 'Código', 'ordenar' => 'codigo_patrimonio', 'padrao' => true],
+        'nome' => ['label' => 'Nome', 'ordenar' => 'nome', 'padrao' => true],
+        'apelido' => ['label' => 'Apelido', 'ordenar' => 'apelido', 'padrao' => true],
+        'tipo' => ['label' => 'Tipo', 'ordenar' => 'tipo', 'padrao' => true],
+        'status' => ['label' => 'Status', 'ordenar' => 'status', 'padrao' => true],
+        'condicao' => ['label' => 'Condição', 'ordenar' => null, 'padrao' => true],
+        'setor' => ['label' => 'Setor', 'ordenar' => 'setor_nome', 'padrao' => true],
+        'localizacao' => ['label' => 'Localização', 'ordenar' => 'localizacao_nome', 'padrao' => true],
+        'versao_agente' => ['label' => 'Versão do Agente', 'ordenar' => 'agente_versao', 'padrao' => true],
+        'ip' => ['label' => 'IP Principal', 'ordenar' => 'ip', 'padrao' => false],
+        'so' => ['label' => 'S.O.', 'ordenar' => 'sistema_operacional', 'padrao' => false],
+    ];
+
+    /**
      * Campos extras por tipo, guardados na coluna `detalhes` (JSON).
      * Só os campos aqui listados são aceitos na montagem do JSON --
      * evita gravar lixo arbitrário vindo do POST.

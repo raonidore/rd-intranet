@@ -48,6 +48,8 @@ class AtivoController extends Controller
             'tipo' => $_GET['tipo'] ?? '',
             'status' => $_GET['status'] ?? '',
             'busca' => trim($_GET['busca'] ?? ''),
+            'ordenar' => $_GET['ordenar'] ?? '',
+            'direcao' => $_GET['direcao'] ?? '',
         ];
 
         $this->view('ativos/lista', [

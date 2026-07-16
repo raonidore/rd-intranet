@@ -21,6 +21,24 @@ class AtivoRepository
         LEFT JOIN ativos_catalogos cl ON cl.id = a.localizacao_id
     ";
 
+    /**
+     * Whitelist chave (usada na URL/tela) -> expressão SQL segura pra
+     * ORDER BY -- nunca interpola o valor de $filtros['ordenar'] direto
+     * na query, só usa ele pra escolher uma destas expressões fixas.
+     */
+    private const ORDENACAO_PERMITIDA = [
+        'codigo_patrimonio' => 'a.codigo_patrimonio',
+        'nome' => 'a.nome',
+        'apelido' => 'a.apelido',
+        'tipo' => 'a.tipo',
+        'status' => 'a.status',
+        'setor_nome' => 'cs.nome',
+        'localizacao_nome' => 'cl.nome',
+        'agente_versao' => 'a.agente_versao',
+        'ip' => 'a.ip',
+        'sistema_operacional' => "JSON_UNQUOTE(JSON_EXTRACT(a.detalhes, '$.sistema_operacional'))",
+    ];
+
     public function listar(array $filtros = []): array
     {
         $sql = self::SELECT_COM_CATALOGOS . " WHERE 1=1";
@@ -41,7 +59,12 @@ class AtivoRepository
             $params['busca'] = '%' . $filtros['busca'] . '%';
         }
 
-        $sql .= " ORDER BY a.criado_em DESC";
+        $ordenacao = self::ORDENACAO_PERMITIDA[$filtros['ordenar'] ?? ''] ?? null;
+        $direcao = strtolower((string)($filtros['direcao'] ?? '')) === 'desc' ? 'DESC' : 'ASC';
+
+        $sql .= $ordenacao !== null
+            ? " ORDER BY {$ordenacao} {$direcao}, a.criado_em DESC"
+            : " ORDER BY a.criado_em DESC";
 
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);

@@ -11,6 +11,34 @@ $statusCores = [
     'estoque' => 'secondary',
     'baixado' => 'danger',
 ];
+
+/** Cabeçalho clicável (quando $ordenarChave existe) que reordena a lista, preservando os filtros atuais na URL. */
+function thOrdenavel(string $coluna, string $label, ?string $ordenarChave, array $filtros): string
+{
+    if ($ordenarChave === null) {
+        return '<th data-col="' . htmlspecialchars($coluna) . '">' . htmlspecialchars($label) . '</th>';
+    }
+
+    $ehColunaAtiva = ($filtros['ordenar'] ?? '') === $ordenarChave;
+    $direcaoAtual = $ehColunaAtiva ? strtolower((string)($filtros['direcao'] ?? 'asc')) : null;
+    $proximaDirecao = ($direcaoAtual === 'asc') ? 'desc' : 'asc';
+
+    $icone = 'bi-arrow-down-up text-muted';
+    if ($direcaoAtual === 'asc') {
+        $icone = 'bi-caret-up-fill';
+    } elseif ($direcaoAtual === 'desc') {
+        $icone = 'bi-caret-down-fill';
+    }
+
+    $query = $_GET;
+    $query['ordenar'] = $ordenarChave;
+    $query['direcao'] = $proximaDirecao;
+
+    return '<th data-col="' . htmlspecialchars($coluna) . '">'
+        . '<a href="' . htmlspecialchars(url('/ativos/lista?' . http_build_query($query))) . '" class="text-decoration-none text-dark d-inline-flex align-items-center gap-1">'
+        . htmlspecialchars($label) . ' <i class="bi ' . $icone . '" style="font-size:11px"></i>'
+        . '</a></th>';
+}
 ?>
 
 <?= Alert::flash() ?>
@@ -20,7 +48,22 @@ $statusCores = [
         <h4 class="mb-1"><i class="bi bi-list-ul me-1"></i> Ativos - Lista</h4>
         <small class="text-muted"><a href="<?= url('/ativos') ?>"><i class="bi bi-arrow-left"></i> Dashboard</a></small>
     </div>
-    <a href="<?= url('/ativos/novo') ?>" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Novo Ativo</a>
+    <div class="d-flex gap-2">
+        <div class="dropdown">
+            <button class="btn btn-outline-secondary" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                <i class="bi bi-layout-three-columns"></i> Colunas
+            </button>
+            <div class="dropdown-menu p-3" id="menuColunas" style="min-width:260px">
+                <?php foreach (AtivoService::COLUNAS_LISTA as $chaveColuna => $info): ?>
+                    <div class="form-check">
+                        <input class="form-check-input campo-coluna" type="checkbox" value="<?= htmlspecialchars($chaveColuna) ?>" id="coluna-<?= htmlspecialchars($chaveColuna) ?>">
+                        <label class="form-check-label small" for="coluna-<?= htmlspecialchars($chaveColuna) ?>"><?= htmlspecialchars($info['label']) ?></label>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <a href="<?= url('/ativos/novo') ?>" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Novo Ativo</a>
+    </div>
 </div>
 
 <form method="get" action="<?= url('/ativos/lista') ?>" class="card border-0 shadow-sm mb-4">
@@ -73,32 +116,27 @@ $statusCores = [
                         <i class="bi bi-qr-code"></i> Imprimir etiquetas selecionadas
                     </button>
                 </div>
-                <table class="table table-hover align-middle mb-0">
+                <table class="table table-hover align-middle mb-0" id="tabelaAtivos">
                     <thead>
                         <tr>
                             <th style="width:32px"></th>
-                            <th>Código</th>
-                            <th>Nome</th>
-                            <th>Apelido</th>
-                            <th>Tipo</th>
-                            <th>Status</th>
-                            <th>Condição</th>
-                            <th>Setor</th>
-                            <th>Localização</th>
-                            <th>Versão do Agente</th>
-                            <th class="text-end">Ações</th>
+                            <?php foreach (AtivoService::COLUNAS_LISTA as $chaveColuna => $info): ?>
+                                <?= thOrdenavel($chaveColuna, $info['label'], $info['ordenar'], $filtros) ?>
+                            <?php endforeach; ?>
+                            <th class="text-end" data-col="acoes">Ações</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php foreach ($ativos as $a): ?>
+                            <?php $detalhesLinha = json_decode($a['detalhes'] ?? '', true) ?: []; ?>
                             <tr>
                                 <td><input type="checkbox" class="form-check-input checkbox-ativo" name="ids[]" value="<?= (int)$a['id'] ?>"></td>
-                                <td class="font-monospace small"><?= htmlspecialchars($a['codigo_patrimonio']) ?></td>
-                                <td><?= htmlspecialchars($a['nome']) ?></td>
-                                <td><?= htmlspecialchars($a['apelido'] ?: '—') ?></td>
-                                <td><i class="bi <?= AtivoService::TIPOS[$a['tipo']]['icone'] ?>"></i> <?= htmlspecialchars(AtivoService::TIPOS[$a['tipo']]['label']) ?></td>
-                                <td><?= Badge::make(htmlspecialchars(AtivoService::STATUS[$a['status']] ?? $a['status']), $statusCores[$a['status']] ?? 'secondary') ?></td>
-                                <td>
+                                <td class="font-monospace small" data-col="codigo"><?= htmlspecialchars($a['codigo_patrimonio']) ?></td>
+                                <td data-col="nome"><?= htmlspecialchars($a['nome']) ?></td>
+                                <td data-col="apelido"><?= htmlspecialchars($a['apelido'] ?: '—') ?></td>
+                                <td data-col="tipo"><i class="bi <?= AtivoService::TIPOS[$a['tipo']]['icone'] ?>"></i> <?= htmlspecialchars(AtivoService::TIPOS[$a['tipo']]['label']) ?></td>
+                                <td data-col="status"><?= Badge::make(htmlspecialchars(AtivoService::STATUS[$a['status']] ?? $a['status']), $statusCores[$a['status']] ?? 'secondary') ?></td>
+                                <td data-col="condicao">
                                     <?php if ($a['origem'] === 'agente'): ?>
                                         <?php
                                             $segundosHeartbeat = AtivoService::segundosDesdeUltimoHeartbeat($a);
@@ -118,9 +156,9 @@ $statusCores = [
                                         <span class="text-muted small">—</span>
                                     <?php endif; ?>
                                 </td>
-                                <td class="small text-muted"><?= htmlspecialchars($a['setor_nome'] ?? '—') ?></td>
-                                <td class="small text-muted"><?= htmlspecialchars($a['localizacao_nome'] ?? '—') ?></td>
-                                <td class="small">
+                                <td class="small text-muted" data-col="setor"><?= htmlspecialchars($a['setor_nome'] ?? '—') ?></td>
+                                <td class="small text-muted" data-col="localizacao"><?= htmlspecialchars($a['localizacao_nome'] ?? '—') ?></td>
+                                <td class="small" data-col="versao_agente">
                                     <?php if (empty($a['agente_versao'])): ?>
                                         <span class="text-muted">—</span>
                                     <?php elseif ($a['agente_versao'] === 'ps1'): ?>
@@ -133,7 +171,9 @@ $statusCores = [
                                         <span class="font-monospace text-success">v<?= htmlspecialchars($a['agente_versao']) ?></span>
                                     <?php endif; ?>
                                 </td>
-                                <td class="text-end">
+                                <td class="small font-monospace" data-col="ip"><?= htmlspecialchars($a['ip'] ?: '—') ?></td>
+                                <td class="small text-muted" data-col="so"><?= htmlspecialchars($detalhesLinha['sistema_operacional'] ?? '—') ?></td>
+                                <td class="text-end" data-col="acoes">
                                     <div class="btn-group" role="group">
                                         <a href="<?= url('/ativos/ver?id=' . $a['id']) ?>" class="btn btn-sm btn-outline-secondary" title="Ver"><i class="bi bi-eye"></i></a>
                                         <a href="<?= url('/ativos/editar?id=' . $a['id']) ?>" class="btn btn-sm btn-outline-secondary" title="Editar"><i class="bi bi-pencil"></i></a>
@@ -179,6 +219,47 @@ window.addEventListener('load', function () {
 
     checkboxes.forEach(function (c) { c.addEventListener('change', atualizarBotao); });
 });
+
+// Visibilidade de coluna é só preferência de tela (não precisa ida e volta
+// no servidor pra isso) -- guardada no localStorage deste navegador, não
+// depende do bootstrap.bundle.min.js (carregado só no fim do layout), por
+// isso roda direto aqui, sem esperar 'load'.
+(function () {
+    const CHAVE_STORAGE = 'rd_ativos_lista_colunas';
+    const colunasPadrao = <?= json_encode(array_keys(array_filter(AtivoService::COLUNAS_LISTA, fn($info) => $info['padrao']))) ?>;
+
+    function colunasSalvas() {
+        try {
+            const bruto = localStorage.getItem(CHAVE_STORAGE);
+            const lista = bruto ? JSON.parse(bruto) : null;
+            return Array.isArray(lista) ? lista : colunasPadrao;
+        } catch (e) {
+            return colunasPadrao;
+        }
+    }
+
+    function aplicarVisibilidade(colunasVisiveis) {
+        document.querySelectorAll('#tabelaAtivos [data-col]').forEach(function (el) {
+            if (el.dataset.col === 'acoes') return;
+            el.style.display = colunasVisiveis.includes(el.dataset.col) ? '' : 'none';
+        });
+    }
+
+    const colunasAtuais = colunasSalvas();
+    aplicarVisibilidade(colunasAtuais);
+
+    document.querySelectorAll('.campo-coluna').forEach(function (checkbox) {
+        checkbox.checked = colunasAtuais.includes(checkbox.value);
+        checkbox.addEventListener('change', function () {
+            const marcados = Array.from(document.querySelectorAll('.campo-coluna'))
+                .filter(function (c) { return c.checked; })
+                .map(function (c) { return c.value; });
+
+            localStorage.setItem(CHAVE_STORAGE, JSON.stringify(marcados));
+            aplicarVisibilidade(marcados);
+        });
+    });
+})();
 </script>
 
 <?php
