@@ -22,6 +22,15 @@
 # sem isso, os membros do grupo perderiam acesso no primeiro save desta
 # tela, mesmo sem nunca terem sido listados aqui. "read only" continua
 # sendo reforcado no nivel do smb.conf (share), esta ACL nao substitui isso.
+#
+# --propagate-inheritance: sem isso, -S só grava a ACL na RAIZ do share --
+# as ACEs (OI|CI, herdáveis) só valeriam pra arquivos/pastas criados DEPOIS
+# desse ponto. Qualquer coisa que já existia dentro do compartilhamento
+# (dados migrados, subpastas antigas) nunca herda a ACE nova, e com "hide
+# unreadable = yes" no smb.conf isso não aparece como "acesso negado" --
+# o arquivo some da listagem, dando a impressão de pasta vazia. Com essa
+# flag, o smbcacls percorre a árvore e aplica a herança nos itens
+# existentes também (marcando com a flag (I) de "inherited").
 
 AUTHFILE="/opt/rdtecnologia/scripts/.smbacl_auth"
 SHARE="$1"
@@ -64,4 +73,4 @@ for ITEM in "$@"; do
   ACES="${ACES},ACL:${LOGIN}:ALLOWED/OI|CI/${MASK}"
 done
 
-smbcacls "//localhost/${SHARE}" "" -A "$AUTHFILE" -S "$ACES"
+smbcacls "//localhost/${SHARE}" "" -A "$AUTHFILE" -S "$ACES" --propagate-inheritance
