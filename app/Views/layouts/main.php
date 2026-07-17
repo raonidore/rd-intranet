@@ -27,6 +27,7 @@ $abrirSamba = $rdSecaoAtiva(['/samba', '/deploy']);
 $abrirSeguranca = $rdSecaoAtiva(['/seguranca']);
 $abrirVpn = $rdSecaoAtiva(['/vpn']);
 $abrirSistema = $rdSecaoAtiva(['/administracao', '/auditoria']);
+$abrirEntra = $rdSecaoAtiva(['/entra']);
 
 $abrirHardware = $rdSecaoAtiva(['/infraestrutura/hardware']);
 $abrirRede = $rdSecaoAtiva(['/infraestrutura/rede', '/infraestrutura/servidor/rede']);
@@ -568,7 +569,30 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
     </div>
     <?php endif; ?>
 
-    <?php /* Menu "Microsoft Entra" entra na Fase 3, junto com as rotas/controller -- adicionar antes disso deixaria um link morto (404) visível pra admins. */ ?>
+    <?php if (PermissionService::temAcesso('entra_dashboard') || PermissionService::temAcesso('entra_usuarios') || PermissionService::temAcesso('entra_configuracao')): ?>
+    <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuEntra"
+            aria-expanded="<?= $abrirEntra ? 'true' : 'false' ?>">
+        <span><i class="bi bi-microsoft me-2"></i>Microsoft Entra</span>
+        <i class="bi bi-chevron-right chevron"></i>
+    </button>
+    <div class="collapse <?= $abrirEntra ? 'show' : '' ?>" id="menuEntra">
+        <?php if (PermissionService::temAcesso('entra_dashboard')): ?>
+        <a href="<?= url('/entra/dashboard') ?>" class="<?= $uriAtual === '/entra/dashboard' ? 'active' : '' ?>">
+            <i class="bi bi-speedometer2 me-2"></i> Dashboard
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('entra_usuarios')): ?>
+        <a href="<?= url('/entra/usuarios') ?>" class="<?= str_starts_with($uriAtual, '/entra/usuarios') ? 'active' : '' ?>">
+            <i class="bi bi-people me-2"></i> Usuários
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('entra_configuracao')): ?>
+        <a href="<?= url('/entra/configuracao') ?>" class="<?= str_starts_with($uriAtual, '/entra/configuracao') ? 'active' : '' ?>">
+            <i class="bi bi-gear me-2"></i> Configuração
+        </a>
+        <?php endif; ?>
+    </div>
+    <?php endif; ?>
 
     <?php if (PermissionService::ehAdmin()): ?>
     <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuSistema"

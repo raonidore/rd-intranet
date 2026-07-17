@@ -48,6 +48,7 @@ use App\Controllers\AcessoRemotoController;
 use App\Controllers\EtiquetaConfigController;
 use App\Controllers\EmpresaController;
 use App\Controllers\SistemaModulosController;
+use App\Controllers\EntraController;
 
 $router->get('/', [DashboardController::class, 'index']);
 $router->get('/dashboard', [DashboardController::class, 'index']);
@@ -345,6 +346,18 @@ $router->post('/administracao/empresa/salvar', [EmpresaController::class, 'salva
 
 $router->get('/administracao/modulos', [SistemaModulosController::class, 'index']);
 $router->post('/administracao/modulos/salvar', [SistemaModulosController::class, 'salvar']);
+
+$router->get('/entra/dashboard', [EntraController::class, 'dashboard']);
+$router->get('/entra/configuracao', [EntraController::class, 'configuracaoForm']);
+$router->post('/entra/configuracao/salvar', [EntraController::class, 'configuracaoSalvar']);
+$router->post('/entra/configuracao/remover', [EntraController::class, 'configuracaoRemover']);
+$router->get('/entra/usuarios', [EntraController::class, 'usuarios']);
+$router->post('/entra/usuarios/novo', [EntraController::class, 'usuarioNovo']);
+$router->post('/entra/usuarios/resetar-senha', [EntraController::class, 'resetarSenha']);
+$router->post('/entra/usuarios/ativar', [EntraController::class, 'ativar']);
+$router->post('/entra/usuarios/desativar', [EntraController::class, 'desativar']);
+$router->post('/entra/usuarios/licenca/atribuir', [EntraController::class, 'licencaAtribuir']);
+$router->post('/entra/usuarios/licenca/remover', [EntraController::class, 'licencaRemover']);
 
 $router->get('/banco-dados/conexoes', [DbConexaoController::class, 'index']);
 $router->get('/banco-dados/conexoes/novo', [DbConexaoController::class, 'novoForm']);
