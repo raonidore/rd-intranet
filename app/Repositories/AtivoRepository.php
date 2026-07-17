@@ -676,6 +676,14 @@ class AtivoRepository
         return (int)$this->pdo->query("SELECT COUNT(*) FROM ativos")->fetchColumn();
     }
 
+    /** Só as colunas que AtivoService::estaLigada() precisa -- pro card do dashboard, sem trazer a linha inteira de cada computador. */
+    public function computadoresParaResumo(): array
+    {
+        $stmt = $this->pdo->query("SELECT status, ultimo_heartbeat, ultimo_checkin FROM ativos WHERE tipo = 'computador'");
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function recentes(int $limite = 8): array
     {
         $stmt = $this->pdo->prepare(self::SELECT_COM_CATALOGOS . " ORDER BY a.criado_em DESC LIMIT ?");

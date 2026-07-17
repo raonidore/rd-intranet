@@ -7,6 +7,8 @@ use App\Middleware\AuthMiddleware;
 use App\Services\SambaService;
 use App\Services\ApacheStatusService;
 use App\Services\ServerInfoService;
+use App\Services\SpeedtestService;
+use App\Services\AtivoService;
 use App\Services\PermissionService;
 
 class DashboardController extends Controller
@@ -19,6 +21,8 @@ class DashboardController extends Controller
             'samba' => null,
             'apache' => null,
             'servidor' => null,
+            'ativos' => null,
+            'speedtest' => null,
         ];
 
         if (
@@ -39,6 +43,14 @@ class DashboardController extends Controller
 
         if (PermissionService::temAcesso('infra_servidor')) {
             $dados['servidor'] = (new ServerInfoService())->snapshot();
+        }
+
+        if (PermissionService::temAcesso('infra_speedtest')) {
+            $dados['speedtest'] = (new SpeedtestService())->ultimoConcluido();
+        }
+
+        if (PermissionService::temAcesso('ativos_dashboard')) {
+            $dados['ativos'] = (new AtivoService())->resumoDashboard();
         }
 
         $this->view('dashboard/index', $dados);

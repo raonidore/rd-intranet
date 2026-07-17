@@ -152,6 +152,24 @@ class AtivoService
         ];
     }
 
+    /** Card de resumo do dashboard principal -- só computadores, contagem total + quantos estão ligados agora (heartbeat). */
+    public function resumoDashboard(): array
+    {
+        $computadores = $this->repository->computadoresParaResumo();
+
+        $ligados = 0;
+        foreach ($computadores as $c) {
+            if (self::estaLigada($c)) {
+                $ligados++;
+            }
+        }
+
+        return [
+            'total' => count($computadores),
+            'ligados' => $ligados,
+        ];
+    }
+
     public function criar(array $post): ?int
     {
         $tipo = $post['tipo'] ?? '';
