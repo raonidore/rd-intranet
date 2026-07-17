@@ -492,4 +492,201 @@ PS;
 
         return str_replace(['__LISTA__', '__MENSAGEM__'], [$listaDireitos, $mensagemFinal], $template);
     }
+
+    /*
+     |---------------------------------------------------------
+     | Dispositivos gerenciados pelo Intune (Graph API) -- a licença do
+     | tenant (SPE_F1 / Microsoft 365 F3) inclui Intune Plan 1, então dá
+     | pra consultar/agir sobre as máquinas inscritas, não só usuários.
+     | Só enxerga o que já estiver inscrito no Intune -- ver seção de
+     | inscrição logo abaixo pra levar máquinas até esse ponto.
+     |
+     | "Retire" remove dados/apps corporativos e desinscreve do Intune;
+     | NÃO é reset de fábrica. "Wipe" (esse sim destrutivo, apaga a
+     | máquina inteira) fica fora de escopo -- ganho de uso muito menor
+     | que o risco pro dia a dia.
+     |---------------------------------------------------------
+     */
+
+    public function listarDispositivosGerenciados(): array
+    {
+        $todos = [];
+        $proximaUrl = '/deviceManagement/managedDevices?$select=id,deviceName,userPrincipalName,operatingSystem,osVersion,complianceState,lastSyncDateTime,managementAgent,enrolledDateTime&$top=999';
+
+        while ($proximaUrl !== null) {
+            $resultado = $this->chamarGraph('GET', $proximaUrl);
+
+            if (!$resultado['sucesso']) {
+                NotificationService::error('Erro ao listar dispositivos do Intune.', $resultado['mensagem']);
+                return $todos;
+            }
+
+            foreach ($resultado['dados']['value'] ?? [] as $d) {
+                $todos[] = $d;
+            }
+
+            $proximaUrl = $resultado['dados']['@odata.nextLink'] ?? null;
+        }
+
+        return $todos;
+    }
+
+    public function sincronizarDispositivoIntune(string $deviceId, string $nomeAuditoria): bool
+    {
+        return $this->acaoDispositivoIntune($deviceId, 'syncDevice', 'Sincronizar dispositivo', "Sincronização solicitada para {$nomeAuditoria}.", $nomeAuditoria);
+    }
+
+    public function reiniciarDispositivoIntune(string $deviceId, string $nomeAuditoria): bool
+    {
+        return $this->acaoDispositivoIntune($deviceId, 'rebootNow', 'Reiniciar dispositivo', "Reinício solicitado para {$nomeAuditoria}.", $nomeAuditoria);
+    }
+
+    public function bloquearDispositivoIntune(string $deviceId, string $nomeAuditoria): bool
+    {
+        return $this->acaoDispositivoIntune($deviceId, 'remoteLock', 'Bloquear dispositivo', "Bloqueio de tela solicitado para {$nomeAuditoria}.", $nomeAuditoria);
+    }
+
+    public function retirarDispositivoIntune(string $deviceId, string $nomeAuditoria): bool
+    {
+        return $this->acaoDispositivoIntune($deviceId, 'retire', 'Retirar do Intune', "Dispositivo {$nomeAuditoria} retirado do Intune -- dados/apps corporativos removidos.", $nomeAuditoria);
+    }
+
+    private function acaoDispositivoIntune(string $deviceId, string $acaoGraph, string $rotuloAuditoria, string $detalheAuditoria, string $nomeAuditoria): bool
+    {
+        $resultado = $this->chamarGraph('POST', '/deviceManagement/managedDevices/' . rawurlencode($deviceId) . "/{$acaoGraph}");
+
+        if (!$resultado['sucesso']) {
+            NotificationService::error("Erro ao executar ação em {$nomeAuditoria}.", $resultado['mensagem']);
+            return false;
+        }
+
+        AuditService::registrar('Microsoft Entra', $rotuloAuditoria, $detalheAuditoria);
+        NotificationService::success('Ação enviada -- pode levar alguns minutos pra refletir no dispositivo.');
+
+        return true;
+    }
+
+    /*
+     |---------------------------------------------------------
+     | Inscrever máquinas no Intune usando o agente próprio -- dois
+     | caminhos, dependendo se a máquina já tem o domínio Entra
+     | configurado ou não. Os dois usam o MESMO canal de comando remoto
+     | já existente pra Ativos (executar_powershell / enviar_arquivo),
+     | sem nenhuma mudança no agente.
+     |---------------------------------------------------------
+     */
+
+    /** Máquina já entrou no domínio Entra (manualmente ou via pacote de provisionamento) mas ainda não apareceu no Intune -- força a inscrição na hora em vez de esperar o ciclo automático. */
+    public static function scriptForcarEnrollmentIntune(): string
+    {
+        return <<<'PS'
+$saida = & "$env:windir\system32\deviceenroller.exe" /c /AutoEnrollMDM 2>&1
+Write-Output "Inscricao no Intune solicitada -- pode levar alguns minutos pra aparecer no portal."
+if ($saida) { Write-Output $saida }
+PS;
+    }
+
+    /** Máquina nova, sem domínio nenhum -- instala o pacote de provisionamento (.ppkg) já entregue via enviar_arquivo, esperando ele existir antes de tentar (evita corrida entre os dois comandos, sem precisar de nenhuma confirmação síncrona do servidor). */
+    public static function scriptInstalarProvisioningPackage(string $destino): string
+    {
+        $template = <<<'PS'
+$destino = '__DESTINO__'
+$limite = (Get-Date).AddSeconds(90)
+
+while (-not (Test-Path $destino) -and (Get-Date) -lt $limite) {
+    Start-Sleep -Seconds 2
+}
+
+if (-not (Test-Path $destino)) {
+    Write-Output "ERRO: pacote de provisionamento nao chegou a tempo em $destino."
+    exit 1
+}
+
+try {
+    $resultado = Install-ProvisioningPackage -PackagePath $destino -QuietInstall -ForceInstall 2>&1
+    Write-Output "Pacote de provisionamento instalado -- a maquina deve entrar no dominio e no Intune em alguns minutos."
+    if ($resultado) { Write-Output $resultado }
+} catch {
+    Write-Output "ERRO ao instalar o pacote de provisionamento: $($_.Exception.Message)"
+    exit 1
+} finally {
+    Remove-Item $destino -ErrorAction SilentlyContinue
+}
+PS;
+
+        return str_replace('__DESTINO__', $destino, $template);
+    }
+
+    /*
+     |---------------------------------------------------------
+     | Pacote de provisionamento (.ppkg) mestre -- gerado manualmente
+     | fora do portal (Windows Configuration Designer, com MFA, sem API
+     | suportada pra isso) e enviado aqui UMA vez por tenant. Copiado
+     | por máquina na hora de despachar (ver EntraController), já que
+     | o canal de envio de arquivo consome a cópia temporária.
+     |---------------------------------------------------------
+     */
+
+    private const CHAVE_PPKG_NOME = 'entra_ppkg_nome';
+    private const CHAVE_PPKG_ENVIADO_EM = 'entra_ppkg_enviado_em';
+
+    public static function caminhoProvisioningPackage(): string
+    {
+        return __DIR__ . '/../../storage/uploads/entra/bulk_enrollment.ppkg';
+    }
+
+    public function provisioningConfigurado(): bool
+    {
+        return is_file(self::caminhoProvisioningPackage());
+    }
+
+    public function provisioningInfo(): ?array
+    {
+        if (!$this->provisioningConfigurado()) {
+            return null;
+        }
+
+        return [
+            'nome' => ConfigService::get(self::CHAVE_PPKG_NOME, '') ?: 'bulk_enrollment.ppkg',
+            'enviado_em' => ConfigService::get(self::CHAVE_PPKG_ENVIADO_EM, '') ?: '',
+        ];
+    }
+
+    public function salvarProvisioningPackage(string $caminhoTemporario, string $nomeOriginal): bool
+    {
+        if (strtolower(pathinfo($nomeOriginal, PATHINFO_EXTENSION)) !== 'ppkg') {
+            NotificationService::error('O arquivo precisa ser um pacote de provisionamento (.ppkg).');
+            return false;
+        }
+
+        $destino = self::caminhoProvisioningPackage();
+        $pasta = dirname($destino);
+        if (!is_dir($pasta) && !@mkdir($pasta, 0777, true) && !is_dir($pasta)) {
+            NotificationService::error('Não foi possível preparar a pasta de armazenamento no servidor.');
+            return false;
+        }
+
+        if (!@copy($caminhoTemporario, $destino)) {
+            NotificationService::error('Não foi possível salvar o pacote de provisionamento no servidor.');
+            return false;
+        }
+
+        ConfigService::set(self::CHAVE_PPKG_NOME, basename($nomeOriginal));
+        ConfigService::set(self::CHAVE_PPKG_ENVIADO_EM, date('Y-m-d H:i:s'));
+
+        AuditService::registrar('Microsoft Entra', 'Pacote de provisionamento', "Pacote de provisionamento ({$nomeOriginal}) enviado/atualizado.");
+        NotificationService::success('Pacote de provisionamento salvo.');
+
+        return true;
+    }
+
+    public function removerProvisioningPackage(): void
+    {
+        @unlink(self::caminhoProvisioningPackage());
+        ConfigService::set(self::CHAVE_PPKG_NOME, '');
+        ConfigService::set(self::CHAVE_PPKG_ENVIADO_EM, '');
+
+        AuditService::registrar('Microsoft Entra', 'Pacote de provisionamento', 'Pacote de provisionamento removido.');
+        NotificationService::success('Pacote de provisionamento removido.');
+    }
 }

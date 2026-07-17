@@ -217,7 +217,7 @@ class EntraController extends Controller
             exit;
         }
 
-        $this->enviarScriptRestricao(EntraService::gerarScriptRestricaoLogin($upns), $ativoIds, 'Restrição de login aplicada', count($upns) . ' conta(s) autorizada(s)');
+        $this->enviarScriptParaAtivos(EntraService::gerarScriptRestricaoLogin($upns), $ativoIds, 'Restrição de login aplicada', count($upns) . ' conta(s) autorizada(s)');
 
         header('Location: ' . url('/entra/acesso-maquinas'));
         exit;
@@ -236,13 +236,187 @@ class EntraController extends Controller
             exit;
         }
 
-        $this->enviarScriptRestricao(EntraService::gerarScriptRemoverRestricaoLogin(), $ativoIds, 'Restrição de login removida', 'login liberado pra todo mundo de novo');
+        $this->enviarScriptParaAtivos(EntraService::gerarScriptRemoverRestricaoLogin(), $ativoIds, 'Restrição de login removida', 'login liberado pra todo mundo de novo');
 
         header('Location: ' . url('/entra/acesso-maquinas'));
         exit;
     }
 
-    private function enviarScriptRestricao(string $script, array $ativoIds, string $rotuloAuditoria, string $detalheAuditoria): void
+    /*
+     |---------------------------------------------------------
+     | Dispositivos gerenciados pelo Intune + inscrição de máquinas
+     | usando o agente próprio -- ver plano da feature. Reaproveita o
+     | mesmo canal de comando remoto já existente pra Ativos, por isso
+     | as ações que tocam máquina exigem os dois módulos (entra_dispositivos
+     | + ativos_novo), igual "Acesso às Máquinas".
+     |---------------------------------------------------------
+     */
+
+    public function dispositivos(): void
+    {
+        AuthMiddleware::checkModulo('entra_dispositivos');
+
+        $configurado = $this->service->configurado();
+        $dispositivosIntune = $configurado ? $this->service->listarDispositivosGerenciados() : [];
+
+        $ativoService = new AtivoService();
+        $computadores = array_values(array_filter(
+            $ativoService->listar(['tipo' => 'computador']),
+            fn($a) => $a['origem'] === 'agente' && ($a['agente_versao'] ?? '') !== 'ps1'
+        ));
+
+        $this->view('entra/dispositivos', [
+            'configurado' => $configurado,
+            'dispositivosIntune' => $dispositivosIntune,
+            'computadores' => $computadores,
+            'provisioningConfigurado' => $this->service->provisioningConfigurado(),
+            'provisioningInfo' => $this->service->provisioningInfo(),
+        ]);
+    }
+
+    public function dispositivoSincronizar(): void
+    {
+        AuthMiddleware::checkModulo('entra_dispositivos');
+        $this->service->sincronizarDispositivoIntune($_POST['device_id'] ?? '', $_POST['nome'] ?? '');
+        header('Location: ' . url('/entra/dispositivos'));
+        exit;
+    }
+
+    public function dispositivoReiniciar(): void
+    {
+        AuthMiddleware::checkModulo('entra_dispositivos');
+        $this->service->reiniciarDispositivoIntune($_POST['device_id'] ?? '', $_POST['nome'] ?? '');
+        header('Location: ' . url('/entra/dispositivos'));
+        exit;
+    }
+
+    public function dispositivoBloquear(): void
+    {
+        AuthMiddleware::checkModulo('entra_dispositivos');
+        $this->service->bloquearDispositivoIntune($_POST['device_id'] ?? '', $_POST['nome'] ?? '');
+        header('Location: ' . url('/entra/dispositivos'));
+        exit;
+    }
+
+    public function dispositivoRetirar(): void
+    {
+        AuthMiddleware::checkModulo('entra_dispositivos');
+        $this->service->retirarDispositivoIntune($_POST['device_id'] ?? '', $_POST['nome'] ?? '');
+        header('Location: ' . url('/entra/dispositivos'));
+        exit;
+    }
+
+    public function forcarEnrollment(): void
+    {
+        AuthMiddleware::checkModulo('entra_dispositivos');
+        AuthMiddleware::checkModulo('ativos_novo');
+
+        $ativoIds = array_map('intval', $_POST['ativos'] ?? []);
+
+        if (empty($ativoIds)) {
+            NotificationService::error('Selecione ao menos uma máquina.');
+            header('Location: ' . url('/entra/dispositivos'));
+            exit;
+        }
+
+        $this->enviarScriptParaAtivos(EntraService::scriptForcarEnrollmentIntune(), $ativoIds, 'Inscrição no Intune forçada', 'deviceenroller /c /AutoEnrollMDM disparado');
+
+        header('Location: ' . url('/entra/dispositivos'));
+        exit;
+    }
+
+    public function provisioningUpload(): void
+    {
+        AuthMiddleware::checkModulo('entra_dispositivos');
+
+        $arquivo = $_FILES['pacote'] ?? null;
+
+        if (!$arquivo || $arquivo['error'] !== UPLOAD_ERR_OK) {
+            NotificationService::error('Selecione um arquivo .ppkg válido.');
+            header('Location: ' . url('/entra/dispositivos'));
+            exit;
+        }
+
+        $this->service->salvarProvisioningPackage($arquivo['tmp_name'], $arquivo['name']);
+
+        header('Location: ' . url('/entra/dispositivos'));
+        exit;
+    }
+
+    public function provisioningRemover(): void
+    {
+        AuthMiddleware::checkModulo('entra_dispositivos');
+        $this->service->removerProvisioningPackage();
+        header('Location: ' . url('/entra/dispositivos'));
+        exit;
+    }
+
+    public function provisioningEnviar(): void
+    {
+        AuthMiddleware::checkModulo('entra_dispositivos');
+        AuthMiddleware::checkModulo('ativos_novo');
+
+        $ativoIds = array_map('intval', $_POST['ativos'] ?? []);
+
+        if (empty($ativoIds)) {
+            NotificationService::error('Selecione ao menos uma máquina.');
+            header('Location: ' . url('/entra/dispositivos'));
+            exit;
+        }
+
+        if (!$this->service->provisioningConfigurado()) {
+            NotificationService::error('Envie o pacote de provisionamento (.ppkg) antes.');
+            header('Location: ' . url('/entra/dispositivos'));
+            exit;
+        }
+
+        $solicitadoPor = $_SESSION['usuario']['nome'] ?? null;
+        $enviados = 0;
+        foreach ($ativoIds as $ativoId) {
+            if ($this->enviarProvisioningParaAtivo($ativoId, $solicitadoPor)) {
+                $enviados++;
+            }
+        }
+
+        AuditService::registrar('Microsoft Entra', 'Pacote de provisionamento enviado', "Pacote de provisionamento despachado pra {$enviados} máquina(s).");
+
+        if ($enviados > 0) {
+            NotificationService::success("Enviado pra {$enviados} máquina(s) -- confira o resultado no histórico de comandos de cada ativo em alguns minutos.");
+        } else {
+            NotificationService::error('Não foi possível enviar pra nenhuma máquina selecionada.');
+        }
+
+        header('Location: ' . url('/entra/dispositivos'));
+        exit;
+    }
+
+    private function enviarProvisioningParaAtivo(int $ativoId, ?string $solicitadoPor): bool
+    {
+        $pastaTransferencias = __DIR__ . '/../../storage/uploads/ativos_transferencias';
+        if (!is_dir($pastaTransferencias) && !@mkdir($pastaTransferencias, 0777, true) && !is_dir($pastaTransferencias)) {
+            return false;
+        }
+
+        $copiaTemp = $pastaTransferencias . '/enviar_' . uniqid('', true) . '_bulk_enrollment.ppkg';
+        if (!@copy(EntraService::caminhoProvisioningPackage(), $copiaTemp)) {
+            return false;
+        }
+
+        $destino = 'C:\\Windows\\Temp\\RDIntranetProvisioning\\bulk_enrollment.ppkg';
+        $ativoService = new AtivoService();
+
+        $resultadoArquivo = $ativoService->enviarComando($ativoId, 'enviar_arquivo', $solicitadoPor, $destino, 'bulk_enrollment.ppkg', $copiaTemp);
+        if (!($resultadoArquivo['success'] ?? false)) {
+            @unlink($copiaTemp);
+            return false;
+        }
+
+        $resultadoScript = $ativoService->solicitarListagem($ativoId, 'executar_powershell', EntraService::scriptInstalarProvisioningPackage($destino), $solicitadoPor, true);
+
+        return $resultadoScript['success'] ?? false;
+    }
+
+    private function enviarScriptParaAtivos(string $script, array $ativoIds, string $rotuloAuditoria, string $detalheAuditoria): void
     {
         $solicitadoPor = $_SESSION['usuario']['nome'] ?? null;
         $ativoService = new AtivoService();

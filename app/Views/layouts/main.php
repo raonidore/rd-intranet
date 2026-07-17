@@ -591,6 +591,11 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
             <i class="bi bi-shield-lock me-2"></i> Acesso às Máquinas
         </a>
         <?php endif; ?>
+        <?php if (PermissionService::temAcesso('entra_dispositivos')): ?>
+        <a href="<?= url('/entra/dispositivos') ?>" class="<?= str_starts_with($uriAtual, '/entra/dispositivos') ? 'active' : '' ?>">
+            <i class="bi bi-laptop me-2"></i> Dispositivos (Intune)
+        </a>
+        <?php endif; ?>
         <?php if (PermissionService::temAcesso('entra_configuracao')): ?>
         <a href="<?= url('/entra/configuracao') ?>" class="<?= str_starts_with($uriAtual, '/entra/configuracao') ? 'active' : '' ?>">
             <i class="bi bi-gear me-2"></i> Configuração

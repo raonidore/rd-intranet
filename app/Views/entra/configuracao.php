@@ -60,7 +60,9 @@ use App\Components\Badge;
                 mostrados na tela de visão geral -- são o Client ID e Tenant ID acima.</li>
             <li class="mb-2"><strong>API permissions &gt; Add a permission &gt; Microsoft Graph &gt; Application permissions</strong>
                 (não "Delegated") e adicione: <code>User.ReadWrite.All</code>, <code>Directory.Read.All</code> e
-                <code>Organization.Read.All</code>.</li>
+                <code>Organization.Read.All</code>. Pra usar a tela de <strong>Dispositivos (Intune)</strong>, adicione
+                também <code>DeviceManagementManagedDevices.Read.All</code> e
+                <code>DeviceManagementManagedDevices.ReadWrite.All</code> (só necessário se for usar aquela tela).</li>
             <li class="mb-2">Clique em <strong>"Grant admin consent for [tenant]"</strong> -- sem isso as permissões
                 ficam pendentes e nenhuma chamada funciona.</li>
             <li class="mb-0"><strong>Certificates &amp; secrets &gt; Client secrets &gt; New client secret.</strong>

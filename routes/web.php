@@ -362,6 +362,15 @@ $router->post('/entra/usuarios/excluir', [EntraController::class, 'usuarioExclui
 $router->get('/entra/acesso-maquinas', [EntraController::class, 'acessoMaquinas']);
 $router->post('/entra/acesso-maquinas/aplicar', [EntraController::class, 'acessoMaquinasAplicar']);
 $router->post('/entra/acesso-maquinas/remover', [EntraController::class, 'acessoMaquinasRemover']);
+$router->get('/entra/dispositivos', [EntraController::class, 'dispositivos']);
+$router->post('/entra/dispositivos/sincronizar', [EntraController::class, 'dispositivoSincronizar']);
+$router->post('/entra/dispositivos/reiniciar', [EntraController::class, 'dispositivoReiniciar']);
+$router->post('/entra/dispositivos/bloquear', [EntraController::class, 'dispositivoBloquear']);
+$router->post('/entra/dispositivos/retirar', [EntraController::class, 'dispositivoRetirar']);
+$router->post('/entra/dispositivos/forcar-enrollment', [EntraController::class, 'forcarEnrollment']);
+$router->post('/entra/provisionamento/upload', [EntraController::class, 'provisioningUpload']);
+$router->post('/entra/provisionamento/remover', [EntraController::class, 'provisioningRemover']);
+$router->post('/entra/provisionamento/enviar', [EntraController::class, 'provisioningEnviar']);
 
 $router->get('/banco-dados/conexoes', [DbConexaoController::class, 'index']);
 $router->get('/banco-dados/conexoes/novo', [DbConexaoController::class, 'novoForm']);
