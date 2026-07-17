@@ -12,6 +12,50 @@ use App\Components\Badge;
     <small class="text-muted"><a href="<?= url('/entra/dashboard') ?>"><i class="bi bi-arrow-left"></i> Dashboard</a></small>
 </div>
 
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <strong><i class="bi bi-question-circle"></i> Como entrar uma máquina no domínio</strong>
+        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#ajudaEntrarDominio">
+            Ver passo a passo
+        </button>
+    </div>
+    <div class="collapse" id="ajudaEntrarDominio">
+        <div class="card-body">
+            <p class="small text-muted">
+                <strong>Entrar no domínio</strong> (identidade) e <strong>virar gerenciado pelo Intune</strong>
+                (dispositivo) são coisas diferentes -- os dois passos abaixo cobrem cada uma.
+            </p>
+
+            <strong class="small">1. Uma vez por tenant (pré-requisito, feito no portal do Entra)</strong>
+            <p class="small text-muted mb-1">
+                Sem isso, nenhuma máquina vira gerenciada automaticamente -- nem entrando manualmente, nem pelo
+                botão "Forçar inscrição agora" desta tela.
+            </p>
+            <ol class="small text-muted">
+                <li>Acesse o <a href="https://entra.microsoft.com" target="_blank">portal do Entra</a> &gt;
+                    <strong>Identity &gt; Mobility (MDM and MAM) &gt; Microsoft Intune</strong>.</li>
+                <li>Em <strong>"MDM user scope"</strong>, troque de <code>None</code> (padrão) pra <code>All</code>
+                    (todo mundo) ou <code>Some</code> (mirando um grupo específico).</li>
+            </ol>
+
+            <strong class="small">2. Em cada máquina (uma vez por máquina, ou via pacote de provisionamento acima)</strong>
+            <ol class="small text-muted mb-0">
+                <li><kbd>Win</kbd> + <kbd>I</kbd> &gt; <strong>Contas &gt; Acesso corporativo ou de estudante &gt; Conectar</strong>.</li>
+                <li>Não digite o e-mail direto na caixa principal -- isso só adiciona uma "conta de trabalho", sem
+                    entrar no domínio de verdade. Clique no <strong>link pequeno embaixo da caixa</strong>
+                    ("Ingressar neste dispositivo no Microsoft Entra ID" / "Join this device to Microsoft Entra ID").</li>
+                <li>Faça login com o <strong>UPN completo</strong> de um usuário já criado (ex:
+                    <code>usuario@enzilab.net</code>) + senha (+ MFA se estiver habilitado). Não precisa digitar o
+                    domínio em nenhum outro lugar -- o Windows descobre o tenant sozinho a partir do que vem depois
+                    do <code>@</code>.</li>
+                <li>Reinicie quando pedir. Pra confirmar que funcionou: <strong>Contas &gt; Acesso corporativo</strong>
+                    deve mostrar "Conectado a [tenant] Entra ID", ou rode <code>dsregcmd /status</code> no cmd e
+                    procure por <code>AzureAdJoined: YES</code>.</li>
+            </ol>
+        </div>
+    </div>
+</div>
+
 <?php if (!$configurado): ?>
     <div class="card border-0 shadow-sm">
         <div class="card-body text-center py-5">
