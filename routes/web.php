@@ -358,6 +358,10 @@ $router->post('/entra/usuarios/ativar', [EntraController::class, 'ativar']);
 $router->post('/entra/usuarios/desativar', [EntraController::class, 'desativar']);
 $router->post('/entra/usuarios/licenca/atribuir', [EntraController::class, 'licencaAtribuir']);
 $router->post('/entra/usuarios/licenca/remover', [EntraController::class, 'licencaRemover']);
+$router->post('/entra/usuarios/excluir', [EntraController::class, 'usuarioExcluir']);
+$router->get('/entra/acesso-maquinas', [EntraController::class, 'acessoMaquinas']);
+$router->post('/entra/acesso-maquinas/aplicar', [EntraController::class, 'acessoMaquinasAplicar']);
+$router->post('/entra/acesso-maquinas/remover', [EntraController::class, 'acessoMaquinasRemover']);
 
 $router->get('/banco-dados/conexoes', [DbConexaoController::class, 'index']);
 $router->get('/banco-dados/conexoes/novo', [DbConexaoController::class, 'novoForm']);

@@ -3,6 +3,7 @@ ob_start();
 
 use App\Components\Alert;
 use App\Components\Badge;
+use App\Services\EntraService;
 ?>
 
 <?= Alert::flash() ?>
@@ -67,7 +68,10 @@ use App\Components\Badge;
                     <tbody>
                         <?php foreach ($skus as $sku): ?>
                             <tr>
-                                <td class="font-monospace small"><?= htmlspecialchars($sku['skuPartNumber'] ?? '—') ?></td>
+                                <td>
+                                    <?= htmlspecialchars(EntraService::nomeAmigavelSku($sku['skuPartNumber'] ?? '—')) ?>
+                                    <span class="text-muted small font-monospace">(<?= htmlspecialchars($sku['skuPartNumber'] ?? '—') ?>)</span>
+                                </td>
                                 <td><?= (int)($sku['consumedUnits'] ?? 0) ?></td>
                                 <td><?= (int)($sku['prepaidUnits']['enabled'] ?? 0) ?></td>
                             </tr>

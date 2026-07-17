@@ -3,10 +3,11 @@ ob_start();
 
 use App\Components\Alert;
 use App\Components\Badge;
+use App\Services\EntraService;
 
 $skusPorId = [];
 foreach ($skus as $sku) {
-    $skusPorId[$sku['skuId']] = $sku['skuPartNumber'] ?? $sku['skuId'];
+    $skusPorId[$sku['skuId']] = EntraService::nomeAmigavelSku($sku['skuPartNumber'] ?? $sku['skuId']);
 }
 ?>
 
@@ -103,6 +104,15 @@ foreach ($skus as $sku) {
                                                         </button>
                                                     </form>
                                                 </li>
+                                                <li>
+                                                    <form method="post" action="<?= url('/entra/usuarios/excluir') ?>" class="form-excluir-usuario-entra">
+                                                        <input type="hidden" name="user_id" value="<?= htmlspecialchars($userId) ?>">
+                                                        <input type="hidden" name="upn" value="<?= htmlspecialchars($upn) ?>">
+                                                        <button type="submit" class="dropdown-item text-danger">
+                                                            <i class="bi bi-trash"></i> Excluir
+                                                        </button>
+                                                    </form>
+                                                </li>
                                             </ul>
                                         </div>
                                     </td>
@@ -196,7 +206,7 @@ foreach ($skus as $sku) {
                             <label class="form-label small mb-1">Atribuir licença</label>
                             <select name="sku_id" class="form-select form-select-sm" required>
                                 <?php foreach ($skus as $sku): ?>
-                                    <option value="<?= htmlspecialchars($sku['skuId']) ?>"><?= htmlspecialchars($sku['skuPartNumber'] ?? $sku['skuId']) ?></option>
+                                    <option value="<?= htmlspecialchars($sku['skuId']) ?>"><?= htmlspecialchars(EntraService::nomeAmigavelSku($sku['skuPartNumber'] ?? $sku['skuId'])) ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
@@ -280,6 +290,14 @@ window.addEventListener('load', function () {
     document.querySelectorAll('.form-toggle-ativo-entra').forEach(function (form) {
         form.addEventListener('submit', function (e) {
             if (form.action.includes('/desativar') && !confirm('Desativar este usuário no Entra? Ele perde acesso imediatamente.')) {
+                e.preventDefault();
+            }
+        });
+    });
+
+    document.querySelectorAll('.form-excluir-usuario-entra').forEach(function (form) {
+        form.addEventListener('submit', function (e) {
+            if (!confirm('Excluir este usuário do Entra? Essa ação não pode ser desfeita por aqui (a conta some do tenant).')) {
                 e.preventDefault();
             }
         });

@@ -586,6 +586,11 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
             <i class="bi bi-people me-2"></i> Usuários
         </a>
         <?php endif; ?>
+        <?php if (PermissionService::temAcesso('entra_usuarios') && PermissionService::temAcesso('ativos_novo')): ?>
+        <a href="<?= url('/entra/acesso-maquinas') ?>" class="<?= str_starts_with($uriAtual, '/entra/acesso-maquinas') ? 'active' : '' ?>">
+            <i class="bi bi-shield-lock me-2"></i> Acesso às Máquinas
+        </a>
+        <?php endif; ?>
         <?php if (PermissionService::temAcesso('entra_configuracao')): ?>
         <a href="<?= url('/entra/configuracao') ?>" class="<?= str_starts_with($uriAtual, '/entra/configuracao') ? 'active' : '' ?>">
             <i class="bi bi-gear me-2"></i> Configuração

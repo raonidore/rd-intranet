@@ -339,4 +339,157 @@ class EntraService
 
         return true;
     }
+
+    public function excluirUsuario(string $userId, string $upnParaAuditoria): bool
+    {
+        $resultado = $this->chamarGraph('DELETE', '/users/' . rawurlencode($userId));
+
+        if (!$resultado['sucesso']) {
+            NotificationService::error('Erro ao excluir usuário.', $resultado['mensagem']);
+            return false;
+        }
+
+        AuditService::registrar('Microsoft Entra', 'Excluir usuário', "Usuário {$upnParaAuditoria} excluído.");
+        NotificationService::success('Usuário excluído.');
+
+        return true;
+    }
+
+    /** skuPartNumber (nome técnico do Graph, ex. "SPE_F1") -> nome comercial reconhecível. Não exaustivo -- só os planos mais comuns; nome técnico aparece como está pros demais. */
+    private const NOMES_AMIGAVEIS_SKU = [
+        'SPE_F1' => 'Microsoft 365 F3',
+        'M365_F1' => 'Microsoft 365 F1',
+        'SPB' => 'Microsoft 365 Business Premium',
+        'O365_BUSINESS_PREMIUM' => 'Microsoft 365 Business Standard',
+        'SPE_E3' => 'Microsoft 365 E3',
+        'SPE_E5' => 'Microsoft 365 E5',
+        'ENTERPRISEPACK' => 'Office 365 E3',
+        'ENTERPRISEPREMIUM' => 'Office 365 E5',
+        'STANDARDPACK' => 'Office 365 E1',
+        'EXCHANGESTANDARD' => 'Exchange Online (Plan 1)',
+        'EXCHANGEENTERPRISE' => 'Exchange Online (Plan 2)',
+        'FLOW_FREE' => 'Power Automate (Free)',
+        'POWER_BI_STANDARD' => 'Power BI (Free)',
+    ];
+
+    public static function nomeAmigavelSku(string $skuPartNumber): string
+    {
+        return self::NOMES_AMIGAVEIS_SKU[$skuPartNumber] ?? $skuPartNumber;
+    }
+
+    /*
+     |---------------------------------------------------------
+     | Restringir login local do Windows a uma lista de contas do Entra
+     | -- não usa Graph API pra isso (é configuração local de cada
+     | máquina, não do tenant). Gera um script PowerShell que mexe no
+     | "User Rights Assignment" local (SeInteractiveLogonRight, o mesmo
+     | direito da política "Allow log on locally") via secedit, já que
+     | funciona sem precisar de Intune/licença adicional -- confirmado:
+     | Windows aceita referenciar contas do Entra individualmente nessa
+     | política via "AzureAD\usuario@tenant.com", só não aceita GRUPOS do
+     | Entra por essa via (isso sim exigiria Intune). O script é entregue
+     | pra cada ativo pelo mesmo canal de comando remoto já existente
+     | (AtivoService::solicitarListagem, executar_powershell, elevado).
+     |
+     | Rede de segurança: o grupo local "Administradores" (SID universal
+     | *S-1-5-32-544) SEMPRE entra na lista, então essa ação nunca tranca
+     | o acesso de quem administra a máquina localmente -- e como essa
+     | política só afeta login INTERATIVO no console (não afeta serviços,
+     | tarefas agendadas nem o canal de comando remoto do nosso próprio
+     | agente), mesmo uma aplicação errada continua sendo revertível
+     | remotamente por aqui, sem precisar tocar fisicamente na máquina.
+     |---------------------------------------------------------
+     */
+
+    private const SID_ADMINISTRADORES_LOCAIS = '*S-1-5-32-544';
+    private const SID_USUARIOS_LOCAIS = '*S-1-5-32-545';
+
+    private static function validarUpns(array $upns): array
+    {
+        return array_values(array_filter(array_map(function ($upn) {
+            $upn = trim((string)$upn);
+            return preg_match('/^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$/', $upn) === 1 ? $upn : null;
+        }, $upns)));
+    }
+
+    /** Script que aplica a restrição -- só os UPNs informados (+ administradores locais, sempre) podem logar localmente. */
+    public static function gerarScriptRestricaoLogin(array $upnsPermitidos): string
+    {
+        $upns = self::validarUpns($upnsPermitidos);
+
+        $direitos = array_merge(
+            [self::SID_ADMINISTRADORES_LOCAIS],
+            array_map(fn($upn) => 'AzureAD\\' . $upn, $upns)
+        );
+
+        return self::scriptSeceditLogonRight(
+            implode(',', $direitos),
+            'Restricao aplicada -- administradores locais + ' . count($upns) . ' conta(s) do Entra autorizadas.'
+        );
+    }
+
+    /** Script que desfaz a restrição -- volta pro padrão comum do Windows (Administradores + Usuários locais). */
+    public static function gerarScriptRemoverRestricaoLogin(): string
+    {
+        return self::scriptSeceditLogonRight(
+            implode(',', [self::SID_ADMINISTRADORES_LOCAIS, self::SID_USUARIOS_LOCAIS]),
+            'Restricao removida -- login local liberado pra Administradores e Usuarios locais novamente.'
+        );
+    }
+
+    private static function scriptSeceditLogonRight(string $listaDireitos, string $mensagemFinal): string
+    {
+        $template = <<<'PS'
+$listaCompleta = '__LISTA__'
+
+$tempCfg = Join-Path $env:TEMP ("rd_secpol_" + [guid]::NewGuid().ToString("N") + ".inf")
+$tempDb = Join-Path $env:TEMP ("rd_secpol_" + [guid]::NewGuid().ToString("N") + ".sdb")
+
+try {
+    $exportOut = secedit /export /cfg $tempCfg /areas USER_RIGHTS 2>&1
+    if (-not (Test-Path $tempCfg)) {
+        Write-Output "ERRO: falha ao exportar politica atual de seguranca -- $exportOut"
+        exit 1
+    }
+
+    $linhas = Get-Content $tempCfg
+    $encontrou = $false
+    $novasLinhas = foreach ($linha in $linhas) {
+        if ($linha -match '^SeInteractiveLogonRight\s*=') {
+            $encontrou = $true
+            "SeInteractiveLogonRight = $listaCompleta"
+        } else {
+            $linha
+        }
+    }
+
+    if (-not $encontrou) {
+        $comSecao = @()
+        foreach ($linha in $novasLinhas) {
+            $comSecao += $linha
+            if ($linha -match '^\[Privilege Rights\]') {
+                $comSecao += "SeInteractiveLogonRight = $listaCompleta"
+            }
+        }
+        $novasLinhas = $comSecao
+    }
+
+    Set-Content -Path $tempCfg -Value $novasLinhas -Encoding Unicode
+
+    $configureOut = secedit /configure /db $tempDb /cfg $tempCfg /areas USER_RIGHTS 2>&1
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Output "ERRO: secedit /configure falhou -- $configureOut"
+        exit 1
+    }
+
+    Write-Output "__MENSAGEM__"
+} finally {
+    Remove-Item $tempCfg -ErrorAction SilentlyContinue
+    Remove-Item $tempDb -ErrorAction SilentlyContinue
+}
+PS;
+
+        return str_replace(['__LISTA__', '__MENSAGEM__'], [$listaDireitos, $mensagemFinal], $template);
+    }
 }
