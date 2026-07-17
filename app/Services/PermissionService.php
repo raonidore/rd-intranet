@@ -6,6 +6,15 @@ class PermissionService
 {
     public static function temAcesso(string $modulo): bool
     {
+        // Grupo desligado pra instalação inteira (Sistema > Módulos) --
+        // ninguém vê, nem admin. É um toggle de "esse cliente usa esse
+        // módulo", não uma permissão individual, então vem antes de
+        // qualquer bypass.
+        $grupo = ModuloCatalogo::grupoDoModulo($modulo);
+        if ($grupo !== null && !ModuloCatalogo::grupoHabilitado($grupo)) {
+            return false;
+        }
+
         $usuario = $_SESSION['usuario'] ?? null;
 
         if (!$usuario) {

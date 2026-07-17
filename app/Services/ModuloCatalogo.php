@@ -73,4 +73,64 @@ class ModuloCatalogo
 
         return $grupos;
     }
+
+    /*
+     |---------------------------------------------------------
+     | Grupos habilitáveis por instalação -- diferente do picker de
+     | módulos por usuário (usuario_modulos), isto liga/desliga o grupo
+     | INTEIRO pra todo mundo, admin incluso (menos poluição de menu em
+     | clientes que não usam um módulo). 'Sistema' nunca entra aqui --
+     | senão dava pra se trancar fora da própria tela que reabilita
+     | grupos.
+     |---------------------------------------------------------
+     */
+
+    public const GRUPOS_TOGGLEAVEIS = [
+        'Apache', 'Banco de Dados', 'Ativos', 'Infraestrutura', 'VPN', 'Samba', 'Segurança', 'Microsoft Entra',
+    ];
+
+    /** Grupos que nascem desligados em instalações novas -- opt-in, não fazem parte do uso típico. */
+    private const GRUPOS_DESABILITADOS_POR_PADRAO = ['Microsoft Entra'];
+
+    private const CHAVE_CONFIG_GRUPOS = 'sistema_grupos_habilitados';
+
+    public static function grupoDoModulo(string $modulo): ?string
+    {
+        return self::MODULOS[$modulo]['grupo'] ?? null;
+    }
+
+    /**
+     * Ausente na config = todos os grupos "de sempre" habilitados
+     * (instalação existente não perde nada num update), exceto os
+     * listados em GRUPOS_DESABILITADOS_POR_PADRAO, que só ficam
+     * visíveis depois de habilitados explicitamente em Sistema > Módulos.
+     */
+    public static function gruposHabilitados(): array
+    {
+        $bruto = ConfigService::get(self::CHAVE_CONFIG_GRUPOS);
+
+        if ($bruto === null || $bruto === '') {
+            return array_values(array_diff(self::GRUPOS_TOGGLEAVEIS, self::GRUPOS_DESABILITADOS_POR_PADRAO));
+        }
+
+        $decodificado = json_decode($bruto, true);
+
+        return is_array($decodificado) ? $decodificado : [];
+    }
+
+    public static function grupoHabilitado(string $grupo): bool
+    {
+        if (!in_array($grupo, self::GRUPOS_TOGGLEAVEIS, true)) {
+            return true; // grupo nao togglavel (ex: "Sistema") -- sempre visivel
+        }
+
+        return in_array($grupo, self::gruposHabilitados(), true);
+    }
+
+    public static function salvarGruposHabilitados(array $grupos): void
+    {
+        $validos = array_values(array_intersect($grupos, self::GRUPOS_TOGGLEAVEIS));
+
+        ConfigService::set(self::CHAVE_CONFIG_GRUPOS, json_encode($validos));
+    }
 }

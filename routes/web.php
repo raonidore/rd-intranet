@@ -47,6 +47,7 @@ use App\Controllers\AtivoAgenteController;
 use App\Controllers\AcessoRemotoController;
 use App\Controllers\EtiquetaConfigController;
 use App\Controllers\EmpresaController;
+use App\Controllers\SistemaModulosController;
 
 $router->get('/', [DashboardController::class, 'index']);
 $router->get('/dashboard', [DashboardController::class, 'index']);
@@ -341,6 +342,9 @@ $router->post('/administracao/atualizacoes/passos-manuais/desconfirmar', [Atuali
 
 $router->get('/administracao/empresa', [EmpresaController::class, 'index']);
 $router->post('/administracao/empresa/salvar', [EmpresaController::class, 'salvar']);
+
+$router->get('/administracao/modulos', [SistemaModulosController::class, 'index']);
+$router->post('/administracao/modulos/salvar', [SistemaModulosController::class, 'salvar']);
 
 $router->get('/banco-dados/conexoes', [DbConexaoController::class, 'index']);
 $router->get('/banco-dados/conexoes/novo', [DbConexaoController::class, 'novoForm']);

@@ -24,8 +24,9 @@ $abrirApache = $rdSecaoAtiva(['/apache']);
 $abrirBancoDados = $rdSecaoAtiva(['/banco-dados']);
 $abrirInfraestrutura = $rdSecaoAtiva(['/infraestrutura']);
 $abrirSamba = $rdSecaoAtiva(['/samba', '/deploy']);
-$abrirSeguranca = $rdSecaoAtiva(['/auditoria', '/administracao', '/seguranca']);
+$abrirSeguranca = $rdSecaoAtiva(['/seguranca']);
 $abrirVpn = $rdSecaoAtiva(['/vpn']);
+$abrirSistema = $rdSecaoAtiva(['/administracao', '/auditoria']);
 
 $abrirHardware = $rdSecaoAtiva(['/infraestrutura/hardware']);
 $abrirRede = $rdSecaoAtiva(['/infraestrutura/rede', '/infraestrutura/servidor/rede']);
@@ -34,6 +35,7 @@ $abrirVpnWireguard = $rdSecaoAtiva(['/vpn/wireguard']);
 $abrirVpnOpenvpn = $rdSecaoAtiva(['/vpn/openvpn']);
 $abrirVpnIkev2 = $rdSecaoAtiva(['/vpn/ikev2']);
 $abrirAtivos = $rdSecaoAtiva(['/ativos']);
+$abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -549,7 +551,7 @@ $abrirAtivos = $rdSecaoAtiva(['/ativos']);
     </div>
 
     <?php
-    $temSeguranca = PermissionService::temAcesso('auditoria') || PermissionService::temAcesso('seguranca_antivirus') || PermissionService::ehAdmin();
+    $temSeguranca = PermissionService::temAcesso('seguranca_antivirus');
     ?>
     <?php if ($temSeguranca): ?>
     <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuSeguranca"
@@ -558,19 +560,26 @@ $abrirAtivos = $rdSecaoAtiva(['/ativos']);
         <i class="bi bi-chevron-right chevron"></i>
     </button>
     <div class="collapse <?= $abrirSeguranca ? 'show' : '' ?>" id="menuSeguranca">
-        <?php if (PermissionService::temAcesso('auditoria')): ?>
-        <a href="<?= url('/auditoria') ?>" class="<?= $uriAtual === '/auditoria' ? 'active' : '' ?>">
-            <i class="bi bi-journal-text me-2"></i> Auditoria
-        </a>
-        <?php endif; ?>
-
         <?php if (PermissionService::temAcesso('seguranca_antivirus')): ?>
         <a href="<?= url('/seguranca/antivirus') ?>" class="<?= str_starts_with($uriAtual, '/seguranca/antivirus') ? 'active' : '' ?>">
             <i class="bi bi-virus me-2"></i> Antivírus
         </a>
         <?php endif; ?>
+    </div>
+    <?php endif; ?>
 
-        <?php if (PermissionService::ehAdmin()): ?>
+    <?php /* Menu "Microsoft Entra" entra na Fase 3, junto com as rotas/controller -- adicionar antes disso deixaria um link morto (404) visível pra admins. */ ?>
+
+    <?php if (PermissionService::ehAdmin()): ?>
+    <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuSistema"
+            aria-expanded="<?= $abrirSistema ? 'true' : 'false' ?>">
+        <span><i class="bi bi-gear-wide-connected me-2"></i>Sistema</span>
+        <i class="bi bi-chevron-right chevron"></i>
+    </button>
+    <div class="collapse <?= $abrirSistema ? 'show' : '' ?>" id="menuSistema">
+        <a href="<?= url('/auditoria') ?>" class="<?= $uriAtual === '/auditoria' ? 'active' : '' ?>">
+            <i class="bi bi-journal-text me-2"></i> Auditoria
+        </a>
         <a href="<?= url('/administracao/usuarios') ?>" class="<?= str_starts_with($uriAtual, '/administracao/usuarios') ? 'active' : '' ?>">
             <i class="bi bi-person-gear me-2"></i> Usuários do Sistema
         </a>
@@ -580,7 +589,17 @@ $abrirAtivos = $rdSecaoAtiva(['/ativos']);
         <a href="<?= url('/administracao/empresa') ?>" class="<?= str_starts_with($uriAtual, '/administracao/empresa') ? 'active' : '' ?>">
             <i class="bi bi-building me-2"></i> Dados da Empresa
         </a>
-        <?php endif; ?>
+
+        <button class="menu-toggle menu-toggle-sub" type="button" data-bs-toggle="collapse" data-bs-target="#menuSistemaModulos"
+                aria-expanded="<?= $abrirSistemaModulos ? 'true' : 'false' ?>">
+            <span><i class="bi bi-grid-3x3-gap-fill me-2"></i>Módulos</span>
+            <i class="bi bi-chevron-right chevron"></i>
+        </button>
+        <div class="collapse menu-sub <?= $abrirSistemaModulos ? 'show' : '' ?>" id="menuSistemaModulos">
+            <a href="<?= url('/administracao/modulos') ?>" class="<?= str_starts_with($uriAtual, '/administracao/modulos') ? 'active' : '' ?>">
+                Habilitar/Desabilitar
+            </a>
+        </div>
     </div>
     <?php endif; ?>
 
