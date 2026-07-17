@@ -184,7 +184,9 @@ class EntraService
             return ['sucesso' => true, 'dados' => $dados, 'mensagem' => ''];
         }
 
-        $mensagemErro = $dados['error']['message'] ?? "Erro HTTP {$codigo} ao falar com a Microsoft Graph.";
+        // Graph "normal" (users, subscribedSkus...) usa {"error":{"message":...}}; a API do Intune
+        // (deviceManagement/*) usa um envelope próprio {"Message":...}, sem o wrapper "error".
+        $mensagemErro = $dados['error']['message'] ?? $dados['Message'] ?? "Erro HTTP {$codigo} ao falar com a Microsoft Graph.";
 
         return ['sucesso' => false, 'dados' => null, 'mensagem' => $mensagemErro];
     }
@@ -508,8 +510,13 @@ PS;
      |---------------------------------------------------------
      */
 
+    /** true quando a última chamada a listarDispositivosGerenciados() falhou por falta de permissão no App Registration (não por token/credencial errada) -- usado pra mostrar a ajuda contextual na tela em vez de só o erro cru do Graph. */
+    private bool $ultimoErroDispositivosPermissao = false;
+
     public function listarDispositivosGerenciados(): array
     {
+        $this->ultimoErroDispositivosPermissao = false;
+
         $todos = [];
         $proximaUrl = '/deviceManagement/managedDevices?$select=id,deviceName,userPrincipalName,operatingSystem,osVersion,complianceState,lastSyncDateTime,managementAgent,enrolledDateTime&$top=999';
 
@@ -517,6 +524,9 @@ PS;
             $resultado = $this->chamarGraph('GET', $proximaUrl);
 
             if (!$resultado['sucesso']) {
+                if (stripos($resultado['mensagem'], 'scope') !== false || stripos($resultado['mensagem'], 'not authorized') !== false) {
+                    $this->ultimoErroDispositivosPermissao = true;
+                }
                 NotificationService::error('Erro ao listar dispositivos do Intune.', $resultado['mensagem']);
                 return $todos;
             }
@@ -529,6 +539,11 @@ PS;
         }
 
         return $todos;
+    }
+
+    public function ultimoErroDispositivosFoiPermissao(): bool
+    {
+        return $this->ultimoErroDispositivosPermissao;
     }
 
     public function sincronizarDispositivoIntune(string $deviceId, string $nomeAuditoria): bool

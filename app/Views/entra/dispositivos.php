@@ -106,6 +106,33 @@ use App\Components\Badge;
         </div>
     </div>
 
+    <?php if ($faltaPermissaoIntune): ?>
+        <div class="alert alert-warning">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                <div>
+                    <strong><i class="bi bi-exclamation-triangle"></i> Permissão do Intune ainda não liberada nesse tenant.</strong>
+                    <p class="small mb-0 mt-1">
+                        O App Registration existe e funciona pra usuários/licenças, mas ainda não tem as permissões
+                        de dispositivo -- comum quando o Entra foi configurado antes dessa tela existir.
+                    </p>
+                </div>
+                <button class="btn btn-sm btn-outline-warning text-nowrap" type="button" data-bs-toggle="collapse" data-bs-target="#comoResolverPermissaoIntune">
+                    <i class="bi bi-question-circle"></i> Como resolver
+                </button>
+            </div>
+            <div class="collapse mt-2" id="comoResolverPermissaoIntune">
+                <hr>
+                <ol class="small mb-2">
+                    <li>Vá no <a href="https://entra.microsoft.com" target="_blank">portal do Entra</a> &gt; Identity &gt; Applications &gt; App registrations &gt; ache o app do RD Intranet.</li>
+                    <li><strong>API permissions &gt; Add a permission &gt; Microsoft Graph &gt; Application permissions</strong> e adicione
+                        <code>DeviceManagementManagedDevices.Read.All</code> e <code>DeviceManagementManagedDevices.ReadWrite.All</code>.</li>
+                    <li>Clique em <strong>"Grant admin consent for [tenant]"</strong> -- sem isso a permissão fica pendente e continua dando esse erro.</li>
+                </ol>
+                <a href="<?= url('/entra/configuracao') ?>" class="small"><i class="bi bi-arrow-right-short"></i> Ver o passo a passo completo em Configuração</a>
+            </div>
+        </div>
+    <?php endif; ?>
+
     <div class="card border-0 shadow-sm">
         <div class="card-header bg-white d-flex justify-content-between align-items-center">
             <strong>Dispositivos gerenciados pelo Intune</strong>

@@ -258,6 +258,7 @@ class EntraController extends Controller
 
         $configurado = $this->service->configurado();
         $dispositivosIntune = $configurado ? $this->service->listarDispositivosGerenciados() : [];
+        $faltaPermissaoIntune = $configurado && $this->service->ultimoErroDispositivosFoiPermissao();
 
         $ativoService = new AtivoService();
         $computadores = array_values(array_filter(
@@ -268,6 +269,7 @@ class EntraController extends Controller
         $this->view('entra/dispositivos', [
             'configurado' => $configurado,
             'dispositivosIntune' => $dispositivosIntune,
+            'faltaPermissaoIntune' => $faltaPermissaoIntune,
             'computadores' => $computadores,
             'provisioningConfigurado' => $this->service->provisioningConfigurado(),
             'provisioningInfo' => $this->service->provisioningInfo(),
