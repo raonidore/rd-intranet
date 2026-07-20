@@ -478,17 +478,59 @@ del ""%~f0""
         }
     }
 
+    /// <summary>
+    /// Registra o início automático via Agendador de Tarefas (/sc onlogon
+    /// /rl highest), não mais HKCU\...\Run -- uma entrada em Run sempre
+    /// inicia sem elevação (nível Médio), mesmo numa conta admin, e o
+    /// agente agora PRECISA estar elevado (ver Program.cs) pra "comando
+    /// com elevação" funcionar sem credencial extra por máquina. Como
+    /// quem está criando essa tarefa aqui já está elevado (garantido pelo
+    /// Program.cs), o Windows autoriza o "Executar com privilégios mais
+    /// altos" sem pedir confirmação de novo nos próximos logins.
+    /// </summary>
     private static void RegistrarInicioAutomatico()
+    {
+        RemoverEntradaRunAntiga();
+
+        try
+        {
+            const string nomeTarefa = "RDIntranetAgenteAutoStart";
+            var argumentos = $"/create /tn \"{nomeTarefa}\" /tr \"\\\"{Application.ExecutablePath}\\\"\" /sc onlogon /rl highest /f";
+
+            using var processo = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "schtasks.exe",
+                    Arguments = argumentos,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                }
+            };
+            processo.Start();
+            processo.WaitForExit(15000);
+        }
+        catch
+        {
+            // Melhor esforço -- se falhar, só perde o "iniciar com o
+            // Windows" nessa máquina, não impede o agente de continuar
+            // rodando na sessão atual.
+        }
+    }
+
+    /// <summary>Migra instalações antigas que ainda têm a entrada em HKCU\...\Run (versão anterior, sem elevação) -- remove pra não iniciar duas vezes.</summary>
+    private static void RemoverEntradaRunAntiga()
     {
         try
         {
             using var chave = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", writable: true);
-            chave?.SetValue("RDIntranetAgente", $"\"{Application.ExecutablePath}\"");
+            chave?.DeleteValue("RDIntranetAgente", throwOnMissingValue: false);
         }
         catch
         {
-            // sem permissao pra escrever no HKCU\...\Run (raro) -- o usuario
-            // pode abrir manualmente, so perde o "iniciar com o Windows"
+            // melhor esforço
         }
     }
 

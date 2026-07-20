@@ -162,34 +162,53 @@ do ativo (card "Executar comando", abaixo do histórico de comandos), com
 opção de **elevação** (como administrador). Sem UAC interativo -- a
 elevação usa um truque padrão de Agendador de Tarefas (cria uma tarefa
 temporária com "Executar com privilégios mais altos", dispara na hora,
-apaga em seguida). Por padrão só funciona de verdade se a conta que roda
-o agente já for administrador local da máquina -- não existe truque que
-dê privilégio pra quem não tem, a elevação só evita o prompt que
-travaria uma execução remota desassistida. Saída (stdout/stderr/código)
-volta pelo mesmo canal de solicitação e fica registrada no histórico
-(últimos 5 comandos, com saída completa, expansível clicando na linha),
-junto com quem pediu (`solicitado_por`).
+apaga em seguida). **Desde a v1.0.12, o próprio agente sempre roda
+elevado**: pede UAC uma vez no primeiro início (`Program.cs`, checa
+`WindowsPrincipal.IsInRole(Administrator)` e relança com o verbo `runas`
+se precisar) e depois se registra pra iniciar já elevado nos próximos
+logins via Agendador de Tarefas (`/sc onlogon /rl highest`), em vez do
+antigo `HKCU\...\Run` (que sempre iniciava sem elevação, nível Médio,
+mesmo numa conta administradora -- foi exatamente isso que causava
+"Access is denied" ao tentar elevar comandos em versões anteriores).
+Com isso, o truque de Agendador de Tarefas funciona sozinho na maioria
+das máquinas, sem precisar cadastrar mais nada. Saída (stdout/stderr/
+código) volta pelo mesmo canal de solicitação e fica registrada no
+histórico (últimos 5 comandos, com saída completa, expansível clicando
+na linha), junto com quem pediu (`solicitado_por`).
 
-Se a conta que roda o agente **não** for administradora (caso comum --
-o agente normalmente registra em `HKCU\...\Run`, contexto do próprio
-usuário logado, não elevado), cadastre uma **credencial de elevação**
-direto na ficha do ativo (card "Executar comando", `ativos.elevacao_usuario`
-/ `elevacao_senha_cifrada`) -- **por máquina, não uma só pra frota
-inteira**: cada Windows normalmente tem sua própria conta de
-administrador local, com senha diferente (diferente da chave de API do
-agente, que essa sim é única pra frota). Usuário local ou de domínio
-(ex.: `DOMINIO\admin` ou `.\admin`) + senha. A senha fica cifrada no
-banco (`CryptoService`, AES-256-GCM, mesma chave já usada pra senha de
-conexão de banco de clientes) e só é enviada ao agente, decifrada, no
-momento em que uma solicitação com elevação marcada está pendente pra
-aquele ativo específico -- nunca em todo heartbeat, nunca fica gravada
-em log/auditoria (só o nome de usuário é auditado), nunca vaza pra
-outra máquina. Quando essa credencial existe, a tarefa agendada roda
-com `/ru "usuario" /rp "senha"` em vez de depender da conta do agente
-já ser admin -- vale mesmo com o agente rodando como usuário comum. Sem
-credencial
-cadastrada, cai de volta no comportamento padrão (`/rl highest`,
-depende da conta do agente).
+Ainda existe a opção de cadastrar uma **credencial de elevação** por
+máquina direto na ficha do ativo (card "Executar comando",
+`ativos.elevacao_usuario` / `elevacao_senha_cifrada`) -- **por máquina,
+não uma só pra frota inteira**: cada Windows normalmente tem sua própria
+conta de administrador local, com senha diferente (diferente da chave
+de API do agente, que essa sim é única pra frota). Ainda útil quando: o
+agente instalado é de uma versão anterior à v1.0.12 (sem elevação
+própria), o usuário recusou o prompt de UAC no primeiro início, ou você
+quer que o comando rode especificamente como OUTRA conta (não a que já
+roda o agente). Usuário local ou de domínio (ex.: `DOMINIO\admin` ou
+`.\admin`) + senha. A senha fica cifrada no banco (`CryptoService`,
+AES-256-GCM, mesma chave já usada pra senha de conexão de banco de
+clientes) e só é enviada ao agente, decifrada, no momento em que uma
+solicitação com elevação marcada está pendente pra aquele ativo
+específico -- nunca em todo heartbeat, nunca fica gravada em
+log/auditoria (só o nome de usuário é auditado), nunca vaza pra outra
+máquina. Quando essa credencial existe, a tarefa agendada roda com
+`/ru "usuario" /rp "senha"` em vez de depender da conta do agente já
+ser admin. Sem credencial cadastrada, cai de volta no comportamento
+padrão (`/rl highest`, depende da conta do agente já estar elevada).
+
+**Pegadinha confirmada ao vivo, numa VM de teste real**: se a credencial
+cadastrada for de uma conta administradora local **com nome próprio**
+(ex. `TI`, não a conta `Administrator` embutida do Windows), o
+`schtasks /ru` pode recusar com `ERROR: Access is denied` mesmo com
+usuário/senha certos -- é uma política do Windows chamada "token
+filtrado pra contas locais" (UAC remote restrictions), que existe
+mesmo em contas fora de domínio. A conta `Administrator` embutida é
+isenta disso por padrão; qualquer outra conta admin local não é. Pra
+liberar, roda uma vez na máquina afetada (não precisa reiniciar):
+```
+reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v LocalAccountTokenFilterPolicy /t REG_DWORD /d 1 /f
+```
 
 **Poder de verdade, use com critério**: quem tiver acesso ao módulo
 Ativos com permissão de enviar comando (`ativos_novo`) consegue rodar
