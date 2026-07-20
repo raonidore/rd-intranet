@@ -61,8 +61,11 @@ use App\Components\Badge;
             <li class="mb-2"><strong>API permissions &gt; Add a permission &gt; Microsoft Graph &gt; Application permissions</strong>
                 (não "Delegated") e adicione: <code>User.ReadWrite.All</code>, <code>Directory.Read.All</code> e
                 <code>Organization.Read.All</code>. Pra usar a tela de <strong>Dispositivos (Intune)</strong>, adicione
-                também <code>DeviceManagementManagedDevices.Read.All</code> e
-                <code>DeviceManagementManagedDevices.ReadWrite.All</code> (só necessário se for usar aquela tela).</li>
+                também <code>DeviceManagementManagedDevices.Read.All</code> (listar/ver),
+                <code>DeviceManagementManagedDevices.ReadWrite.All</code> (sincronizar/reiniciar/bloquear) e
+                <code>DeviceManagementManagedDevices.PrivilegedOperations.All</code> (necessário até pra sincronizar
+                -- confirmado ao vivo, o Graph exige esse escopo mais restrito mesmo pras ações "leves") -- só
+                necessário se for usar aquela tela.</li>
             <li class="mb-2">Clique em <strong>"Grant admin consent for [tenant]"</strong> -- sem isso as permissões
                 ficam pendentes e nenhuma chamada funciona.</li>
             <li class="mb-0"><strong>Certificates &amp; secrets &gt; Client secrets &gt; New client secret.</strong>
