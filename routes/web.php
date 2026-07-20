@@ -382,6 +382,7 @@ $router->post('/entra/wallpaper/desktop/upload', [EntraController::class, 'wallp
 $router->post('/entra/wallpaper/desktop/remover', [EntraController::class, 'wallpaperDesktopRemover']);
 $router->post('/entra/wallpaper/lockscreen/upload', [EntraController::class, 'wallpaperLockscreenUpload']);
 $router->post('/entra/wallpaper/lockscreen/remover', [EntraController::class, 'wallpaperLockscreenRemover']);
+$router->post('/entra/wallpaper/enviar', [EntraController::class, 'wallpaperEnviar']);
 $router->get('/entra/perfis-configuracao/novo', [EntraController::class, 'perfilConfiguracaoNovoForm']);
 $router->post('/entra/perfis-configuracao/novo', [EntraController::class, 'perfilConfiguracaoNovo']);
 $router->get('/entra/perfis-configuracao/editar', [EntraController::class, 'perfilConfiguracaoEditarForm']);

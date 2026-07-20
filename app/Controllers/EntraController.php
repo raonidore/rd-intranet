@@ -559,9 +559,16 @@ class EntraController extends Controller
         $configurado = $this->service->configurado();
         $perfis = $configurado ? $this->service->listarPerfisConfiguracao() : [];
 
+        $ativoService = new AtivoService();
+        $computadores = array_values(array_filter(
+            $ativoService->listar(['tipo' => 'computador']),
+            fn($a) => $a['origem'] === 'agente' && ($a['agente_versao'] ?? '') !== 'ps1'
+        ));
+
         $this->view('entra/perfis_configuracao', [
             'configurado' => $configurado,
             'perfis' => $perfis,
+            'computadores' => $computadores,
             'wallpaperDesktopInfo' => $this->service->wallpaperInfo('desktop'),
             'wallpaperLockscreenInfo' => $this->service->wallpaperInfo('lockscreen'),
         ]);
@@ -611,6 +618,80 @@ class EntraController extends Controller
         exit;
     }
 
+    /** Envia as imagens de papel de parede já configuradas (desktop e/ou tela de bloqueio) pras máquinas selecionadas -- diferente do resto de Perfis de Configuração, toca em Ativos/agente, por isso precisa do dual-gate. */
+    public function wallpaperEnviar(): void
+    {
+        AuthMiddleware::checkModulo('entra_perfis_configuracao');
+        AuthMiddleware::checkModulo('ativos_novo');
+
+        $ativoIds = array_map('intval', $_POST['ativos'] ?? []);
+
+        if (empty($ativoIds)) {
+            NotificationService::error('Selecione ao menos uma máquina.');
+            header('Location: ' . url('/entra/perfis-configuracao'));
+            exit;
+        }
+
+        if (!$this->service->wallpaperConfigurado('desktop') && !$this->service->wallpaperConfigurado('lockscreen')) {
+            NotificationService::error('Envie ao menos uma imagem de papel de parede antes.');
+            header('Location: ' . url('/entra/perfis-configuracao'));
+            exit;
+        }
+
+        $solicitadoPor = $_SESSION['usuario']['nome'] ?? null;
+        $enviados = 0;
+        foreach ($ativoIds as $ativoId) {
+            if ($this->enviarWallpaperParaAtivo($ativoId, $solicitadoPor)) {
+                $enviados++;
+            }
+        }
+
+        AuditService::registrar('Microsoft Entra', 'Imagens de papel de parede enviadas', "Papel de parede despachado pra {$enviados} máquina(s).");
+
+        if ($enviados > 0) {
+            NotificationService::success("Enviado pra {$enviados} máquina(s) -- confira o resultado no histórico de comandos de cada ativo em alguns segundos. Depois é só usar o botão \"Usar imagem enviada\" no formulário do perfil.");
+        } else {
+            NotificationService::error('Não foi possível enviar pra nenhuma máquina selecionada.');
+        }
+
+        header('Location: ' . url('/entra/perfis-configuracao'));
+        exit;
+    }
+
+    private function enviarWallpaperParaAtivo(int $ativoId, ?string $solicitadoPor): bool
+    {
+        $pastaTransferencias = __DIR__ . '/../../storage/uploads/ativos_transferencias';
+        if (!is_dir($pastaTransferencias) && !@mkdir($pastaTransferencias, 0777, true) && !is_dir($pastaTransferencias)) {
+            return false;
+        }
+
+        $ativoService = new AtivoService();
+        $enviouAlgum = false;
+
+        foreach (['desktop', 'lockscreen'] as $tipo) {
+            if (!$this->service->wallpaperConfigurado($tipo)) {
+                continue;
+            }
+
+            $caminhoRemoto = $this->service->caminhoRemotoWallpaper($tipo);
+            $nomeArquivo = basename(str_replace('\\', '/', $caminhoRemoto));
+            $copiaTemp = $pastaTransferencias . '/enviar_' . uniqid('', true) . '_' . $nomeArquivo;
+
+            if (!@copy(EntraService::caminhoWallpaper($tipo), $copiaTemp)) {
+                continue;
+            }
+
+            $resultado = $ativoService->enviarComando($ativoId, 'enviar_arquivo', $solicitadoPor, $caminhoRemoto, $nomeArquivo, $copiaTemp);
+            if ($resultado['success'] ?? false) {
+                $enviouAlgum = true;
+            } else {
+                @unlink($copiaTemp);
+            }
+        }
+
+        return $enviouAlgum;
+    }
+
     public function perfilConfiguracaoNovoForm(): void
     {
         AuthMiddleware::checkModulo('entra_perfis_configuracao');
@@ -618,6 +699,8 @@ class EntraController extends Controller
         $this->view('entra/perfil_configuracao_form', [
             'modoEdicao' => false,
             'perfil' => null,
+            'wallpaperDesktopFileUrl' => $this->service->urlFileWallpaper('desktop'),
+            'wallpaperLockscreenFileUrl' => $this->service->urlFileWallpaper('lockscreen'),
         ]);
     }
 
@@ -647,6 +730,8 @@ class EntraController extends Controller
         $this->view('entra/perfil_configuracao_form', [
             'modoEdicao' => true,
             'perfil' => $perfil,
+            'wallpaperDesktopFileUrl' => $this->service->urlFileWallpaper('desktop'),
+            'wallpaperLockscreenFileUrl' => $this->service->urlFileWallpaper('lockscreen'),
         ]);
     }
 

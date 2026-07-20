@@ -8,6 +8,11 @@ $valores = [];
 foreach (EntraService::CAMPOS_RESTRICOES as $campo => $info) {
     $valores[$campo] = $perfil[$campo] ?? null;
 }
+
+$wallpaperUrlsPorCampo = [
+    'personalizationDesktopImageUrl' => $wallpaperDesktopFileUrl ?? null,
+    'personalizationLockScreenImageUrl' => $wallpaperLockscreenFileUrl ?? null,
+];
 ?>
 
 <?= Alert::flash() ?>
@@ -45,8 +50,18 @@ foreach (EntraService::CAMPOS_RESTRICOES as $campo => $info) {
                         </div>
                     <?php else: ?>
                         <label class="form-label" for="campo-<?= htmlspecialchars($campo) ?>"><?= htmlspecialchars($info['label']) ?></label>
-                        <input type="<?= $info['tipo'] === 'numero' ? 'number' : 'text' ?>" name="<?= htmlspecialchars($campo) ?>" id="campo-<?= htmlspecialchars($campo) ?>" class="form-control"
-                               value="<?= htmlspecialchars((string)($valores[$campo] ?? '')) ?>">
+                        <div class="d-flex gap-2">
+                            <input type="<?= $info['tipo'] === 'numero' ? 'number' : 'text' ?>" name="<?= htmlspecialchars($campo) ?>" id="campo-<?= htmlspecialchars($campo) ?>" class="form-control"
+                                   value="<?= htmlspecialchars((string)($valores[$campo] ?? '')) ?>">
+                            <?php if (!empty($wallpaperUrlsPorCampo[$campo])): ?>
+                                <button type="button" class="btn btn-outline-secondary text-nowrap botao-usar-imagem-enviada" data-campo="campo-<?= htmlspecialchars($campo) ?>" data-url="<?= htmlspecialchars($wallpaperUrlsPorCampo[$campo]) ?>">
+                                    <i class="bi bi-image"></i> Usar imagem enviada
+                                </button>
+                            <?php endif; ?>
+                        </div>
+                        <?php if (array_key_exists($campo, $wallpaperUrlsPorCampo) && empty($wallpaperUrlsPorCampo[$campo])): ?>
+                            <div class="form-text">Nenhuma imagem enviada ainda pra esse campo -- veja "Imagens de papel de parede" na listagem.</div>
+                        <?php endif; ?>
                     <?php endif; ?>
                 </div>
             <?php endforeach; ?>
@@ -56,6 +71,19 @@ foreach (EntraService::CAMPOS_RESTRICOES as $campo => $info) {
         </form>
     </div>
 </div>
+
+<script>
+(function () {
+    document.querySelectorAll('.botao-usar-imagem-enviada').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+            const campo = document.getElementById(botao.dataset.campo);
+            if (campo) {
+                campo.value = botao.dataset.url;
+            }
+        });
+    });
+})();
+</script>
 
 <?php
 $conteudo = ob_get_clean();

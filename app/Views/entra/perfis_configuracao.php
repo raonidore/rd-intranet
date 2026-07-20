@@ -83,8 +83,9 @@ use App\Components\Badge;
             <p class="text-muted small">
                 A Microsoft não hospeda essa imagem -- os campos de papel de parede do perfil aceitam uma URL
                 pública (http/https) ou um caminho já presente na máquina. Envie aqui pra guardar a imagem no
-                servidor; o envio dela pra cada máquina (e o preenchimento automático no formulário do perfil)
-                é o próximo passo, ainda não feito nesta tela.
+                servidor, depois selecione as máquinas abaixo pra entregar o arquivo nelas (mesmo canal do
+                Company Portal/pacote de provisionamento) -- uma vez entregue, o formulário do perfil mostra um
+                botão pra usar o caminho local automaticamente.
             </p>
             <div class="row g-3">
                 <div class="col-md-6">
@@ -124,6 +125,31 @@ use App\Components\Badge;
                     <?php endif; ?>
                 </div>
             </div>
+
+            <?php if ($wallpaperDesktopInfo || $wallpaperLockscreenInfo): ?>
+                <hr>
+                <form method="post" action="<?= url('/entra/wallpaper/enviar') ?>" id="formEnviarWallpaper">
+                    <strong class="small">Entregar nas máquinas</strong>
+                    <div class="border rounded p-2 mb-2 mt-1" style="max-height:220px; overflow-y:auto">
+                        <?php if (empty($computadores)): ?>
+                            <p class="text-muted small mb-0">Nenhum computador com o agente instalado.</p>
+                        <?php else: ?>
+                            <?php foreach ($computadores as $c): ?>
+                                <div class="form-check">
+                                    <input class="form-check-input campo-ativo-wallpaper" type="checkbox" name="ativos[]" value="<?= (int)$c['id'] ?>" id="wp-ativo-<?= (int)$c['id'] ?>">
+                                    <label class="form-check-label small" for="wp-ativo-<?= (int)$c['id'] ?>">
+                                        <?= htmlspecialchars($c['nome']) ?>
+                                        <span class="text-muted font-monospace">(<?= htmlspecialchars($c['codigo_patrimonio']) ?>)</span>
+                                    </label>
+                                </div>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </div>
+                    <button type="submit" class="btn btn-sm btn-outline-primary" id="botaoEnviarWallpaper">
+                        <i class="bi bi-send"></i> Enviar pras máquinas selecionadas
+                    </button>
+                </form>
+            <?php endif; ?>
         </div>
     </div>
 
@@ -234,6 +260,20 @@ use App\Components\Badge;
         botaoRemoverLockscreen.addEventListener('click', function () {
             if (confirm('Remover a imagem de papel de parede (tela de bloqueio)?')) {
                 document.getElementById('formRemoverWallpaperLockscreen').submit();
+            }
+        });
+    }
+
+    const formWallpaper = document.getElementById('formEnviarWallpaper');
+    if (formWallpaper) {
+        formWallpaper.addEventListener('submit', function (e) {
+            if (!Array.from(document.querySelectorAll('.campo-ativo-wallpaper')).some(function (c) { return c.checked; })) {
+                e.preventDefault();
+                alert('Selecione ao menos uma máquina.');
+                return;
+            }
+            if (!confirm('Enviar as imagens de papel de parede pras máquinas selecionadas?')) {
+                e.preventDefault();
             }
         });
     }

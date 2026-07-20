@@ -910,6 +910,31 @@ PS;
         NotificationService::success('Imagem removida.');
     }
 
+    /** Caminho fixo que o arquivo vai ocupar NA MÁQUINA depois de enviado (ProgramData -- persistente, diferente do Temp usado por instaladores avulsos) -- mesma extensão do arquivo original enviado. Null se essa imagem ainda não foi configurada. */
+    public function caminhoRemotoWallpaper(string $tipo): ?string
+    {
+        $info = $this->wallpaperInfo($tipo);
+        if ($info === null) {
+            return null;
+        }
+
+        $extensao = strtolower(pathinfo($info['nome'], PATHINFO_EXTENSION));
+        $nomeArquivo = ($tipo === 'desktop' ? 'wallpaper_desktop' : 'wallpaper_lockscreen') . '.' . $extensao;
+
+        return 'C:\\ProgramData\\RDIntranet\\' . $nomeArquivo;
+    }
+
+    /** URL "file:///..." pronta pra colar direto no campo personalizationDesktopImageUrl/personalizationLockScreenImageUrl do perfil -- só depois que a imagem já tiver sido enviada pra máquina (ver enviarWallpaperParaAtivo no Controller). */
+    public function urlFileWallpaper(string $tipo): ?string
+    {
+        $caminho = $this->caminhoRemotoWallpaper($tipo);
+        if ($caminho === null) {
+            return null;
+        }
+
+        return 'file:///' . str_replace('\\', '/', $caminho);
+    }
+
     /*
      |---------------------------------------------------------
      | Perfis de Configuração (Intune Configuration Profiles) -- aplicam
