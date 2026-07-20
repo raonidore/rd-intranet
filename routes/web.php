@@ -371,6 +371,9 @@ $router->post('/entra/dispositivos/forcar-enrollment', [EntraController::class, 
 $router->post('/entra/provisionamento/upload', [EntraController::class, 'provisioningUpload']);
 $router->post('/entra/provisionamento/remover', [EntraController::class, 'provisioningRemover']);
 $router->post('/entra/provisionamento/enviar', [EntraController::class, 'provisioningEnviar']);
+$router->post('/entra/company-portal/upload', [EntraController::class, 'companyPortalUpload']);
+$router->post('/entra/company-portal/remover', [EntraController::class, 'companyPortalRemover']);
+$router->post('/entra/company-portal/enviar', [EntraController::class, 'companyPortalEnviar']);
 
 $router->get('/banco-dados/conexoes', [DbConexaoController::class, 'index']);
 $router->get('/banco-dados/conexoes/novo', [DbConexaoController::class, 'novoForm']);

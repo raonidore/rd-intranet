@@ -273,6 +273,8 @@ class EntraController extends Controller
             'computadores' => $computadores,
             'provisioningConfigurado' => $this->service->provisioningConfigurado(),
             'provisioningInfo' => $this->service->provisioningInfo(),
+            'companyPortalConfigurado' => $this->service->companyPortalConfigurado(),
+            'companyPortalInfo' => $this->service->companyPortalInfo(),
         ]);
     }
 
@@ -416,6 +418,106 @@ class EntraController extends Controller
         $resultadoScript = $ativoService->solicitarListagem($ativoId, 'executar_powershell', EntraService::scriptInstalarProvisioningPackage($destino), $solicitadoPor, true);
 
         return $resultadoScript['success'] ?? false;
+    }
+
+    /*
+     |---------------------------------------------------------
+     | Instalador do Company Portal -- só entrega o arquivo (mesmo canal
+     | enviar_arquivo já testado), sem tentar instalar automaticamente.
+     | Ver EntraService::caminhoCompanyPortal() pro porquê de não rodar
+     | via nosso canal elevado aqui.
+     |---------------------------------------------------------
+     */
+
+    public function companyPortalUpload(): void
+    {
+        AuthMiddleware::checkModulo('entra_dispositivos');
+
+        $arquivo = $_FILES['instalador'] ?? null;
+
+        if (!$arquivo || $arquivo['error'] !== UPLOAD_ERR_OK) {
+            NotificationService::error('Selecione o instalador do Company Portal (.exe, .msix ou .msixbundle).');
+            header('Location: ' . url('/entra/dispositivos'));
+            exit;
+        }
+
+        $this->service->salvarCompanyPortal($arquivo['tmp_name'], $arquivo['name']);
+
+        header('Location: ' . url('/entra/dispositivos'));
+        exit;
+    }
+
+    public function companyPortalRemover(): void
+    {
+        AuthMiddleware::checkModulo('entra_dispositivos');
+        $this->service->removerCompanyPortal();
+        header('Location: ' . url('/entra/dispositivos'));
+        exit;
+    }
+
+    public function companyPortalEnviar(): void
+    {
+        AuthMiddleware::checkModulo('entra_dispositivos');
+        AuthMiddleware::checkModulo('ativos_novo');
+
+        $ativoIds = array_map('intval', $_POST['ativos'] ?? []);
+
+        if (empty($ativoIds)) {
+            NotificationService::error('Selecione ao menos uma máquina.');
+            header('Location: ' . url('/entra/dispositivos'));
+            exit;
+        }
+
+        $infoInstalador = $this->service->companyPortalInfo();
+        if ($infoInstalador === null) {
+            NotificationService::error('Envie o instalador do Company Portal antes.');
+            header('Location: ' . url('/entra/dispositivos'));
+            exit;
+        }
+
+        $solicitadoPor = $_SESSION['usuario']['nome'] ?? null;
+        $enviados = 0;
+        foreach ($ativoIds as $ativoId) {
+            if ($this->enviarCompanyPortalParaAtivo($ativoId, $solicitadoPor, $infoInstalador['nome'])) {
+                $enviados++;
+            }
+        }
+
+        AuditService::registrar('Microsoft Entra', 'Instalador Company Portal enviado', "Instalador do Company Portal despachado pra {$enviados} máquina(s).");
+
+        if ($enviados > 0) {
+            NotificationService::success("Enviado pra {$enviados} máquina(s) -- abra o arquivo em cada uma como o usuário logado (sem \"Executar como administrador\") pra instalar.");
+        } else {
+            NotificationService::error('Não foi possível enviar pra nenhuma máquina selecionada.');
+        }
+
+        header('Location: ' . url('/entra/dispositivos'));
+        exit;
+    }
+
+    private function enviarCompanyPortalParaAtivo(int $ativoId, ?string $solicitadoPor, string $nomeOriginal): bool
+    {
+        $pastaTransferencias = __DIR__ . '/../../storage/uploads/ativos_transferencias';
+        if (!is_dir($pastaTransferencias) && !@mkdir($pastaTransferencias, 0777, true) && !is_dir($pastaTransferencias)) {
+            return false;
+        }
+
+        $nomeSanitizado = preg_replace('/[^A-Za-z0-9._-]/', '_', $nomeOriginal) ?: 'company_portal_installer';
+        $copiaTemp = $pastaTransferencias . '/enviar_' . uniqid('', true) . '_' . $nomeSanitizado;
+        if (!@copy(EntraService::caminhoCompanyPortal(), $copiaTemp)) {
+            return false;
+        }
+
+        $destino = 'C:\\Windows\\Temp\\RDIntranetProvisioning\\' . $nomeSanitizado;
+        $ativoService = new AtivoService();
+
+        $resultadoArquivo = $ativoService->enviarComando($ativoId, 'enviar_arquivo', $solicitadoPor, $destino, $nomeSanitizado, $copiaTemp);
+        if (!($resultadoArquivo['success'] ?? false)) {
+            @unlink($copiaTemp);
+            return false;
+        }
+
+        return true;
     }
 
     private function enviarScriptParaAtivos(string $script, array $ativoIds, string $rotuloAuditoria, string $detalheAuditoria): void

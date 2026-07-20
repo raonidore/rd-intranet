@@ -52,6 +52,25 @@ use App\Components\Badge;
                     deve mostrar "Conectado a [tenant] Entra ID", ou rode <code>dsregcmd /status</code> no cmd e
                     procure por <code>AzureAdJoined: YES</code>.</li>
             </ol>
+
+            <strong class="small">3. Se mesmo assim não aparecer no Intune (aconteceu com a gente)</strong>
+            <p class="small text-muted mb-1">
+                Confirmado num teste real: às vezes o dispositivo entra no domínio certinho, tudo configurado no
+                tenant (licença, escopo, autoridade MDM), mas o <code>deviceenroller.exe /c /AutoEnrollMDM</code>
+                (usado pelo botão "Forçar inscrição agora") nunca completa -- o log mostra
+                <code>Mobile Device Management (MDM) is not configured</code> mesmo estando tudo certo. O que
+                resolveu foi instalar o <strong>Company Portal</strong> manualmente:
+            </p>
+            <ol class="small text-muted mb-0">
+                <li>Instala o Company Portal (pela Microsoft Store, ou pelo instalador salvo abaixo, se a Store der
+                    trabalho).</li>
+                <li>Abre o app, loga com o UPN do usuário. Se aparecer <em>"This device hasn't been set up for
+                    corporate use yet"</em>, clica nessa mensagem pra começar a configuração.</li>
+                <li>Se aparecer o erro <em>"We couldn't auto-discover a management endpoint..."</em>, preenche o
+                    campo <strong>"MDM Server URL"</strong> manualmente com:
+                    <code>https://enrollment.manage.microsoft.com/enrollmentserver/discovery.svc</code> e continua.</li>
+                <li>Espera alguns minutos -- o dispositivo deve aparecer na tabela desta tela.</li>
+            </ol>
         </div>
     </div>
 </div>
@@ -147,6 +166,60 @@ use App\Components\Badge;
                     </form>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-3">
+        <div class="card-header bg-white"><strong>Instalador do Company Portal</strong></div>
+        <div class="card-body">
+            <p class="small text-muted">
+                Guarde aqui o instalador do Company Portal (<code>.exe</code>, <code>.msix</code> ou
+                <code>.msixbundle</code>) pra reenviar pra quantas máquinas precisar, sem depender da Microsoft
+                Store -- muitas vezes é o que realmente completa a inscrição no Intune quando "Forçar inscrição
+                agora" não é suficiente (ver "Ver passo a passo" acima). Só entrega o arquivo na máquina; abra-o lá
+                manualmente, <strong>como o usuário logado, sem "Executar como administrador"</strong> -- apps de
+                Loja não instalam certo com privilégio elevado.
+            </p>
+
+            <?php if ($companyPortalInfo): ?>
+                <div class="d-flex justify-content-between align-items-center border rounded p-2 mb-2">
+                    <span class="small">
+                        <i class="bi bi-file-earmark-binary"></i> <?= htmlspecialchars($companyPortalInfo['nome']) ?>
+                        <span class="text-muted">(enviado em <?= htmlspecialchars($companyPortalInfo['enviado_em']) ?>)</span>
+                    </span>
+                    <button type="button" class="btn btn-sm btn-outline-danger" id="botaoRemoverCompanyPortal"><i class="bi bi-trash"></i></button>
+                </div>
+                <form method="post" action="<?= url('/entra/company-portal/remover') ?>" id="formRemoverCompanyPortal" class="d-none"></form>
+            <?php else: ?>
+                <form method="post" action="<?= url('/entra/company-portal/upload') ?>" enctype="multipart/form-data" class="d-flex gap-2 mb-2">
+                    <input type="file" name="instalador" accept=".exe,.msix,.msixbundle" class="form-control form-control-sm" required>
+                    <button type="submit" class="btn btn-sm btn-outline-secondary text-nowrap"><i class="bi bi-upload"></i> Enviar</button>
+                </form>
+            <?php endif; ?>
+
+            <form method="post" action="<?= url('/entra/company-portal/enviar') ?>" id="formEnviarCompanyPortal">
+                <div class="border rounded p-2 mb-2" style="max-height:220px; overflow-y:auto">
+                    <?php if (empty($computadores)): ?>
+                        <p class="text-muted small mb-0">Nenhum computador com o agente instalado.</p>
+                    <?php else: ?>
+                        <?php foreach ($computadores as $c): ?>
+                            <div class="form-check">
+                                <input class="form-check-input campo-ativo-companyportal" type="checkbox" name="ativos[]" value="<?= (int)$c['id'] ?>" id="cp-ativo-<?= (int)$c['id'] ?>">
+                                <label class="form-check-label small" for="cp-ativo-<?= (int)$c['id'] ?>">
+                                    <?= htmlspecialchars($c['nome']) ?>
+                                    <span class="text-muted font-monospace">(<?= htmlspecialchars($c['codigo_patrimonio']) ?>)</span>
+                                </label>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </div>
+                <button type="submit" class="btn btn-sm btn-primary" id="botaoEnviarCompanyPortal" <?= $companyPortalConfigurado ? '' : 'disabled' ?>>
+                    <i class="bi bi-send"></i> Enviar pra máquinas selecionadas
+                </button>
+                <?php if (!$companyPortalConfigurado): ?>
+                    <span class="text-muted small">envie o instalador acima primeiro</span>
+                <?php endif; ?>
+            </form>
         </div>
     </div>
 
@@ -297,6 +370,29 @@ use App\Components\Badge;
         botaoRemoverPpkg.addEventListener('click', function () {
             if (confirm('Remover o pacote de provisionamento salvo? Máquinas novas deixam de poder ser inscritas em lote até um novo envio.')) {
                 document.getElementById('formRemoverPpkg').submit();
+            }
+        });
+    }
+
+    const formCompanyPortal = document.getElementById('formEnviarCompanyPortal');
+    if (formCompanyPortal) {
+        formCompanyPortal.addEventListener('submit', function (e) {
+            if (!algumMarcado('.campo-ativo-companyportal')) {
+                e.preventDefault();
+                alert('Selecione ao menos uma máquina.');
+                return;
+            }
+            if (!confirm('Enviar o instalador do Company Portal pras máquinas selecionadas? Depois é preciso abrir o arquivo manualmente em cada uma (como o usuário logado, sem elevação).')) {
+                e.preventDefault();
+            }
+        });
+    }
+
+    const botaoRemoverCompanyPortal = document.getElementById('botaoRemoverCompanyPortal');
+    if (botaoRemoverCompanyPortal) {
+        botaoRemoverCompanyPortal.addEventListener('click', function () {
+            if (confirm('Remover o instalador do Company Portal salvo?')) {
+                document.getElementById('formRemoverCompanyPortal').submit();
             }
         });
     }

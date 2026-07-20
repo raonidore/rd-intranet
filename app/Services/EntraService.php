@@ -704,4 +704,92 @@ PS;
         AuditService::registrar('Microsoft Entra', 'Pacote de provisionamento', 'Pacote de provisionamento removido.');
         NotificationService::success('Pacote de provisionamento removido.');
     }
+
+    /*
+     |---------------------------------------------------------
+     | Instalador do Company Portal -- confirmado ao vivo numa VM de
+     | teste real: quando a inscrição automática (deviceenroller /c
+     | /AutoEnrollMDM) não completa (tenant não devolve a URL de MDM na
+     | descoberta), o Company Portal é o caminho que funciona -- ele tem
+     | tela própria de "Set up a work or school account" com campo pra
+     | informar a URL do servidor MDM manualmente quando a auto-descoberta
+     | falha. Baixar pela Microsoft Store nem sempre é prático (o cliente
+     | relatou dificuldade), então guarda um instalador (.exe/.msix/
+     | .msixbundle) aqui, uma vez, pra reenviar pra quantas máquinas
+     | precisar.
+     |
+     | Só entrega o arquivo (reaproveitando enviar_arquivo, já testado) --
+     | NÃO tenta instalar/rodar automaticamente: apps de Loja (UWP/MSIX)
+     | precisam ser instalados na sessão do próprio usuário logado, sem
+     | elevação -- rodar via nosso canal elevado (schtasks /rl highest ou
+     | /ru outra conta) tende a falhar ou instalar pro perfil errado. Fica
+     | documentado na tela pro admin abrir manualmente, sem "Executar como
+     | administrador", depois que o arquivo chegar.
+     |---------------------------------------------------------
+     */
+
+    private const CHAVE_COMPANY_PORTAL_NOME = 'entra_companyportal_nome';
+    private const CHAVE_COMPANY_PORTAL_ENVIADO_EM = 'entra_companyportal_enviado_em';
+    private const EXTENSOES_COMPANY_PORTAL_VALIDAS = ['exe', 'msix', 'msixbundle'];
+
+    public static function caminhoCompanyPortal(): string
+    {
+        return __DIR__ . '/../../storage/uploads/entra/company_portal_installer';
+    }
+
+    public function companyPortalConfigurado(): bool
+    {
+        return is_file(self::caminhoCompanyPortal());
+    }
+
+    public function companyPortalInfo(): ?array
+    {
+        if (!$this->companyPortalConfigurado()) {
+            return null;
+        }
+
+        return [
+            'nome' => ConfigService::get(self::CHAVE_COMPANY_PORTAL_NOME, '') ?: 'company_portal',
+            'enviado_em' => ConfigService::get(self::CHAVE_COMPANY_PORTAL_ENVIADO_EM, '') ?: '',
+        ];
+    }
+
+    public function salvarCompanyPortal(string $caminhoTemporario, string $nomeOriginal): bool
+    {
+        $extensao = strtolower(pathinfo($nomeOriginal, PATHINFO_EXTENSION));
+        if (!in_array($extensao, self::EXTENSOES_COMPANY_PORTAL_VALIDAS, true)) {
+            NotificationService::error('O arquivo precisa ser o instalador do Company Portal (.exe, .msix ou .msixbundle).');
+            return false;
+        }
+
+        $destino = self::caminhoCompanyPortal();
+        $pasta = dirname($destino);
+        if (!is_dir($pasta) && !@mkdir($pasta, 0777, true) && !is_dir($pasta)) {
+            NotificationService::error('Não foi possível preparar a pasta de armazenamento no servidor.');
+            return false;
+        }
+
+        if (!@copy($caminhoTemporario, $destino)) {
+            NotificationService::error('Não foi possível salvar o instalador no servidor.');
+            return false;
+        }
+
+        ConfigService::set(self::CHAVE_COMPANY_PORTAL_NOME, basename($nomeOriginal));
+        ConfigService::set(self::CHAVE_COMPANY_PORTAL_ENVIADO_EM, date('Y-m-d H:i:s'));
+
+        AuditService::registrar('Microsoft Entra', 'Instalador Company Portal', "Instalador do Company Portal ({$nomeOriginal}) enviado/atualizado.");
+        NotificationService::success('Instalador do Company Portal salvo.');
+
+        return true;
+    }
+
+    public function removerCompanyPortal(): void
+    {
+        @unlink(self::caminhoCompanyPortal());
+        ConfigService::set(self::CHAVE_COMPANY_PORTAL_NOME, '');
+        ConfigService::set(self::CHAVE_COMPANY_PORTAL_ENVIADO_EM, '');
+
+        AuditService::registrar('Microsoft Entra', 'Instalador Company Portal', 'Instalador do Company Portal removido.');
+        NotificationService::success('Instalador do Company Portal removido.');
+    }
 }
