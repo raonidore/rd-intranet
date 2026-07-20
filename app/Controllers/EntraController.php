@@ -562,7 +562,53 @@ class EntraController extends Controller
         $this->view('entra/perfis_configuracao', [
             'configurado' => $configurado,
             'perfis' => $perfis,
+            'wallpaperDesktopInfo' => $this->service->wallpaperInfo('desktop'),
+            'wallpaperLockscreenInfo' => $this->service->wallpaperInfo('lockscreen'),
         ]);
+    }
+
+    public function wallpaperDesktopUpload(): void
+    {
+        AuthMiddleware::checkModulo('entra_perfis_configuracao');
+        $this->uploadWallpaper('desktop');
+    }
+
+    public function wallpaperDesktopRemover(): void
+    {
+        AuthMiddleware::checkModulo('entra_perfis_configuracao');
+        $this->service->removerWallpaper('desktop');
+        header('Location: ' . url('/entra/perfis-configuracao'));
+        exit;
+    }
+
+    public function wallpaperLockscreenUpload(): void
+    {
+        AuthMiddleware::checkModulo('entra_perfis_configuracao');
+        $this->uploadWallpaper('lockscreen');
+    }
+
+    public function wallpaperLockscreenRemover(): void
+    {
+        AuthMiddleware::checkModulo('entra_perfis_configuracao');
+        $this->service->removerWallpaper('lockscreen');
+        header('Location: ' . url('/entra/perfis-configuracao'));
+        exit;
+    }
+
+    private function uploadWallpaper(string $tipo): void
+    {
+        $arquivo = $_FILES['imagem'] ?? null;
+
+        if (!$arquivo || $arquivo['error'] !== UPLOAD_ERR_OK) {
+            NotificationService::error('Selecione uma imagem .jpg ou .png.');
+            header('Location: ' . url('/entra/perfis-configuracao'));
+            exit;
+        }
+
+        $this->service->salvarWallpaper($tipo, $arquivo['tmp_name'], $arquivo['name']);
+
+        header('Location: ' . url('/entra/perfis-configuracao'));
+        exit;
     }
 
     public function perfilConfiguracaoNovoForm(): void

@@ -378,6 +378,10 @@ $router->post('/entra/company-portal/upload', [EntraController::class, 'companyP
 $router->post('/entra/company-portal/remover', [EntraController::class, 'companyPortalRemover']);
 $router->post('/entra/company-portal/enviar', [EntraController::class, 'companyPortalEnviar']);
 $router->get('/entra/perfis-configuracao', [EntraController::class, 'perfisConfiguracao']);
+$router->post('/entra/wallpaper/desktop/upload', [EntraController::class, 'wallpaperDesktopUpload']);
+$router->post('/entra/wallpaper/desktop/remover', [EntraController::class, 'wallpaperDesktopRemover']);
+$router->post('/entra/wallpaper/lockscreen/upload', [EntraController::class, 'wallpaperLockscreenUpload']);
+$router->post('/entra/wallpaper/lockscreen/remover', [EntraController::class, 'wallpaperLockscreenRemover']);
 $router->get('/entra/perfis-configuracao/novo', [EntraController::class, 'perfilConfiguracaoNovoForm']);
 $router->post('/entra/perfis-configuracao/novo', [EntraController::class, 'perfilConfiguracaoNovo']);
 $router->get('/entra/perfis-configuracao/editar', [EntraController::class, 'perfilConfiguracaoEditarForm']);

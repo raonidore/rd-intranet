@@ -77,6 +77,56 @@ use App\Components\Badge;
     </div>
 <?php else: ?>
 
+    <div class="card border-0 shadow-sm mb-3">
+        <div class="card-header bg-white"><strong>Imagens de papel de parede</strong></div>
+        <div class="card-body">
+            <p class="text-muted small">
+                A Microsoft não hospeda essa imagem -- os campos de papel de parede do perfil aceitam uma URL
+                pública (http/https) ou um caminho já presente na máquina. Envie aqui pra guardar a imagem no
+                servidor; o envio dela pra cada máquina (e o preenchimento automático no formulário do perfil)
+                é o próximo passo, ainda não feito nesta tela.
+            </p>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <strong class="small">Área de trabalho</strong>
+                    <?php if ($wallpaperDesktopInfo): ?>
+                        <div class="d-flex justify-content-between align-items-center border rounded p-2 mt-1">
+                            <span class="small">
+                                <i class="bi bi-file-earmark-image"></i> <?= htmlspecialchars($wallpaperDesktopInfo['nome']) ?>
+                                <span class="text-muted">(enviado em <?= htmlspecialchars($wallpaperDesktopInfo['enviado_em']) ?>)</span>
+                            </span>
+                            <button type="button" class="btn btn-sm btn-outline-danger" id="botaoRemoverWallpaperDesktop"><i class="bi bi-trash"></i></button>
+                        </div>
+                        <form method="post" action="<?= url('/entra/wallpaper/desktop/remover') ?>" id="formRemoverWallpaperDesktop" class="d-none"></form>
+                    <?php else: ?>
+                        <form method="post" action="<?= url('/entra/wallpaper/desktop/upload') ?>" enctype="multipart/form-data" class="d-flex gap-2 mt-1">
+                            <input type="file" name="imagem" accept=".jpg,.jpeg,.png" class="form-control form-control-sm" required>
+                            <button type="submit" class="btn btn-sm btn-outline-secondary text-nowrap"><i class="bi bi-upload"></i> Enviar</button>
+                        </form>
+                    <?php endif; ?>
+                </div>
+                <div class="col-md-6">
+                    <strong class="small">Tela de bloqueio</strong>
+                    <?php if ($wallpaperLockscreenInfo): ?>
+                        <div class="d-flex justify-content-between align-items-center border rounded p-2 mt-1">
+                            <span class="small">
+                                <i class="bi bi-file-earmark-image"></i> <?= htmlspecialchars($wallpaperLockscreenInfo['nome']) ?>
+                                <span class="text-muted">(enviado em <?= htmlspecialchars($wallpaperLockscreenInfo['enviado_em']) ?>)</span>
+                            </span>
+                            <button type="button" class="btn btn-sm btn-outline-danger" id="botaoRemoverWallpaperLockscreen"><i class="bi bi-trash"></i></button>
+                        </div>
+                        <form method="post" action="<?= url('/entra/wallpaper/lockscreen/remover') ?>" id="formRemoverWallpaperLockscreen" class="d-none"></form>
+                    <?php else: ?>
+                        <form method="post" action="<?= url('/entra/wallpaper/lockscreen/upload') ?>" enctype="multipart/form-data" class="d-flex gap-2 mt-1">
+                            <input type="file" name="imagem" accept=".jpg,.jpeg,.png" class="form-control form-control-sm" required>
+                            <button type="submit" class="btn btn-sm btn-outline-secondary text-nowrap"><i class="bi bi-upload"></i> Enviar</button>
+                        </form>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="card border-0 shadow-sm">
         <div class="card-body p-0">
             <?php if (empty($perfis)): ?>
@@ -169,6 +219,24 @@ use App\Components\Badge;
             }
         });
     });
+
+    const botaoRemoverDesktop = document.getElementById('botaoRemoverWallpaperDesktop');
+    if (botaoRemoverDesktop) {
+        botaoRemoverDesktop.addEventListener('click', function () {
+            if (confirm('Remover a imagem de papel de parede (área de trabalho)?')) {
+                document.getElementById('formRemoverWallpaperDesktop').submit();
+            }
+        });
+    }
+
+    const botaoRemoverLockscreen = document.getElementById('botaoRemoverWallpaperLockscreen');
+    if (botaoRemoverLockscreen) {
+        botaoRemoverLockscreen.addEventListener('click', function () {
+            if (confirm('Remover a imagem de papel de parede (tela de bloqueio)?')) {
+                document.getElementById('formRemoverWallpaperLockscreen').submit();
+            }
+        });
+    }
 })();
 </script>
 

@@ -813,6 +813,105 @@ PS;
 
     /*
      |---------------------------------------------------------
+     | Imagens de papel de parede (área de trabalho / tela de bloqueio) --
+     | a Microsoft NÃO hospeda essa imagem pros campos
+     | personalizationDesktopImageUrl/personalizationLockScreenImageUrl
+     | do perfil de configuração: eles só aceitam uma URL http(s) pública
+     | (o Windows baixa de lá) ou uma URL local "file:///C:/..." já
+     | presente na máquina. Guardamos aqui só o UPLOAD/armazenamento da
+     | imagem mestre -- o envio em lote pra cada máquina (via
+     | enviar_arquivo, mesmo canal do Company Portal/.ppkg) e o
+     | preenchimento automático do campo "file:///..." no formulário do
+     | perfil ficam pra uma próxima etapa.
+     |
+     | $tipo é sempre um literal vindo do Controller ('desktop' ou
+     | 'lockscreen'), nunca de entrada do usuário -- por isso é seguro
+     | interpolar direto no caminho do arquivo.
+     |---------------------------------------------------------
+     */
+
+    private const EXTENSOES_IMAGEM_VALIDAS = ['jpg', 'jpeg', 'png'];
+
+    public static function caminhoWallpaper(string $tipo): string
+    {
+        return __DIR__ . '/../../storage/uploads/entra/wallpaper_' . $tipo;
+    }
+
+    private static function chaveWallpaperNome(string $tipo): string
+    {
+        return "entra_wallpaper_{$tipo}_nome";
+    }
+
+    private static function chaveWallpaperEnviadoEm(string $tipo): string
+    {
+        return "entra_wallpaper_{$tipo}_enviado_em";
+    }
+
+    private static function rotuloWallpaper(string $tipo): string
+    {
+        return $tipo === 'desktop' ? 'área de trabalho' : 'tela de bloqueio';
+    }
+
+    public function wallpaperConfigurado(string $tipo): bool
+    {
+        return is_file(self::caminhoWallpaper($tipo));
+    }
+
+    public function wallpaperInfo(string $tipo): ?array
+    {
+        if (!$this->wallpaperConfigurado($tipo)) {
+            return null;
+        }
+
+        return [
+            'nome' => ConfigService::get(self::chaveWallpaperNome($tipo), '') ?: 'wallpaper',
+            'enviado_em' => ConfigService::get(self::chaveWallpaperEnviadoEm($tipo), '') ?: '',
+        ];
+    }
+
+    public function salvarWallpaper(string $tipo, string $caminhoTemporario, string $nomeOriginal): bool
+    {
+        $extensao = strtolower(pathinfo($nomeOriginal, PATHINFO_EXTENSION));
+        if (!in_array($extensao, self::EXTENSOES_IMAGEM_VALIDAS, true)) {
+            NotificationService::error('A imagem precisa ser .jpg, .jpeg ou .png.');
+            return false;
+        }
+
+        $destino = self::caminhoWallpaper($tipo);
+        $pasta = dirname($destino);
+        if (!is_dir($pasta) && !@mkdir($pasta, 0777, true) && !is_dir($pasta)) {
+            NotificationService::error('Não foi possível preparar a pasta de armazenamento no servidor.');
+            return false;
+        }
+
+        if (!@copy($caminhoTemporario, $destino)) {
+            NotificationService::error('Não foi possível salvar a imagem no servidor.');
+            return false;
+        }
+
+        ConfigService::set(self::chaveWallpaperNome($tipo), basename($nomeOriginal));
+        ConfigService::set(self::chaveWallpaperEnviadoEm($tipo), date('Y-m-d H:i:s'));
+
+        $rotulo = self::rotuloWallpaper($tipo);
+        AuditService::registrar('Microsoft Entra', 'Imagem de papel de parede', "Imagem de papel de parede ({$rotulo}) enviada/atualizada.");
+        NotificationService::success('Imagem salva.');
+
+        return true;
+    }
+
+    public function removerWallpaper(string $tipo): void
+    {
+        @unlink(self::caminhoWallpaper($tipo));
+        ConfigService::set(self::chaveWallpaperNome($tipo), '');
+        ConfigService::set(self::chaveWallpaperEnviadoEm($tipo), '');
+
+        $rotulo = self::rotuloWallpaper($tipo);
+        AuditService::registrar('Microsoft Entra', 'Imagem de papel de parede', "Imagem de papel de parede ({$rotulo}) removida.");
+        NotificationService::success('Imagem removida.');
+    }
+
+    /*
+     |---------------------------------------------------------
      | Perfis de Configuração (Intune Configuration Profiles) -- aplicam
      | configurações do Windows automaticamente em toda a frota
      | gerenciada, sem precisar mexer máquina por máquina (papel de
