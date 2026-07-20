@@ -259,7 +259,7 @@ use App\Components\Badge;
             <?php if (empty($dispositivosIntune)): ?>
                 <p class="text-muted p-3 mb-0">Nenhum dispositivo inscrito no Intune ainda.</p>
             <?php else: ?>
-                <div class="table-responsive">
+                <?php /* Sem .table-responsive de propósito: overflow-x:auto força overflow-y:auto também (regra do CSS), e isso corta o menu do dropdown "Ações" -- confirmado ao vivo. Poucas colunas aqui, não devia precisar de scroll horizontal mesmo. */ ?>
                     <table class="table table-hover align-middle mb-0">
                         <thead>
                             <tr>
@@ -324,7 +324,6 @@ use App\Components\Badge;
                             <?php endforeach; ?>
                         </tbody>
                     </table>
-                </div>
             <?php endif; ?>
         </div>
     </div>
