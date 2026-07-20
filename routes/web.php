@@ -377,6 +377,14 @@ $router->post('/entra/provisionamento/enviar', [EntraController::class, 'provisi
 $router->post('/entra/company-portal/upload', [EntraController::class, 'companyPortalUpload']);
 $router->post('/entra/company-portal/remover', [EntraController::class, 'companyPortalRemover']);
 $router->post('/entra/company-portal/enviar', [EntraController::class, 'companyPortalEnviar']);
+$router->get('/entra/perfis-configuracao', [EntraController::class, 'perfisConfiguracao']);
+$router->get('/entra/perfis-configuracao/novo', [EntraController::class, 'perfilConfiguracaoNovoForm']);
+$router->post('/entra/perfis-configuracao/novo', [EntraController::class, 'perfilConfiguracaoNovo']);
+$router->get('/entra/perfis-configuracao/editar', [EntraController::class, 'perfilConfiguracaoEditarForm']);
+$router->post('/entra/perfis-configuracao/editar', [EntraController::class, 'perfilConfiguracaoEditar']);
+$router->post('/entra/perfis-configuracao/excluir', [EntraController::class, 'perfilConfiguracaoExcluir']);
+$router->post('/entra/perfis-configuracao/atribuir', [EntraController::class, 'perfilConfiguracaoAtribuir']);
+$router->post('/entra/perfis-configuracao/desatribuir', [EntraController::class, 'perfilConfiguracaoDesatribuir']);
 
 $router->get('/banco-dados/conexoes', [DbConexaoController::class, 'index']);
 $router->get('/banco-dados/conexoes/novo', [DbConexaoController::class, 'novoForm']);

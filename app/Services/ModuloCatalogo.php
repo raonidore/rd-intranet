@@ -55,6 +55,7 @@ class ModuloCatalogo
         'entra_usuarios' => ['label' => 'Entra - Usuários', 'grupo' => 'Microsoft Entra'],
         'entra_configuracao' => ['label' => 'Entra - Configuração', 'grupo' => 'Microsoft Entra'],
         'entra_dispositivos' => ['label' => 'Entra - Dispositivos (Intune)', 'grupo' => 'Microsoft Entra'],
+        'entra_perfis_configuracao' => ['label' => 'Entra - Perfis de Configuração (Intune)', 'grupo' => 'Microsoft Entra'],
     ];
 
     public static function chaves(): array

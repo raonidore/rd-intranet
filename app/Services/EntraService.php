@@ -810,4 +810,211 @@ PS;
         AuditService::registrar('Microsoft Entra', 'Instalador Company Portal', 'Instalador do Company Portal removido.');
         NotificationService::success('Instalador do Company Portal removido.');
     }
+
+    /*
+     |---------------------------------------------------------
+     | Perfis de Configuração (Intune Configuration Profiles) -- aplicam
+     | configurações do Windows automaticamente em toda a frota
+     | gerenciada, sem precisar mexer máquina por máquina (papel de
+     | parede, bloqueio de USB, tempo de bloqueio de tela, senha mínima,
+     | bloquear Windows Store, bloquear acesso às Configurações). Usa o
+     | template "Restrições de dispositivo" do Intune
+     | (windows10GeneralConfiguration) -- o mesmo tipo usado pela própria
+     | tela do Intune admin center pra essas configurações. O "Settings
+     | Catalog" (mais moderno/flexível) ainda é só beta no Graph, por
+     | isso não usamos.
+     |
+     | Sem espelho local -- igual usuários/dispositivos, o Graph é a
+     | única fonte de verdade, sempre lido/escrito na hora.
+     |
+     | Fora de escopo por ora: BitLocker
+     | (windows10EndpointProtectionConfiguration) e perfil de Wi-Fi
+     | (windows81WifiConfiguration) são OUTROS tipos de deviceConfiguration,
+     | com campos bem mais complexos (BitLocker tem política aninhada
+     | por tipo de unidade; Wi-Fi lida com segredo de rede) -- não cabem
+     | no mesmo formulário curado sem inchar demais essa primeira versão.
+     |
+     | Atribuição: perfil de configuração no Intune se aplica a GRUPOS
+     | do Entra, não a dispositivos individuais (diferente do resto do
+     | módulo Dispositivos). Pra não precisar de um seletor de grupos
+     | agora, a atribuição aqui é sempre pro alvo especial "Todos os
+     | dispositivos" (allDevicesAssignmentTarget) -- afeta a FROTA
+     | INTEIRA inscrita no Intune, não só uma seleção.
+     |---------------------------------------------------------
+     */
+
+    private const TIPO_GRAPH_RESTRICOES = '#microsoft.graph.windows10GeneralConfiguration';
+
+    /** campo Graph => [label em português, tipo de input] -- usado tanto pra montar o form quanto pra filtrar o $_POST na hora de salvar. */
+    public const CAMPOS_RESTRICOES = [
+        'personalizationDesktopImageUrl' => ['label' => 'Papel de parede da área de trabalho (URL da imagem .jpg/.png)', 'tipo' => 'url'],
+        'personalizationLockScreenImageUrl' => ['label' => 'Papel de parede da tela de bloqueio (URL da imagem .jpg/.png)', 'tipo' => 'url'],
+        'usbBlocked' => ['label' => 'Bloquear conexão USB', 'tipo' => 'bool'],
+        'storageBlockRemovableStorage' => ['label' => 'Bloquear armazenamento removível (pen drive, HD externo)', 'tipo' => 'bool'],
+        'passwordRequired' => ['label' => 'Exigir senha pra entrar no Windows', 'tipo' => 'bool'],
+        'passwordMinimumLength' => ['label' => 'Tamanho mínimo da senha', 'tipo' => 'numero'],
+        'passwordMinutesOfInactivityBeforeScreenTimeout' => ['label' => 'Bloquear tela após ficar parado (minutos)', 'tipo' => 'numero'],
+        'windowsStoreBlocked' => ['label' => 'Bloquear a Windows Store', 'tipo' => 'bool'],
+        'settingsBlockSettingsApp' => ['label' => 'Bloquear acesso ao app de Configurações do Windows', 'tipo' => 'bool'],
+    ];
+
+    public function listarPerfisConfiguracao(): array
+    {
+        $todos = [];
+        $proximaUrl = '/deviceManagement/deviceConfigurations?$top=999&$expand=assignments';
+
+        while ($proximaUrl !== null) {
+            $resultado = $this->chamarGraph('GET', $proximaUrl);
+
+            if (!$resultado['sucesso']) {
+                NotificationService::error('Erro ao listar perfis de configuração.', $resultado['mensagem']);
+                return $todos;
+            }
+
+            foreach ($resultado['dados']['value'] ?? [] as $perfil) {
+                if (($perfil['@odata.type'] ?? '') === self::TIPO_GRAPH_RESTRICOES) {
+                    $todos[] = $perfil;
+                }
+            }
+
+            $proximaUrl = $resultado['dados']['@odata.nextLink'] ?? null;
+        }
+
+        return $todos;
+    }
+
+    public function buscarPerfilConfiguracao(string $id): ?array
+    {
+        $resultado = $this->chamarGraph('GET', '/deviceManagement/deviceConfigurations/' . rawurlencode($id));
+
+        if (!$resultado['sucesso']) {
+            NotificationService::error('Erro ao carregar o perfil.', $resultado['mensagem']);
+            return null;
+        }
+
+        return $resultado['dados'];
+    }
+
+    private static function montarCorpoRestricoes(array $post): array
+    {
+        $corpo = [];
+
+        foreach (self::CAMPOS_RESTRICOES as $campo => $info) {
+            if ($info['tipo'] === 'bool') {
+                $corpo[$campo] = isset($post[$campo]);
+                continue;
+            }
+
+            $valor = trim((string)($post[$campo] ?? ''));
+            if ($valor === '') {
+                continue;
+            }
+
+            $corpo[$campo] = $info['tipo'] === 'numero' ? (int)$valor : $valor;
+        }
+
+        return $corpo;
+    }
+
+    public function criarPerfilConfiguracao(string $nome, string $descricao, array $post): bool
+    {
+        $nome = trim($nome);
+        if ($nome === '') {
+            NotificationService::error('Informe um nome pro perfil.');
+            return false;
+        }
+
+        $corpo = array_merge(
+            ['@odata.type' => self::TIPO_GRAPH_RESTRICOES, 'displayName' => $nome, 'description' => trim($descricao)],
+            self::montarCorpoRestricoes($post)
+        );
+
+        $resultado = $this->chamarGraph('POST', '/deviceManagement/deviceConfigurations', $corpo);
+
+        if (!$resultado['sucesso']) {
+            NotificationService::error('Erro ao criar o perfil de configuração.', $resultado['mensagem']);
+            return false;
+        }
+
+        AuditService::registrar('Microsoft Entra', 'Criar perfil de configuração', "Perfil \"{$nome}\" criado.");
+        NotificationService::success('Perfil de configuração criado -- lembre de aplicar em "Todos os dispositivos" quando quiser que valha.');
+
+        return true;
+    }
+
+    public function editarPerfilConfiguracao(string $id, string $nome, string $descricao, array $post): bool
+    {
+        $nome = trim($nome);
+        if ($nome === '') {
+            NotificationService::error('Informe um nome pro perfil.');
+            return false;
+        }
+
+        $corpo = array_merge(
+            ['displayName' => $nome, 'description' => trim($descricao)],
+            self::montarCorpoRestricoes($post)
+        );
+
+        $resultado = $this->chamarGraph('PATCH', '/deviceManagement/deviceConfigurations/' . rawurlencode($id), $corpo);
+
+        if (!$resultado['sucesso']) {
+            NotificationService::error('Erro ao salvar o perfil de configuração.', $resultado['mensagem']);
+            return false;
+        }
+
+        AuditService::registrar('Microsoft Entra', 'Editar perfil de configuração', "Perfil \"{$nome}\" atualizado.");
+        NotificationService::success('Perfil de configuração salvo.');
+
+        return true;
+    }
+
+    public function excluirPerfilConfiguracao(string $id, string $nomeAuditoria): bool
+    {
+        $resultado = $this->chamarGraph('DELETE', '/deviceManagement/deviceConfigurations/' . rawurlencode($id));
+
+        if (!$resultado['sucesso']) {
+            NotificationService::error('Erro ao excluir o perfil.', $resultado['mensagem']);
+            return false;
+        }
+
+        AuditService::registrar('Microsoft Entra', 'Excluir perfil de configuração', "Perfil \"{$nomeAuditoria}\" excluído.");
+        NotificationService::success('Perfil excluído.');
+
+        return true;
+    }
+
+    public function atribuirPerfilTodosDispositivos(string $id, string $nomeAuditoria): bool
+    {
+        return $this->salvarAtribuicaoPerfil(
+            $id,
+            [['target' => ['@odata.type' => '#microsoft.graph.allDevicesAssignmentTarget']]],
+            "Perfil \"{$nomeAuditoria}\" aplicado a todos os dispositivos.",
+            'Perfil aplicado a todos os dispositivos -- pode levar alguns minutos pra refletir.'
+        );
+    }
+
+    public function removerAtribuicaoPerfil(string $id, string $nomeAuditoria): bool
+    {
+        return $this->salvarAtribuicaoPerfil(
+            $id,
+            [],
+            "Atribuição do perfil \"{$nomeAuditoria}\" removida.",
+            'Atribuição removida -- o perfil deixou de valer pra qualquer dispositivo.'
+        );
+    }
+
+    private function salvarAtribuicaoPerfil(string $id, array $assignments, string $detalheAuditoria, string $mensagemSucesso): bool
+    {
+        $resultado = $this->chamarGraph('POST', '/deviceManagement/deviceConfigurations/' . rawurlencode($id) . '/assign', ['assignments' => $assignments]);
+
+        if (!$resultado['sucesso']) {
+            NotificationService::error('Erro ao atualizar a atribuição do perfil.', $resultado['mensagem']);
+            return false;
+        }
+
+        AuditService::registrar('Microsoft Entra', 'Atribuição de perfil de configuração', $detalheAuditoria);
+        NotificationService::success($mensagemSucesso);
+
+        return true;
+    }
 }

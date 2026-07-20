@@ -544,6 +544,106 @@ class EntraController extends Controller
         return true;
     }
 
+    /*
+     |---------------------------------------------------------
+     | Perfis de Configuração (Intune) -- 100% Graph API, sem tocar em
+     | Ativos/agente, por isso só precisa de checkModulo('entra_perfis_configuracao'),
+     | sem o dual-gate de ativos_novo usado nas seções acima.
+     |---------------------------------------------------------
+     */
+
+    public function perfisConfiguracao(): void
+    {
+        AuthMiddleware::checkModulo('entra_perfis_configuracao');
+
+        $configurado = $this->service->configurado();
+        $perfis = $configurado ? $this->service->listarPerfisConfiguracao() : [];
+
+        $this->view('entra/perfis_configuracao', [
+            'configurado' => $configurado,
+            'perfis' => $perfis,
+        ]);
+    }
+
+    public function perfilConfiguracaoNovoForm(): void
+    {
+        AuthMiddleware::checkModulo('entra_perfis_configuracao');
+
+        $this->view('entra/perfil_configuracao_form', [
+            'modoEdicao' => false,
+            'perfil' => null,
+        ]);
+    }
+
+    public function perfilConfiguracaoNovo(): void
+    {
+        AuthMiddleware::checkModulo('entra_perfis_configuracao');
+
+        $this->service->criarPerfilConfiguracao($_POST['nome'] ?? '', $_POST['descricao'] ?? '', $_POST);
+
+        header('Location: ' . url('/entra/perfis-configuracao'));
+        exit;
+    }
+
+    public function perfilConfiguracaoEditarForm(): void
+    {
+        AuthMiddleware::checkModulo('entra_perfis_configuracao');
+
+        $id = $_GET['id'] ?? '';
+        $perfil = $id !== '' ? $this->service->buscarPerfilConfiguracao($id) : null;
+
+        if ($perfil === null) {
+            NotificationService::error('Perfil não encontrado.');
+            header('Location: ' . url('/entra/perfis-configuracao'));
+            exit;
+        }
+
+        $this->view('entra/perfil_configuracao_form', [
+            'modoEdicao' => true,
+            'perfil' => $perfil,
+        ]);
+    }
+
+    public function perfilConfiguracaoEditar(): void
+    {
+        AuthMiddleware::checkModulo('entra_perfis_configuracao');
+
+        $this->service->editarPerfilConfiguracao($_POST['id'] ?? '', $_POST['nome'] ?? '', $_POST['descricao'] ?? '', $_POST);
+
+        header('Location: ' . url('/entra/perfis-configuracao'));
+        exit;
+    }
+
+    public function perfilConfiguracaoExcluir(): void
+    {
+        AuthMiddleware::checkModulo('entra_perfis_configuracao');
+
+        $this->service->excluirPerfilConfiguracao($_POST['id'] ?? '', $_POST['nome'] ?? '');
+
+        header('Location: ' . url('/entra/perfis-configuracao'));
+        exit;
+    }
+
+    public function perfilConfiguracaoAtribuir(): void
+    {
+        AuthMiddleware::checkModulo('entra_perfis_configuracao');
+
+        $this->service->atribuirPerfilTodosDispositivos($_POST['id'] ?? '', $_POST['nome'] ?? '');
+
+        header('Location: ' . url('/entra/perfis-configuracao'));
+        exit;
+    }
+
+    public function perfilConfiguracaoDesatribuir(): void
+    {
+        AuthMiddleware::checkModulo('entra_perfis_configuracao');
+
+        $this->service->removerAtribuicaoPerfil($_POST['id'] ?? '', $_POST['nome'] ?? '');
+
+        header('Location: ' . url('/entra/perfis-configuracao'));
+        exit;
+    }
+
     private function enviarScriptParaAtivos(string $script, array $ativoIds, string $rotuloAuditoria, string $detalheAuditoria): void
     {
         $solicitadoPor = $_SESSION['usuario']['nome'] ?? null;

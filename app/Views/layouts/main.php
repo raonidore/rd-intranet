@@ -596,6 +596,11 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
             <i class="bi bi-laptop me-2"></i> Dispositivos (Intune)
         </a>
         <?php endif; ?>
+        <?php if (PermissionService::temAcesso('entra_perfis_configuracao')): ?>
+        <a href="<?= url('/entra/perfis-configuracao') ?>" class="<?= str_starts_with($uriAtual, '/entra/perfis-configuracao') ? 'active' : '' ?>">
+            <i class="bi bi-sliders me-2"></i> Perfis de Configuração
+        </a>
+        <?php endif; ?>
         <?php if (PermissionService::temAcesso('entra_configuracao')): ?>
         <a href="<?= url('/entra/configuracao') ?>" class="<?= str_starts_with($uriAtual, '/entra/configuracao') ? 'active' : '' ?>">
             <i class="bi bi-gear me-2"></i> Configuração

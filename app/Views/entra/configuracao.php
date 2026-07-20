@@ -74,10 +74,13 @@ use App\Components\Badge;
                             <tr><td><code>DeviceManagementManagedDevices.Read.All</code></td><td>Tela Dispositivos -- listar/ver os dispositivos do Intune</td></tr>
                             <tr><td><code>DeviceManagementManagedDevices.ReadWrite.All</code></td><td>Tela Dispositivos -- sincronizar/reiniciar/bloquear/retirar</td></tr>
                             <tr><td><code>DeviceManagementManagedDevices.PrivilegedOperations.All</code></td><td>Tela Dispositivos -- confirmado ao vivo: exigido até pra "Sincronizar", a ação mais leve das quatro</td></tr>
+                            <tr><td><code>DeviceManagementConfiguration.ReadWrite.All</code></td><td>Tela Perfis de Configuração -- criar/editar/excluir/aplicar perfis</td></tr>
                         </tbody>
                     </table>
                 </div>
-                As 3 últimas só são necessárias se for usar a tela <strong>Dispositivos (Intune)</strong>.
+                As 3 de <code>DeviceManagementManagedDevices</code> só são necessárias pra tela
+                <strong>Dispositivos (Intune)</strong>; a de <code>DeviceManagementConfiguration</code> só pra tela
+                <strong>Perfis de Configuração</strong>.
             </li>
             <li class="mb-2">Clique em <strong>"Grant admin consent for [tenant]"</strong> -- uma vez só, depois de
                 adicionar todas as permissões acima. Sem isso elas ficam pendentes e nenhuma chamada funciona (nem
