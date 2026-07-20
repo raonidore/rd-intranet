@@ -26,6 +26,20 @@ use App\Components\Badge;
                 (dispositivo) são coisas diferentes -- os dois passos abaixo cobrem cada uma.
             </p>
 
+            <div class="alert alert-info small mb-3">
+                <strong><i class="bi bi-signpost-split"></i> Qual tela usar pra quê no nosso portal</strong>
+                <ul class="mb-0 mt-1">
+                    <li><strong><a href="<?= url('/entra/acesso-maquinas') ?>">Acesso às Máquinas</a></strong> --
+                        pra "só quem tem conta da empresa consegue logar na máquina". Só precisa da máquina
+                        <strong>entrar no domínio</strong> (passo 2 abaixo) -- <strong>não precisa</strong> de Intune
+                        nem de Company Portal pra isso. É o suficiente pra a maioria dos casos.</li>
+                    <li><strong>Esta tela (Dispositivos)</strong> -- opcional, complementar: visibilidade e controle
+                        remoto extra (ver se a máquina está em conformidade, forçar sincronização, reiniciar,
+                        bloquear tela, retirar em caso de perda/roubo). Exige a máquina também estar
+                        <strong>inscrita no Intune</strong> (passo 3 abaixo), um passo a mais além do domínio.</li>
+                </ul>
+            </div>
+
             <strong class="small">1. Uma vez por tenant (pré-requisito, feito no portal do Entra)</strong>
             <p class="small text-muted mb-1">
                 Sem isso, nenhuma máquina vira gerenciada automaticamente -- nem entrando manualmente, nem pelo

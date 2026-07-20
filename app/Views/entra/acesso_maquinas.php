@@ -28,7 +28,9 @@ use App\Components\Alert;
         <strong>administradores locais de cada máquina sempre continuam permitidos</strong>, mesmo sem marcar
         nada (rede de segurança pra nunca travar o acesso). Não afeta acesso remoto (RDP, comando remoto daqui
         do portal) nem exige Intune/licença adicional. O resultado de cada máquina aparece no histórico de
-        comandos da própria ficha do ativo, em poucos segundos.
+        comandos da própria ficha do ativo, em poucos segundos. Quer visibilidade/controle remoto extra
+        (conformidade, sincronizar, reiniciar, bloquear tela) além disso? Isso é opcional e fica em
+        <a href="<?= url('/entra/dispositivos') ?>">Dispositivos (Intune)</a>.
     </div>
 
     <form method="post" id="formAcessoMaquinas">
