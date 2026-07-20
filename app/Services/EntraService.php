@@ -165,8 +165,11 @@ class EntraService
             CURLOPT_TIMEOUT => 20,
         ]);
 
-        if ($corpo !== null) {
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($corpo));
+        // Sempre seta POSTFIELDS (mesmo vazio) em métodos com corpo -- CUSTOMREQUEST sozinho não
+        // manda Content-Length, e a API do Intune (syncDevice, rebootNow...) exige esse header
+        // mesmo sem corpo, senão devolve 411 Length Required.
+        if (in_array($metodo, ['POST', 'PUT', 'PATCH'], true)) {
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $corpo !== null ? json_encode($corpo) : '');
         }
 
         $resposta = curl_exec($ch);
