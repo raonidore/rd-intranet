@@ -58,16 +58,30 @@ use App\Components\Badge;
                 Dê um nome (ex: "RD Intranet"), deixe "Accounts in this organizational directory only".</li>
             <li class="mb-2">Anote o <strong>Application (client) ID</strong> e o <strong>Directory (tenant) ID</strong>
                 mostrados na tela de visão geral -- são o Client ID e Tenant ID acima.</li>
-            <li class="mb-2"><strong>API permissions &gt; Add a permission &gt; Microsoft Graph &gt; Application permissions</strong>
-                (não "Delegated") e adicione: <code>User.ReadWrite.All</code>, <code>Directory.Read.All</code> e
-                <code>Organization.Read.All</code>. Pra usar a tela de <strong>Dispositivos (Intune)</strong>, adicione
-                também <code>DeviceManagementManagedDevices.Read.All</code> (listar/ver),
-                <code>DeviceManagementManagedDevices.ReadWrite.All</code> (sincronizar/reiniciar/bloquear) e
-                <code>DeviceManagementManagedDevices.PrivilegedOperations.All</code> (necessário até pra sincronizar
-                -- confirmado ao vivo, o Graph exige esse escopo mais restrito mesmo pras ações "leves") -- só
-                necessário se for usar aquela tela.</li>
-            <li class="mb-2">Clique em <strong>"Grant admin consent for [tenant]"</strong> -- sem isso as permissões
-                ficam pendentes e nenhuma chamada funciona.</li>
+            <li class="mb-2">
+                <strong>API permissions &gt; Add a permission &gt; Microsoft Graph &gt; Application permissions</strong>
+                (não "Delegated"). Busca cada nome abaixo, marca e clica <strong>Add permissions</strong> -- repete
+                pra cada uma da lista (dá pra marcar várias antes de confirmar, se aparecerem na mesma busca):
+                <div class="table-responsive mt-2 mb-2">
+                    <table class="table table-sm table-bordered small mb-0">
+                        <thead class="table-light">
+                            <tr><th>Permissão</th><th>Pra quê</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td><code>User.ReadWrite.All</code></td><td>Usuários -- ver, criar, resetar senha, ativar/desativar, licenças</td></tr>
+                            <tr><td><code>Directory.Read.All</code></td><td>Leitura geral do diretório (necessário pros usuários funcionarem)</td></tr>
+                            <tr><td><code>Organization.Read.All</code></td><td>Dados da organização e licenças disponíveis no tenant</td></tr>
+                            <tr><td><code>DeviceManagementManagedDevices.Read.All</code></td><td>Tela Dispositivos -- listar/ver os dispositivos do Intune</td></tr>
+                            <tr><td><code>DeviceManagementManagedDevices.ReadWrite.All</code></td><td>Tela Dispositivos -- sincronizar/reiniciar/bloquear/retirar</td></tr>
+                            <tr><td><code>DeviceManagementManagedDevices.PrivilegedOperations.All</code></td><td>Tela Dispositivos -- confirmado ao vivo: exigido até pra "Sincronizar", a ação mais leve das quatro</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                As 3 últimas só são necessárias se for usar a tela <strong>Dispositivos (Intune)</strong>.
+            </li>
+            <li class="mb-2">Clique em <strong>"Grant admin consent for [tenant]"</strong> -- uma vez só, depois de
+                adicionar todas as permissões acima. Sem isso elas ficam pendentes e nenhuma chamada funciona (nem
+                as que já estavam marcadas antes).</li>
             <li class="mb-0"><strong>Certificates &amp; secrets &gt; Client secrets &gt; New client secret.</strong>
                 Copie o <em>valor</em> gerado na hora (some depois de sair da tela) e cole no campo Client Secret acima.</li>
         </ol>
