@@ -210,7 +210,7 @@ use App\Components\Badge;
                                     <td class="small"><?= htmlspecialchars($d['userPrincipalName'] ?? '—') ?></td>
                                     <td class="small"><?= htmlspecialchars(($d['operatingSystem'] ?? '') . ' ' . ($d['osVersion'] ?? '')) ?></td>
                                     <td><?= $conforme ? Badge::make('Conforme', 'success') : Badge::make($d['complianceState'] ?? 'desconhecido', 'secondary') ?></td>
-                                    <td class="small text-muted"><?= htmlspecialchars($d['lastSyncDateTime'] ?? '—') ?></td>
+                                    <td class="small text-muted"><?= htmlspecialchars(data_br($d['lastSyncDateTime'] ?? null, 'd/m/Y H:i')) ?></td>
                                     <td class="text-end">
                                         <div class="dropdown">
                                             <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">Ações</button>
