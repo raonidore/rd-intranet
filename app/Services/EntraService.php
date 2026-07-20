@@ -521,7 +521,7 @@ PS;
         $this->ultimoErroDispositivosPermissao = false;
 
         $todos = [];
-        $proximaUrl = '/deviceManagement/managedDevices?$select=id,deviceName,userPrincipalName,operatingSystem,osVersion,complianceState,lastSyncDateTime,managementAgent,enrolledDateTime&$top=999';
+        $proximaUrl = '/deviceManagement/managedDevices?$select=id,deviceName,userPrincipalName,operatingSystem,osVersion,complianceState,lastSyncDateTime,managementAgent,enrolledDateTime,isEncrypted,manufacturer,model,serialNumber&$top=999';
 
         while ($proximaUrl !== null) {
             $resultado = $this->chamarGraph('GET', $proximaUrl);
@@ -567,6 +567,21 @@ PS;
     public function retirarDispositivoIntune(string $deviceId, string $nomeAuditoria): bool
     {
         return $this->acaoDispositivoIntune($deviceId, 'retire', 'Retirar do Intune', "Dispositivo {$nomeAuditoria} retirado do Intune -- dados/apps corporativos removidos.", $nomeAuditoria);
+    }
+
+    public function desligarDispositivoIntune(string $deviceId, string $nomeAuditoria): bool
+    {
+        return $this->acaoDispositivoIntune($deviceId, 'shutDown', 'Desligar dispositivo', "Desligamento solicitado para {$nomeAuditoria}.", $nomeAuditoria);
+    }
+
+    public function varredurraDefenderDispositivoIntune(string $deviceId, string $nomeAuditoria): bool
+    {
+        return $this->acaoDispositivoIntune($deviceId, 'windowsDefenderScan', 'Varredura do Defender', "Varredura do Windows Defender solicitada para {$nomeAuditoria}.", $nomeAuditoria);
+    }
+
+    public function atualizarAssinaturasDefenderDispositivoIntune(string $deviceId, string $nomeAuditoria): bool
+    {
+        return $this->acaoDispositivoIntune($deviceId, 'windowsDefenderUpdateSignatures', 'Atualizar assinaturas do Defender', "Atualização de assinaturas do Windows Defender solicitada para {$nomeAuditoria}.", $nomeAuditoria);
     }
 
     private function acaoDispositivoIntune(string $deviceId, string $acaoGraph, string $rotuloAuditoria, string $detalheAuditoria, string $nomeAuditoria): bool

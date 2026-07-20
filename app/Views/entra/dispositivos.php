@@ -281,6 +281,7 @@ use App\Components\Badge;
                                 <th>Usuário</th>
                                 <th>SO</th>
                                 <th>Conformidade</th>
+                                <th>Criptografado</th>
                                 <th>Último sync</th>
                                 <th class="text-end">Ações</th>
                             </tr>
@@ -291,12 +292,22 @@ use App\Components\Badge;
                                     $deviceId = $d['id'];
                                     $nome = $d['deviceName'] ?? '(sem nome)';
                                     $conforme = ($d['complianceState'] ?? '') === 'compliant';
+                                    $infoMaquina = trim(($d['manufacturer'] ?? '') . ' ' . ($d['model'] ?? ''));
                                 ?>
                                 <tr>
-                                    <td><?= htmlspecialchars($nome) ?></td>
+                                    <td>
+                                        <?= htmlspecialchars($nome) ?>
+                                        <?php if ($infoMaquina !== '' || !empty($d['serialNumber'])): ?>
+                                            <div class="text-muted" style="font-size:11px">
+                                                <?= htmlspecialchars($infoMaquina) ?>
+                                                <?php if (!empty($d['serialNumber'])): ?> · S/N <?= htmlspecialchars($d['serialNumber']) ?><?php endif; ?>
+                                            </div>
+                                        <?php endif; ?>
+                                    </td>
                                     <td class="small"><?= htmlspecialchars($d['userPrincipalName'] ?? '—') ?></td>
                                     <td class="small"><?= htmlspecialchars(($d['operatingSystem'] ?? '') . ' ' . ($d['osVersion'] ?? '')) ?></td>
                                     <td><?= $conforme ? Badge::make('Conforme', 'success') : Badge::make($d['complianceState'] ?? 'desconhecido', 'secondary') ?></td>
+                                    <td><?= !empty($d['isEncrypted']) ? Badge::make('Sim', 'success') : Badge::make('Não', 'secondary') ?></td>
                                     <td class="small text-muted"><?= htmlspecialchars(data_br($d['lastSyncDateTime'] ?? null, 'd/m/Y H:i')) ?></td>
                                     <td class="text-end">
                                         <div class="dropdown">
@@ -317,10 +328,32 @@ use App\Components\Badge;
                                                     </form>
                                                 </li>
                                                 <li>
+                                                    <form method="post" action="<?= url('/entra/dispositivos/desligar') ?>" class="form-acao-dispositivo" data-confirmacao="Desligar este dispositivo? O usuário perde o trabalho não salvo.">
+                                                        <input type="hidden" name="device_id" value="<?= htmlspecialchars($deviceId) ?>">
+                                                        <input type="hidden" name="nome" value="<?= htmlspecialchars($nome) ?>">
+                                                        <button type="submit" class="dropdown-item"><i class="bi bi-power"></i> Desligar</button>
+                                                    </form>
+                                                </li>
+                                                <li>
                                                     <form method="post" action="<?= url('/entra/dispositivos/bloquear') ?>" class="form-acao-dispositivo" data-confirmacao="Bloquear a tela deste dispositivo?">
                                                         <input type="hidden" name="device_id" value="<?= htmlspecialchars($deviceId) ?>">
                                                         <input type="hidden" name="nome" value="<?= htmlspecialchars($nome) ?>">
                                                         <button type="submit" class="dropdown-item"><i class="bi bi-lock"></i> Bloquear tela</button>
+                                                    </form>
+                                                </li>
+                                                <li><hr class="dropdown-divider"></li>
+                                                <li>
+                                                    <form method="post" action="<?= url('/entra/dispositivos/defender-varredura') ?>" class="form-acao-dispositivo" data-confirmacao="Disparar uma varredura do Windows Defender nesse dispositivo?">
+                                                        <input type="hidden" name="device_id" value="<?= htmlspecialchars($deviceId) ?>">
+                                                        <input type="hidden" name="nome" value="<?= htmlspecialchars($nome) ?>">
+                                                        <button type="submit" class="dropdown-item"><i class="bi bi-shield-check"></i> Varredura do Defender</button>
+                                                    </form>
+                                                </li>
+                                                <li>
+                                                    <form method="post" action="<?= url('/entra/dispositivos/defender-assinaturas') ?>" class="form-acao-dispositivo" data-confirmacao="Atualizar as assinaturas do Windows Defender nesse dispositivo?">
+                                                        <input type="hidden" name="device_id" value="<?= htmlspecialchars($deviceId) ?>">
+                                                        <input type="hidden" name="nome" value="<?= htmlspecialchars($nome) ?>">
+                                                        <button type="submit" class="dropdown-item"><i class="bi bi-shield-plus"></i> Atualizar assinaturas do Defender</button>
                                                     </form>
                                                 </li>
                                                 <li><hr class="dropdown-divider"></li>

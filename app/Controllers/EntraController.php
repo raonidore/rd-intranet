@@ -310,6 +310,30 @@ class EntraController extends Controller
         exit;
     }
 
+    public function dispositivoDesligar(): void
+    {
+        AuthMiddleware::checkModulo('entra_dispositivos');
+        $this->service->desligarDispositivoIntune($_POST['device_id'] ?? '', $_POST['nome'] ?? '');
+        header('Location: ' . url('/entra/dispositivos'));
+        exit;
+    }
+
+    public function dispositivoVarredurraDefender(): void
+    {
+        AuthMiddleware::checkModulo('entra_dispositivos');
+        $this->service->varredurraDefenderDispositivoIntune($_POST['device_id'] ?? '', $_POST['nome'] ?? '');
+        header('Location: ' . url('/entra/dispositivos'));
+        exit;
+    }
+
+    public function dispositivoAtualizarAssinaturasDefender(): void
+    {
+        AuthMiddleware::checkModulo('entra_dispositivos');
+        $this->service->atualizarAssinaturasDefenderDispositivoIntune($_POST['device_id'] ?? '', $_POST['nome'] ?? '');
+        header('Location: ' . url('/entra/dispositivos'));
+        exit;
+    }
+
     public function forcarEnrollment(): void
     {
         AuthMiddleware::checkModulo('entra_dispositivos');

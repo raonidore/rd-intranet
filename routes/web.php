@@ -367,6 +367,9 @@ $router->post('/entra/dispositivos/sincronizar', [EntraController::class, 'dispo
 $router->post('/entra/dispositivos/reiniciar', [EntraController::class, 'dispositivoReiniciar']);
 $router->post('/entra/dispositivos/bloquear', [EntraController::class, 'dispositivoBloquear']);
 $router->post('/entra/dispositivos/retirar', [EntraController::class, 'dispositivoRetirar']);
+$router->post('/entra/dispositivos/desligar', [EntraController::class, 'dispositivoDesligar']);
+$router->post('/entra/dispositivos/defender-varredura', [EntraController::class, 'dispositivoVarredurraDefender']);
+$router->post('/entra/dispositivos/defender-assinaturas', [EntraController::class, 'dispositivoAtualizarAssinaturasDefender']);
 $router->post('/entra/dispositivos/forcar-enrollment', [EntraController::class, 'forcarEnrollment']);
 $router->post('/entra/provisionamento/upload', [EntraController::class, 'provisioningUpload']);
 $router->post('/entra/provisionamento/remover', [EntraController::class, 'provisioningRemover']);
