@@ -36,7 +36,12 @@ use App\Services\PoliticaService;
                     dependem também de uma chave por usuário (não só por máquina); valem garantidamente pro usuário
                     que estiver logado no momento em que a regra for aplicada -- outra conta que logar depois pode
                     precisar que a regra seja reaplicada (a máquina toda também recebe a chave, mas alguns desses
-                    bloqueios só o Windows aplica de fato olhando a conta logada).</li>
+                    bloqueios só o Windows aplica de fato olhando a conta logada).
+                    <strong>Importante:</strong> essa é uma política antiga do Windows que só é conferida no
+                    logon/inicialização, não a cada abertura -- o badge fica "Aplicado" assim que o registro é
+                    gravado com sucesso, mas o bloqueio só passa a valer de verdade depois que o usuário
+                    <strong>fizer logoff e login de novo</strong> (ou reiniciar a máquina). Não é preciso reaplicar a
+                    regra, só esperar o próximo logon.</li>
                 <li><strong>Bloquear CMD / Bloquear PowerShell</strong> -- impede o usuário de abrir o Prompt de
                     Comando/PowerShell pelo Menu Iniciar ou "Executar". <strong>Não afeta o nosso agente</strong>:
                     esse bloqueio age no nível do Explorer (o que aparece pro usuário abrir), e o agente nunca passa
