@@ -765,6 +765,54 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                 <?php endif; ?>
             </div>
         </div>
+
+        <?php if (!empty($politicasHabilitado)): ?>
+        <div class="card border-0 shadow-sm mt-3">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <strong><i class="bi bi-shield-check"></i> Regras de Segurança</strong>
+                <a href="<?= url('/ativos/politicas') ?>" class="small">Catálogo / aplicar em lote</a>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">
+                    Marque as regras que essa máquina deve ter. Ao salvar, o agente aplica na hora (chega em poucos
+                    segundos pelo heartbeat) e o status de cada regra é atualizado aqui mesmo.
+                </p>
+                <form id="formRegrasSeguranca">
+                    <input type="hidden" name="ativo_id" value="<?= (int)$ativo['id'] ?>">
+                    <?php
+                        $categoriasPoliticas = [];
+                        foreach ($estadoPoliticas as $regraId => $r) {
+                            $categoriasPoliticas[$r['categoria']][$regraId] = $r;
+                        }
+                    ?>
+                    <?php foreach ($categoriasPoliticas as $categoria => $regras): ?>
+                        <p class="text-muted small text-uppercase mb-1 mt-2"><?= htmlspecialchars($categoria) ?></p>
+                        <?php foreach ($regras as $regraId => $r): ?>
+                            <div class="form-check d-flex justify-content-between align-items-center mb-1" style="max-width:560px">
+                                <span>
+                                    <input class="form-check-input" type="checkbox" name="regras[]" value="<?= htmlspecialchars($regraId) ?>"
+                                           id="regra-<?= htmlspecialchars($regraId) ?>" <?= $r['desejado'] ? 'checked' : '' ?>>
+                                    <label class="form-check-label small" for="regra-<?= htmlspecialchars($regraId) ?>"><?= htmlspecialchars($r['label']) ?></label>
+                                </span>
+                                <span class="badge-status-regra" data-regra="<?= htmlspecialchars($regraId) ?>" title="<?= htmlspecialchars($r['mensagem'] ?? '') ?>">
+                                    <?= match ($r['status']) {
+                                        'aplicado' => Badge::make('Aplicado', 'success'),
+                                        'erro' => Badge::make('Erro', 'danger'),
+                                        'pendente' => Badge::make('Aplicando...', 'warning'),
+                                        default => Badge::make('Nunca aplicado', 'secondary'),
+                                    } ?>
+                                </span>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php endforeach; ?>
+                    <button type="submit" class="btn btn-sm btn-outline-primary mt-2" id="botaoSalvarRegras">
+                        <i class="bi bi-save"></i> Salvar regras desta máquina
+                    </button>
+                    <span class="text-muted small ms-2 d-none" id="statusSalvarRegras"></span>
+                </form>
+            </div>
+        </div>
+        <?php endif; ?>
     <?php endif; ?>
 </div>
 
@@ -1562,6 +1610,82 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro) {
             conteudoSaida.textContent = e.message;
         } finally {
             botaoExecutar.disabled = false;
+        }
+    });
+})();
+
+(function () {
+    const form = document.getElementById('formRegrasSeguranca');
+    if (!form) return;
+
+    const botao = document.getElementById('botaoSalvarRegras');
+    const status = document.getElementById('statusSalvarRegras');
+
+    function badgeHtml(situacao) {
+        const mapa = {
+            aplicado: ['Aplicado', 'success'],
+            erro: ['Erro', 'danger'],
+            pendente: ['Aplicando...', 'warning'],
+        };
+        const par = mapa[situacao] || ['Nunca aplicado', 'secondary'];
+        return '<span class="badge text-bg-' + par[1] + '">' + par[0] + '</span>';
+    }
+
+    function redesenharBadges(estado) {
+        Object.keys(estado).forEach(function (regraId) {
+            const span = form.querySelector('.badge-status-regra[data-regra="' + regraId + '"]');
+            if (!span) return;
+            const r = estado[regraId];
+            span.innerHTML = badgeHtml(r.status);
+            span.title = r.mensagem || '';
+        });
+    }
+
+    form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        botao.disabled = true;
+        status.classList.remove('d-none');
+        status.textContent = 'Salvando...';
+
+        try {
+            const dados = new URLSearchParams(new FormData(form));
+            const resSalvar = await fetch(<?= json_encode(url('/ativos/politicas/salvar-maquina')) ?>, { method: 'POST', body: dados });
+            const salvo = await resSalvar.json();
+
+            if (!salvo.success) {
+                throw new Error(salvo.message || 'Falha ao salvar.');
+            }
+
+            if (!salvo.solicitacao_id) {
+                status.textContent = salvo.message || 'Nada pra aplicar.';
+                return;
+            }
+
+            status.textContent = 'Aplicando na máquina...';
+            const ativoId = <?= (int)$ativo['id'] ?>;
+            const inicio = Date.now();
+
+            while (Date.now() - inicio < 45000) {
+                await new Promise(function (resolve) { setTimeout(resolve, 700); });
+
+                const resPoll = await fetch(<?= json_encode(url('/ativos/politicas/status-maquina')) ?> + '?solicitacao_id=' + salvo.solicitacao_id + '&ativo_id=' + ativoId);
+                const poll = await resPoll.json();
+
+                if (!poll.success) throw new Error(poll.message || 'Falha ao consultar resultado.');
+
+                if (poll.status === 'concluido' || poll.status === 'erro') {
+                    if (poll.estado) redesenharBadges(poll.estado);
+                    status.textContent = poll.status === 'concluido' ? 'Aplicado.' : (poll.mensagem || 'Erro ao aplicar.');
+                    return;
+                }
+                // "pendente" -- continua esperando
+            }
+
+            status.textContent = 'Sem resposta do agente em 45s (a máquina está ligada e conectada?).';
+        } catch (err) {
+            status.textContent = err.message;
+        } finally {
+            botao.disabled = false;
         }
     });
 })();

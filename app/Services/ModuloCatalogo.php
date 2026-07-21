@@ -51,6 +51,7 @@ class ModuloCatalogo
         'ativos_cadastros' => ['label' => 'Ativos - Cadastros (Setor/Localização)', 'grupo' => 'Ativos'],
         'ativos_acesso_remoto' => ['label' => 'Ativos - Acesso Remoto', 'grupo' => 'Ativos'],
         'ativos_etiqueta_config' => ['label' => 'Ativos - Configurações de Etiqueta', 'grupo' => 'Ativos'],
+        'ativos_politicas' => ['label' => 'Ativos - Regras de Segurança', 'grupo' => 'Ativos'],
         'entra_dashboard' => ['label' => 'Entra - Dashboard', 'grupo' => 'Microsoft Entra'],
         'entra_usuarios' => ['label' => 'Entra - Usuários', 'grupo' => 'Microsoft Entra'],
         'entra_configuracao' => ['label' => 'Entra - Configuração', 'grupo' => 'Microsoft Entra'],

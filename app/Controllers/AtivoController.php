@@ -10,6 +10,8 @@ use App\Services\AuditService;
 use App\Services\CronService;
 use App\Services\EtiquetaService;
 use App\Services\NotificationService;
+use App\Services\PermissionService;
+use App\Services\PoliticaService;
 
 class AtivoController extends Controller
 {
@@ -90,6 +92,8 @@ class AtivoController extends Controller
             'intervaloComunicacao' => $this->service->intervaloComunicacao(),
             'elevacaoConfigurada' => $this->service->credenciaisElevacaoConfiguradas($id),
             'elevacaoUsuarioAtual' => $this->service->usuarioElevacaoAtual($id),
+            'politicasHabilitado' => PermissionService::temAcesso('ativos_politicas'),
+            'estadoPoliticas' => PermissionService::temAcesso('ativos_politicas') ? (new PoliticaService())->estadoMaquina($id) : [],
         ]);
     }
 

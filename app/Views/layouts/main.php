@@ -197,7 +197,8 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         || PermissionService::temAcesso('ativos_novo')
         || PermissionService::temAcesso('ativos_cadastros')
         || PermissionService::temAcesso('ativos_acesso_remoto')
-        || PermissionService::temAcesso('ativos_etiqueta_config');
+        || PermissionService::temAcesso('ativos_etiqueta_config')
+        || PermissionService::temAcesso('ativos_politicas');
     ?>
     <?php if ($temAtivos): ?>
     <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuAtivos"
@@ -239,6 +240,12 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         <?php if (PermissionService::temAcesso('ativos_etiqueta_config')): ?>
         <a href="<?= url('/ativos/etiqueta-config') ?>" class="<?= str_starts_with($uriAtual, '/ativos/etiqueta-config') ? 'active' : '' ?>">
             <i class="bi bi-qr-code me-2"></i> Configurações de Etiqueta
+        </a>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('ativos_politicas')): ?>
+        <a href="<?= url('/ativos/politicas') ?>" class="<?= str_starts_with($uriAtual, '/ativos/politicas') ? 'active' : '' ?>">
+            <i class="bi bi-shield-check me-2"></i> Regras de Segurança
         </a>
         <?php endif; ?>
     </div>

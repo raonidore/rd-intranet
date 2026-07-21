@@ -1,0 +1,495 @@
+<?php
+
+namespace App\Services;
+
+use App\Repositories\PoliticaRepository;
+
+/**
+ * "Regras de Segurança" -- políticas locais de máquina (USB, Painel de
+ * Controle, CMD/PowerShell, navegadores, firewall, senha forte, papel
+ * de parede, IP fixo) entregues pelo nosso próprio agente Windows, sem
+ * nenhuma dependência de Microsoft Entra/Intune. Cada regra é só um
+ * script PowerShell (aplicar/reverter) despachado via
+ * AtivoService::solicitarListagem(..., 'executar_powershell', ...) --
+ * o mesmo canal (ativos_solicitacoes/heartbeat) que já devolve
+ * status/resultado, usado hoje pelo Explorador de Arquivos e pelos
+ * scripts do módulo Entra. Nenhuma mudança no agente compilado (.exe)
+ * é necessária pra essa feature.
+ */
+class PoliticaService
+{
+    private PoliticaRepository $repository;
+    private AtivoService $ativoService;
+
+    public function __construct()
+    {
+        $this->repository = new PoliticaRepository();
+        $this->ativoService = new AtivoService();
+    }
+
+    private const EXTENSOES_IMAGEM_VALIDAS = ['jpg', 'jpeg', 'png'];
+
+    /** regra_id => [label, categoria, reversivel]. 'reversivel'=false = regra "só aplicar" (desmarcar só para de forçar, nunca enfraquece a máquina de propósito -- caso do Firewall e da senha forte). */
+    public const CATALOGO = [
+        'usb_bloqueado' => ['label' => 'Bloquear portas USB (armazenamento removível)', 'categoria' => 'Segurança', 'reversivel' => true],
+        'painel_controle_bloqueado' => ['label' => 'Bloquear acesso ao Painel de Controle e Configurações', 'categoria' => 'Segurança', 'reversivel' => true],
+        'cmd_bloqueado' => ['label' => 'Bloquear o Prompt de Comando (CMD)', 'categoria' => 'Segurança', 'reversivel' => true],
+        'powershell_bloqueado' => ['label' => 'Bloquear o Windows PowerShell', 'categoria' => 'Segurança', 'reversivel' => true],
+        'navegadores_bloqueados' => ['label' => 'Bloquear navegadores de internet (Chrome, Edge, Firefox, Opera, Brave)', 'categoria' => 'Segurança', 'reversivel' => true],
+        'firewall_habilitado' => ['label' => 'Garantir que o Firewall do Windows esteja sempre ativo', 'categoria' => 'Segurança', 'reversivel' => false],
+        'senha_forte' => ['label' => 'Exigir senha forte pra entrar no Windows (mínimo 8 caracteres, com complexidade)', 'categoria' => 'Segurança', 'reversivel' => false],
+        'papel_parede_padrao' => ['label' => 'Aplicar o papel de parede corporativo padrão', 'categoria' => 'Customização', 'reversivel' => true],
+        'ip_fixo_bloqueado' => ['label' => 'Impedir o usuário de alterar configurações de IP/rede', 'categoria' => 'Segurança', 'reversivel' => true],
+    ];
+
+    /**
+     * PowerShell reaproveitado por qualquer regra que mexe na lista
+     * compartilhada de programas bloqueados do Explorer
+     * (DisallowRun/RestrictRun) -- lê a lista inteira, troca só a
+     * própria entrada (adiciona ou remove) e regrava, pra uma regra
+     * nunca apagar o que outra regra já tiver colocado ali (ex:
+     * "bloquear PowerShell" e "bloquear navegadores" dividem a mesma
+     * chave do registro).
+     */
+    private const FUNCAO_RESTRICT_RUN = <<<'PS1'
+function Set-RdRestrictRunEntry {
+    param([string]$Exe, [bool]$Bloquear)
+    $chave = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer'
+    New-Item -Path $chave -Force -ErrorAction Stop | Out-Null
+    $item = Get-Item -Path $chave -ErrorAction SilentlyContinue
+    $existentes = @()
+    if ($item) {
+        foreach ($nome in $item.Property) {
+            if ($nome -match '^[0-9]+$') {
+                $valor = (Get-ItemProperty -Path $chave -Name $nome -ErrorAction SilentlyContinue).$nome
+                if ($valor -and $valor -ne $Exe) { $existentes += $valor }
+                Remove-ItemProperty -Path $chave -Name $nome -ErrorAction SilentlyContinue
+            }
+        }
+    }
+    if ($Bloquear) { $existentes += $Exe }
+    $i = 1
+    foreach ($valor in ($existentes | Select-Object -Unique)) {
+        Set-ItemProperty -Path $chave -Name "$i" -Value $valor -Type String -ErrorAction Stop
+        $i++
+    }
+    if ($existentes.Count -gt 0) {
+        Set-ItemProperty -Path $chave -Name 'RestrictRun' -Value 1 -Type DWord -ErrorAction Stop
+    } else {
+        Remove-ItemProperty -Path $chave -Name 'RestrictRun' -ErrorAction SilentlyContinue
+    }
+}
+PS1;
+
+    private const REGRAS_QUE_USAM_RESTRICT_RUN = ['powershell_bloqueado', 'navegadores_bloqueados'];
+
+    /** @return array{aplicar: ?string, reverter: ?string} PowerShell de uma regra -- null em 'reverter' = regra "só aplicar" (ver CATALOGO). */
+    private function scriptsDaRegra(string $regraId): array
+    {
+        return match ($regraId) {
+            'usb_bloqueado' => [
+                'aplicar' => "Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\USBSTOR' -Name 'Start' -Value 4 -Type DWord -ErrorAction Stop",
+                'reverter' => "Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\USBSTOR' -Name 'Start' -Value 3 -Type DWord -ErrorAction Stop",
+            ],
+            'painel_controle_bloqueado' => [
+                'aplicar' => "New-Item -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer' -Force -ErrorAction Stop | Out-Null; Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer' -Name 'NoControlPanel' -Value 1 -Type DWord -ErrorAction Stop",
+                'reverter' => "Remove-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer' -Name 'NoControlPanel' -ErrorAction SilentlyContinue",
+            ],
+            'cmd_bloqueado' => [
+                'aplicar' => "New-Item -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\System' -Force -ErrorAction Stop | Out-Null; Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\System' -Name 'DisableCMD' -Value 2 -Type DWord -ErrorAction Stop",
+                'reverter' => "Remove-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\System' -Name 'DisableCMD' -ErrorAction SilentlyContinue",
+            ],
+            'powershell_bloqueado' => [
+                'aplicar' => "Set-RdRestrictRunEntry -Exe 'powershell.exe' -Bloquear \$true; Set-RdRestrictRunEntry -Exe 'powershell_ise.exe' -Bloquear \$true",
+                'reverter' => "Set-RdRestrictRunEntry -Exe 'powershell.exe' -Bloquear \$false; Set-RdRestrictRunEntry -Exe 'powershell_ise.exe' -Bloquear \$false",
+            ],
+            'navegadores_bloqueados' => [
+                'aplicar' => "foreach (\$exe in @('chrome.exe','msedge.exe','firefox.exe','opera.exe','brave.exe','iexplore.exe')) { Set-RdRestrictRunEntry -Exe \$exe -Bloquear \$true }",
+                'reverter' => "foreach (\$exe in @('chrome.exe','msedge.exe','firefox.exe','opera.exe','brave.exe','iexplore.exe')) { Set-RdRestrictRunEntry -Exe \$exe -Bloquear \$false }",
+            ],
+            'firewall_habilitado' => [
+                'aplicar' => 'Set-NetFirewallProfile -All -Enabled True -ErrorAction Stop',
+                'reverter' => null,
+            ],
+            'senha_forte' => [
+                'aplicar' => self::scriptSenhaForte(),
+                'reverter' => null,
+            ],
+            'papel_parede_padrao' => [
+                'aplicar' => $this->scriptAplicarWallpaper(),
+                'reverter' => "Remove-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\ActiveDesktop' -Name 'NoChangingWallPaper' -ErrorAction SilentlyContinue",
+            ],
+            // Chave clássica de "Network Connections" do GPO -- é HKCU (não tem
+            // equivalente HKLM documentado), então só vale pro usuário logado
+            // na hora em que o agente rodar o script (ver aviso na tela de ajuda).
+            'ip_fixo_bloqueado' => [
+                'aplicar' => "New-Item -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Network\\Connections' -Force -ErrorAction Stop | Out-Null; Set-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Network\\Connections' -Name 'NC_LanChangeProperties' -Value 0 -Type DWord -ErrorAction Stop; Set-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Network\\Connections' -Name 'NC_StdDomainUserSetLocation' -Value 1 -Type DWord -ErrorAction Stop",
+                'reverter' => "Remove-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Network\\Connections' -Name 'NC_LanChangeProperties' -ErrorAction SilentlyContinue; Remove-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Network\\Connections' -Name 'NC_StdDomainUserSetLocation' -ErrorAction SilentlyContinue",
+            ],
+            default => ['aplicar' => null, 'reverter' => null],
+        };
+    }
+
+    private static function scriptSenhaForte(): string
+    {
+        return <<<'PS1'
+$conteudoInf = @'
+[Unicode]
+Unicode=yes
+[System Access]
+MinimumPasswordLength = 8
+PasswordComplexity = 1
+[Version]
+signature="$CHICAGO$"
+Revision=1
+'@
+$arquivoInf = Join-Path $env:TEMP 'rd_senha_forte.inf'
+$arquivoSdb = Join-Path $env:TEMP 'rd_senha_forte.sdb'
+Set-Content -Path $arquivoInf -Value $conteudoInf -Encoding Unicode -ErrorAction Stop
+secedit /configure /db $arquivoSdb /cfg $arquivoInf /areas SECURITYPOLICY | Out-Null
+$codigo = $LASTEXITCODE
+Remove-Item -Path $arquivoInf, $arquivoSdb -ErrorAction SilentlyContinue
+if ($codigo -ne 0) { throw "secedit falhou (codigo $codigo)" }
+PS1;
+    }
+
+    /** Monta o script combinado de UM "Salvar"/lote: um try/catch por regra alterada, JSON único no final (única coisa que vai pro stdout) -- é isso que fica em ativos_solicitacoes.resultado pro polling decodificar. */
+    public function gerarScriptCombinado(array $mudancas): string
+    {
+        $precisaRestrictRun = false;
+        $blocos = [];
+
+        foreach ($mudancas as $mudanca) {
+            $regraId = $mudanca['regra_id'];
+            $ativar = $mudanca['ativar'];
+            $scripts = $this->scriptsDaRegra($regraId);
+            $script = $ativar ? $scripts['aplicar'] : $scripts['reverter'];
+
+            if ($script === null) {
+                continue;
+            }
+
+            if (in_array($regraId, self::REGRAS_QUE_USAM_RESTRICT_RUN, true)) {
+                $precisaRestrictRun = true;
+            }
+
+            $chaveJson = addslashes($regraId);
+            $blocos[] = <<<PS1
+try {
+    {$script}
+    \$resultados['{$chaveJson}'] = @{ sucesso = \$true }
+} catch {
+    \$resultados['{$chaveJson}'] = @{ sucesso = \$false; erro = \$_.Exception.Message }
+}
+PS1;
+        }
+
+        $preambulo = "\$resultados = @{}\n";
+        if ($precisaRestrictRun) {
+            $preambulo .= self::FUNCAO_RESTRICT_RUN . "\n";
+        }
+
+        return $preambulo . implode("\n", $blocos) . "\n(\$resultados | ConvertTo-Json -Compress)\n";
+    }
+
+    /** @return array<string, array> catálogo mesclado com o estado salvo (desejado/status/mensagem) dessa máquina -- 'desejado'=0 e status=null pra regra nunca tocada. */
+    public function estadoMaquina(int $ativoId): array
+    {
+        $salvos = $this->repository->estadoPorAtivo($ativoId);
+        $estado = [];
+
+        foreach (self::CATALOGO as $regraId => $info) {
+            $linha = $salvos[$regraId] ?? null;
+            $estado[$regraId] = array_merge($info, [
+                'regra_id' => $regraId,
+                'desejado' => $linha ? (bool)$linha['desejado'] : false,
+                'status' => $linha['status'] ?? null,
+                'mensagem' => $linha['mensagem'] ?? null,
+            ]);
+        }
+
+        return $estado;
+    }
+
+    /** @param string[] $regrasMarcadas ids de regra que ficaram marcadas no form (as ausentes = desmarcadas) */
+    public function salvarEstadoMaquina(int $ativoId, array $regrasMarcadas, ?string $solicitadoPor): array
+    {
+        $ativo = $this->ativoService->buscar($ativoId);
+        if (!$ativo || $ativo['origem'] !== 'agente') {
+            return ['success' => false, 'message' => 'Este ativo não tem o agente Windows instalado.'];
+        }
+
+        $atual = $this->repository->estadoPorAtivo($ativoId);
+        $mudancas = [];
+
+        foreach (self::CATALOGO as $regraId => $info) {
+            $desejadoNovo = in_array($regraId, $regrasMarcadas, true);
+            $desejadoAtual = isset($atual[$regraId]) && (bool)$atual[$regraId]['desejado'];
+
+            if ($desejadoNovo === $desejadoAtual) {
+                continue;
+            }
+
+            if (!$desejadoNovo && !$info['reversivel']) {
+                // Regra "só aplicar" sendo desmarcada -- só para de forçar
+                // localmente, nunca gera um script que enfraquece a máquina.
+                $this->repository->upsertEstado($ativoId, $regraId, 0, 'aplicado', 'Não é mais forçada (nenhuma mudança na máquina).', null);
+                continue;
+            }
+
+            $mudancas[] = ['regra_id' => $regraId, 'ativar' => $desejadoNovo];
+        }
+
+        if (empty($mudancas)) {
+            return ['success' => true, 'message' => 'Nada pra aplicar -- estado já era esse.'];
+        }
+
+        if ($regraWallpaper = $this->precisaEnviarWallpaper($mudancas)) {
+            if (!$this->enviarWallpaperParaAtivo($ativoId, $solicitadoPor)) {
+                return ['success' => false, 'message' => 'Não foi possível enviar a imagem do papel de parede pra essa máquina.'];
+            }
+        }
+
+        $script = $this->gerarScriptCombinado($mudancas);
+        $resultado = $this->ativoService->solicitarListagem($ativoId, 'executar_powershell', $script, $solicitadoPor, false);
+
+        if (!($resultado['success'] ?? false)) {
+            return $resultado;
+        }
+
+        $solicitacaoId = $resultado['id'];
+        foreach ($mudancas as $mudanca) {
+            $this->repository->upsertEstado($ativoId, $mudanca['regra_id'], $mudanca['ativar'] ? 1 : 0, 'pendente', null, $solicitacaoId);
+        }
+
+        AuditService::registrar('Ativos', 'Regras de Segurança', count($mudancas) . ' regra(s) alterada(s) em ' . $ativo['codigo_patrimonio'] . ' (' . $ativo['nome'] . ').');
+
+        return ['success' => true, 'solicitacao_id' => $solicitacaoId];
+    }
+
+    private function precisaEnviarWallpaper(array $mudancas): bool
+    {
+        foreach ($mudancas as $mudanca) {
+            if ($mudanca['regra_id'] === 'papel_parede_padrao' && $mudanca['ativar']) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** Confirma o resultado de uma solicitação e atualiza o status por regra -- chamado pelo polling da tela de máquina. */
+    public function confirmarResultado(int $solicitacaoId, int $ativoId): array
+    {
+        $resultado = $this->ativoService->resultadoSolicitacao($solicitacaoId, $ativoId);
+
+        if (!($resultado['success'] ?? false) || $resultado['status'] === 'pendente') {
+            return $resultado;
+        }
+
+        $linhas = $this->repository->porSolicitacao($solicitacaoId);
+
+        if ($resultado['status'] === 'erro') {
+            foreach ($linhas as $linha) {
+                $this->repository->atualizarStatus((int)$linha['id'], 'erro', $resultado['mensagem'] ?? 'Falha ao executar o script.');
+            }
+
+            return array_merge($resultado, ['estado' => $this->estadoMaquina($ativoId)]);
+        }
+
+        $porRegra = json_decode($resultado['resultado']['saida'] ?? '', true) ?: [];
+
+        foreach ($linhas as $linha) {
+            $regraId = $linha['regra_id'];
+            $infoRegra = $porRegra[$regraId] ?? null;
+
+            if ($infoRegra === null) {
+                continue;
+            }
+
+            $sucesso = $infoRegra['sucesso'] ?? false;
+            $this->repository->atualizarStatus((int)$linha['id'], $sucesso ? 'aplicado' : 'erro', $sucesso ? null : ($infoRegra['erro'] ?? 'Falha desconhecida.'));
+        }
+
+        return array_merge($resultado, ['estado' => $this->estadoMaquina($ativoId)]);
+    }
+
+    /** Aplica ou remove UMA regra em várias máquinas de uma vez (fogo-e-esquece, igual ao padrão já usado pra papel de parede/Company Portal em lote no módulo Entra). */
+    public function aplicarEmLote(string $regraId, array $ativoIds, bool $ativar, ?string $solicitadoPor): array
+    {
+        if (!isset(self::CATALOGO[$regraId])) {
+            return ['success' => false, 'message' => 'Regra inválida.'];
+        }
+
+        if (!$ativar && !self::CATALOGO[$regraId]['reversivel']) {
+            return ['success' => false, 'message' => 'Essa regra não tem "desligar" -- ela só reforça, nunca enfraquece a máquina de propósito.'];
+        }
+
+        $enviados = 0;
+
+        foreach ($ativoIds as $ativoId) {
+            $ativoId = (int)$ativoId;
+
+            if ($regraId === 'papel_parede_padrao' && $ativar && !$this->enviarWallpaperParaAtivo($ativoId, $solicitadoPor)) {
+                continue;
+            }
+
+            $script = $this->gerarScriptCombinado([['regra_id' => $regraId, 'ativar' => $ativar]]);
+            $resultado = $this->ativoService->solicitarListagem($ativoId, 'executar_powershell', $script, $solicitadoPor, false);
+
+            if ($resultado['success'] ?? false) {
+                $this->repository->upsertEstado($ativoId, $regraId, $ativar ? 1 : 0, 'pendente', null, $resultado['id']);
+                $enviados++;
+            }
+        }
+
+        AuditService::registrar('Ativos', 'Regras de Segurança', ($ativar ? 'Aplicação' : 'Remoção') . " em lote da regra \"{$regraId}\" -- {$enviados} máquina(s).");
+
+        return ['success' => true, 'enviados' => $enviados];
+    }
+
+    /*
+     |---------------------------------------------------------
+     | Papel de parede corporativo -- 1 imagem só (diferente do Entra,
+     | que separa área de trabalho/tela de bloqueio porque o Intune tem
+     | os dois campos; aqui é um Set-ItemProperty só, então uma imagem
+     | já basta). Mesmo padrão de storage do Company Portal/wallpaper do
+     | Entra (arquivo fixo + metadados no ConfigService).
+     |---------------------------------------------------------
+     */
+
+    private const CHAVE_WALLPAPER_NOME = 'ativos_politicas_wallpaper_nome';
+    private const CHAVE_WALLPAPER_ENVIADO_EM = 'ativos_politicas_wallpaper_enviado_em';
+
+    public static function caminhoWallpaper(): string
+    {
+        return __DIR__ . '/../../storage/uploads/ativos_politicas/wallpaper';
+    }
+
+    public function wallpaperConfigurado(): bool
+    {
+        return is_file(self::caminhoWallpaper());
+    }
+
+    public function wallpaperInfo(): ?array
+    {
+        if (!$this->wallpaperConfigurado()) {
+            return null;
+        }
+
+        return [
+            'nome' => ConfigService::get(self::CHAVE_WALLPAPER_NOME, '') ?: 'wallpaper',
+            'enviado_em' => ConfigService::get(self::CHAVE_WALLPAPER_ENVIADO_EM, '') ?: '',
+        ];
+    }
+
+    public function salvarWallpaper(string $caminhoTemporario, string $nomeOriginal): bool
+    {
+        $extensao = strtolower(pathinfo($nomeOriginal, PATHINFO_EXTENSION));
+        if (!in_array($extensao, self::EXTENSOES_IMAGEM_VALIDAS, true)) {
+            NotificationService::error('A imagem precisa ser .jpg, .jpeg ou .png.');
+            return false;
+        }
+
+        $destino = self::caminhoWallpaper();
+        $pasta = dirname($destino);
+        if (!is_dir($pasta) && !@mkdir($pasta, 0777, true) && !is_dir($pasta)) {
+            NotificationService::error('Não foi possível preparar a pasta de armazenamento no servidor.');
+            return false;
+        }
+
+        if (!@copy($caminhoTemporario, $destino)) {
+            NotificationService::error('Não foi possível salvar a imagem no servidor.');
+            return false;
+        }
+
+        ConfigService::set(self::CHAVE_WALLPAPER_NOME, basename($nomeOriginal));
+        ConfigService::set(self::CHAVE_WALLPAPER_ENVIADO_EM, date('Y-m-d H:i:s'));
+
+        AuditService::registrar('Ativos', 'Regras de Segurança', 'Imagem do papel de parede corporativo enviada/atualizada.');
+        NotificationService::success('Imagem salva.');
+
+        return true;
+    }
+
+    public function removerWallpaper(): void
+    {
+        @unlink(self::caminhoWallpaper());
+        ConfigService::set(self::CHAVE_WALLPAPER_NOME, '');
+        ConfigService::set(self::CHAVE_WALLPAPER_ENVIADO_EM, '');
+
+        AuditService::registrar('Ativos', 'Regras de Segurança', 'Imagem do papel de parede corporativo removida.');
+        NotificationService::success('Imagem removida.');
+    }
+
+    /** Caminho fixo que o arquivo ocupa NA MÁQUINA depois de enviado (ProgramData -- persistente). Null se ainda não foi configurado. */
+    public function caminhoRemotoWallpaper(): ?string
+    {
+        $info = $this->wallpaperInfo();
+        if ($info === null) {
+            return null;
+        }
+
+        $extensao = strtolower(pathinfo($info['nome'], PATHINFO_EXTENSION));
+
+        return 'C:\\ProgramData\\RDIntranet\\wallpaper_corporativo.' . $extensao;
+    }
+
+    private function scriptAplicarWallpaper(): string
+    {
+        $caminhoRemoto = $this->caminhoRemotoWallpaper() ?? 'C:\\ProgramData\\RDIntranet\\wallpaper_corporativo';
+
+        $template = <<<'PS1'
+$caminho = '__CAMINHO__'
+if (!(Test-Path $caminho)) { throw "Imagem do papel de parede ainda nao chegou nessa maquina." }
+New-Item -Path 'HKCU:\Control Panel\Desktop' -Force -ErrorAction Stop | Out-Null
+Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'Wallpaper' -Value $caminho -ErrorAction Stop
+Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'WallpaperStyle' -Value '10' -ErrorAction Stop
+RUNDLL32.EXE user32.dll,UpdatePerUserSystemParameters
+New-Item -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop' -Force -ErrorAction Stop | Out-Null
+Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop' -Name 'NoChangingWallPaper' -Value 1 -Type DWord -ErrorAction Stop
+PS1;
+
+        return str_replace('__CAMINHO__', $caminhoRemoto, $template);
+    }
+
+    /** Copia a imagem já salva no servidor pra máquina (enviar_arquivo), igual ao padrão do wallpaper/Company Portal do módulo Entra. */
+    private function enviarWallpaperParaAtivo(int $ativoId, ?string $solicitadoPor): bool
+    {
+        if (!$this->wallpaperConfigurado()) {
+            NotificationService::error('Envie a imagem do papel de parede corporativo antes de aplicar essa regra.');
+            return false;
+        }
+
+        $pastaTransferencias = __DIR__ . '/../../storage/uploads/ativos_transferencias';
+        if (!is_dir($pastaTransferencias) && !@mkdir($pastaTransferencias, 0777, true) && !is_dir($pastaTransferencias)) {
+            return false;
+        }
+
+        $caminhoRemoto = $this->caminhoRemotoWallpaper();
+        $nomeArquivo = basename(str_replace('\\', '/', $caminhoRemoto));
+        $copiaTemp = $pastaTransferencias . '/enviar_' . uniqid('', true) . '_' . $nomeArquivo;
+
+        if (!@copy(self::caminhoWallpaper(), $copiaTemp)) {
+            return false;
+        }
+
+        $resultado = $this->ativoService->enviarComando($ativoId, 'enviar_arquivo', $solicitadoPor, $caminhoRemoto, $nomeArquivo, $copiaTemp);
+
+        if (!($resultado['success'] ?? false)) {
+            @unlink($copiaTemp);
+            return false;
+        }
+
+        return true;
+    }
+
+    /** Máquinas elegíveis pro picker (mesmo filtro do módulo Entra: só computador, com agente instalado e numa versão que já suporta executar_powershell). */
+    public function maquinasElegiveis(): array
+    {
+        return array_values(array_filter(
+            $this->ativoService->listar(['tipo' => 'computador']),
+            fn($a) => $a['origem'] === 'agente' && ($a['agente_versao'] ?? '') !== 'ps1'
+        ));
+    }
+}
