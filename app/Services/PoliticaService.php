@@ -235,6 +235,41 @@ PS1;
         return $estado;
     }
 
+    /**
+     * Matriz "máquina x regra" pra tabela de status geral -- uma linha
+     * por máquina elegível, cada uma com o estado de todas as regras do
+     * catálogo (mesmo formato de estadoMaquina(), mas buscando tudo
+     * numa query só em vez de uma por máquina).
+     *
+     * @param array $maquinas mesmo array que vem de maquinasElegiveis()
+     * @return array<int, array{ativo: array, regras: array}>
+     */
+    public function matrizStatus(array $maquinas): array
+    {
+        $ativoIds = array_map(fn($m) => (int)$m['id'], $maquinas);
+        $salvosPorAtivo = $this->repository->estadoPorAtivos($ativoIds);
+
+        $matriz = [];
+        foreach ($maquinas as $m) {
+            $ativoId = (int)$m['id'];
+            $salvos = $salvosPorAtivo[$ativoId] ?? [];
+            $regras = [];
+
+            foreach (self::CATALOGO as $regraId => $info) {
+                $linha = $salvos[$regraId] ?? null;
+                $regras[$regraId] = [
+                    'desejado' => $linha ? (bool)$linha['desejado'] : false,
+                    'status' => $linha['status'] ?? null,
+                    'mensagem' => $linha['mensagem'] ?? null,
+                ];
+            }
+
+            $matriz[] = ['ativo' => $m, 'regras' => $regras];
+        }
+
+        return $matriz;
+    }
+
     /** @param string[] $regrasMarcadas ids de regra que ficaram marcadas no form (as ausentes = desmarcadas) */
     public function salvarEstadoMaquina(int $ativoId, array $regrasMarcadas, ?string $solicitadoPor): array
     {

@@ -160,11 +160,91 @@ use App\Services\PoliticaService;
     </div>
 </div>
 
+<?php
+    $iconesPorRegra = [
+        'usb_bloqueado' => 'bi-usb-drive',
+        'painel_controle_bloqueado' => 'bi-sliders',
+        'cmd_bloqueado' => 'bi-terminal',
+        'powershell_bloqueado' => 'bi-code-square',
+        'navegadores_bloqueados' => 'bi-globe2',
+        'firewall_habilitado' => 'bi-shield-fill-check',
+        'senha_forte' => 'bi-key-fill',
+        'papel_parede_padrao' => 'bi-image-fill',
+        'ip_fixo_bloqueado' => 'bi-hdd-network-fill',
+    ];
+?>
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <strong><i class="bi bi-grid-3x3-gap-fill"></i> Status das regras por máquina</strong>
+        <span class="small text-muted">
+            <i class="bi bi-circle-fill" style="color:#3fb950; font-size:9px"></i> aplicada
+            <i class="bi bi-circle-fill ms-2" style="color:#f85149; font-size:9px"></i> erro
+            <i class="bi bi-circle-fill ms-2" style="color:#d29922; font-size:9px"></i> aplicando
+            <i class="bi bi-circle ms-2" style="color:#484f58; font-size:9px"></i> inativa
+        </span>
+    </div>
+    <div class="card-body p-0">
+        <?php if (empty($matrizStatus)): ?>
+            <p class="text-muted small p-3 mb-0">Nenhum computador com o agente instalado.</p>
+        <?php else: ?>
+            <div class="rd-matriz-regras">
+                <table class="table table-sm mb-0 align-middle">
+                    <thead>
+                        <tr>
+                            <th>Máquina</th>
+                            <?php foreach ($catalogo as $regraId => $info): ?>
+                                <th class="text-center" style="width:44px" title="<?= htmlspecialchars($info['label']) ?>">
+                                    <i class="bi <?= $iconesPorRegra[$regraId] ?? 'bi-question-circle' ?>"></i>
+                                </th>
+                            <?php endforeach; ?>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($matrizStatus as $linha): ?>
+                            <tr>
+                                <td class="small">
+                                    <?= htmlspecialchars($linha['ativo']['nome']) ?>
+                                    <span class="text-muted font-monospace">(<?= htmlspecialchars($linha['ativo']['codigo_patrimonio']) ?>)</span>
+                                </td>
+                                <?php foreach ($catalogo as $regraId => $info): ?>
+                                    <?php
+                                        $r = $linha['regras'][$regraId];
+                                        if ($r['status'] === 'erro') {
+                                            $cor = '#f85149'; $preenchido = true; $titulo = 'Erro: ' . ($r['mensagem'] ?? '');
+                                        } elseif ($r['status'] === 'pendente') {
+                                            $cor = '#d29922'; $preenchido = true; $titulo = 'Aplicando...';
+                                        } elseif ($r['desejado'] && $r['status'] === 'aplicado') {
+                                            $cor = '#3fb950'; $preenchido = true; $titulo = 'Aplicada';
+                                        } else {
+                                            $cor = '#484f58'; $preenchido = false; $titulo = 'Inativa nesta máquina';
+                                        }
+                                    ?>
+                                    <td class="text-center">
+                                        <i class="bi <?= $preenchido ? 'bi-circle-fill' : 'bi-circle' ?>" style="color:<?= $cor ?>; font-size:11px" title="<?= htmlspecialchars($info['label'] . ' -- ' . $titulo) ?>"></i>
+                                    </td>
+                                <?php endforeach; ?>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
+
 <div class="card border-0 shadow-sm mb-3">
     <div class="card-header bg-white"><strong>Aplicar/remover regras em lote</strong></div>
     <div class="card-body">
         <p class="text-muted small mb-2">A seleção de máquinas abaixo também vale pra instalação de software, no card seguinte.</p>
-        <strong class="small">Máquinas</strong>
+        <div class="d-flex justify-content-between align-items-center">
+            <strong class="small">Máquinas</strong>
+            <?php if (!empty($maquinas)): ?>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="campoSelecionarTodasMaquinas">
+                    <label class="form-check-label small" for="campoSelecionarTodasMaquinas">Selecionar todas</label>
+                </div>
+            <?php endif; ?>
+        </div>
         <div class="border rounded p-2 mb-3 mt-1" style="max-height:220px; overflow-y:auto; max-width:480px">
             <?php if (empty($maquinas)): ?>
                 <p class="text-muted small mb-0">Nenhum computador com o agente instalado.</p>
@@ -305,6 +385,19 @@ use App\Services\PoliticaService;
 
 <script>
 (function () {
+    const campoSelecionarTodas = document.getElementById('campoSelecionarTodasMaquinas');
+    if (campoSelecionarTodas) {
+        campoSelecionarTodas.addEventListener('change', function () {
+            document.querySelectorAll('.campo-ativo-lote').forEach(function (c) { c.checked = campoSelecionarTodas.checked; });
+        });
+        // Se o usuário desmarcar uma máquina na mão, o "Selecionar todas" desmarca sozinho.
+        document.querySelectorAll('.campo-ativo-lote').forEach(function (c) {
+            c.addEventListener('change', function () {
+                if (!c.checked) { campoSelecionarTodas.checked = false; }
+            });
+        });
+    }
+
     const botaoRemoverWallpaper = document.getElementById('botaoRemoverWallpaper');
     if (botaoRemoverWallpaper) {
         botaoRemoverWallpaper.addEventListener('click', function () {

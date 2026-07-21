@@ -795,12 +795,17 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                     <label class="form-check-label small" for="regra-<?= htmlspecialchars($regraId) ?>"><?= htmlspecialchars($r['label']) ?></label>
                                 </span>
                                 <span class="badge-status-regra" data-regra="<?= htmlspecialchars($regraId) ?>" title="<?= htmlspecialchars($r['mensagem'] ?? '') ?>">
-                                    <?= match ($r['status']) {
-                                        'aplicado' => Badge::make('Aplicado', 'success'),
-                                        'erro' => Badge::make('Erro', 'danger'),
-                                        'pendente' => Badge::make('Aplicando...', 'warning'),
-                                        default => Badge::make('Nunca aplicado', 'secondary'),
-                                    } ?>
+                                    <?php if ($r['status'] === 'erro'): ?>
+                                        <?= Badge::make('Erro', 'danger') ?>
+                                    <?php elseif ($r['status'] === 'pendente'): ?>
+                                        <?= Badge::make('Aplicando...', 'warning') ?>
+                                    <?php elseif ($r['status'] === 'aplicado' && $r['desejado']): ?>
+                                        <?= Badge::make('Aplicado', 'success') ?>
+                                    <?php elseif ($r['status'] === 'aplicado' && !$r['desejado']): ?>
+                                        <?= Badge::make('Removida', 'secondary') ?>
+                                    <?php else: ?>
+                                        <?= Badge::make('Nunca aplicado', 'secondary') ?>
+                                    <?php endif; ?>
                                 </span>
                             </div>
                         <?php endforeach; ?>
@@ -1652,13 +1657,13 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro) {
     const botao = document.getElementById('botaoSalvarRegras');
     const status = document.getElementById('statusSalvarRegras');
 
-    function badgeHtml(situacao) {
-        const mapa = {
-            aplicado: ['Aplicado', 'success'],
-            erro: ['Erro', 'danger'],
-            pendente: ['Aplicando...', 'warning'],
-        };
-        const par = mapa[situacao] || ['Nunca aplicado', 'secondary'];
+    function badgeHtml(situacao, desejado) {
+        let par;
+        if (situacao === 'erro') par = ['Erro', 'danger'];
+        else if (situacao === 'pendente') par = ['Aplicando...', 'warning'];
+        else if (situacao === 'aplicado' && desejado) par = ['Aplicado', 'success'];
+        else if (situacao === 'aplicado' && !desejado) par = ['Removida', 'secondary'];
+        else par = ['Nunca aplicado', 'secondary'];
         return '<span class="badge text-bg-' + par[1] + '">' + par[0] + '</span>';
     }
 
@@ -1667,7 +1672,7 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro) {
             const span = form.querySelector('.badge-status-regra[data-regra="' + regraId + '"]');
             if (!span) return;
             const r = estado[regraId];
-            span.innerHTML = badgeHtml(r.status);
+            span.innerHTML = badgeHtml(r.status, r.desejado);
             span.title = r.mensagem || '';
         });
     }

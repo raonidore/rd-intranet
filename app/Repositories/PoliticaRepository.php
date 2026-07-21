@@ -28,6 +28,25 @@ class PoliticaRepository
         return $porRegra;
     }
 
+    /** @param int[] $ativoIds @return array<int, array<string, array>> ativo_id => regra_id => linha -- uma query só pra montar a matriz de status de N máquinas (evita N+1). */
+    public function estadoPorAtivos(array $ativoIds): array
+    {
+        if (empty($ativoIds)) {
+            return [];
+        }
+
+        $marcadores = implode(',', array_fill(0, count($ativoIds), '?'));
+        $stmt = $this->pdo->prepare("SELECT * FROM ativos_politicas_estado WHERE ativo_id IN ({$marcadores})");
+        $stmt->execute($ativoIds);
+
+        $porAtivo = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $linha) {
+            $porAtivo[(int)$linha['ativo_id']][$linha['regra_id']] = $linha;
+        }
+
+        return $porAtivo;
+    }
+
     public function upsertEstado(int $ativoId, string $regraId, int $desejado, string $status, ?string $mensagem, ?int $solicitacaoId): void
     {
         $stmt = $this->pdo->prepare('

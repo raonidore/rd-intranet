@@ -3,6 +3,7 @@ ob_start();
 
 use App\Components\Alert;
 use App\Services\AtivoService;
+use App\Services\PermissionService;
 
 $statusCores = [
     'ativo' => 'success',
@@ -41,7 +42,7 @@ $statusCores = [
 
 <div class="row g-3">
     <div class="col-lg-5">
-        <div class="card border-0 shadow-sm h-100">
+        <div class="card border-0 shadow-sm">
             <div class="card-header bg-white"><strong>Por status</strong></div>
             <div class="card-body">
                 <?php if (empty($por_status)): ?>
@@ -56,6 +57,19 @@ $statusCores = [
                 <?php endif; ?>
             </div>
         </div>
+
+        <?php if (PermissionService::temAcesso('ativos_politicas')): ?>
+            <a href="<?= url('/ativos/politicas') ?>" class="card border-0 shadow-sm text-decoration-none mt-3" style="background:linear-gradient(135deg,#0d1117,#161b22)">
+                <div class="card-body d-flex align-items-center gap-3 py-3">
+                    <i class="bi bi-shield-lock-fill" style="font-size:2rem; color:#58a6ff"></i>
+                    <div>
+                        <div class="fw-bold" style="color:#fff">Regras de Segurança</div>
+                        <div class="small" style="color:#8b949e">Políticas locais via agente -- USB, CMD, firewall, papel de parede e mais, sem depender do Intune.</div>
+                    </div>
+                    <i class="bi bi-chevron-right ms-auto" style="color:#58a6ff"></i>
+                </div>
+            </a>
+        <?php endif; ?>
     </div>
 
     <div class="col-lg-7">

@@ -24,10 +24,12 @@ class PoliticaController extends Controller
         AuthMiddleware::checkModulo('ativos_politicas');
 
         $catalogoService = new AtivoCatalogoService();
+        $maquinas = $this->service->maquinasElegiveis();
 
         $this->view('ativos/politicas', [
             'catalogo' => PoliticaService::CATALOGO,
-            'maquinas' => $this->service->maquinasElegiveis(),
+            'maquinas' => $maquinas,
+            'matrizStatus' => $this->service->matrizStatus($maquinas),
             'wallpaperInfo' => $this->service->wallpaperInfo(),
             'setores' => $catalogoService->listarSetores(),
             'recursosSetor' => $this->service->listarRecursosSetor(),
