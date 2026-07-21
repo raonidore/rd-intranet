@@ -829,6 +829,18 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                         <a href="<?= url('/ativos/politicas') ?>">cadastre em Regras de Segurança</a>.
                     </p>
                 <?php endif; ?>
+
+                <?php if ($scriptAtualizacoesWindows !== null): ?>
+                    <hr>
+                    <p class="text-muted small mb-2">
+                        Dispara uma varredura + download + instalação de atualizações do Windows Update. Pode demorar
+                        bastante e continuar rodando em segundo plano depois do comando retornar.
+                    </p>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="botaoAtualizacoesWindows">
+                        <i class="bi bi-arrow-repeat"></i> Aplicar atualizações do Windows
+                    </button>
+                    <span class="text-muted small ms-2 d-none" id="statusAtualizacoesWindows"></span>
+                <?php endif; ?>
             </div>
         </div>
         <?php endif; ?>
@@ -1734,6 +1746,44 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro) {
             status.textContent = err.message;
         } finally {
             botaoMapear.disabled = false;
+        }
+    });
+})();
+
+(function () {
+    const botao = document.getElementById('botaoAtualizacoesWindows');
+    if (!botao) return;
+
+    const status = document.getElementById('statusAtualizacoesWindows');
+    const ativoId = <?= (int)$ativo['id'] ?>;
+    const script = <?= json_encode($scriptAtualizacoesWindows ?? '') ?>;
+
+    // Fogo-e-esquece de propósito (diferente do botão de mapeamento de
+    // setor): Windows Update pode levar bem mais que os ~20-45s que os
+    // outros pollings desta página esperam -- em vez de deixar o
+    // administrador com um spinner travado, só confirma que foi
+    // solicitado e aponta pro histórico de solicitações da máquina.
+    botao.addEventListener('click', async function () {
+        botao.disabled = true;
+        status.classList.remove('d-none');
+        status.textContent = 'Solicitando...';
+
+        try {
+            const dados = new URLSearchParams();
+            dados.set('id', ativoId);
+            dados.set('tipo', 'executar_powershell');
+            dados.set('parametro', script);
+
+            const res = await fetch(<?= json_encode(url('/ativos/solicitacoes/listar')) ?>, { method: 'POST', body: dados });
+            const resultado = await res.json();
+
+            if (!resultado.success) throw new Error(resultado.message || 'Falha ao solicitar.');
+
+            status.textContent = 'Solicitado! Pode levar bastante tempo -- confira o resultado no histórico de solicitações desta máquina daqui a alguns minutos.';
+        } catch (err) {
+            status.textContent = err.message;
+        } finally {
+            botao.disabled = false;
         }
     });
 })();

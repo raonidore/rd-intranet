@@ -95,6 +95,7 @@ class AtivoController extends Controller
             'politicasHabilitado' => PermissionService::temAcesso('ativos_politicas'),
             'estadoPoliticas' => PermissionService::temAcesso('ativos_politicas') ? (new PoliticaService())->estadoMaquina($id) : [],
             'scriptMapeamentoSetor' => PermissionService::temAcesso('ativos_politicas') ? (new PoliticaService())->scriptMapearRecursosSetor(isset($ativo['setor_id']) ? (int)$ativo['setor_id'] : null) : null,
+            'scriptAtualizacoesWindows' => PermissionService::temAcesso('ativos_politicas') ? (new PoliticaService())->scriptAplicarAtualizacoesWindows() : null,
         ]);
     }
 

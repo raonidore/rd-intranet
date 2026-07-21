@@ -987,4 +987,29 @@ PS1;
 
         return str_replace(['__NOMETAREFA__', '__DESTINO__'], [self::NOME_TAREFA_LOGIN_SCRIPT, $this->caminhoRemotoLoginScript()], $template);
     }
+
+    /**
+     * Fase 5: ação avulsa "Aplicar atualizações do Windows" -- sem
+     * estado nenhum pra guardar, só dispara e mostra o resultado (igual
+     * o botão "Aplicar mapeamentos do setor"). UsoClient.exe é a
+     * ferramenta de linha de comando (não documentada oficialmente, mas
+     * estável desde o Windows 10 1607) que aciona o mesmo motor do
+     * Windows Update usado pela tela de Configurações -- "ScanInstallWait"
+     * varre, baixa e instala numa tacada só, esperando terminar. Best
+     * effort: o processo real de update continua em segundo plano mesmo
+     * depois do comando retornar, então "sucesso" aqui significa "consegui
+     * disparar", não necessariamente "já terminou de instalar tudo".
+     */
+    public function scriptAplicarAtualizacoesWindows(): string
+    {
+        return <<<'PS1'
+try {
+    Start-Process -FilePath "$env:windir\System32\UsoClient.exe" -ArgumentList 'ScanInstallWait' -Wait -ErrorAction Stop
+    Write-Output "Atualizacoes do Windows solicitadas (varredura + download + instalacao). Pode continuar rodando em segundo plano por um tempo -- confira o Windows Update na maquina se quiser confirmar."
+} catch {
+    Write-Output "ERRO ao solicitar atualizacoes: $($_.Exception.Message)"
+    exit 1
+}
+PS1;
+    }
 }
