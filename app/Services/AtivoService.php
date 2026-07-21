@@ -1471,7 +1471,19 @@ class AtivoService
             return null;
         }
 
-        $segundos = max(0, time() - $timestamp);
+        return self::duracaoLegivel(max(0, time() - $timestamp));
+    }
+
+    /**
+     * "X dia(s), HH:MM:SS" (ou só "HH:MM:SS" se for menos de 1 dia) --
+     * mesma quebra em dias/horas/minutos/segundos usada no uptime,
+     * reaproveitada pra qualquer "há quanto tempo" da tela do ativo
+     * (último ping, última coleta) em vez de mostrar segundos/minutos
+     * crus.
+     */
+    public static function duracaoLegivel(int $segundos): string
+    {
+        $segundos = max(0, $segundos);
         $dias = intdiv($segundos, 86400);
         $horas = intdiv($segundos % 86400, 3600);
         $minutos = intdiv($segundos % 3600, 60);

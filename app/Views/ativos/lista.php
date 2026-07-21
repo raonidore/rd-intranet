@@ -141,11 +141,11 @@ function thOrdenavel(string $coluna, string $label, ?string $ordenarChave, array
                                         <?php
                                             $segundosHeartbeat = AtivoService::segundosDesdeUltimoHeartbeat($a);
                                             if ($segundosHeartbeat !== null) {
-                                                $dicaStatus = 'Ao vivo -- último ping há ' . $segundosHeartbeat . 's';
+                                                $dicaStatus = 'Ao vivo -- último ping há ' . AtivoService::duracaoLegivel($segundosHeartbeat);
                                             } else {
                                                 $minutosAtras = AtivoService::minutosDesdeUltimoCheckin($a);
                                                 $dicaStatus = $minutosAtras !== null
-                                                    ? 'Sem heartbeat ainda (agente antigo) -- baseado no último check-in completo, há ' . $minutosAtras . ' min'
+                                                    ? 'Sem heartbeat ainda (agente antigo) -- baseado no último check-in completo, há ' . AtivoService::duracaoLegivel($minutosAtras * 60)
                                                     : 'Nunca se comunicou';
                                             }
                                         ?>

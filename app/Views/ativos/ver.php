@@ -175,14 +175,14 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
         <div class="alert alert-light border small mb-0 py-2">
             <i class="bi bi-broadcast"></i>
             <?php if ($segundosDesdeHeartbeat !== null): ?>
-                Status Ligado/Desligado ao vivo -- último ping há <strong><?= $segundosDesdeHeartbeat ?>s</strong>.
+                Status Ligado/Desligado ao vivo -- último ping há <strong><?= AtivoService::duracaoLegivel($segundosDesdeHeartbeat) ?></strong>.
             <?php else: ?>
                 Ainda sem heartbeat (agente antigo ou recém-instalado) -- status Ligado/Desligado está usando o
                 último check-in completo como aproximação.
             <?php endif; ?>
             <?php if (!empty($ativo['ultimo_checkin'])): ?>
                 <br><i class="bi bi-hdd-stack"></i> Dados completos (hardware/programas/alertas): última coleta há
-                <strong><?= $minutosDesdeCheckin ?> min</strong> (<?= htmlspecialchars(data_br($ativo['ultimo_checkin'])) ?>),
+                <strong><?= AtivoService::duracaoLegivel($minutosDesdeCheckin * 60) ?></strong> (<?= htmlspecialchars(data_br($ativo['ultimo_checkin'])) ?>),
                 próxima esperada em até <strong><?= $intervaloComunicacao ?> min</strong>
                 -- ou use "Forçar coleta agora".
             <?php endif; ?>
