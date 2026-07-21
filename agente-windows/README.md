@@ -144,15 +144,22 @@ busca a versão publicada direto do git.
 **Configuração única por servidor** (só na primeira vez que este botão
 for usado, não a cada atualização de agente): o botão depende de um
 script auxiliar (`scripts/system/agente_baixar_git.sh`) sincronizado
-pra `/opt/rdtecnologia/scripts/` -- depois que esse arquivo chegar no
-servidor via `git pull`, rode uma vez:
+pra `/opt/rdtecnologia/scripts/`.
 
-```bash
-sudo /var/www/rd.intranet/scripts/sync-system-scripts.sh
-```
+- **Se você atualiza o código pela própria tela "Atualizações do
+  Sistema" do portal**: nada a fazer -- o script
+  `atualizar_aplicar_web.sh` que essa tela roda já sincroniza
+  `scripts/system/` automaticamente a cada atualização aplicada.
+- **Se você atualizou o código "por fora" (`git pull` direto via
+  SSH/terminal, sem passar pela tela do portal)**: rode uma vez, com
+  sudo:
+  ```bash
+  sudo /var/www/rd.intranet/scripts/sync-system-scripts.sh
+  ```
 
-Isso só precisa ser feito de novo se algum script em `scripts/system/`
-mudar no futuro -- não a cada novo `.exe` publicado.
+De um jeito ou de outro, isso só precisa acontecer de novo se algum
+script em `scripts/system/` mudar no futuro -- não a cada novo `.exe`
+publicado.
 
 ## Detecção de ligado/desligado em tempo real (heartbeat)
 
