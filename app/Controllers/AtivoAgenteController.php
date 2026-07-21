@@ -259,6 +259,17 @@ class AtivoAgenteController extends Controller
         $this->redirecionarAposUpload(url('/ativos'));
     }
 
+    /** Alternativa ao upload manual: busca o .exe já compilado direto do repositório git -- útil pra quem roda o sistema em vários servidores. */
+    public function baixarAgenteDoGit(): void
+    {
+        AuthMiddleware::checkModulo('ativos_dashboard');
+
+        $this->service->atualizarAgenteViaGit();
+
+        header('Location: ' . url('/ativos'));
+        exit;
+    }
+
     /** Download manual do instalador do .NET Desktop Runtime pelo admin. */
     public function baixarDotnetRuntime(): void
     {

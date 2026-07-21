@@ -457,6 +457,7 @@ $router->post('/ativos/solicitar-checkin', [AtivoController::class, 'solicitarCh
 $router->get('/ativos/agente/script', [AtivoAgenteController::class, 'baixarScript']);
 $router->get('/ativos/agente/exe', [AtivoAgenteController::class, 'baixarExecutavel']);
 $router->post('/ativos/agente/exe/upload', [AtivoAgenteController::class, 'uploadExecutavel']);
+$router->post('/ativos/agente/exe/baixar-git', [AtivoAgenteController::class, 'baixarAgenteDoGit']);
 $router->get('/ativos/agente/dotnet', [AtivoAgenteController::class, 'baixarDotnetRuntime']);
 $router->post('/ativos/agente/dotnet/upload', [AtivoAgenteController::class, 'uploadDotnetRuntime']);
 $router->post('/api/ativos/checkin', [AtivoAgenteController::class, 'checkin']);

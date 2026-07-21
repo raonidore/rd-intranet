@@ -740,6 +740,37 @@ class AtivoService
         return ['success' => true];
     }
 
+    /**
+     * Alternativa ao upload manual: busca o .exe já compilado direto do
+     * repositório git (agente-windows/dist/RdIntranetAgente.exe +
+     * VERSION.txt, publicados lá pelo próprio processo de build) --
+     * pensado pra quem roda o RD Intranet em vários servidores e não
+     * quer repetir o upload em cada um, só dar "git push" uma vez e
+     * clicar aqui em cada servidor. Só leitura do git (fetch + show),
+     * nunca mexe na working tree deste checkout. Reaproveita o mesmo
+     * mecanismo de scripts com sudo já usado por Atualizações do Sistema
+     * (LinuxService::executarScript, script sincronizado em
+     * /opt/rdtecnologia/scripts/ via scripts/sync-system-scripts.sh).
+     */
+    public function atualizarAgenteViaGit(): array
+    {
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/agente_baixar_git.sh');
+        $dados = json_decode(trim($resultado['output']), true);
+
+        if (!is_array($dados) || !($dados['success'] ?? false)) {
+            $mensagem = $dados['message'] ?? ($resultado['output'] ?: 'Erro desconhecido ao buscar o agente no repositório.');
+            NotificationService::error('Erro ao buscar o agente no repositório.', $mensagem);
+            return ['success' => false];
+        }
+
+        $versao = $dados['versao'] ?? '';
+        ConfigService::set('ativos_agente_exe_versao', $versao);
+        AuditService::registrar('Ativos', 'Agente Windows', "Agente .exe atualizado a partir do repositório git: versão {$versao}.");
+        NotificationService::success("Versão {$versao} do agente baixada do repositório. Agentes já instalados vão se autoatualizar no próximo check-in.");
+
+        return ['success' => true, 'versao' => $versao];
+    }
+
     /*
      |---------------------------------------------------------
      | .NET Desktop Runtime -- o agente .exe framework-dependent (menor)

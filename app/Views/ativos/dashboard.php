@@ -202,6 +202,16 @@ $statusCores = [
                     <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width:0%">0%</div>
                 </div>
 
+                <p class="text-muted small mb-1 mt-2">
+                    Roda o sistema em mais de um servidor? Publique o <code>.exe</code> em
+                    <code>agente-windows/dist/</code> no repositório git (veja o passo a passo no README em
+                    <code>agente-windows/</code>) e use o botão abaixo em cada servidor pra buscar a versão
+                    publicada, sem precisar repetir o upload manual.
+                </p>
+                <form action="<?= url('/ativos/agente/exe/baixar-git') ?>" method="post" class="d-inline">
+                    <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-git"></i> Baixar do repositório</button>
+                </form>
+
                 <hr>
 
                 <p class="text-muted small mb-2">

@@ -95,7 +95,8 @@ O agente se autoatualiza. O fluxo:
    publicar o `.exe` (seção acima).
 2. No RD Intranet, em **Ativos > Dashboard**, no card "Atualizar agente
    (.exe)", envie o `.exe` publicado e informe a mesma versão (formato
-   `X.Y.Z`).
+   `X.Y.Z`) -- ou, se você roda o sistema em mais de um servidor, publique
+   pelo git em vez de fazer upload em cada um (ver seção abaixo).
 3. Cada agente já instalado confere essa versão a cada 12h (e também ao
    abrir) chamando `GET /api/ativos/agente/versao` com a chave de API.
    Se for mais nova que a própria, baixa o `.exe` novo, entrega a troca
@@ -105,6 +106,43 @@ O agente se autoatualiza. O fluxo:
 
 Se nenhum `.exe` for enviado ainda, essa checagem simplesmente não
 encontra nada e não faz nada (sem erro visível pro usuário).
+
+### Publicar via git (recomendado se você roda em vários servidores)
+
+Se você mantém o RD Intranet em mais de um servidor (cada instalação
+com seu próprio banco/config), fazer upload manual do `.exe` em cada
+um é repetitivo. Alternativa: publicar o `.exe` no próprio repositório
+git e, em cada servidor, clicar em **"Baixar do repositório"** (mesmo
+card "Atualizar agente (.exe)") em vez de enviar o arquivo -- o botão
+busca a versão publicada direto do git.
+
+**Passo a passo, a cada novo build do agente:**
+
+1. Compile/publique o `.exe` normalmente (seção "Publicar um .exe pra
+   distribuir" acima).
+2. Copie o arquivo gerado para `agente-windows/dist/RdIntranetAgente.exe`
+   (sobrescrevendo o anterior) e crie/atualize
+   `agente-windows/dist/VERSION.txt` com a mesma versão do `<Version>`
+   no `.csproj` (ex: `1.0.13`, sem mais nada no arquivo).
+3. Faça commit e `git push` desses dois arquivos pra branch `main`.
+4. Em cada servidor, na tela **Ativos > Dashboard**, clique em
+   **"Baixar do repositório"** -- ele busca o `.exe` e a versão direto
+   do git (sem precisar selecionar arquivo nem digitar versão) e já
+   deixa disponível pros agentes instalados se autoatualizarem no
+   próximo check-in, do mesmo jeito do fluxo de upload manual.
+
+**Configuração única por servidor** (só na primeira vez que este botão
+for usado, não a cada atualização de agente): o botão depende de um
+script auxiliar (`scripts/system/agente_baixar_git.sh`) sincronizado
+pra `/opt/rdtecnologia/scripts/` -- depois que esse arquivo chegar no
+servidor via `git pull`, rode uma vez:
+
+```bash
+sudo /var/www/rd.intranet/scripts/sync-system-scripts.sh
+```
+
+Isso só precisa ser feito de novo se algum script em `scripts/system/`
+mudar no futuro -- não a cada novo `.exe` publicado.
 
 ## Detecção de ligado/desligado em tempo real (heartbeat)
 
