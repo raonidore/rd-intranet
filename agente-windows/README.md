@@ -166,12 +166,22 @@ apaga em seguida). **Desde a v1.0.12, o próprio agente sempre roda
 elevado**: pede UAC uma vez no primeiro início (`Program.cs`, checa
 `WindowsPrincipal.IsInRole(Administrator)` e relança com o verbo `runas`
 se precisar) e depois se registra pra iniciar já elevado nos próximos
-logins via Agendador de Tarefas (`/sc onlogon /rl highest`), em vez do
-antigo `HKCU\...\Run` (que sempre iniciava sem elevação, nível Médio,
-mesmo numa conta administradora -- foi exatamente isso que causava
-"Access is denied" ao tentar elevar comandos em versões anteriores).
-Com isso, o truque de Agendador de Tarefas funciona sozinho na maioria
-das máquinas, sem precisar cadastrar mais nada. Saída (stdout/stderr/
+logins via Agendador de Tarefas, em vez do antigo `HKCU\...\Run` (que
+sempre iniciava sem elevação, nível Médio, mesmo numa conta
+administradora -- foi exatamente isso que causava "Access is denied"
+ao tentar elevar comandos em versões anteriores). **Desde a v1.0.13**,
+essa tarefa é criada via definição XML mirando o grupo local "Users"
+(SID `S-1-5-32-545`), não uma conta específica -- confirmado ao vivo:
+criar a tarefa com os parâmetros simples do `schtasks /create /sc
+onlogon` (sem `/xml`) vincula ela só à conta que rodou o primeiro
+início elevado, então só aquela conta específica tinha o agente
+iniciando sozinho; outras contas (inclusive outras contas do Entra)
+logando na mesma máquina não disparavam nada. Com o XML mirando o
+grupo, qualquer conta que conseguir logar interativamente na máquina
+(local ou do Entra) já dispara o agente elevado, sem precisar de
+nenhum ajuste por conta. Com isso, o truque de Agendador de Tarefas
+funciona sozinho na maioria das máquinas, sem precisar cadastrar mais
+nada. Saída (stdout/stderr/
 código) volta pelo mesmo canal de solicitação e fica registrada no
 histórico (últimos 5 comandos, com saída completa, expansível clicando
 na linha), junto com quem pediu (`solicitado_por`).

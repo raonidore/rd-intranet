@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Reflection;
+using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Win32;
@@ -479,14 +480,25 @@ del ""%~f0""
     }
 
     /// <summary>
-    /// Registra o início automático via Agendador de Tarefas (/sc onlogon
-    /// /rl highest), não mais HKCU\...\Run -- uma entrada em Run sempre
-    /// inicia sem elevação (nível Médio), mesmo numa conta admin, e o
-    /// agente agora PRECISA estar elevado (ver Program.cs) pra "comando
-    /// com elevação" funcionar sem credencial extra por máquina. Como
-    /// quem está criando essa tarefa aqui já está elevado (garantido pelo
-    /// Program.cs), o Windows autoriza o "Executar com privilégios mais
-    /// altos" sem pedir confirmação de novo nos próximos logins.
+    /// Registra o início automático via Agendador de Tarefas, não mais
+    /// HKCU\...\Run -- uma entrada em Run sempre inicia sem elevação
+    /// (nível Médio), mesmo numa conta admin, e o agente agora PRECISA
+    /// estar elevado (ver Program.cs) pra "comando com elevação"
+    /// funcionar sem credencial extra por máquina.
+    ///
+    /// Usa uma definição de tarefa em XML (não os parâmetros simples do
+    /// schtasks /create) porque precisa disparar pra QUALQUER usuário
+    /// que logar na máquina, não só quem rodou o primeiro início
+    /// elevado -- `schtasks /create /sc onlogon` sem `/ru` vincula a
+    /// tarefa à conta que está criando ela (bug real, confirmado ao
+    /// vivo: funcionava só pra quem instalou, não pra outras contas do
+    /// Entra que logavam depois). O XML usa &lt;GroupId&gt; com o SID
+    /// universal do grupo local "Users" (S-1-5-32-545, todo mundo que
+    /// consegue logar interativamente, seja conta local ou do Entra) em
+    /// vez de &lt;UserId&gt; de uma conta específica -- é a forma
+    /// oficialmente suportada de disparar "pra qualquer usuário",
+    /// equivalente a escolher "Any user" na caixa de diálogo do
+    /// Agendador de Tarefas (não exposto como flag simples no schtasks.exe).
     /// </summary>
     private static void RegistrarInicioAutomatico()
     {
@@ -495,22 +507,64 @@ del ""%~f0""
         try
         {
             const string nomeTarefa = "RDIntranetAgenteAutoStart";
-            var argumentos = $"/create /tn \"{nomeTarefa}\" /tr \"\\\"{Application.ExecutablePath}\\\"\" /sc onlogon /rl highest /f";
+            var caminhoXml = Path.Combine(Path.GetTempPath(), $"{nomeTarefa}.xml");
+            var xml =
+                "<?xml version=\"1.0\" encoding=\"UTF-16\"?>\r\n" +
+                "<Task version=\"1.2\" xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\">\r\n" +
+                "  <Triggers>\r\n" +
+                "    <LogonTrigger>\r\n" +
+                "      <Enabled>true</Enabled>\r\n" +
+                "    </LogonTrigger>\r\n" +
+                "  </Triggers>\r\n" +
+                "  <Principals>\r\n" +
+                "    <Principal id=\"Author\">\r\n" +
+                "      <GroupId>S-1-5-32-545</GroupId>\r\n" +
+                "      <RunLevel>HighestAvailable</RunLevel>\r\n" +
+                "    </Principal>\r\n" +
+                "  </Principals>\r\n" +
+                "  <Settings>\r\n" +
+                "    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>\r\n" +
+                "    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>\r\n" +
+                "    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>\r\n" +
+                "    <AllowHardTerminate>true</AllowHardTerminate>\r\n" +
+                "    <StartWhenAvailable>false</StartWhenAvailable>\r\n" +
+                "    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>\r\n" +
+                "    <Enabled>true</Enabled>\r\n" +
+                "    <Hidden>false</Hidden>\r\n" +
+                "    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>\r\n" +
+                "  </Settings>\r\n" +
+                "  <Actions Context=\"Author\">\r\n" +
+                "    <Exec>\r\n" +
+                $"      <Command>\"{Application.ExecutablePath}\"</Command>\r\n" +
+                "    </Exec>\r\n" +
+                "  </Actions>\r\n" +
+                "</Task>\r\n";
 
-            using var processo = new Process
+            File.WriteAllText(caminhoXml, xml, Encoding.Unicode);
+
+            try
             {
-                StartInfo = new ProcessStartInfo
+                var argumentos = $"/create /tn \"{nomeTarefa}\" /xml \"{caminhoXml}\" /f";
+
+                using var processo = new Process
                 {
-                    FileName = "schtasks.exe",
-                    Arguments = argumentos,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true
-                }
-            };
-            processo.Start();
-            processo.WaitForExit(15000);
+                    StartInfo = new ProcessStartInfo
+                    {
+                        FileName = "schtasks.exe",
+                        Arguments = argumentos,
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true
+                    }
+                };
+                processo.Start();
+                processo.WaitForExit(15000);
+            }
+            finally
+            {
+                try { File.Delete(caminhoXml); } catch { }
+            }
         }
         catch
         {
