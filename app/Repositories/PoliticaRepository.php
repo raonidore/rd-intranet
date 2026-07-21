@@ -100,4 +100,44 @@ class PoliticaRepository
         $stmt = $this->pdo->prepare('DELETE FROM ativos_setor_recursos WHERE id = ?');
         $stmt->execute([$id]);
     }
+
+    /*
+     |---------------------------------------------------------
+     | Fase 3: catálogo de pacotes de software instaláveis.
+     |---------------------------------------------------------
+     */
+
+    public function listarPacotesSoftware(): array
+    {
+        $stmt = $this->pdo->query('SELECT * FROM ativos_pacotes_software ORDER BY nome');
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function buscarPacoteSoftware(int $id): ?array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM ativos_pacotes_software WHERE id = ?');
+        $stmt->execute([$id]);
+
+        $linha = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $linha ?: null;
+    }
+
+    public function criarPacoteSoftware(string $nome, string $nomeOriginal, string $caminho, ?string $argumentos, ?string $criadoPor): int
+    {
+        $stmt = $this->pdo->prepare('
+            INSERT INTO ativos_pacotes_software (nome, arquivo_nome_original, arquivo_caminho, argumentos_silenciosos, criado_por)
+            VALUES (?, ?, ?, ?, ?)
+        ');
+        $stmt->execute([$nome, $nomeOriginal, $caminho, $argumentos, $criadoPor]);
+
+        return (int)$this->pdo->lastInsertId();
+    }
+
+    public function excluirPacoteSoftware(int $id): void
+    {
+        $stmt = $this->pdo->prepare('DELETE FROM ativos_pacotes_software WHERE id = ?');
+        $stmt->execute([$id]);
+    }
 }

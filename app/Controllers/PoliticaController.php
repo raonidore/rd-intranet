@@ -32,7 +32,70 @@ class PoliticaController extends Controller
             'setores' => $catalogoService->listarSetores(),
             'recursosSetor' => $this->service->listarRecursosSetor(),
             'tiposRecurso' => PoliticaService::TIPOS_RECURSO_SETOR,
+            'pacotes' => $this->service->listarPacotesSoftware(),
         ]);
+    }
+
+    public function pacoteUpload(): void
+    {
+        AuthMiddleware::checkModulo('ativos_politicas');
+
+        $arquivo = $_FILES['arquivo'] ?? null;
+        $nome = trim((string)($_POST['nome'] ?? ''));
+        $argumentos = trim((string)($_POST['argumentos'] ?? ''));
+        $solicitadoPor = $_SESSION['usuario']['nome'] ?? null;
+
+        if (!$arquivo || $arquivo['error'] !== UPLOAD_ERR_OK) {
+            NotificationService::error('Falha no upload do arquivo.');
+        } else {
+            $resultado = $this->service->criarPacoteSoftware($nome, $arquivo['tmp_name'], $arquivo['name'], $argumentos, $solicitadoPor);
+            if (!($resultado['success'] ?? false)) {
+                NotificationService::error($resultado['message'] ?? 'Falha ao adicionar o pacote.');
+            }
+        }
+
+        header('Location: ' . url('/ativos/politicas'));
+        exit;
+    }
+
+    public function pacoteExcluir(): void
+    {
+        AuthMiddleware::checkModulo('ativos_politicas');
+
+        $this->service->excluirPacoteSoftware((int)($_POST['id'] ?? 0));
+
+        header('Location: ' . url('/ativos/politicas'));
+        exit;
+    }
+
+    /** Instala UM pacote em N máquinas selecionadas -- exige ativos_novo também, igual toda ação que toca o agente/comandos. */
+    public function pacoteInstalarEmLote(): void
+    {
+        AuthMiddleware::checkModulo('ativos_politicas');
+        AuthMiddleware::checkModulo('ativos_novo');
+
+        $pacoteId = (int)($_POST['pacote_id'] ?? 0);
+        $ativoIds = array_map('intval', $_POST['ativos'] ?? []);
+        $solicitadoPor = $_SESSION['usuario']['nome'] ?? null;
+
+        if (empty($ativoIds)) {
+            NotificationService::error('Selecione ao menos uma máquina.');
+            header('Location: ' . url('/ativos/politicas'));
+            exit;
+        }
+
+        $resultado = $this->service->instalarPacoteEmLote($pacoteId, $ativoIds, $solicitadoPor);
+
+        if ($resultado['success'] ?? false) {
+            NotificationService::success(
+                "Instalação solicitada em {$resultado['enviados']} máquina(s) -- confira o resultado no histórico de solicitações de cada uma em alguns minutos."
+            );
+        } else {
+            NotificationService::error($resultado['message'] ?? 'Falha ao instalar o pacote.');
+        }
+
+        header('Location: ' . url('/ativos/politicas'));
+        exit;
     }
 
     public function recursoNovo(): void

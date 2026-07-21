@@ -151,8 +151,9 @@ use App\Services\PoliticaService;
 </div>
 
 <div class="card border-0 shadow-sm mb-3">
-    <div class="card-header bg-white"><strong>Aplicar/remover em lote</strong></div>
+    <div class="card-header bg-white"><strong>Aplicar/remover regras em lote</strong></div>
     <div class="card-body">
+        <p class="text-muted small mb-2">A seleção de máquinas abaixo também vale pra instalação de software, no card seguinte.</p>
         <strong class="small">Máquinas</strong>
         <div class="border rounded p-2 mb-3 mt-1" style="max-height:220px; overflow-y:auto; max-width:480px">
             <?php if (empty($maquinas)): ?>
@@ -202,6 +203,63 @@ use App\Services\PoliticaService;
     </div>
 </div>
 
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-header bg-white"><strong>Instalação de software</strong></div>
+    <div class="card-body">
+        <p class="text-muted small">
+            Envie um instalador (.exe ou .msi) e os argumentos de instalação silenciosa (ex: <code>/S</code> pra
+            muitos instaladores NSIS/Inno Setup, ou deixe em branco pra usar o padrão -- <code>/quiet /norestart</code>
+            pra .msi, <code>/S</code> pra .exe). Depois selecione as máquinas na tabela acima e instale.
+        </p>
+        <form method="post" action="<?= url('/ativos/politicas/pacotes/upload') ?>" enctype="multipart/form-data" class="row g-2 align-items-end mb-3">
+            <div class="col-md-3">
+                <label class="form-label small mb-0">Nome</label>
+                <input type="text" name="nome" class="form-control form-control-sm" placeholder="Ex: Adobe Reader" required>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-0">Instalador (.exe/.msi)</label>
+                <input type="file" name="arquivo" accept=".exe,.msi" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small mb-0">Argumentos silenciosos (opcional)</label>
+                <input type="text" name="argumentos" class="form-control form-control-sm" placeholder="/S">
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-sm btn-primary w-100"><i class="bi bi-upload"></i> Enviar</button>
+            </div>
+        </form>
+
+        <?php if (empty($pacotes)): ?>
+            <p class="text-muted small mb-0">Nenhum pacote de software enviado ainda.</p>
+        <?php else: ?>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead><tr><th>Nome</th><th>Arquivo</th><th>Argumentos</th><th class="text-end">Ações nas máquinas marcadas acima</th></tr></thead>
+                    <tbody>
+                        <?php foreach ($pacotes as $p): ?>
+                            <tr>
+                                <td class="small"><?= htmlspecialchars($p['nome']) ?></td>
+                                <td class="small font-monospace"><?= htmlspecialchars($p['arquivo_nome_original']) ?></td>
+                                <td class="small font-monospace"><?= htmlspecialchars($p['argumentos_silenciosos'] ?? '') ?: '<span class="text-muted">(padrão)</span>' ?></td>
+                                <td class="text-end">
+                                    <form method="post" action="<?= url('/ativos/politicas/pacotes/instalar-em-lote') ?>" class="d-inline form-instalar-pacote">
+                                        <input type="hidden" name="pacote_id" value="<?= (int)$p['id'] ?>">
+                                        <button type="submit" class="btn btn-sm btn-outline-primary">Instalar</button>
+                                    </form>
+                                    <form method="post" action="<?= url('/ativos/politicas/pacotes/excluir') ?>" class="d-inline" onsubmit="return confirm('Remover o pacote &quot;<?= htmlspecialchars(addslashes($p['nome'])) ?>&quot;?');">
+                                        <input type="hidden" name="id" value="<?= (int)$p['id'] ?>">
+                                        <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
+
 <script>
 (function () {
     const botaoRemoverWallpaper = document.getElementById('botaoRemoverWallpaper');
@@ -235,6 +293,33 @@ use App\Services\PoliticaService;
 
             const acao = form.querySelector('input[name="acao"]').value;
             if (!confirm((acao === 'aplicar' ? 'Aplicar' : 'Remover') + ' essa regra em ' + marcadas.length + ' máquina(s)?')) {
+                e.preventDefault();
+                return;
+            }
+
+            form.querySelectorAll('.ativo-injetado').forEach(function (i) { i.remove(); });
+            marcadas.forEach(function (c) {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'ativos[]';
+                input.value = c.value;
+                input.className = 'ativo-injetado';
+                form.appendChild(input);
+            });
+        });
+    });
+
+    document.querySelectorAll('.form-instalar-pacote').forEach(function (form) {
+        form.addEventListener('submit', function (e) {
+            const marcadas = Array.from(document.querySelectorAll('.campo-ativo-lote')).filter(function (c) { return c.checked; });
+
+            if (!marcadas.length) {
+                e.preventDefault();
+                alert('Selecione ao menos uma máquina (tabela do card "Aplicar/remover regras em lote").');
+                return;
+            }
+
+            if (!confirm('Instalar esse pacote em ' + marcadas.length + ' máquina(s)? Pode levar alguns minutos por máquina.')) {
                 e.preventDefault();
                 return;
             }

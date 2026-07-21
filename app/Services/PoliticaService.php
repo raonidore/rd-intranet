@@ -591,4 +591,168 @@ PS1;
 
         return implode("\n", $resultados);
     }
+
+    /*
+     |---------------------------------------------------------
+     | Fase 3: instalar software remotamente -- catálogo de pacotes
+     | (.exe/.msi) + push do arquivo (enviar_arquivo) seguido de
+     | instalação silenciosa (executar_powershell), mesmo encadeamento
+     | já usado pelo pacote de provisionamento (.ppkg) do módulo Entra.
+     |---------------------------------------------------------
+     */
+
+    private const EXTENSOES_INSTALADOR_VALIDAS = ['exe', 'msi'];
+
+    private static function pastaPacotesSoftware(): string
+    {
+        return __DIR__ . '/../../storage/uploads/ativos_pacotes_software';
+    }
+
+    public function listarPacotesSoftware(): array
+    {
+        return $this->repository->listarPacotesSoftware();
+    }
+
+    public function criarPacoteSoftware(string $nome, string $caminhoTemporario, string $nomeOriginal, ?string $argumentos, ?string $criadoPor): array
+    {
+        $extensao = strtolower(pathinfo($nomeOriginal, PATHINFO_EXTENSION));
+        if (!in_array($extensao, self::EXTENSOES_INSTALADOR_VALIDAS, true)) {
+            return ['success' => false, 'message' => 'O instalador precisa ser .exe ou .msi.'];
+        }
+
+        if ($nome === '') {
+            return ['success' => false, 'message' => 'Informe um nome pro pacote.'];
+        }
+
+        $pasta = self::pastaPacotesSoftware();
+        if (!is_dir($pasta) && !@mkdir($pasta, 0777, true) && !is_dir($pasta)) {
+            return ['success' => false, 'message' => 'Não foi possível preparar a pasta de armazenamento no servidor.'];
+        }
+
+        $nomeArmazenado = uniqid('pacote_', true) . '.' . $extensao;
+        $destino = $pasta . '/' . $nomeArmazenado;
+
+        if (!@copy($caminhoTemporario, $destino)) {
+            return ['success' => false, 'message' => 'Não foi possível salvar o instalador no servidor.'];
+        }
+
+        $this->repository->criarPacoteSoftware($nome, basename($nomeOriginal), $destino, $argumentos !== '' ? $argumentos : null, $criadoPor);
+
+        AuditService::registrar('Ativos', 'Regras de Segurança', "Pacote de software \"{$nome}\" enviado.");
+        NotificationService::success('Pacote adicionado.');
+
+        return ['success' => true];
+    }
+
+    public function excluirPacoteSoftware(int $id): void
+    {
+        $pacote = $this->repository->buscarPacoteSoftware($id);
+        if ($pacote !== null) {
+            @unlink($pacote['arquivo_caminho']);
+        }
+
+        $this->repository->excluirPacoteSoftware($id);
+        AuditService::registrar('Ativos', 'Regras de Segurança', 'Pacote de software removido.');
+        NotificationService::success('Pacote removido.');
+    }
+
+    /** Instala UM pacote em várias máquinas (fogo-e-esquece, igual wallpaper/Company Portal -- confira o resultado no histórico de cada ativo). */
+    public function instalarPacoteEmLote(int $pacoteId, array $ativoIds, ?string $solicitadoPor): array
+    {
+        $pacote = $this->repository->buscarPacoteSoftware($pacoteId);
+        if ($pacote === null) {
+            return ['success' => false, 'message' => 'Pacote não encontrado.'];
+        }
+
+        if (!is_file($pacote['arquivo_caminho'])) {
+            return ['success' => false, 'message' => 'O arquivo do pacote não está mais no servidor -- envie de novo.'];
+        }
+
+        $pastaTransferencias = __DIR__ . '/../../storage/uploads/ativos_transferencias';
+        if (!is_dir($pastaTransferencias) && !@mkdir($pastaTransferencias, 0777, true) && !is_dir($pastaTransferencias)) {
+            return ['success' => false, 'message' => 'Não foi possível preparar a pasta de transferência.'];
+        }
+
+        $extensao = strtolower(pathinfo($pacote['arquivo_caminho'], PATHINFO_EXTENSION));
+        $nomeRemoto = 'pacote_' . $pacoteId . '.' . $extensao;
+        $destinoRemoto = 'C:\\Windows\\Temp\\RDIntranetInstall\\' . $nomeRemoto;
+
+        $enviados = 0;
+
+        foreach ($ativoIds as $ativoId) {
+            $ativoId = (int)$ativoId;
+            $copiaTemp = $pastaTransferencias . '/enviar_' . uniqid('', true) . '_' . $nomeRemoto;
+
+            if (!@copy($pacote['arquivo_caminho'], $copiaTemp)) {
+                continue;
+            }
+
+            $resultadoArquivo = $this->ativoService->enviarComando($ativoId, 'enviar_arquivo', $solicitadoPor, $destinoRemoto, $nomeRemoto, $copiaTemp);
+            if (!($resultadoArquivo['success'] ?? false)) {
+                @unlink($copiaTemp);
+                continue;
+            }
+
+            $script = $this->scriptInstalarPacote($destinoRemoto, $extensao, $pacote['argumentos_silenciosos'] ?? '');
+            $resultado = $this->ativoService->solicitarListagem($ativoId, 'executar_powershell', $script, $solicitadoPor, false);
+
+            if ($resultado['success'] ?? false) {
+                $enviados++;
+            }
+        }
+
+        AuditService::registrar('Ativos', 'Regras de Segurança', "Instalação de \"{$pacote['nome']}\" solicitada em {$enviados} máquina(s).");
+
+        return ['success' => true, 'enviados' => $enviados];
+    }
+
+    /** Espera o arquivo chegar (enviar_arquivo é assíncrono, sem confirmação) e instala silenciosamente -- msiexec pra .msi, execução direta com os argumentos configurados pra .exe. */
+    private function scriptInstalarPacote(string $destinoRemoto, string $extensao, string $argumentos): string
+    {
+        $template = <<<'PS1'
+$destino = '__DESTINO__'
+$limite = (Get-Date).AddSeconds(120)
+
+while (-not (Test-Path $destino) -and (Get-Date) -lt $limite) {
+    Start-Sleep -Seconds 2
+}
+
+if (-not (Test-Path $destino)) {
+    Write-Output "ERRO: instalador nao chegou a tempo em $destino."
+    exit 1
+}
+
+try {
+    $processo = __COMANDO_INSTALACAO__
+    if ($processo.ExitCode -ne 0) { throw "instalador saiu com codigo $($processo.ExitCode)" }
+    Write-Output "Instalacao concluida (codigo de saida $($processo.ExitCode))."
+} catch {
+    Write-Output "ERRO ao instalar: $($_.Exception.Message)"
+    exit 1
+} finally {
+    Remove-Item $destino -ErrorAction SilentlyContinue
+}
+PS1;
+
+        // -PassThru devolve o objeto do processo (com .ExitCode) -- sem ele,
+        // Start-Process não dá pra saber se o instalador realmente terminou
+        // com sucesso ou só se conseguiu ABRIR o processo ($LASTEXITCODE não
+        // reflete Start-Process, só comandos nativos chamados direto).
+        $argumentosSeguros = $argumentos !== '' ? $argumentos : ($extensao === 'msi' ? '/quiet /norestart' : '/S');
+
+        $comando = $extensao === 'msi'
+            ? "Start-Process -FilePath msiexec.exe -ArgumentList '/i', \"`\"\$destino`\"\", {$this->argumentosComoLista($argumentosSeguros)} -Wait -PassThru"
+            : "Start-Process -FilePath \$destino -ArgumentList {$this->argumentosComoLista($argumentosSeguros)} -Wait -PassThru";
+
+        return str_replace(['__DESTINO__', '__COMANDO_INSTALACAO__'], [$destinoRemoto, $comando], $template);
+    }
+
+    /** Transforma "argumento1 argumento2" (separado por espaço, como o admin digita) numa lista PowerShell de strings -- evita que Start-Process quebre argumentos com espaço junto sem querer. */
+    private function argumentosComoLista(string $argumentos): string
+    {
+        $partes = preg_split('/\s+/', trim($argumentos)) ?: [];
+        $partesEscapadas = array_map(fn($p) => "'" . str_replace("'", "''", $p) . "'", $partes);
+
+        return implode(', ', $partesEscapadas);
+    }
 }
