@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
+use App\Services\AtivoCatalogoService;
 use App\Services\NotificationService;
 use App\Services\PoliticaService;
 
@@ -22,11 +23,46 @@ class PoliticaController extends Controller
     {
         AuthMiddleware::checkModulo('ativos_politicas');
 
+        $catalogoService = new AtivoCatalogoService();
+
         $this->view('ativos/politicas', [
             'catalogo' => PoliticaService::CATALOGO,
             'maquinas' => $this->service->maquinasElegiveis(),
             'wallpaperInfo' => $this->service->wallpaperInfo(),
+            'setores' => $catalogoService->listarSetores(),
+            'recursosSetor' => $this->service->listarRecursosSetor(),
+            'tiposRecurso' => PoliticaService::TIPOS_RECURSO_SETOR,
         ]);
+    }
+
+    public function recursoNovo(): void
+    {
+        AuthMiddleware::checkModulo('ativos_politicas');
+
+        $resultado = $this->service->criarRecursoSetor(
+            (int)($_POST['setor_id'] ?? 0),
+            (string)($_POST['tipo'] ?? ''),
+            trim((string)($_POST['nome_exibicao'] ?? '')),
+            trim((string)($_POST['letra_unidade'] ?? '')) ?: null,
+            trim((string)($_POST['caminho_unc'] ?? ''))
+        );
+
+        if (!($resultado['success'] ?? false)) {
+            NotificationService::error($resultado['message'] ?? 'Falha ao adicionar o recurso.');
+        }
+
+        header('Location: ' . url('/ativos/politicas'));
+        exit;
+    }
+
+    public function recursoExcluir(): void
+    {
+        AuthMiddleware::checkModulo('ativos_politicas');
+
+        $this->service->excluirRecursoSetor((int)($_POST['id'] ?? 0));
+
+        header('Location: ' . url('/ativos/politicas'));
+        exit;
     }
 
     public function wallpaperUpload(): void

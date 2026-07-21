@@ -810,6 +810,25 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                     </button>
                     <span class="text-muted small ms-2 d-none" id="statusSalvarRegras"></span>
                 </form>
+
+                <?php if ($scriptMapeamentoSetor !== null): ?>
+                    <hr>
+                    <p class="text-muted small mb-2">
+                        Mapeia a impressora/unidade de rede cadastradas pro setor desta máquina
+                        (<a href="<?= url('/ativos/politicas') ?>">gerenciar recursos por setor</a>).
+                    </p>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="botaoMapearSetor">
+                        <i class="bi bi-hdd-network"></i> Aplicar mapeamentos do setor
+                    </button>
+                    <span class="text-muted small ms-2 d-none" id="statusMapearSetor"></span>
+                    <pre class="small mt-2 mb-0 d-none" id="saidaMapearSetor" style="white-space:pre-wrap; word-break:break-word;"></pre>
+                <?php elseif (!empty($ativo['setor_id'])): ?>
+                    <hr>
+                    <p class="text-muted small mb-0">
+                        Nenhum recurso de rede cadastrado pro setor desta máquina ainda --
+                        <a href="<?= url('/ativos/politicas') ?>">cadastre em Regras de Segurança</a>.
+                    </p>
+                <?php endif; ?>
             </div>
         </div>
         <?php endif; ?>
@@ -1686,6 +1705,35 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro) {
             status.textContent = err.message;
         } finally {
             botao.disabled = false;
+        }
+    });
+})();
+
+(function () {
+    const botaoMapear = document.getElementById('botaoMapearSetor');
+    if (!botaoMapear) return;
+
+    const status = document.getElementById('statusMapearSetor');
+    const saida = document.getElementById('saidaMapearSetor');
+    const ativoId = <?= (int)$ativo['id'] ?>;
+    const script = <?= json_encode($scriptMapeamentoSetor ?? '') ?>;
+
+    botaoMapear.addEventListener('click', async function () {
+        botaoMapear.disabled = true;
+        status.classList.remove('d-none');
+        status.textContent = 'Aplicando...';
+        saida.classList.add('d-none');
+
+        try {
+            const resultado = await pedirEAguardarSolicitacao(ativoId, 'executar_powershell', script);
+            const r = resultado.resultado;
+            status.textContent = 'Concluído.';
+            saida.textContent = (r.saida || '') + (r.erro ? '\n--- erro ---\n' + r.erro : '');
+            saida.classList.remove('d-none');
+        } catch (err) {
+            status.textContent = err.message;
+        } finally {
+            botaoMapear.disabled = false;
         }
     });
 })();

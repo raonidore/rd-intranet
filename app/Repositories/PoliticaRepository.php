@@ -57,4 +57,47 @@ class PoliticaRepository
         $stmt = $this->pdo->prepare('UPDATE ativos_politicas_estado SET status = ?, mensagem = ? WHERE id = ?');
         $stmt->execute([$status, $mensagem, $id]);
     }
+
+    /*
+     |---------------------------------------------------------
+     | Fase 2: recursos de rede (impressora/unidade) por setor.
+     |---------------------------------------------------------
+     */
+
+    /** @return array<int, array> todos os recursos, com o nome do setor já junto (pra listar numa tabela só). */
+    public function listarRecursosSetor(): array
+    {
+        $stmt = $this->pdo->query('
+            SELECT r.*, c.nome AS setor_nome
+            FROM ativos_setor_recursos r
+            JOIN ativos_catalogos c ON c.id = r.setor_id
+            ORDER BY c.nome, r.tipo, r.nome_exibicao
+        ');
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** @return array<int, array> só os recursos de UM setor (usado na hora de montar o script de mapeamento). */
+    public function recursosPorSetor(int $setorId): array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM ativos_setor_recursos WHERE setor_id = ? ORDER BY tipo, nome_exibicao');
+        $stmt->execute([$setorId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function criarRecursoSetor(int $setorId, string $tipo, string $nomeExibicao, ?string $letraUnidade, string $caminhoUnc): void
+    {
+        $stmt = $this->pdo->prepare('
+            INSERT INTO ativos_setor_recursos (setor_id, tipo, nome_exibicao, letra_unidade, caminho_unc)
+            VALUES (?, ?, ?, ?, ?)
+        ');
+        $stmt->execute([$setorId, $tipo, $nomeExibicao, $letraUnidade, $caminhoUnc]);
+    }
+
+    public function excluirRecursoSetor(int $id): void
+    {
+        $stmt = $this->pdo->prepare('DELETE FROM ativos_setor_recursos WHERE id = ?');
+        $stmt->execute([$id]);
+    }
 }

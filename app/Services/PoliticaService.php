@@ -492,4 +492,103 @@ PS1;
             fn($a) => $a['origem'] === 'agente' && ($a['agente_versao'] ?? '') !== 'ps1'
         ));
     }
+
+    /*
+     |---------------------------------------------------------
+     | Fase 2: recursos de rede (impressora/unidade) por setor --
+     | ativos.setor_id já existe (é o "departamento" da máquina), só
+     | precisava de um catálogo de que impressora/unidade cada setor usa.
+     | Diferente do catálogo de regras (não é liga/desliga por máquina):
+     | é uma AÇÃO ("aplicar mapeamentos do setor desta máquina") que lê o
+     | setor da máquina na hora e gera o script -- por isso não usa
+     | ativos_politicas_estado, é fogo-e-esquece igual o "Executar
+     | comando" já existente (mesmo canal genérico de executar_powershell).
+     |---------------------------------------------------------
+     */
+
+    public const TIPOS_RECURSO_SETOR = ['impressora' => 'Impressora', 'unidade_rede' => 'Unidade de rede'];
+
+    public function listarRecursosSetor(): array
+    {
+        return $this->repository->listarRecursosSetor();
+    }
+
+    public function criarRecursoSetor(int $setorId, string $tipo, string $nomeExibicao, ?string $letraUnidade, string $caminhoUnc): array
+    {
+        if (!isset(self::TIPOS_RECURSO_SETOR[$tipo])) {
+            return ['success' => false, 'message' => 'Tipo de recurso inválido.'];
+        }
+
+        if ($nomeExibicao === '' || $caminhoUnc === '') {
+            return ['success' => false, 'message' => 'Preencha o nome e o caminho de rede (\\\\servidor\\compartilhamento).'];
+        }
+
+        // Nome e caminho entram sem escape nenhum no script PowerShell gerado
+        // (ver scriptMapearRecursosSetor) -- aspas simples/duplas quebrariam a
+        // string do PowerShell, e $/backtick disparariam interpolação/escape
+        // dentro dela. Em vez de tentar escapar certo em cada contexto (net
+        // use usa aspas duplas, Add-PrinterConnection usa simples), é mais
+        // simples e seguro só recusar esses caracteres aqui.
+        if (preg_match('/[\'"$`]/', $nomeExibicao . $caminhoUnc)) {
+            return ['success' => false, 'message' => 'Nome e caminho de rede não podem conter aspas, $ ou acento grave.'];
+        }
+
+        if ($tipo === 'unidade_rede' && !preg_match('/^[A-Za-z]$/', (string)$letraUnidade)) {
+            return ['success' => false, 'message' => 'Informe uma letra de unidade válida (A-Z).'];
+        }
+
+        $this->repository->criarRecursoSetor($setorId, $tipo, $nomeExibicao, $tipo === 'unidade_rede' ? strtoupper($letraUnidade) : null, $caminhoUnc);
+
+        AuditService::registrar('Ativos', 'Regras de Segurança', "Recurso de setor criado: {$nomeExibicao} ({$caminhoUnc}).");
+        NotificationService::success('Recurso adicionado.');
+
+        return ['success' => true];
+    }
+
+    public function excluirRecursoSetor(int $id): void
+    {
+        $this->repository->excluirRecursoSetor($id);
+        AuditService::registrar('Ativos', 'Regras de Segurança', 'Recurso de setor removido.');
+        NotificationService::success('Recurso removido.');
+    }
+
+    /** Script pra mapear TODOS os recursos do setor de uma vez -- null se o setor não tiver nenhum recurso cadastrado. Idempotente por natureza (net use sobrescreve, Add-Printer não duplica pela mesma conexão). */
+    public function scriptMapearRecursosSetor(?int $setorId): ?string
+    {
+        if ($setorId === null) {
+            return null;
+        }
+
+        $recursos = $this->repository->recursosPorSetor($setorId);
+        if (empty($recursos)) {
+            return null;
+        }
+
+        $resultados = [];
+        foreach ($recursos as $r) {
+            // Sem escape aqui de propósito: nome/caminho já são validados em
+            // criarRecursoSetor() pra nunca conter aspas (o único caractere
+            // que quebraria a string do PowerShell nos dois formatos abaixo).
+            $chave = $r['nome_exibicao'];
+            $caminho = $r['caminho_unc'];
+
+            if ($r['tipo'] === 'unidade_rede') {
+                $letra = $r['letra_unidade'];
+                $comando = "net use {$letra}: \"{$caminho}\" /persistent:yes";
+            } else {
+                $comando = "if (Get-Printer -Name '{$caminho}' -ErrorAction SilentlyContinue) { } else { Add-PrinterConnection -ConnectionName '{$caminho}' -ErrorAction Stop }";
+            }
+
+            $resultados[] = <<<PS1
+try {
+    {$comando}
+    Write-Output "OK: {$chave}"
+} catch {
+    Write-Output "ERRO ({$chave}): \$(\$_.Exception.Message)"
+}
+PS1;
+        }
+
+        return implode("\n", $resultados);
+    }
 }

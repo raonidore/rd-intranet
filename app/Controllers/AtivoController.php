@@ -94,6 +94,7 @@ class AtivoController extends Controller
             'elevacaoUsuarioAtual' => $this->service->usuarioElevacaoAtual($id),
             'politicasHabilitado' => PermissionService::temAcesso('ativos_politicas'),
             'estadoPoliticas' => PermissionService::temAcesso('ativos_politicas') ? (new PoliticaService())->estadoMaquina($id) : [],
+            'scriptMapeamentoSetor' => PermissionService::temAcesso('ativos_politicas') ? (new PoliticaService())->scriptMapearRecursosSetor(isset($ativo['setor_id']) ? (int)$ativo['setor_id'] : null) : null,
         ]);
     }
 

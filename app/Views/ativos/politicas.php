@@ -81,6 +81,76 @@ use App\Services\PoliticaService;
 </div>
 
 <div class="card border-0 shadow-sm mb-3">
+    <div class="card-header bg-white"><strong>Recursos de rede por setor (impressora / unidade de rede)</strong></div>
+    <div class="card-body">
+        <p class="text-muted small">
+            Cadastre aqui qual impressora e qual unidade de rede cada setor usa. Na tela de cada máquina (que já
+            tem um setor definido em Ativos &gt; Cadastros), o botão "Aplicar mapeamentos do setor" mapeia tudo isso
+            de uma vez, sem precisar saber o caminho de rede na hora.
+        </p>
+        <form method="post" action="<?= url('/ativos/politicas/recursos-setor/novo') ?>" class="row g-2 align-items-end mb-3">
+            <div class="col-md-2">
+                <label class="form-label small mb-0">Setor</label>
+                <select name="setor_id" class="form-select form-select-sm" required>
+                    <?php foreach ($setores as $s): ?>
+                        <option value="<?= (int)$s['id'] ?>"><?= htmlspecialchars($s['nome']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-0">Tipo</label>
+                <select name="tipo" class="form-select form-select-sm" id="campoTipoRecurso">
+                    <?php foreach ($tiposRecurso as $valor => $label): ?>
+                        <option value="<?= htmlspecialchars($valor) ?>"><?= htmlspecialchars($label) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-0">Nome</label>
+                <input type="text" name="nome_exibicao" class="form-control form-control-sm" placeholder="Ex: Impressora RH" required>
+            </div>
+            <div class="col-md-1" id="colunaLetraUnidade">
+                <label class="form-label small mb-0">Letra</label>
+                <input type="text" name="letra_unidade" maxlength="1" class="form-control form-control-sm" placeholder="Z">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-0">Caminho de rede (UNC)</label>
+                <input type="text" name="caminho_unc" class="form-control form-control-sm" placeholder="\\servidor\compartilhamento" required>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-sm btn-primary w-100"><i class="bi bi-plus-lg"></i> Adicionar</button>
+            </div>
+        </form>
+
+        <?php if (empty($recursosSetor)): ?>
+            <p class="text-muted small mb-0">Nenhum recurso cadastrado ainda.</p>
+        <?php else: ?>
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead><tr><th>Setor</th><th>Tipo</th><th>Nome</th><th>Letra/Caminho</th><th class="text-end">Ações</th></tr></thead>
+                    <tbody>
+                        <?php foreach ($recursosSetor as $r): ?>
+                            <tr>
+                                <td class="small"><?= htmlspecialchars($r['setor_nome']) ?></td>
+                                <td class="small"><?= htmlspecialchars($tiposRecurso[$r['tipo']] ?? $r['tipo']) ?></td>
+                                <td class="small"><?= htmlspecialchars($r['nome_exibicao']) ?></td>
+                                <td class="small font-monospace"><?= $r['tipo'] === 'unidade_rede' ? htmlspecialchars($r['letra_unidade']) . ': ' : '' ?><?= htmlspecialchars($r['caminho_unc']) ?></td>
+                                <td class="text-end">
+                                    <form method="post" action="<?= url('/ativos/politicas/recursos-setor/excluir') ?>" onsubmit="return confirm('Remover este recurso?');">
+                                        <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+                                        <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mb-3">
     <div class="card-header bg-white"><strong>Aplicar/remover em lote</strong></div>
     <div class="card-body">
         <strong class="small">Máquinas</strong>
@@ -141,6 +211,16 @@ use App\Services\PoliticaService;
                 document.getElementById('formRemoverWallpaper').submit();
             }
         });
+    }
+
+    const campoTipoRecurso = document.getElementById('campoTipoRecurso');
+    const colunaLetraUnidade = document.getElementById('colunaLetraUnidade');
+    function atualizarColunaLetra() {
+        colunaLetraUnidade.classList.toggle('d-none', campoTipoRecurso.value !== 'unidade_rede');
+    }
+    if (campoTipoRecurso) {
+        campoTipoRecurso.addEventListener('change', atualizarColunaLetra);
+        atualizarColunaLetra();
     }
 
     document.querySelectorAll('.form-aplicar-regra').forEach(function (form) {
