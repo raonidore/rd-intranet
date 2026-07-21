@@ -91,13 +91,24 @@ PS1;
                 'aplicar' => "Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\USBSTOR' -Name 'Start' -Value 4 -Type DWord -ErrorAction Stop",
                 'reverter' => "Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\USBSTOR' -Name 'Start' -Value 3 -Type DWord -ErrorAction Stop",
             ],
+            // NoControlPanel/DisableCMD: gravamos em HKLM E HKCU de propósito.
+            // Confirmado ao vivo que DisableCMD só em HKLM NÃO bloqueia nada
+            // -- "Prevent access to the command prompt" é uma política de
+            // User Configuration de verdade, e o cmd.exe só confere
+            // HKCU\...\Policies\Microsoft\Windows\System na hora de abrir.
+            // HKLM sozinho não tem efeito (o valor fica só "documentando a
+            // intenção", nunca é lido). Escrevendo nos dois, cobre tanto
+            // esse caso quanto qualquer outro que eventualmente funcione via
+            // HKLM -- mas o efeito real depende de qual usuário está logado
+            // no momento em que o agente roda o script (mesma limitação já
+            // documentada pra regra de IP fixo).
             'painel_controle_bloqueado' => [
-                'aplicar' => "New-Item -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer' -Force -ErrorAction Stop | Out-Null; Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer' -Name 'NoControlPanel' -Value 1 -Type DWord -ErrorAction Stop",
-                'reverter' => "Remove-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer' -Name 'NoControlPanel' -ErrorAction SilentlyContinue",
+                'aplicar' => "foreach (\$hive in @('HKLM:','HKCU:')) { New-Item -Path \"\$hive\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer\" -Force -ErrorAction Stop | Out-Null; Set-ItemProperty -Path \"\$hive\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer\" -Name 'NoControlPanel' -Value 1 -Type DWord -ErrorAction Stop }",
+                'reverter' => "foreach (\$hive in @('HKLM:','HKCU:')) { Remove-ItemProperty -Path \"\$hive\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer\" -Name 'NoControlPanel' -ErrorAction SilentlyContinue }",
             ],
             'cmd_bloqueado' => [
-                'aplicar' => "New-Item -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\System' -Force -ErrorAction Stop | Out-Null; Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\System' -Name 'DisableCMD' -Value 2 -Type DWord -ErrorAction Stop",
-                'reverter' => "Remove-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\System' -Name 'DisableCMD' -ErrorAction SilentlyContinue",
+                'aplicar' => "foreach (\$hive in @('HKLM:','HKCU:')) { New-Item -Path \"\$hive\\SOFTWARE\\Policies\\Microsoft\\Windows\\System\" -Force -ErrorAction Stop | Out-Null; Set-ItemProperty -Path \"\$hive\\SOFTWARE\\Policies\\Microsoft\\Windows\\System\" -Name 'DisableCMD' -Value 2 -Type DWord -ErrorAction Stop }",
+                'reverter' => "foreach (\$hive in @('HKLM:','HKCU:')) { Remove-ItemProperty -Path \"\$hive\\SOFTWARE\\Policies\\Microsoft\\Windows\\System\" -Name 'DisableCMD' -ErrorAction SilentlyContinue }",
             ],
             'powershell_bloqueado' => [
                 'aplicar' => "Set-RdRestrictRunEntry -Exe 'powershell.exe' -Bloquear \$true; Set-RdRestrictRunEntry -Exe 'powershell_ise.exe' -Bloquear \$true",
@@ -754,5 +765,226 @@ PS1;
         $partesEscapadas = array_map(fn($p) => "'" . str_replace("'", "''", $p) . "'", $partes);
 
         return implode(', ', $partesEscapadas);
+    }
+
+    /*
+     |---------------------------------------------------------
+     | Fase 4: script de login personalizado -- um .ps1 só (slot único,
+     | igual Company Portal), entregue via enviar_arquivo e registrado
+     | pra rodar em TODO logon via Scheduled Task. Reaproveita o mesmo
+     | truque de XML com <GroupId>S-1-5-32-545</GroupId> (grupo "Users")
+     | que o próprio agente já usa pra se auto-iniciar em qualquer
+     | usuário -- só que aqui quem gera o XML é o PHP, dentro do script
+     | PowerShell que o agente executa (não precisa de nenhuma mudança
+     | no .exe compilado).
+     |---------------------------------------------------------
+     */
+
+    private const NOME_TAREFA_LOGIN_SCRIPT = 'RDIntranetLoginScript';
+    private const CHAVE_LOGIN_SCRIPT_NOME = 'ativos_politicas_login_script_nome';
+    private const CHAVE_LOGIN_SCRIPT_ENVIADO_EM = 'ativos_politicas_login_script_enviado_em';
+
+    public static function caminhoLoginScript(): string
+    {
+        return __DIR__ . '/../../storage/uploads/ativos_politicas/login_script.ps1';
+    }
+
+    public function loginScriptConfigurado(): bool
+    {
+        return is_file(self::caminhoLoginScript());
+    }
+
+    public function loginScriptInfo(): ?array
+    {
+        if (!$this->loginScriptConfigurado()) {
+            return null;
+        }
+
+        return [
+            'nome' => ConfigService::get(self::CHAVE_LOGIN_SCRIPT_NOME, '') ?: 'login_script.ps1',
+            'enviado_em' => ConfigService::get(self::CHAVE_LOGIN_SCRIPT_ENVIADO_EM, '') ?: '',
+        ];
+    }
+
+    public function salvarLoginScript(string $caminhoTemporario, string $nomeOriginal): bool
+    {
+        $extensao = strtolower(pathinfo($nomeOriginal, PATHINFO_EXTENSION));
+        if ($extensao !== 'ps1') {
+            NotificationService::error('O script de login precisa ser um arquivo .ps1.');
+            return false;
+        }
+
+        $destino = self::caminhoLoginScript();
+        $pasta = dirname($destino);
+        if (!is_dir($pasta) && !@mkdir($pasta, 0777, true) && !is_dir($pasta)) {
+            NotificationService::error('Não foi possível preparar a pasta de armazenamento no servidor.');
+            return false;
+        }
+
+        if (!@copy($caminhoTemporario, $destino)) {
+            NotificationService::error('Não foi possível salvar o script no servidor.');
+            return false;
+        }
+
+        ConfigService::set(self::CHAVE_LOGIN_SCRIPT_NOME, basename($nomeOriginal));
+        ConfigService::set(self::CHAVE_LOGIN_SCRIPT_ENVIADO_EM, date('Y-m-d H:i:s'));
+
+        AuditService::registrar('Ativos', 'Regras de Segurança', 'Script de login enviado/atualizado.');
+        NotificationService::success('Script salvo.');
+
+        return true;
+    }
+
+    public function removerLoginScript(): void
+    {
+        @unlink(self::caminhoLoginScript());
+        ConfigService::set(self::CHAVE_LOGIN_SCRIPT_NOME, '');
+        ConfigService::set(self::CHAVE_LOGIN_SCRIPT_ENVIADO_EM, '');
+
+        AuditService::registrar('Ativos', 'Regras de Segurança', 'Script de login removido do servidor (as tarefas já registradas em máquinas continuam até serem removidas individualmente).');
+        NotificationService::success('Script removido do servidor.');
+    }
+
+    private function caminhoRemotoLoginScript(): string
+    {
+        return 'C:\\ProgramData\\RDIntranet\\login_script.ps1';
+    }
+
+    /** Instala (envia o arquivo + registra a tarefa) em N máquinas -- fogo-e-esquece. */
+    public function instalarLoginScriptEmLote(array $ativoIds, ?string $solicitadoPor): array
+    {
+        if (!$this->loginScriptConfigurado()) {
+            return ['success' => false, 'message' => 'Envie o script de login antes.'];
+        }
+
+        $pastaTransferencias = __DIR__ . '/../../storage/uploads/ativos_transferencias';
+        if (!is_dir($pastaTransferencias) && !@mkdir($pastaTransferencias, 0777, true) && !is_dir($pastaTransferencias)) {
+            return ['success' => false, 'message' => 'Não foi possível preparar a pasta de transferência.'];
+        }
+
+        $destinoRemoto = $this->caminhoRemotoLoginScript();
+        $nomeRemoto = basename(str_replace('\\', '/', $destinoRemoto));
+        $enviados = 0;
+
+        foreach ($ativoIds as $ativoId) {
+            $ativoId = (int)$ativoId;
+            $copiaTemp = $pastaTransferencias . '/enviar_' . uniqid('', true) . '_' . $nomeRemoto;
+
+            if (!@copy(self::caminhoLoginScript(), $copiaTemp)) {
+                continue;
+            }
+
+            $resultadoArquivo = $this->ativoService->enviarComando($ativoId, 'enviar_arquivo', $solicitadoPor, $destinoRemoto, $nomeRemoto, $copiaTemp);
+            if (!($resultadoArquivo['success'] ?? false)) {
+                @unlink($copiaTemp);
+                continue;
+            }
+
+            $resultado = $this->ativoService->solicitarListagem($ativoId, 'executar_powershell', $this->scriptRegistrarLoginScript(), $solicitadoPor, false);
+            if ($resultado['success'] ?? false) {
+                $enviados++;
+            }
+        }
+
+        AuditService::registrar('Ativos', 'Regras de Segurança', "Script de login instalado em {$enviados} máquina(s).");
+
+        return ['success' => true, 'enviados' => $enviados];
+    }
+
+    /** Desregistra a tarefa (e apaga o .ps1) em N máquinas -- fogo-e-esquece. */
+    public function removerLoginScriptEmLote(array $ativoIds, ?string $solicitadoPor): array
+    {
+        $script = $this->scriptRemoverLoginScript();
+        $enviados = 0;
+
+        foreach ($ativoIds as $ativoId) {
+            $resultado = $this->ativoService->solicitarListagem((int)$ativoId, 'executar_powershell', $script, $solicitadoPor, false);
+            if ($resultado['success'] ?? false) {
+                $enviados++;
+            }
+        }
+
+        AuditService::registrar('Ativos', 'Regras de Segurança', "Script de login removido de {$enviados} máquina(s).");
+
+        return ['success' => true, 'enviados' => $enviados];
+    }
+
+    /** Espera o .ps1 chegar (enviar_arquivo é assíncrono) e registra a Scheduled Task de logon -- mesmo XML que o agente usa pra se auto-iniciar, gerado aqui em PHP. */
+    private function scriptRegistrarLoginScript(): string
+    {
+        $template = <<<'PS1'
+$destino = '__DESTINO__'
+$limite = (Get-Date).AddSeconds(60)
+
+while (-not (Test-Path $destino) -and (Get-Date) -lt $limite) {
+    Start-Sleep -Seconds 2
+}
+
+if (-not (Test-Path $destino)) {
+    Write-Output "ERRO: script de login nao chegou a tempo em $destino."
+    exit 1
+}
+
+$xml = @'
+<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+    </LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <GroupId>S-1-5-32-545</GroupId>
+      <RunLevel>HighestAvailable</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>false</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>powershell.exe</Command>
+      <Arguments>-ExecutionPolicy Bypass -File "__DESTINO__"</Arguments>
+    </Exec>
+  </Actions>
+</Task>
+'@
+
+$caminhoXml = Join-Path $env:TEMP '__NOMETAREFA__.xml'
+Set-Content -Path $caminhoXml -Value $xml -Encoding Unicode -ErrorAction Stop
+
+try {
+    schtasks /create /tn "__NOMETAREFA__" /xml $caminhoXml /f | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "schtasks retornou codigo $LASTEXITCODE" }
+    Write-Output "Script de login registrado com sucesso."
+} catch {
+    Write-Output "ERRO ao registrar tarefa: $($_.Exception.Message)"
+    exit 1
+} finally {
+    Remove-Item $caminhoXml -ErrorAction SilentlyContinue
+}
+PS1;
+
+        return str_replace(['__DESTINO__', '__NOMETAREFA__'], [$this->caminhoRemotoLoginScript(), self::NOME_TAREFA_LOGIN_SCRIPT], $template);
+    }
+
+    private function scriptRemoverLoginScript(): string
+    {
+        $template = <<<'PS1'
+schtasks /delete /tn "__NOMETAREFA__" /f 2>&1 | Out-Null
+Remove-Item -Path '__DESTINO__' -ErrorAction SilentlyContinue
+Write-Output "Script de login removido."
+PS1;
+
+        return str_replace(['__NOMETAREFA__', '__DESTINO__'], [self::NOME_TAREFA_LOGIN_SCRIPT, $this->caminhoRemotoLoginScript()], $template);
     }
 }

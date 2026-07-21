@@ -502,4 +502,8 @@ $router->post('/ativos/politicas/recursos-setor/excluir', [PoliticaController::c
 $router->post('/ativos/politicas/pacotes/upload', [PoliticaController::class, 'pacoteUpload']);
 $router->post('/ativos/politicas/pacotes/excluir', [PoliticaController::class, 'pacoteExcluir']);
 $router->post('/ativos/politicas/pacotes/instalar-em-lote', [PoliticaController::class, 'pacoteInstalarEmLote']);
+$router->post('/ativos/politicas/login-script/upload', [PoliticaController::class, 'loginScriptUpload']);
+$router->post('/ativos/politicas/login-script/remover', [PoliticaController::class, 'loginScriptRemover']);
+$router->post('/ativos/politicas/login-script/instalar-em-lote', [PoliticaController::class, 'loginScriptInstalarEmLote']);
+$router->post('/ativos/politicas/login-script/remover-em-lote', [PoliticaController::class, 'loginScriptRemoverEmLote']);
 $router->get('/ativos/solicitacoes/arquivo', [AtivoController::class, 'baixarSolicitacaoArquivo']);

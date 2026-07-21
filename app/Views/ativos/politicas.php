@@ -32,8 +32,11 @@ use App\Services\PoliticaService;
             <strong class="small">O que cada regra faz</strong>
             <ul class="small text-muted">
                 <li><strong>Bloquear portas USB</strong> -- impede o uso de pen drives e HDs externos (armazenamento).</li>
-                <li><strong>Bloquear Painel de Controle e Configurações</strong> -- esconde o Painel de Controle e o
-                    app de Configurações do usuário comum.</li>
+                <li><strong>Bloquear Painel de Controle e Configurações / Bloquear CMD</strong> -- essas duas
+                    dependem também de uma chave por usuário (não só por máquina); valem garantidamente pro usuário
+                    que estiver logado no momento em que a regra for aplicada -- outra conta que logar depois pode
+                    precisar que a regra seja reaplicada (a máquina toda também recebe a chave, mas alguns desses
+                    bloqueios só o Windows aplica de fato olhando a conta logada).</li>
                 <li><strong>Bloquear CMD / Bloquear PowerShell</strong> -- impede o usuário de abrir o Prompt de
                     Comando/PowerShell pelo Menu Iniciar ou "Executar". <strong>Não afeta o nosso agente</strong>:
                     esse bloqueio age no nível do Explorer (o que aparece pro usuário abrir), e o agente nunca passa
@@ -260,6 +263,39 @@ use App\Services\PoliticaService;
     </div>
 </div>
 
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-header bg-white"><strong>Script de login personalizado</strong></div>
+    <div class="card-body">
+        <p class="text-muted small">
+            Um script PowerShell (.ps1) que roda sozinho toda vez que qualquer usuário fizer login na máquina (ex:
+            mapear algo específico, ajustar uma configuração). Registrado via Agendador de Tarefas do Windows --
+            envie aqui, depois selecione as máquinas na tabela acima e instale.
+        </p>
+        <?php if ($loginScriptInfo): ?>
+            <div class="d-flex justify-content-between align-items-center border rounded p-2 mb-3" style="max-width:480px">
+                <span class="small">
+                    <i class="bi bi-file-earmark-code"></i> <?= htmlspecialchars($loginScriptInfo['nome']) ?>
+                    <span class="text-muted">(enviado em <?= htmlspecialchars($loginScriptInfo['enviado_em']) ?>)</span>
+                </span>
+                <button type="button" class="btn btn-sm btn-outline-danger" id="botaoRemoverLoginScript"><i class="bi bi-trash"></i></button>
+            </div>
+            <form method="post" action="<?= url('/ativos/politicas/login-script/remover') ?>" id="formRemoverLoginScript" class="d-none"></form>
+
+            <form method="post" action="<?= url('/ativos/politicas/login-script/instalar-em-lote') ?>" class="d-inline form-instalar-pacote" data-confirmacao="Instalar o script de login em">
+                <button type="submit" class="btn btn-sm btn-outline-primary">Instalar nas selecionadas</button>
+            </form>
+            <form method="post" action="<?= url('/ativos/politicas/login-script/remover-em-lote') ?>" class="d-inline form-instalar-pacote" data-confirmacao="Remover o script de login de">
+                <button type="submit" class="btn btn-sm btn-outline-secondary">Remover das selecionadas</button>
+            </form>
+        <?php else: ?>
+            <form method="post" action="<?= url('/ativos/politicas/login-script/upload') ?>" enctype="multipart/form-data" class="d-flex gap-2" style="max-width:480px">
+                <input type="file" name="arquivo" accept=".ps1" class="form-control form-control-sm" required>
+                <button type="submit" class="btn btn-sm btn-outline-secondary text-nowrap"><i class="bi bi-upload"></i> Enviar</button>
+            </form>
+        <?php endif; ?>
+    </div>
+</div>
+
 <script>
 (function () {
     const botaoRemoverWallpaper = document.getElementById('botaoRemoverWallpaper');
@@ -267,6 +303,15 @@ use App\Services\PoliticaService;
         botaoRemoverWallpaper.addEventListener('click', function () {
             if (confirm('Remover a imagem do papel de parede corporativo?')) {
                 document.getElementById('formRemoverWallpaper').submit();
+            }
+        });
+    }
+
+    const botaoRemoverLoginScript = document.getElementById('botaoRemoverLoginScript');
+    if (botaoRemoverLoginScript) {
+        botaoRemoverLoginScript.addEventListener('click', function () {
+            if (confirm('Remover o script de login do servidor? As tarefas já registradas nas máquinas continuam até serem removidas individualmente.')) {
+                document.getElementById('formRemoverLoginScript').submit();
             }
         });
     }
@@ -319,7 +364,8 @@ use App\Services\PoliticaService;
                 return;
             }
 
-            if (!confirm('Instalar esse pacote em ' + marcadas.length + ' máquina(s)? Pode levar alguns minutos por máquina.')) {
+            const mensagemConfirmacao = form.dataset.confirmacao || 'Instalar esse pacote em';
+            if (!confirm(mensagemConfirmacao + ' ' + marcadas.length + ' máquina(s)?')) {
                 e.preventDefault();
                 return;
             }

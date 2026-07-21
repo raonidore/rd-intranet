@@ -33,7 +33,84 @@ class PoliticaController extends Controller
             'recursosSetor' => $this->service->listarRecursosSetor(),
             'tiposRecurso' => PoliticaService::TIPOS_RECURSO_SETOR,
             'pacotes' => $this->service->listarPacotesSoftware(),
+            'loginScriptInfo' => $this->service->loginScriptInfo(),
         ]);
+    }
+
+    public function loginScriptUpload(): void
+    {
+        AuthMiddleware::checkModulo('ativos_politicas');
+
+        $arquivo = $_FILES['arquivo'] ?? null;
+
+        if (!$arquivo || $arquivo['error'] !== UPLOAD_ERR_OK) {
+            NotificationService::error('Falha no upload do arquivo.');
+        } else {
+            $this->service->salvarLoginScript($arquivo['tmp_name'], $arquivo['name']);
+        }
+
+        header('Location: ' . url('/ativos/politicas'));
+        exit;
+    }
+
+    public function loginScriptRemover(): void
+    {
+        AuthMiddleware::checkModulo('ativos_politicas');
+
+        $this->service->removerLoginScript();
+
+        header('Location: ' . url('/ativos/politicas'));
+        exit;
+    }
+
+    /** Instala (envia o arquivo + registra a tarefa de logon) nas máquinas marcadas. */
+    public function loginScriptInstalarEmLote(): void
+    {
+        AuthMiddleware::checkModulo('ativos_politicas');
+        AuthMiddleware::checkModulo('ativos_novo');
+
+        $ativoIds = array_map('intval', $_POST['ativos'] ?? []);
+        $solicitadoPor = $_SESSION['usuario']['nome'] ?? null;
+
+        if (empty($ativoIds)) {
+            NotificationService::error('Selecione ao menos uma máquina.');
+            header('Location: ' . url('/ativos/politicas'));
+            exit;
+        }
+
+        $resultado = $this->service->instalarLoginScriptEmLote($ativoIds, $solicitadoPor);
+
+        if ($resultado['success'] ?? false) {
+            NotificationService::success("Script de login instalado em {$resultado['enviados']} máquina(s) -- confira o histórico de solicitações de cada uma.");
+        } else {
+            NotificationService::error($resultado['message'] ?? 'Falha ao instalar o script de login.');
+        }
+
+        header('Location: ' . url('/ativos/politicas'));
+        exit;
+    }
+
+    /** Desregistra a tarefa de logon (e apaga o .ps1) nas máquinas marcadas. */
+    public function loginScriptRemoverEmLote(): void
+    {
+        AuthMiddleware::checkModulo('ativos_politicas');
+        AuthMiddleware::checkModulo('ativos_novo');
+
+        $ativoIds = array_map('intval', $_POST['ativos'] ?? []);
+        $solicitadoPor = $_SESSION['usuario']['nome'] ?? null;
+
+        if (empty($ativoIds)) {
+            NotificationService::error('Selecione ao menos uma máquina.');
+            header('Location: ' . url('/ativos/politicas'));
+            exit;
+        }
+
+        $resultado = $this->service->removerLoginScriptEmLote($ativoIds, $solicitadoPor);
+
+        NotificationService::success("Script de login removido de {$resultado['enviados']} máquina(s).");
+
+        header('Location: ' . url('/ativos/politicas'));
+        exit;
     }
 
     public function pacoteUpload(): void
