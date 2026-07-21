@@ -462,7 +462,26 @@ if (!(Test-Path $caminho)) { throw "Imagem do papel de parede ainda nao chegou n
 New-Item -Path 'HKCU:\Control Panel\Desktop' -Force -ErrorAction Stop | Out-Null
 Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'Wallpaper' -Value $caminho -ErrorAction Stop
 Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'WallpaperStyle' -Value '10' -ErrorAction Stop
-RUNDLL32.EXE user32.dll,UpdatePerUserSystemParameters
+Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'TileWallpaper' -Value '0' -ErrorAction Stop
+
+# RUNDLL32.EXE user32.dll,UpdatePerUserSystemParameters (usado antes)
+# nunca foi documentado pela Microsoft como forma oficial de trocar o
+# papel de parede e o Windows nem sempre honra a chamada -- a forma
+# confiavel de verdade e chamar a API SystemParametersInfo direto via
+# P/Invoke, que forca o Explorer a redesenhar a area de trabalho na
+# hora.
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public class RdWallpaper {
+    [DllImport("user32.dll", EntryPoint = "SystemParametersInfo", CharSet = CharSet.Auto)]
+    public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+}
+'@
+
+$resultadoApi = [RdWallpaper]::SystemParametersInfo(20, 0, $caminho, 3)
+if ($resultadoApi -eq 0) { throw "SystemParametersInfo retornou falha ao trocar o papel de parede." }
+
 New-Item -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop' -Force -ErrorAction Stop | Out-Null
 Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop' -Name 'NoChangingWallPaper' -Value 1 -Type DWord -ErrorAction Stop
 PS1;
