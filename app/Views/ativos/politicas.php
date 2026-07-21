@@ -52,10 +52,12 @@ use App\Services\PoliticaService;
                     aplica, desmarcar só para de forçar (nunca desliga o firewall nem afrouxa a senha de propósito).</li>
                 <li><strong>Papel de parede corporativo</strong> -- envie a imagem abaixo primeiro; a regra entrega
                     o arquivo na máquina e define como papel de parede fixo (usuário não troca).</li>
+                <li><strong>Bloquear navegadores / Bloquear PowerShell</strong> -- mesma observação do CMD: o
+                    bloqueio só passa a valer depois que o usuário fizer logoff/login de novo (ou reiniciar).</li>
                 <li><strong>Impedir alterar IP/rede</strong> -- bloqueia a tela de propriedades da conexão de rede.
-                    Como essa é uma política por usuário (não por máquina), só vale pro usuário que estiver logado
-                    no momento em que a regra for aplicada -- outra conta que logar depois pode precisar que a
-                    regra seja reaplicada.</li>
+                    Também depende de uma chave por usuário e só passa a valer após um novo logon (mesma observação
+                    do CMD/Painel de Controle acima) -- outra conta que logar depois pode precisar que a regra seja
+                    reaplicada.</li>
             </ul>
             <div class="alert alert-warning small mb-0">
                 <i class="bi bi-exclamation-triangle"></i> Isso é uma política do Windows, não uma trava

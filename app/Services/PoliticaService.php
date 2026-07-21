@@ -49,34 +49,40 @@ class PoliticaService
      * própria entrada (adiciona ou remove) e regrava, pra uma regra
      * nunca apagar o que outra regra já tiver colocado ali (ex:
      * "bloquear PowerShell" e "bloquear navegadores" dividem a mesma
-     * chave do registro).
+     * chave do registro). Grava em HKLM e HKCU -- confirmado que
+     * gravar só em HKLM não tem efeito (DisallowRun/RestrictRun via
+     * HKLM sozinho é ignorado pelo Explorer; a chave que realmente
+     * conta é a de HKCU do usuário logado, mesma limitação já
+     * documentada pra Painel de Controle/CMD).
      */
     private const FUNCAO_RESTRICT_RUN = <<<'PS1'
 function Set-RdRestrictRunEntry {
     param([string]$Exe, [bool]$Bloquear)
-    $chave = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer'
-    New-Item -Path $chave -Force -ErrorAction Stop | Out-Null
-    $item = Get-Item -Path $chave -ErrorAction SilentlyContinue
-    $existentes = @()
-    if ($item) {
-        foreach ($nome in $item.Property) {
-            if ($nome -match '^[0-9]+$') {
-                $valor = (Get-ItemProperty -Path $chave -Name $nome -ErrorAction SilentlyContinue).$nome
-                if ($valor -and $valor -ne $Exe) { $existentes += $valor }
-                Remove-ItemProperty -Path $chave -Name $nome -ErrorAction SilentlyContinue
+    foreach ($hive in @('HKLM:', 'HKCU:')) {
+        $chave = "$hive\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer"
+        New-Item -Path $chave -Force -ErrorAction Stop | Out-Null
+        $item = Get-Item -Path $chave -ErrorAction SilentlyContinue
+        $existentes = @()
+        if ($item) {
+            foreach ($nome in $item.Property) {
+                if ($nome -match '^[0-9]+$') {
+                    $valor = (Get-ItemProperty -Path $chave -Name $nome -ErrorAction SilentlyContinue).$nome
+                    if ($valor -and $valor -ne $Exe) { $existentes += $valor }
+                    Remove-ItemProperty -Path $chave -Name $nome -ErrorAction SilentlyContinue
+                }
             }
         }
-    }
-    if ($Bloquear) { $existentes += $Exe }
-    $i = 1
-    foreach ($valor in ($existentes | Select-Object -Unique)) {
-        Set-ItemProperty -Path $chave -Name "$i" -Value $valor -Type String -ErrorAction Stop
-        $i++
-    }
-    if ($existentes.Count -gt 0) {
-        Set-ItemProperty -Path $chave -Name 'RestrictRun' -Value 1 -Type DWord -ErrorAction Stop
-    } else {
-        Remove-ItemProperty -Path $chave -Name 'RestrictRun' -ErrorAction SilentlyContinue
+        if ($Bloquear) { $existentes += $Exe }
+        $i = 1
+        foreach ($valor in ($existentes | Select-Object -Unique)) {
+            Set-ItemProperty -Path $chave -Name "$i" -Value $valor -Type String -ErrorAction Stop
+            $i++
+        }
+        if ($existentes.Count -gt 0) {
+            Set-ItemProperty -Path $chave -Name 'RestrictRun' -Value 1 -Type DWord -ErrorAction Stop
+        } else {
+            Remove-ItemProperty -Path $chave -Name 'RestrictRun' -ErrorAction SilentlyContinue
+        }
     }
 }
 PS1;
@@ -130,12 +136,19 @@ PS1;
                 'aplicar' => $this->scriptAplicarWallpaper(),
                 'reverter' => "Remove-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\ActiveDesktop' -Name 'NoChangingWallPaper' -ErrorAction SilentlyContinue",
             ],
-            // Chave clássica de "Network Connections" do GPO -- é HKCU (não tem
-            // equivalente HKLM documentado), então só vale pro usuário logado
-            // na hora em que o agente rodar o script (ver aviso na tela de ajuda).
+            // Caminho corrigido: é 'SOFTWARE\Policies\Microsoft\Windows\Network Connections'
+            // (pasta "Network Connections" só, com espaço -- não "CurrentVersion\Policies"
+            // nem "Network\Connections" separados, erro da primeira versão desta regra).
+            // NC_LanProperties=1 esconde o botão "Propriedades" da conexão de rede pro
+            // usuário comum (o que realmente impede mudar o IP manualmente);
+            // NC_LanChangeProperties=1 bloqueia até administradores/Network Config
+            // Operators; NC_StdDomainUserSetLocation=1 exige elevação pra mudar o
+            // perfil de rede (domínio/privada/pública). Grava em HKLM e HKCU --
+            // fontes divergem sobre qual hive cada valor individual respeita, então
+            // grava nos dois pra garantir.
             'ip_fixo_bloqueado' => [
-                'aplicar' => "New-Item -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Network\\Connections' -Force -ErrorAction Stop | Out-Null; Set-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Network\\Connections' -Name 'NC_LanChangeProperties' -Value 0 -Type DWord -ErrorAction Stop; Set-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Network\\Connections' -Name 'NC_StdDomainUserSetLocation' -Value 1 -Type DWord -ErrorAction Stop",
-                'reverter' => "Remove-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Network\\Connections' -Name 'NC_LanChangeProperties' -ErrorAction SilentlyContinue; Remove-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Network\\Connections' -Name 'NC_StdDomainUserSetLocation' -ErrorAction SilentlyContinue",
+                'aplicar' => "foreach (\$hive in @('HKLM:','HKCU:')) { New-Item -Path \"\$hive\\SOFTWARE\\Policies\\Microsoft\\Windows\\Network Connections\" -Force -ErrorAction Stop | Out-Null; Set-ItemProperty -Path \"\$hive\\SOFTWARE\\Policies\\Microsoft\\Windows\\Network Connections\" -Name 'NC_LanProperties' -Value 1 -Type DWord -ErrorAction Stop; Set-ItemProperty -Path \"\$hive\\SOFTWARE\\Policies\\Microsoft\\Windows\\Network Connections\" -Name 'NC_LanChangeProperties' -Value 1 -Type DWord -ErrorAction Stop; Set-ItemProperty -Path \"\$hive\\SOFTWARE\\Policies\\Microsoft\\Windows\\Network Connections\" -Name 'NC_StdDomainUserSetLocation' -Value 1 -Type DWord -ErrorAction Stop }",
+                'reverter' => "foreach (\$hive in @('HKLM:','HKCU:')) { Remove-ItemProperty -Path \"\$hive\\SOFTWARE\\Policies\\Microsoft\\Windows\\Network Connections\" -Name 'NC_LanProperties' -ErrorAction SilentlyContinue; Remove-ItemProperty -Path \"\$hive\\SOFTWARE\\Policies\\Microsoft\\Windows\\Network Connections\" -Name 'NC_LanChangeProperties' -ErrorAction SilentlyContinue; Remove-ItemProperty -Path \"\$hive\\SOFTWARE\\Policies\\Microsoft\\Windows\\Network Connections\" -Name 'NC_StdDomainUserSetLocation' -ErrorAction SilentlyContinue }",
             ],
             default => ['aplicar' => null, 'reverter' => null],
         };
@@ -563,7 +576,7 @@ PS1;
         // (ver scriptMapearRecursosSetor) -- aspas simples/duplas quebrariam a
         // string do PowerShell, e $/backtick disparariam interpolação/escape
         // dentro dela. Em vez de tentar escapar certo em cada contexto (net
-        // use usa aspas duplas, Add-PrinterConnection usa simples), é mais
+        // use usa aspas duplas, Add-Printer usa simples), é mais
         // simples e seguro só recusar esses caracteres aqui.
         if (preg_match('/[\'"$`]/', $nomeExibicao . $caminhoUnc)) {
             return ['success' => false, 'message' => 'Nome e caminho de rede não podem conter aspas, $ ou acento grave.'];
@@ -612,7 +625,7 @@ PS1;
                 $letra = $r['letra_unidade'];
                 $comando = "net use {$letra}: \"{$caminho}\" /persistent:yes";
             } else {
-                $comando = "if (Get-Printer -Name '{$caminho}' -ErrorAction SilentlyContinue) { } else { Add-PrinterConnection -ConnectionName '{$caminho}' -ErrorAction Stop }";
+                $comando = "if (Get-Printer -Name '{$caminho}' -ErrorAction SilentlyContinue) { } else { Add-Printer -ConnectionName '{$caminho}' -ErrorAction Stop }";
             }
 
             $resultados[] = <<<PS1
@@ -1016,23 +1029,54 @@ PS1;
     /**
      * Fase 5: ação avulsa "Aplicar atualizações do Windows" -- sem
      * estado nenhum pra guardar, só dispara e mostra o resultado (igual
-     * o botão "Aplicar mapeamentos do setor"). UsoClient.exe é a
-     * ferramenta de linha de comando (não documentada oficialmente, mas
-     * estável desde o Windows 10 1607) que aciona o mesmo motor do
-     * Windows Update usado pela tela de Configurações -- "ScanInstallWait"
-     * varre, baixa e instala numa tacada só, esperando terminar. Best
-     * effort: o processo real de update continua em segundo plano mesmo
-     * depois do comando retornar, então "sucesso" aqui significa "consegui
-     * disparar", não necessariamente "já terminou de instalar tudo".
+     * o botão "Aplicar mapeamentos do setor").
+     *
+     * Não usa UsoClient.exe: é uma ferramenta não documentada oficialmente
+     * pela Microsoft, e o switch "ScanInstallWait" parou de funcionar de
+     * verdade em builds do Windows 10 a partir de ~2020 (só finge que
+     * disparou). Em vez disso, fala direto com a Windows Update Agent API
+     * (o motor de verdade por trás da tela de Configurações), via os
+     * objetos COM Microsoft.Update.Session/Searcher/Downloader/Installer
+     * -- nativo do Windows, não precisa instalar nenhum módulo extra
+     * (diferente do PSWindowsUpdate, que exigiria internet/PSGallery na
+     * máquina do cliente).
      */
     public function scriptAplicarAtualizacoesWindows(): string
     {
         return <<<'PS1'
 try {
-    Start-Process -FilePath "$env:windir\System32\UsoClient.exe" -ArgumentList 'ScanInstallWait' -Wait -ErrorAction Stop
-    Write-Output "Atualizacoes do Windows solicitadas (varredura + download + instalacao). Pode continuar rodando em segundo plano por um tempo -- confira o Windows Update na maquina se quiser confirmar."
+    $sessao = New-Object -ComObject Microsoft.Update.Session
+    $busca = $sessao.CreateUpdateSearcher()
+    $resultado = $busca.Search("IsInstalled=0 and Type='Software' and IsHidden=0")
+
+    if ($resultado.Updates.Count -eq 0) {
+        Write-Output "Nenhuma atualizacao pendente."
+    } else {
+        $paraBaixar = New-Object -ComObject Microsoft.Update.UpdateColl
+        foreach ($item in $resultado.Updates) { $paraBaixar.Add($item) | Out-Null }
+
+        $baixador = $sessao.CreateUpdateDownloader()
+        $baixador.Updates = $paraBaixar
+        $baixador.Download() | Out-Null
+
+        $paraInstalar = New-Object -ComObject Microsoft.Update.UpdateColl
+        foreach ($item in $resultado.Updates) {
+            if ($item.IsDownloaded) { $paraInstalar.Add($item) | Out-Null }
+        }
+
+        if ($paraInstalar.Count -eq 0) {
+            Write-Output "Encontrei $($resultado.Updates.Count) atualizacao(oes), mas nenhuma baixou com sucesso."
+        } else {
+            $instalador = $sessao.CreateUpdateInstaller()
+            $instalador.Updates = $paraInstalar
+            $resultadoInstalacao = $instalador.Install()
+
+            # ResultCode: 2=sucesso, 3=sucesso com falhas parciais, 4=falha, 5=cancelado
+            Write-Output "Atualizacoes instaladas: $($paraInstalar.Count) de $($resultado.Updates.Count) encontrada(s). Codigo do resultado: $($resultadoInstalacao.ResultCode). Reinicio necessario: $($resultadoInstalacao.RebootRequired)."
+        }
+    }
 } catch {
-    Write-Output "ERRO ao solicitar atualizacoes: $($_.Exception.Message)"
+    Write-Output "ERRO ao aplicar atualizacoes: $($_.Exception.Message)"
     exit 1
 }
 PS1;
