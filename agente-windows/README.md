@@ -107,6 +107,16 @@ O agente se autoatualiza. O fluxo:
 Se nenhum `.exe` for enviado ainda, essa checagem simplesmente não
 encontra nada e não faz nada (sem erro visível pro usuário).
 
+**Desde a v1.0.14**, o script auxiliar de troca (`atualizar.bat`,
+gerado em `%TEMP%\RDIntranetAgenteUpdate\`) grava um log
+(`atualizar.log` na mesma pasta) de cada tentativa e, se a troca do
+arquivo falhar depois de 30 tentativas (arquivo ainda em uso --
+antivírus escaneando o `.exe` novo, por exemplo), **sempre reabre o
+agente** (a versão antiga, se a troca não deu certo) em vez de deixar
+o ícone da bandeja simplesmente sumir sem voltar. Versões anteriores
+não tinham esse fallback -- se a troca falhasse, o agente ficava fora
+do ar até reabrir manualmente ou reiniciar a máquina.
+
 ### Publicar via git (recomendado se você roda em vários servidores)
 
 Se você mantém o RD Intranet em mais de um servidor (cada instalação

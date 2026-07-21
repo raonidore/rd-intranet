@@ -420,7 +420,8 @@ public class TrayApplicationContext : ApplicationContext
 
             var exeAtual = Application.ExecutablePath;
             var scriptPath = Path.Combine(pastaAtualizacao, "atualizar.bat");
-            File.WriteAllText(scriptPath, ConteudoScriptAtualizacao(novoExe, exeAtual));
+            var logPath = Path.Combine(pastaAtualizacao, "atualizar.log");
+            File.WriteAllText(scriptPath, ConteudoScriptAtualizacao(novoExe, exeAtual, logPath));
 
             Process.Start(new ProcessStartInfo
             {
@@ -431,7 +432,7 @@ public class TrayApplicationContext : ApplicationContext
                 UseShellExecute = false
             });
 
-            Application.Exit();
+            Encerrar();
         }
         catch
         {
@@ -442,21 +443,35 @@ public class TrayApplicationContext : ApplicationContext
     /// <summary>
     /// O move só consegue substituir o .exe depois que este processo
     /// encerrar de vez (arquivo em uso) -- por isso o retry com pausas em
-    /// vez de tentar uma vez só logo de cara.
+    /// vez de tentar uma vez só logo de cara. Registra cada tentativa num
+    /// log (pasta %TEMP%\RDIntranetAgenteUpdate\atualizar.log) porque essa
+    /// troca acontece sem ninguém olhando -- se travar (antivírus
+    /// escaneando o novo .exe, arquivo ainda em uso, permissão), precisa
+    /// dar pra diagnosticar sem depender de acesso remoto à máquina.
+    /// Sempre reabre algum .exe no fim (o novo se a troca deu certo, o
+    /// antigo intacto se não deu) -- nunca deixa o agente sumir da
+    /// bandeja só porque a troca falhou.
     /// </summary>
-    private static string ConteudoScriptAtualizacao(string origem, string destino) => $@"@echo off
+    private static string ConteudoScriptAtualizacao(string origem, string destino, string log) => $@"@echo off
 setlocal
 set ""ORIGEM={origem}""
 set ""DESTINO={destino}""
+set ""LOG={log}""
+echo [%date% %time%] Iniciando troca de versao > ""%LOG%""
 set contador=0
 :tentar
 timeout /t 1 /nobreak >nul
-move /y ""%ORIGEM%"" ""%DESTINO%"" >nul 2>&1
+move /y ""%ORIGEM%"" ""%DESTINO%"" >>""%LOG%"" 2>&1
 if exist ""%ORIGEM%"" (
     set /a contador+=1
-    if %contador% lss 20 goto tentar
+    echo [%date% %time%] Tentativa %contador% -- arquivo ainda em uso >>""%LOG%""
+    if %contador% lss 30 goto tentar
+    echo [%date% %time%] Desisti apos 30 tentativas -- reabrindo versao anterior >>""%LOG%""
+    start """" ""%DESTINO%""
+    del ""%~f0""
     exit /b 1
 )
+echo [%date% %time%] Troca concluida, reabrindo versao nova >>""%LOG%""
 start """" ""%DESTINO%""
 del ""%~f0""
 ";
