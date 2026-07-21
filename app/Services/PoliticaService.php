@@ -452,7 +452,13 @@ PS1;
 
         $template = <<<'PS1'
 $caminho = '__CAMINHO__'
-if (!(Test-Path $caminho)) { throw "Imagem do papel de parede ainda nao chegou nessa maquina." }
+$limite = (Get-Date).AddSeconds(120)
+
+while (-not (Test-Path $caminho) -and (Get-Date) -lt $limite) {
+    Start-Sleep -Seconds 2
+}
+
+if (!(Test-Path $caminho)) { throw "Imagem do papel de parede ainda nao chegou nessa maquina (enviar_arquivo e mais lento que executar_powershell -- pode levar ate um checkin inteiro)." }
 New-Item -Path 'HKCU:\Control Panel\Desktop' -Force -ErrorAction Stop | Out-Null
 Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'Wallpaper' -Value $caminho -ErrorAction Stop
 Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'WallpaperStyle' -Value '10' -ErrorAction Stop
