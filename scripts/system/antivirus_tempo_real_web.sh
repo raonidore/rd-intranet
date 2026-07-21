@@ -37,15 +37,23 @@ mkdir -p /var/quarantine/rd-intranet
 
 cat > "$ARQUIVO" <<'EOF'
 # Gerado pela RD Intranet (Seguranca > Antivirus). Nao edite manualmente.
+#
+# Nomes dos parametros "virusfilter:*" usam ESPACO entre palavras, nao
+# hifen (confirmado no man vfs_virusfilter oficial) -- uma versao anterior
+# deste script usava hifen em tudo (ex: "clamav-socket-path",
+# "scan-on-open"), o que o modulo nao reconhecia. Sem "virusfilter:scanner"
+# valido, o proprio connect() do modulo falhava, derrubando QUALQUER tree
+# connect na hora de abrir um compartilhamento (nao so o escaneamento)
+# -- por isso ligar "tempo real" quebrava o acesso Samba inteiro.
 vfs objects = acl_xattr recycle virusfilter
-virusfilter:engine = clamav
-virusfilter:clamav-socket-path = /var/run/clamav/clamd.ctl
-virusfilter:scan-on-open = yes
-virusfilter:scan-on-close = no
-virusfilter:max-file-size = 100M
-virusfilter:infected-file-action = quarantine
-virusfilter:quarantine-dir = /var/quarantine/rd-intranet
-virusfilter:quarantine-prefix = virus-
+virusfilter:scanner = clamav
+virusfilter:socket path = /var/run/clamav/clamd.ctl
+virusfilter:scan on open = yes
+virusfilter:scan on close = no
+virusfilter:max file size = 100000000
+virusfilter:infected file action = quarantine
+virusfilter:quarantine directory = /var/quarantine/rd-intranet
+virusfilter:quarantine prefix = virus-
 EOF
 
 if ! testparm -s >/dev/null 2>&1; then

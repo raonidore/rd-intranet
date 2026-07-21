@@ -36,6 +36,9 @@ class SambaGlobalConfigService
                 ['key' => 'client min protocol', 'label' => 'Protocolo mínimo (cliente)', 'tipo' => 'select',
                  'opcoes' => ['SMB2' => 'SMB2 (recomendado)', 'SMB2_02' => 'SMB2_02', 'SMB3' => 'SMB3', 'NT1' => 'NT1 / SMB1'],
                  'help' => 'Versão mínima aceita ao conectar como cliente'],
+                ['key' => 'server signing', 'label' => 'Assinatura SMB (signing)', 'tipo' => 'select',
+                 'opcoes' => ['default' => 'default — Aceita se o cliente pedir (padrão)', 'mandatory' => 'mandatory — Exigir sempre', 'auto' => 'auto', 'disabled' => 'disabled — Nunca assinar'],
+                 'help' => 'Windows 11 24H2 passou a EXIGIR assinatura SMB em toda conexão de saída -- sem isso aqui como "mandatory" (ou pelo menos "default"), esses clientes não conseguem acessar nenhum compartilhamento.'],
             ],
         ],
         'rede' => [
