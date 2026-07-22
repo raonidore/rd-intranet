@@ -143,7 +143,8 @@ class AtivoRepository
                    snmp_habilitado = :snmp_habilitado,
                    snmp_community = :snmp_community,
                    observacoes = :observacoes,
-                   detalhes = :detalhes
+                   detalhes = :detalhes,
+                   machine_guid = :machine_guid
              WHERE id = :id
         ");
 
@@ -163,6 +164,7 @@ class AtivoRepository
             'snmp_community' => $dados['snmp_community'],
             'observacoes' => $dados['observacoes'],
             'detalhes' => $dados['detalhes'],
+            'machine_guid' => $dados['machine_guid'],
         ]);
     }
 

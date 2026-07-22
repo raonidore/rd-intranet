@@ -236,11 +236,38 @@ class AtivoService
             'snmp_community' => trim($post['snmp_community'] ?? '') ?: null,
             'observacoes' => trim($post['observacoes'] ?? '') ?: null,
             'detalhes' => json_encode($this->extrairDetalhes($ativo['tipo'], $post), JSON_UNESCAPED_UNICODE),
+            'machine_guid' => $ativo['machine_guid'] ?? null,
         ];
 
         if ($dados['nome'] === '') {
             NotificationService::error('Informe um nome/identificação para o ativo.');
             return false;
+        }
+
+        // Só um ativo de agente tem machine_guid pra editar, e só faz
+        // sentido corrigir manualmente em dois casos: reformatação (a
+        // máquina virou um ativo novo) ou colisão (duas máquinas com
+        // identificador de hardware genérico acabaram com o mesmo
+        // machine_guid -- ver CollectorService no agente). Confere
+        // duplicidade aqui pra dar um erro claro em vez de estourar a
+        // constraint UNIQUE do banco sem explicação.
+        if ($ativo['origem'] === 'agente' && isset($post['machine_guid'])) {
+            $novoGuid = trim($post['machine_guid']);
+
+            if ($novoGuid === '') {
+                NotificationService::error('O identificador da máquina não pode ficar em branco.');
+                return false;
+            }
+
+            if ($novoGuid !== $ativo['machine_guid']) {
+                $conflito = $this->repository->buscarPorMachineGuid($novoGuid);
+                if ($conflito && (int)$conflito['id'] !== $id) {
+                    NotificationService::error("Esse identificador já pertence ao ativo {$conflito['codigo_patrimonio']} ({$conflito['nome']}) -- não dá pra usar o mesmo em dois ativos.");
+                    return false;
+                }
+            }
+
+            $dados['machine_guid'] = $novoGuid;
         }
 
         $this->repository->atualizar($id, $dados);

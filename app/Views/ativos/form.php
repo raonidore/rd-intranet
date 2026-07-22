@@ -69,6 +69,21 @@ $tipoAtual = $ativo['tipo'] ?? $tipoSelecionado;
                 </div>
             </div>
 
+            <?php if ($editando && ($ativo['origem'] ?? null) === 'agente'): ?>
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <label class="form-label">Identificador da máquina (machine_guid)</label>
+                    <input type="text" name="machine_guid" class="form-control font-monospace" value="<?= htmlspecialchars($ativo['machine_guid'] ?? '') ?>">
+                    <small class="text-muted">
+                        Avançado -- normalmente não precisa mexer. O agente gera isso sozinho a partir do hardware.
+                        Só corrija manualmente se a máquina foi <strong>reformatada</strong> e virou um ativo novo/
+                        duplicado no inventário (aí é só copiar o novo identificador aqui pra "religar" este mesmo
+                        cadastro), ou se duas máquinas colidiram no mesmo identificador por engano.
+                    </small>
+                </div>
+            </div>
+            <?php endif; ?>
+
             <div class="row g-3 mb-3">
                 <div class="col-md-3">
                     <label class="form-label">Marca / Fabricante</label>
