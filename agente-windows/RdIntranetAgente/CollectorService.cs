@@ -15,6 +15,19 @@ public static class CollectorService
         "", "To be filled by O.E.M.", "None", "System Serial Number", "0", "Default string"
     };
 
+    /// <summary>
+    /// Confirmado ao vivo: duas placas-mae genericas diferentes relataram
+    /// o mesmo texto de serial "de fabrica" só que com capitalização
+    /// diferente ("To Be Filled By O.E.M." vs "To be filled by O.E.M." da
+    /// lista acima) -- Contains() de string é sensível a maiúsculas por
+    /// padrão, então a segunda variação passava como se fosse um serial
+    /// válido, e as duas máquinas acabavam com o mesmo machine_guid
+    /// (colidindo na mesma linha do inventário, uma sobrescrevendo os
+    /// dados da outra a cada check-in). Comparação agora ignora caixa.
+    /// </summary>
+    private static bool SerialInvalido(string serial) =>
+        SeriaisInvalidos.Any(invalido => string.Equals(invalido, serial, System.StringComparison.OrdinalIgnoreCase));
+
     public static CheckinPayload Coletar(DateTime? eventosDesde)
     {
         var payload = new CheckinPayload
@@ -245,7 +258,7 @@ public static class CollectorService
             }
         }
 
-        var serialValido = serialBios != null && !SeriaisInvalidos.Contains(serialBios.Trim());
+        var serialValido = serialBios != null && !SerialInvalido(serialBios.Trim());
         var machineGuid = serialValido
             ? $"BIOS-{serialBios!.Trim()}"
             : $"REG-{ObterMachineGuidRegistro()}";
