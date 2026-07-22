@@ -18,6 +18,16 @@ class Router
 
     public function dispatch(): void
     {
+        // Sem isso, o navegador podia servir uma versao antiga de uma
+        // pagina (ex: lista de Ativos) direto do cache local em vez de
+        // buscar a atual no servidor -- confirmado ao vivo: a URL sem
+        // query string ficava presa numa versao anterior enquanto a
+        // mesma tela com "?tipo=&status=&busca=" (outra chave de cache
+        // pro navegador) mostrava o estado certo. Todo o painel mostra
+        // dado dinamico/sensivel, nunca deveria ser cacheado.
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('Pragma: no-cache');
+
         $method = $_SERVER['REQUEST_METHOD'];
         $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 
