@@ -235,6 +235,18 @@ public static class CollectorService
     }
 
     /// <summary>
+    /// UUIDs de placeholder conhecidos, gravados de fabrica em placas
+    /// genericas que nunca tiveram a SMBIOS customizada pelo integrador --
+    /// mesmo principio do SeriaisInvalidos, so que pro campo UUID.
+    /// </summary>
+    private static readonly string[] UuidsInvalidos =
+    {
+        "00000000-0000-0000-0000-000000000000",
+        "ffffffff-ffff-ffff-ffff-ffffffffffff",
+        "03000200-0400-0500-0006-000700080009", // placeholder AMI classico
+    };
+
+    /// <summary>
     /// Mesma identificação estável usada no checkin completo, mas isolada
     /// aqui pra poder ser chamada sozinha (sem o resto da coleta via WMI,
     /// que é cara) -- é assim que o heartbeat, chamado a cada poucos
@@ -245,10 +257,28 @@ public static class CollectorService
 
     private static (string MachineGuid, string? SerialBios) ObterMachineGuidComSerial()
     {
-        // Identificacao estavel da maquina -- preferimos o numero de
-        // serie da BIOS (sobrevive a reinstalacao do Windows); se vier
-        // vazio ou for um valor generico de fabricante/VM sem serial
-        // real, caimos pro MachineGuid do registro.
+        // Escape manual (Config.MachineGuidOverride) -- ver comentario no
+        // Config.cs. Usado ao pe da letra, sem nenhuma deteccao, pra
+        // maquinas reformatadas que precisam continuar sendo o mesmo
+        // ativo de antes.
+        var override_ = Config.Carregar().MachineGuidOverride?.Trim();
+        if (!string.IsNullOrEmpty(override_))
+        {
+            return (override_, null);
+        }
+
+        // Identificacao estavel da maquina, da mais confiavel pra menos:
+        // 1) numero de serie da BIOS -- sobrevive a reinstalacao do
+        //    Windows, mas placas genericas costumam deixar em branco ou
+        //    com um texto de fabrica tipo "To Be Filled By O.E.M.";
+        // 2) UUID da SMBIOS -- tambem sobrevive a reinstalacao, e mais
+        //    raro vir vazio/generico do que o serial de texto, mas ainda
+        //    acontece em placas bem baratas;
+        // 3) MachineGuid do registro -- unico problema: e regenerado do
+        //    zero TODA reinstalacao do Windows, entao uma maquina generica
+        //    que caia aqui e for reformatada vira um ativo novo no
+        //    inventario (por isso o override acima existe, pra corrigir
+        //    esse caso manualmente).
         string? serialBios = null;
         using (var buscaBios = new ManagementObjectSearcher("SELECT SerialNumber FROM Win32_BIOS"))
         {
@@ -258,12 +288,29 @@ public static class CollectorService
             }
         }
 
-        var serialValido = serialBios != null && !SerialInvalido(serialBios.Trim());
-        var machineGuid = serialValido
-            ? $"BIOS-{serialBios!.Trim()}"
-            : $"REG-{ObterMachineGuidRegistro()}";
+        if (serialBios != null && !SerialInvalido(serialBios.Trim()))
+        {
+            return ($"BIOS-{serialBios.Trim()}", serialBios);
+        }
 
-        return (machineGuid, serialBios);
+        string? uuidSmbios = null;
+        using (var buscaUuid = new ManagementObjectSearcher("SELECT UUID FROM Win32_ComputerSystemProduct"))
+        {
+            foreach (ManagementObject item in buscaUuid.Get())
+            {
+                uuidSmbios = item["UUID"]?.ToString();
+            }
+        }
+
+        var uuidValido = uuidSmbios != null
+            && !UuidsInvalidos.Any(invalido => string.Equals(invalido, uuidSmbios.Trim(), System.StringComparison.OrdinalIgnoreCase));
+
+        if (uuidValido)
+        {
+            return ($"SMBIOS-{uuidSmbios!.Trim()}", serialBios);
+        }
+
+        return ($"REG-{ObterMachineGuidRegistro()}", serialBios);
     }
 
     private static string ObterMachineGuidRegistro()

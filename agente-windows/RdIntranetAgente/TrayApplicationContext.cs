@@ -19,7 +19,10 @@ public class TrayApplicationContext : ApplicationContext
     private Config _config;
     private readonly AppState _estado;
     private readonly PrintListener _printListener;
-    private readonly string? _machineGuid;
+    // Não é "readonly" -- ver RecalcularMachineGuid(), chamado quando o
+    // admin preenche o "Identificador da máquina" na tela de
+    // Configurações, pra valer na hora, sem precisar reiniciar o agente.
+    private string? _machineGuid;
     private bool _coletando;
     private bool _enviandoHeartbeat;
 
@@ -32,14 +35,7 @@ public class TrayApplicationContext : ApplicationContext
         // execução) -- reaproveitado em todo heartbeat, que roda a cada
         // poucos segundos e não pode pagar o custo de WMI de novo a
         // cada tick.
-        try
-        {
-            _machineGuid = CollectorService.ObterMachineGuid();
-        }
-        catch
-        {
-            _machineGuid = null;
-        }
+        RecalcularMachineGuid();
 
         // Escuta local pra imprimir etiqueta sob demanda (sem esperar o
         // proximo checkin) -- sempre tenta iniciar; so imprime de verdade
@@ -89,6 +85,18 @@ public class TrayApplicationContext : ApplicationContext
     private int IntervaloEmMs() => Math.Max(5, _config.IntervaloMinutos) * 60 * 1000;
     private int HeartbeatIntervaloEmMs() => Math.Max(1, _config.HeartbeatSegundos) * 1000;
 
+    private void RecalcularMachineGuid()
+    {
+        try
+        {
+            _machineGuid = CollectorService.ObterMachineGuid();
+        }
+        catch
+        {
+            _machineGuid = null;
+        }
+    }
+
     private void AbrirConfiguracoes()
     {
         using var form = new ConfigForm(_config);
@@ -100,6 +108,10 @@ public class TrayApplicationContext : ApplicationContext
 
         _config = form.ConfigResultante;
         _config.Salvar();
+        // Recalcula na hora -- principalmente pro "Identificador da
+        // máquina" (override), que só é lido aqui; sem isso, só valeria
+        // depois de reiniciar o agente.
+        RecalcularMachineGuid();
         _timer.Interval = IntervaloEmMs();
         _heartbeatTimer.Interval = HeartbeatIntervaloEmMs();
 

@@ -11,6 +11,19 @@ public class Config
     public int HeartbeatSegundos { get; set; } = 1;
     public string ImpressoraEtiqueta { get; set; } = "";
 
+    /// <summary>
+    /// Escape manual pra reformatação: o identificador automático da
+    /// máquina (BIOS/SMBIOS/registro -- ver CollectorService) muda quando
+    /// o Windows é reinstalado numa máquina sem serial de BIOS confiável,
+    /// o que criaria um ativo NOVO no inventário em vez de continuar o
+    /// mesmo. Preenchendo isso aqui (a mesma "Identificador da máquina"
+    /// que aparece na tela do Ativo no portal) antes do primeiro check-in
+    /// pós-reformatação, o agente usa esse valor ao pé da letra, sem
+    /// tentar detectar nada -- a máquina reformatada volta a ser
+    /// reconhecida como o mesmo ativo de antes.
+    /// </summary>
+    public string MachineGuidOverride { get; set; } = "";
+
     public bool EstaConfigurado => !string.IsNullOrWhiteSpace(ServerUrl) && !string.IsNullOrWhiteSpace(ApiKey);
 
     private static string PastaDados => Path.Combine(

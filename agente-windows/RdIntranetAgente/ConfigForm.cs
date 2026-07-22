@@ -17,6 +17,7 @@ public class ConfigForm : Form
     private readonly NumericUpDown _campoIntervalo;
     private readonly NumericUpDown _campoHeartbeat;
     private readonly ComboBox _campoImpressora;
+    private readonly TextBox _campoMachineGuidOverride;
 
     public Config ConfigResultante { get; private set; }
 
@@ -26,7 +27,7 @@ public class ConfigForm : Form
 
         Text = "RD Intranet - Configuração do Agente";
         Width = 460;
-        Height = 340;
+        Height = 400;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -78,18 +79,28 @@ public class ConfigForm : Form
         var indiceAtual = _campoImpressora.Items.IndexOf(configAtual.ImpressoraEtiqueta);
         _campoImpressora.SelectedIndex = indiceAtual >= 0 ? indiceAtual : 0;
 
+        var rotuloOverride = new Label
+        {
+            Text = "Identificador da máquina (avançado -- só preencha ao restaurar uma máquina reformatada; deixe em branco no dia a dia)",
+            Left = 15,
+            Top = 233,
+            Width = 420,
+            Height = 30
+        };
+        _campoMachineGuidOverride = new TextBox { Left = 15, Top = 265, Width = 420, Text = configAtual.MachineGuidOverride };
+
         var rotuloVersao = new Label
         {
             Text = "Versão do agente: v" + ObterVersao(),
             Left = 15,
-            Top = 256,
+            Top = 316,
             Width = 220,
             ForeColor = Color.Gray,
             Font = new Font("Segoe UI", 8F)
         };
 
-        var botaoSalvar = new Button { Text = "Salvar", Left = 260, Top = 250, Width = 80, DialogResult = DialogResult.OK };
-        var botaoCancelar = new Button { Text = "Cancelar", Left = 350, Top = 250, Width = 80, DialogResult = DialogResult.Cancel };
+        var botaoSalvar = new Button { Text = "Salvar", Left = 260, Top = 310, Width = 80, DialogResult = DialogResult.OK };
+        var botaoCancelar = new Button { Text = "Cancelar", Left = 350, Top = 310, Width = 80, DialogResult = DialogResult.Cancel };
 
         botaoSalvar.Click += (s, e) =>
         {
@@ -109,7 +120,8 @@ public class ConfigForm : Form
                 ApiKey = _campoChave.Text.Trim(),
                 IntervaloMinutos = (int)_campoIntervalo.Value,
                 HeartbeatSegundos = (int)_campoHeartbeat.Value,
-                ImpressoraEtiqueta = (impressoraSelecionada == "(nenhuma)" ? null : impressoraSelecionada) ?? ""
+                ImpressoraEtiqueta = (impressoraSelecionada == "(nenhuma)" ? null : impressoraSelecionada) ?? "",
+                MachineGuidOverride = _campoMachineGuidOverride.Text.Trim()
             };
         };
 
@@ -120,6 +132,7 @@ public class ConfigForm : Form
             rotuloIntervalo, _campoIntervalo,
             rotuloHeartbeat, _campoHeartbeat,
             rotuloImpressora, _campoImpressora,
+            rotuloOverride, _campoMachineGuidOverride,
             rotuloVersao,
             botaoSalvar, botaoCancelar
         });
