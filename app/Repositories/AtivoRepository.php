@@ -453,8 +453,8 @@ class AtivoRepository
         }
 
         $stmt = $this->pdo->prepare("
-            INSERT INTO ativos_volumes (ativo_id, unidade, total_gb, usado_gb, modelo_disco, fabricante_disco, serial_disco, rede, caminho_rede)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO ativos_volumes (ativo_id, unidade, total_gb, usado_gb, modelo_disco, fabricante_disco, serial_disco, tipo_disco, rede, caminho_rede)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
 
         foreach ($volumes as $v) {
@@ -466,6 +466,7 @@ class AtivoRepository
             $modeloDisco = trim((string)($v['modelo_disco'] ?? ''));
             $fabricanteDisco = trim((string)($v['fabricante_disco'] ?? ''));
             $serialDisco = trim((string)($v['serial_disco'] ?? ''));
+            $tipoDisco = trim((string)($v['tipo_disco'] ?? ''));
             $caminhoRede = trim((string)($v['caminho_rede'] ?? ''));
 
             $stmt->execute([
@@ -476,6 +477,7 @@ class AtivoRepository
                 $modeloDisco !== '' ? $modeloDisco : null,
                 $fabricanteDisco !== '' ? $fabricanteDisco : null,
                 $serialDisco !== '' ? $serialDisco : null,
+                $tipoDisco !== '' ? $tipoDisco : null,
                 !empty($v['rede']) ? 1 : 0,
                 $caminhoRede !== '' ? $caminhoRede : null,
             ]);
@@ -548,7 +550,7 @@ class AtivoRepository
     /** Todos os volumes locais (não-rede) de todos os ativos -- pra agregação em lote (Panorama da Frota). */
     public function volumesLocaisTodos(): array
     {
-        $stmt = $this->pdo->query("SELECT ativo_id, total_gb, usado_gb FROM ativos_volumes WHERE rede = 0");
+        $stmt = $this->pdo->query("SELECT ativo_id, total_gb, usado_gb, tipo_disco FROM ativos_volumes WHERE rede = 0");
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }

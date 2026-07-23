@@ -284,27 +284,33 @@ function thOrdenavel(string $coluna, string $label, ?string $ordenarChave, array
                         </div>
                     </div>
                     <div class="row g-3">
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <div class="frota-card">
                                 <h6>Sistema Operacional</h6>
                                 <canvas id="graficoFrotaSo"></canvas>
                             </div>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <div class="frota-card">
                                 <h6>Memória RAM</h6>
                                 <canvas id="graficoFrotaRam"></canvas>
                             </div>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <div class="frota-card">
                                 <h6>Processador (GHz)</h6>
                                 <canvas id="graficoFrotaCpu"></canvas>
                             </div>
                         </div>
+                        <div class="col-md-3">
+                            <div class="frota-card">
+                                <h6>Disco (SSD x HD)</h6>
+                                <canvas id="graficoFrotaDisco"></canvas>
+                            </div>
+                        </div>
                     </div>
                     <p class="frota-loading mt-3 mb-0" style="padding:8px 0">
-                        SSD x HD ainda não é coletado -- aparece aqui assim que as máquinas atualizarem o agente.
+                        "Não coletado" = máquinas que ainda não atualizaram pro agente com coleta de SSD/HD.
                     </p>
                 </div>
             </div>
@@ -451,6 +457,14 @@ window.addEventListener('load', function () {
         });
     }
 
+    // SSD x HD por entidade, não por posição -- mesma lógica de CORES_SO.
+    const CORES_DISCO = {
+        'SSD': '#199e70',
+        'HD': '#3987e5',
+        'Desconhecido': '#8b949e',
+        'Não coletado': '#30363d',
+    };
+
     const INK_SECUNDARIA = '#8b949e';
     const GRID = '#21262d';
 
@@ -466,6 +480,7 @@ window.addEventListener('load', function () {
     let graficoSo = null;
     let graficoRam = null;
     let graficoCpu = null;
+    let graficoDisco = null;
     let carregado = false;
 
     modalEl.addEventListener('show.bs.modal', function () {
@@ -520,6 +535,18 @@ window.addEventListener('load', function () {
                         datasets: [{ data: dados.cpu.dados, backgroundColor: coresOrdinais(dados.cpu.labels) }],
                     },
                     options: Object.assign({ plugins: { legend: { display: false } } }, opcoesComuns),
+                });
+
+                graficoDisco = new Chart(document.getElementById('graficoFrotaDisco'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: dados.disco.labels,
+                        datasets: [{
+                            data: dados.disco.dados,
+                            backgroundColor: dados.disco.labels.map(function (l) { return CORES_DISCO[l] || CINZA_NEUTRO; }),
+                        }],
+                    },
+                    options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: INK_SECUNDARIA } } } },
                 });
             })
             .catch(function (e) {

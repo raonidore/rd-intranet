@@ -9,7 +9,7 @@
     <AssemblyName>RdIntranetAgente</AssemblyName>
     <RootNamespace>RdIntranetAgente</RootNamespace>
     <Product>RD Intranet - Agente</Product>
-    <Version>1.0.15</Version>
+    <Version>1.0.16</Version>
     <InvariantGlobalization>true</InvariantGlobalization>
     <ApplicationIcon>assets/icone.ico</ApplicationIcon>
 

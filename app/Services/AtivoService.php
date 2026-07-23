@@ -387,8 +387,28 @@ class AtivoService
                 ['Não informado']
             )),
             'so' => $this->serieOrdenada($soPorBucket, ['Windows 11', 'Windows 10', 'Windows 8.1', 'Windows 8', 'Windows 7', 'Windows Server', 'Outro']),
+            'disco' => $this->serieOrdenada($this->discoPorTipo(), ['SSD', 'HD', 'Desconhecido', 'Não coletado']),
             'discosCriticos' => count($this->volumesCriticos()),
         ];
+    }
+
+    /** Volumes locais bucketizados por SSD/HD -- "Não coletado" é NULL (agente ainda não atualizado ou WMI sem MSFT_PhysicalDisk), diferente de "Desconhecido" (WMI respondeu mas não soube dizer o tipo). */
+    private function discoPorTipo(): array
+    {
+        $porTipo = [];
+
+        foreach ($this->repository->volumesLocaisTodos() as $v) {
+            $tipo = match ($v['tipo_disco'] ?? null) {
+                'SSD' => 'SSD',
+                'HDD' => 'HD',
+                'Desconhecido' => 'Desconhecido',
+                default => 'Não coletado',
+            };
+
+            $porTipo[$tipo] = ($porTipo[$tipo] ?? 0) + 1;
+        }
+
+        return $porTipo;
     }
 
     private function bucketRam(string $texto): string
