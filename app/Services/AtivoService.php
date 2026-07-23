@@ -342,6 +342,134 @@ class AtivoService
         return $porAtivo;
     }
 
+    /** Buckets fixos de RAM (GB) pro gráfico do Panorama da Frota -- valor fora da lista cai em "Outro". */
+    private const BUCKETS_RAM_GB = [2, 4, 6, 8, 12, 16, 24, 32, 64];
+
+    /** Passos fixos de CPU (GHz, arredondado pra baixo) pro gráfico do Panorama da Frota. */
+    private const BUCKETS_CPU_GHZ = [2.0, 2.5, 3.0, 3.5, 4.0];
+
+    /**
+     * Números consolidados do parque (RAM, CPU, SO, disco crítico) pro painel
+     * "Panorama da Frota" -- `memoria_ram`/`processador`/`sistema_operacional`
+     * são texto livre vindo do agente (nunca foram pensados como
+     * numérico/enum), então bucketiza por regex. Carregado sob demanda (rota
+     * própria), não no load da lista inteira.
+     */
+    public function relatorioFrota(): array
+    {
+        $ramPorBucket = [];
+        $cpuPorBucket = [];
+        $soPorBucket = [];
+        $total = 0;
+
+        foreach ($this->repository->detalhesPorTipo('computador') as $ativo) {
+            $total++;
+            $detalhes = json_decode($ativo['detalhes'] ?? '', true) ?: [];
+
+            $bucketRam = $this->bucketRam($detalhes['memoria_ram'] ?? '');
+            $ramPorBucket[$bucketRam] = ($ramPorBucket[$bucketRam] ?? 0) + 1;
+
+            $bucketCpu = $this->bucketCpu($detalhes['processador'] ?? '');
+            $cpuPorBucket[$bucketCpu] = ($cpuPorBucket[$bucketCpu] ?? 0) + 1;
+
+            $bucketSo = $this->bucketSistemaOperacional($detalhes['sistema_operacional'] ?? '');
+            $soPorBucket[$bucketSo] = ($soPorBucket[$bucketSo] ?? 0) + 1;
+        }
+
+        return [
+            'total' => $total,
+            'ram' => $this->serieOrdenada($ramPorBucket, array_merge(
+                array_map(static fn($gb) => $gb . ' GB', self::BUCKETS_RAM_GB),
+                ['Outro']
+            )),
+            'cpu' => $this->serieOrdenada($cpuPorBucket, array_merge(
+                array_map(static fn($ghz) => number_format($ghz, 1) . '+ GHz', self::BUCKETS_CPU_GHZ),
+                ['Não informado']
+            )),
+            'so' => $this->serieOrdenada($soPorBucket, ['Windows 11', 'Windows 10', 'Windows 8.1', 'Windows 8', 'Windows 7', 'Windows Server', 'Outro']),
+            'discosCriticos' => count($this->volumesCriticos()),
+        ];
+    }
+
+    private function bucketRam(string $texto): string
+    {
+        if (!preg_match('/(\d+(?:[.,]\d+)?)\s*GB/i', $texto, $m)) {
+            return 'Outro';
+        }
+
+        $gb = (float)str_replace(',', '.', $m[1]);
+
+        foreach (self::BUCKETS_RAM_GB as $bucket) {
+            if (abs($gb - $bucket) < 0.5) {
+                return $bucket . ' GB';
+            }
+        }
+
+        return 'Outro';
+    }
+
+    private function bucketCpu(string $texto): string
+    {
+        if (!preg_match('/([\d.]+)\s*GHz/i', $texto, $m)) {
+            return 'Não informado';
+        }
+
+        $ghz = (float)$m[1];
+
+        $passos = self::BUCKETS_CPU_GHZ;
+        rsort($passos);
+
+        foreach ($passos as $passo) {
+            if ($ghz >= $passo) {
+                return number_format($passo, 1) . '+ GHz';
+            }
+        }
+
+        return 'Não informado';
+    }
+
+    private function bucketSistemaOperacional(string $texto): string
+    {
+        // Ordem importa: "Windows Server" tem que ser checado antes do
+        // genérico "Windows \d+", senão "Windows Server 2022" cairia em "Outro".
+        if (preg_match('/Windows\s+Server/i', $texto)) {
+            return 'Windows Server';
+        }
+        if (preg_match('/Windows\s*11/i', $texto)) {
+            return 'Windows 11';
+        }
+        if (preg_match('/Windows\s*10/i', $texto)) {
+            return 'Windows 10';
+        }
+        if (preg_match('/Windows\s*8\.1/i', $texto)) {
+            return 'Windows 8.1';
+        }
+        if (preg_match('/Windows\s*8/i', $texto)) {
+            return 'Windows 8';
+        }
+        if (preg_match('/Windows\s*7/i', $texto)) {
+            return 'Windows 7';
+        }
+
+        return 'Outro';
+    }
+
+    /** @return array{labels: array<int,string>, dados: array<int,int>} Só entram labels com pelo menos 1 ocorrência, na ordem fixa dada -- pronto pro Chart.js. */
+    private function serieOrdenada(array $porBucket, array $ordemFixa): array
+    {
+        $labels = [];
+        $dados = [];
+
+        foreach ($ordemFixa as $label) {
+            if (!empty($porBucket[$label])) {
+                $labels[] = $label;
+                $dados[] = $porBucket[$label];
+            }
+        }
+
+        return ['labels' => $labels, 'dados' => $dados];
+    }
+
     public function listarMemoria(int $ativoId): array
     {
         return $this->repository->listarMemoria($ativoId);

@@ -51,6 +51,27 @@ function thOrdenavel(string $coluna, string $label, ?string $ordenarChave, array
     animation: piscar-alerta-disco 1.2s infinite;
 }
 .btn-icone-alerta-disco:hover { background: #ef4444; color: #fff; }
+
+/* Painel "Panorama da Frota" -- mesmo visual "console remoto" escuro
+   já usado nos modais de ativos/ver.php (.hitech-panel/.hitech-topbar),
+   reaproveitado aqui pela mesma convenção do projeto (cada view com
+   tema escuro declara o próprio <style>). */
+.hitech-panel {
+    background: #0d1117; border-radius: 12px; border: 1px solid #30363d;
+    box-shadow: 0 0 24px rgba(88,166,255,.08);
+    font-family: 'SFMono-Regular', Consolas, 'Courier New', monospace;
+    color: #c9d1d9;
+}
+.hitech-topbar {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 10px 14px; background: #161b22; border-bottom: 1px solid #30363d;
+}
+.hitech-panel .text-muted { color: #8b949e !important; }
+.frota-stat-total { font-size: 42px; font-weight: 700; color: #58a6ff; line-height: 1; }
+.frota-card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 14px; height: 100%; }
+.frota-card h6 { color: #8b949e; text-transform: uppercase; font-size: 11px; letter-spacing: .04em; margin-bottom: 10px; }
+.frota-loading, .frota-erro { padding: 40px 16px; text-align: center; color: #8b949e; }
+.frota-erro { color: #f85149; }
 </style>
 
 <?= Alert::flash() ?>
@@ -74,6 +95,9 @@ function thOrdenavel(string $coluna, string $label, ?string $ordenarChave, array
                 <?php endforeach; ?>
             </div>
         </div>
+        <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalPanoramaFrota">
+            <i class="bi bi-graph-up"></i> Panorama da Frota
+        </button>
         <a href="<?= url('/ativos/novo') ?>" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Novo Ativo</a>
     </div>
 </div>
@@ -230,6 +254,65 @@ function thOrdenavel(string $coluna, string $label, ?string $ordenarChave, array
     </div>
 </div>
 
+<!-- "Panorama da Frota" -- carregado sob demanda via fetch quando o modal abre, não no load da lista inteira. -->
+<div class="modal fade" id="modalPanoramaFrota" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content hitech-panel">
+            <div class="hitech-topbar">
+                <h5 class="modal-title mb-0"><i class="bi bi-graph-up"></i> Panorama da Frota</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="frotaLoading" class="frota-loading">
+                    <div class="spinner-border" style="color:#58a6ff"></div>
+                    <p class="mt-2 mb-0">Carregando panorama da frota...</p>
+                </div>
+                <div id="frotaErro" class="frota-erro d-none"></div>
+                <div id="frotaConteudo" class="d-none">
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <div class="frota-card text-center">
+                                <h6 class="mb-1">Total de PCs</h6>
+                                <div class="frota-stat-total" id="frotaTotalPcs">0</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="frota-card text-center">
+                                <h6 class="mb-1">Discos em uso crítico (&ge;90%)</h6>
+                                <div class="frota-stat-total" id="frotaDiscosCriticos" style="color:#e66767">0</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <div class="frota-card">
+                                <h6>Sistema Operacional</h6>
+                                <canvas id="graficoFrotaSo"></canvas>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="frota-card">
+                                <h6>Memória RAM</h6>
+                                <canvas id="graficoFrotaRam"></canvas>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="frota-card">
+                                <h6>Processador (GHz)</h6>
+                                <canvas id="graficoFrotaCpu"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="frota-loading mt-3 mb-0" style="padding:8px 0">
+                        SSD x HD ainda não é coletado -- aparece aqui assim que as máquinas atualizarem o agente.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script>
 // Tudo dentro de window.addEventListener('load', ...): o bootstrap.bundle.min.js
 // só é carregado no fim do layout (depois deste conteúdo), então "bootstrap"
@@ -333,6 +416,117 @@ window.addEventListener('load', function () {
             tr.append(tdUnidade, tdPct, tdGb);
             corpo.appendChild(tr);
         });
+    });
+})();
+
+(function () {
+    const modalEl = document.getElementById('modalPanoramaFrota');
+    if (!modalEl) return;
+
+    // Paleta validada pela skill de dataviz contra o fundo escuro real
+    // desta tela (#0d1117, não o #1a1a19 padrão da skill) -- CVD/contraste
+    // conferidos com scripts/validate_palette.js antes de usar aqui.
+    // Cor por ENTIDADE (nome do SO), nunca por posição -- um filtro que
+    // muda a contagem não deve repintar quem sobrou.
+    const CORES_SO = {
+        'Windows 11': '#3987e5',
+        'Windows 10': '#d95926',
+        'Windows 8.1': '#199e70',
+        'Windows 8': '#c98500',
+        'Windows 7': '#d55181',
+        'Windows Server': '#9085e9',
+        'Outro': '#8b949e',
+    };
+
+    // RAM/CPU são buckets ORDENADOS (tiers), não identidades -- rampa de
+    // um hue só (azul), claro->escuro, dentro da faixa validada pro modo
+    // escuro (step 250 a 600). "Outro"/"Não informado" não é magnitude,
+    // usa o cinza neutro em vez de continuar a rampa.
+    const RAMPA_ORDINAL = ['#86b6ef', '#6da7ec', '#5598e7', '#3987e5', '#2a78d6', '#256abf', '#1c5cab', '#184f95'];
+    const CINZA_NEUTRO = '#8b949e';
+
+    function coresOrdinais(labels) {
+        return labels.map(function (label, i) {
+            return (label === 'Outro' || label === 'Não informado') ? CINZA_NEUTRO : RAMPA_ORDINAL[i % RAMPA_ORDINAL.length];
+        });
+    }
+
+    const INK_SECUNDARIA = '#8b949e';
+    const GRID = '#21262d';
+
+    const opcoesComuns = {
+        responsive: true,
+        plugins: { legend: { labels: { color: INK_SECUNDARIA } } },
+        scales: {
+            x: { ticks: { color: INK_SECUNDARIA }, grid: { color: GRID } },
+            y: { ticks: { color: INK_SECUNDARIA }, grid: { color: GRID }, beginAtZero: true },
+        },
+    };
+
+    let graficoSo = null;
+    let graficoRam = null;
+    let graficoCpu = null;
+    let carregado = false;
+
+    modalEl.addEventListener('show.bs.modal', function () {
+        if (carregado) return;
+
+        const loading = document.getElementById('frotaLoading');
+        const erro = document.getElementById('frotaErro');
+        const conteudo = document.getElementById('frotaConteudo');
+
+        loading.classList.remove('d-none');
+        erro.classList.add('d-none');
+        conteudo.classList.add('d-none');
+
+        fetch('<?= url('/ativos/relatorio-frota') ?>')
+            .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function (dados) {
+                carregado = true;
+                loading.classList.add('d-none');
+                conteudo.classList.remove('d-none');
+
+                document.getElementById('frotaTotalPcs').textContent = dados.total;
+                document.getElementById('frotaDiscosCriticos').textContent = dados.discosCriticos;
+
+                graficoSo = new Chart(document.getElementById('graficoFrotaSo'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: dados.so.labels,
+                        datasets: [{
+                            data: dados.so.dados,
+                            backgroundColor: dados.so.labels.map(function (l) { return CORES_SO[l] || CINZA_NEUTRO; }),
+                        }],
+                    },
+                    options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: INK_SECUNDARIA } } } },
+                });
+
+                graficoRam = new Chart(document.getElementById('graficoFrotaRam'), {
+                    type: 'bar',
+                    data: {
+                        labels: dados.ram.labels,
+                        datasets: [{ data: dados.ram.dados, backgroundColor: coresOrdinais(dados.ram.labels) }],
+                    },
+                    options: Object.assign({ plugins: { legend: { display: false } } }, opcoesComuns),
+                });
+
+                graficoCpu = new Chart(document.getElementById('graficoFrotaCpu'), {
+                    type: 'bar',
+                    data: {
+                        labels: dados.cpu.labels,
+                        datasets: [{ data: dados.cpu.dados, backgroundColor: coresOrdinais(dados.cpu.labels) }],
+                    },
+                    options: Object.assign({ plugins: { legend: { display: false } } }, opcoesComuns),
+                });
+            })
+            .catch(function (e) {
+                loading.classList.add('d-none');
+                erro.classList.remove('d-none');
+                erro.textContent = 'Não foi possível carregar o panorama da frota (' + e.message + ').';
+            });
     });
 })();
 </script>

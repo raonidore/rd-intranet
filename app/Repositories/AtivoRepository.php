@@ -553,6 +553,15 @@ class AtivoRepository
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /** `detalhes` (JSON) de todos os ativos de um tipo -- pra bucketizar RAM/CPU/SO no Panorama da Frota. */
+    public function detalhesPorTipo(string $tipo): array
+    {
+        $stmt = $this->pdo->prepare("SELECT id, detalhes FROM ativos WHERE tipo = ?");
+        $stmt->execute([$tipo]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function substituirPortas(int $ativoId, array $portas): void
     {
         $this->pdo->prepare("DELETE FROM ativos_portas WHERE ativo_id = ?")->execute([$ativoId]);

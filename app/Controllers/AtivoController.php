@@ -62,6 +62,15 @@ class AtivoController extends Controller
         ]);
     }
 
+    /** JSON pro modal "Panorama da Frota" -- carregado sob demanda quando o modal abre, não no load da lista inteira. */
+    public function relatorioFrota(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        echo json_encode($this->service->relatorioFrota());
+    }
+
     public function verForm(): void
     {
         AuthMiddleware::checkModulo('ativos_lista');
