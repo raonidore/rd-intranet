@@ -531,6 +531,28 @@ class AtivoRepository
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /** Volumes locais (não-rede) com uso >= $limitePct, de todos os ativos de uma vez -- pro alerta por linha da lista e pro Panorama da Frota. */
+    public function volumesCriticos(float $limitePct = 90): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT ativo_id, unidade, total_gb, usado_gb
+            FROM ativos_volumes
+            WHERE rede = 0 AND total_gb > 0 AND (usado_gb / total_gb) * 100 >= ?
+            ORDER BY ativo_id, unidade
+        ");
+        $stmt->execute([$limitePct]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Todos os volumes locais (não-rede) de todos os ativos -- pra agregação em lote (Panorama da Frota). */
+    public function volumesLocaisTodos(): array
+    {
+        $stmt = $this->pdo->query("SELECT ativo_id, total_gb, usado_gb FROM ativos_volumes WHERE rede = 0");
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function substituirPortas(int $ativoId, array $portas): void
     {
         $this->pdo->prepare("DELETE FROM ativos_portas WHERE ativo_id = ?")->execute([$ativoId]);

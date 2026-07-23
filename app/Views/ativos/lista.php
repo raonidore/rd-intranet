@@ -41,6 +41,18 @@ function thOrdenavel(string $coluna, string $label, ?string $ordenarChave, array
 }
 ?>
 
+<style>
+/* Ícone de alerta de disco crítico (>=90% de uso) na coluna Ações --
+   pisca de propósito, é pra chamar atenção mesmo sem precisar abrir
+   o Panorama da Frota. */
+@keyframes piscar-alerta-disco { 50% { opacity: .25; } }
+.btn-icone-alerta-disco {
+    background: transparent; border: 1px solid #ef4444; color: #ef4444;
+    animation: piscar-alerta-disco 1.2s infinite;
+}
+.btn-icone-alerta-disco:hover { background: #ef4444; color: #fff; }
+</style>
+
 <?= Alert::flash() ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
@@ -174,6 +186,15 @@ function thOrdenavel(string $coluna, string $label, ?string $ordenarChave, array
                                 <td class="small font-monospace" data-col="ip"><?= htmlspecialchars($a['ip'] ?: '—') ?></td>
                                 <td class="small text-muted" data-col="so"><?= htmlspecialchars($detalhesLinha['sistema_operacional'] ?? '—') ?></td>
                                 <td class="text-end" data-col="acoes">
+                                    <?php if (!empty($discosCriticos[$a['id']])): ?>
+                                        <button type="button" class="btn btn-sm btn-icone-alerta-disco me-1" title="Disco em uso crítico"
+                                                data-bs-toggle="modal" data-bs-target="#modalDiscoCritico"
+                                                data-nome="<?= htmlspecialchars($a['apelido'] ?: $a['nome']) ?>"
+                                                data-codigo="<?= htmlspecialchars($a['codigo_patrimonio']) ?>"
+                                                data-volumes='<?= htmlspecialchars(json_encode($discosCriticos[$a['id']]), ENT_QUOTES) ?>'>
+                                            <i class="bi bi-exclamation-triangle-fill"></i>
+                                        </button>
+                                    <?php endif; ?>
                                     <div class="btn-group" role="group">
                                         <a href="<?= url('/ativos/ver?id=' . $a['id']) ?>" class="btn btn-sm btn-outline-secondary" title="Ver"><i class="bi bi-eye"></i></a>
                                         <a href="<?= url('/ativos/editar?id=' . $a['id']) ?>" class="btn btn-sm btn-outline-secondary" title="Editar"><i class="bi bi-pencil"></i></a>
@@ -189,6 +210,25 @@ function thOrdenavel(string $coluna, string $label, ?string $ordenarChave, array
         </div>
     </div>
 </form>
+
+<!-- Modal único, populado via JS a partir dos data-* do botão clicado -- mesmo padrão de modal compartilhado já usado em ativos/ver.php. -->
+<div class="modal fade" id="modalDiscoCritico" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-exclamation-triangle-fill text-danger"></i> Disco em uso crítico</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-2"><strong id="discoCriticoNome"></strong> <span class="text-muted font-monospace" id="discoCriticoCodigo"></span></p>
+                <table class="table table-sm mb-0">
+                    <thead><tr><th>Unidade</th><th>Uso</th><th class="text-end">GB usado / total</th></tr></thead>
+                    <tbody id="discoCriticoCorpo"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
 
 <script>
 // Tudo dentro de window.addEventListener('load', ...): o bootstrap.bundle.min.js
@@ -257,6 +297,41 @@ window.addEventListener('load', function () {
 
             localStorage.setItem(CHAVE_STORAGE, JSON.stringify(marcados));
             aplicarVisibilidade(marcados);
+        });
+    });
+})();
+
+(function () {
+    const modalEl = document.getElementById('modalDiscoCritico');
+    if (!modalEl) return;
+
+    modalEl.addEventListener('show.bs.modal', function (e) {
+        const botao = e.relatedTarget;
+        const volumes = JSON.parse(botao.dataset.volumes || '[]');
+
+        document.getElementById('discoCriticoNome').textContent = botao.dataset.nome || '';
+        document.getElementById('discoCriticoCodigo').textContent = botao.dataset.codigo ? '(' + botao.dataset.codigo + ')' : '';
+
+        const corpo = document.getElementById('discoCriticoCorpo');
+        corpo.innerHTML = '';
+        volumes.forEach(function (v) {
+            const tdUnidade = document.createElement('td');
+            tdUnidade.className = 'font-monospace';
+            tdUnidade.textContent = v.unidade;
+
+            const tdPct = document.createElement('td');
+            const badge = document.createElement('span');
+            badge.className = 'badge text-bg-danger';
+            badge.textContent = v.pct + '%';
+            tdPct.appendChild(badge);
+
+            const tdGb = document.createElement('td');
+            tdGb.className = 'text-end';
+            tdGb.textContent = v.usado_gb + ' GB / ' + v.total_gb + ' GB';
+
+            const tr = document.createElement('tr');
+            tr.append(tdUnidade, tdPct, tdGb);
+            corpo.appendChild(tr);
         });
     });
 })();

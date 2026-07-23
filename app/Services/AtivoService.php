@@ -322,6 +322,26 @@ class AtivoService
         return $this->repository->listarVolumes($ativoId);
     }
 
+    /** @return array<int, array> ativo_id => lista de volumes locais com uso >= 90% -- pro alerta piscando na Lista de Ativos. */
+    public function volumesCriticos(): array
+    {
+        $porAtivo = [];
+
+        foreach ($this->repository->volumesCriticos() as $v) {
+            $totalGb = (float)$v['total_gb'];
+            $usadoGb = (float)$v['usado_gb'];
+
+            $porAtivo[(int)$v['ativo_id']][] = [
+                'unidade' => $v['unidade'],
+                'total_gb' => $totalGb,
+                'usado_gb' => $usadoGb,
+                'pct' => $totalGb > 0 ? round(($usadoGb / $totalGb) * 100, 1) : 0,
+            ];
+        }
+
+        return $porAtivo;
+    }
+
     public function listarMemoria(int $ativoId): array
     {
         return $this->repository->listarMemoria($ativoId);
