@@ -58,7 +58,17 @@ class AtivoController extends Controller
             'ativos' => $this->service->listar($filtros),
             'filtros' => $filtros,
             'versaoAgenteExeAtual' => $this->service->versaoAgenteExe(),
+            'discosCriticos' => $this->service->volumesCriticos(),
         ]);
+    }
+
+    /** JSON pro modal "Panorama da Frota" -- carregado sob demanda quando o modal abre, não no load da lista inteira. */
+    public function relatorioFrota(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        echo json_encode($this->service->relatorioFrota());
     }
 
     public function verForm(): void

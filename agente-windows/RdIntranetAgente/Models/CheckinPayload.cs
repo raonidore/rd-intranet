@@ -168,6 +168,9 @@ public class VolumeItem
     [JsonPropertyName("serial_disco")]
     public string? SerialDisco { get; set; }
 
+    [JsonPropertyName("tipo_disco")]
+    public string? TipoDisco { get; set; }
+
     [JsonPropertyName("rede")]
     public bool Rede { get; set; }
 

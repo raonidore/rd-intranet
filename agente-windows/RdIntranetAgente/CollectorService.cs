@@ -343,6 +343,45 @@ public static class CollectorService
     }
 
     /// <summary>
+    /// SSD x HDD -- Win32_DiskDrive não tem essa informação, só
+    /// MSFT_PhysicalDisk.MediaType (namespace root\Microsoft\Windows\Storage,
+    /// só existe a partir do Windows 8/Server 2012). DeviceId ali é o mesmo
+    /// número de índice do disco que Win32_DiskDrive.Index usa, é assim que
+    /// ObterVolumes() correlaciona os dois. Se o namespace não existir
+    /// (Windows Server mais antigo), degrada pra sem tipo de disco, sem
+    /// quebrar o resto da coleta.
+    /// </summary>
+    private static Dictionary<uint, string> ObterTiposDiscoPorIndice()
+    {
+        var tipos = new Dictionary<uint, string>();
+
+        try
+        {
+            var escopo = new ManagementScope(@"root\Microsoft\Windows\Storage");
+            using var busca = new ManagementObjectSearcher(escopo, new ObjectQuery("SELECT DeviceId, MediaType FROM MSFT_PhysicalDisk"));
+
+            foreach (ManagementObject disco in busca.Get())
+            {
+                if (!uint.TryParse(disco["DeviceId"]?.ToString(), out var indice)) continue;
+
+                tipos[indice] = Convert.ToUInt16(disco["MediaType"]) switch
+                {
+                    4 => "SSD",
+                    3 => "HDD",
+                    _ => "Desconhecido"
+                };
+            }
+        }
+        catch
+        {
+            // namespace nao existe (Windows Server antigo) ou WMI recusou --
+            // segue sem tipo de disco, o resto da coleta de volumes continua normal
+        }
+
+        return tipos;
+    }
+
+    /// <summary>
     /// Volumes lógicos (unidades com letra, ex: C:, D:) -- diferente do
     /// Armazenamento acima, que é o disco físico inteiro. Tenta associar
     /// cada volume ao disco físico por trás dele (modelo/fabricante/série)
@@ -352,6 +391,7 @@ public static class CollectorService
     private static List<VolumeItem> ObterVolumes()
     {
         var volumes = new List<VolumeItem>();
+        var tiposDisco = ObterTiposDiscoPorIndice();
 
         using var busca = new ManagementObjectSearcher("SELECT DeviceID, Size, FreeSpace FROM Win32_LogicalDisk WHERE DriveType = 3");
 
@@ -378,6 +418,11 @@ public static class CollectorService
                         volume.ModeloDisco = discoFisico["Model"]?.ToString();
                         volume.FabricanteDisco = discoFisico["Manufacturer"]?.ToString();
                         volume.SerialDisco = discoFisico["SerialNumber"]?.ToString()?.Trim();
+
+                        if (discoFisico["Index"] != null && tiposDisco.TryGetValue(Convert.ToUInt32(discoFisico["Index"]), out var tipo))
+                        {
+                            volume.TipoDisco = tipo;
+                        }
                         break;
                     }
                     break;
