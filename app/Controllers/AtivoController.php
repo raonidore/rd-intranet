@@ -83,6 +83,10 @@ class AtivoController extends Controller
             exit;
         }
 
+        if (PermissionService::temAcesso('ativos_politicas')) {
+            (new PoliticaService())->reconciliarPendentes($id);
+        }
+
         $this->view('ativos/ver', [
             'ativo' => $ativo,
             'programas' => $this->service->listarProgramas($id),

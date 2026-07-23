@@ -373,6 +373,25 @@ PS1;
         return array_merge($resultado, ['estado' => $this->estadoMaquina($ativoId)]);
     }
 
+    /**
+     * Resolve pra "aplicado"/"erro" qualquer solicitação "pendente" que já
+     * tenha resposta do agente -- confirmarResultado() só era chamado pelo
+     * polling de 45s da ficha individual da máquina (ver.php, disparado
+     * ao salvar o formulário ali). Uma regra aplicada em LOTE (várias
+     * máquinas de uma vez, sem abrir a ficha de cada uma) nunca disparava
+     * esse polling, então ficava presa em "Aplicando..." pra sempre mesmo
+     * com o agente já tendo terminado -- confirmado ao vivo: abrir a
+     * ficha da máquina e salvar de novo resolvia na hora, só porque isso
+     * acionava o polling. Chamado no load da tela de Políticas e da ficha
+     * da máquina, pra nunca depender de alguém saber desse detalhe.
+     */
+    public function reconciliarPendentes(?int $ativoId = null): void
+    {
+        foreach ($this->repository->pendentesComSolicitacao($ativoId) as $p) {
+            $this->confirmarResultado((int)$p['solicitacao_id'], (int)$p['ativo_id']);
+        }
+    }
+
     /** Aplica ou remove UMA regra em várias máquinas de uma vez (fogo-e-esquece, igual ao padrão já usado pra papel de parede/Company Portal em lote no módulo Entra). */
     public function aplicarEmLote(string $regraId, array $ativoIds, bool $ativar, ?string $solicitadoPor): array
     {

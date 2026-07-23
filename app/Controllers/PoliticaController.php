@@ -25,6 +25,7 @@ class PoliticaController extends Controller
 
         $catalogoService = new AtivoCatalogoService();
         $maquinas = $this->service->maquinasElegiveis();
+        $this->service->reconciliarPendentes();
 
         $this->view('ativos/politicas', [
             'catalogo' => PoliticaService::CATALOGO,

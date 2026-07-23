@@ -77,6 +77,23 @@ class PoliticaRepository
         $stmt->execute([$status, $mensagem, $id]);
     }
 
+    /** @return array<int, array{ativo_id: string, solicitacao_id: string}> pares distintos ainda 'pendente' com solicitação registrada -- pra reconciliar status preso em "Aplicando..." sem depender de alguém abrir a ficha da máquina. */
+    public function pendentesComSolicitacao(?int $ativoId = null): array
+    {
+        $sql = "SELECT DISTINCT ativo_id, solicitacao_id FROM ativos_politicas_estado WHERE status = 'pendente' AND solicitacao_id IS NOT NULL";
+        $params = [];
+
+        if ($ativoId !== null) {
+            $sql .= ' AND ativo_id = ?';
+            $params[] = $ativoId;
+        }
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     /*
      |---------------------------------------------------------
      | Fase 2: recursos de rede (impressora/unidade) por setor.
