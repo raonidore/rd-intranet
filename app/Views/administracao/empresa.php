@@ -43,13 +43,57 @@ use App\Components\Alert;
             </div>
             <form method="post" action="<?= url('/administracao/empresa/logo/remover') ?>" id="formRemoverLogoEmpresa" class="d-none"></form>
         <?php else: ?>
-            <form method="post" action="<?= url('/administracao/empresa/logo/upload') ?>" enctype="multipart/form-data" class="d-flex gap-2">
-                <input type="file" name="logo" accept=".jpg,.jpeg,.png" class="form-control form-control-sm" required>
+            <form method="post" action="<?= url('/administracao/empresa/logo/upload') ?>" enctype="multipart/form-data" class="d-flex gap-2" id="formUploadLogoEmpresa">
+                <input type="file" name="logo" id="inputLogoEmpresa" accept=".jpg,.jpeg,.png" class="form-control form-control-sm" required>
                 <button type="submit" class="btn btn-sm btn-outline-secondary text-nowrap"><i class="bi bi-upload"></i> Enviar</button>
             </form>
+            <div class="form-text mt-1">Redimensionada automaticamente pro padrão <strong>320&times;120px</strong> (mantendo a proporção, sem cortar) antes de enviar. PNG com fundo transparente funciona melhor.</div>
         <?php endif; ?>
     </div>
 </div>
+
+<?php if (!$logoConfigurada): ?>
+<script>
+(function () {
+    var LARGURA_MAX = 320;
+    var ALTURA_MAX = 120;
+
+    var input = document.getElementById('inputLogoEmpresa');
+    if (!input || typeof HTMLCanvasElement === 'undefined') return;
+
+    input.addEventListener('change', function () {
+        var arquivo = input.files[0];
+        if (!arquivo) return;
+
+        var leitor = new FileReader();
+        leitor.onload = function (eLeitor) {
+            var imagem = new Image();
+            imagem.onload = function () {
+                var escala = Math.min(1, LARGURA_MAX / imagem.width, ALTURA_MAX / imagem.height);
+                var largura = Math.max(1, Math.round(imagem.width * escala));
+                var altura = Math.max(1, Math.round(imagem.height * escala));
+
+                var canvas = document.createElement('canvas');
+                canvas.width = largura;
+                canvas.height = altura;
+                canvas.getContext('2d').drawImage(imagem, 0, 0, largura, altura);
+
+                canvas.toBlob(function (blob) {
+                    if (!blob) return;
+
+                    var redimensionada = new File([blob], 'logo.png', { type: 'image/png' });
+                    var transferencia = new DataTransfer();
+                    transferencia.items.add(redimensionada);
+                    input.files = transferencia.files;
+                }, 'image/png');
+            };
+            imagem.src = eLeitor.target.result;
+        };
+        leitor.readAsDataURL(arquivo);
+    });
+})();
+</script>
+<?php endif; ?>
 
 <?php
 $conteudo = ob_get_clean();

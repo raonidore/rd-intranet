@@ -615,6 +615,15 @@ class AtivoService
             return false;
         }
 
+        // O redimensionamento pro padrão 320x120 acontece no navegador (o
+        // servidor não tem GD/Imagick instalado) -- esse limite aqui é só
+        // uma trava contra alguém mandar um arquivo gigante direto pro
+        // endpoint, sem passar pelo canvas do formulário.
+        if (filesize($caminhoTemporario) > 3 * 1024 * 1024) {
+            NotificationService::error('Arquivo muito grande (máximo 3MB).');
+            return false;
+        }
+
         $destino = self::caminhoLogoEmpresa();
         $pasta = dirname($destino);
         if (!is_dir($pasta) && !@mkdir($pasta, 0777, true) && !is_dir($pasta)) {
