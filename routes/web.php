@@ -456,6 +456,7 @@ $router->post('/ativos/elevacao/remover', [AtivoController::class, 'removerCrede
 $router->post('/ativos/comunicacao/salvar', [AtivoController::class, 'salvarIntervaloComunicacao']);
 $router->post('/ativos/heartbeat/salvar', [AtivoController::class, 'salvarIntervaloHeartbeat']);
 $router->post('/ativos/solicitar-checkin', [AtivoController::class, 'solicitarCheckin']);
+$router->post('/ativos/solicitar-checkin-lote', [AtivoController::class, 'solicitarCheckinLote']);
 $router->get('/ativos/agente/script', [AtivoAgenteController::class, 'baixarScript']);
 $router->get('/ativos/agente/exe', [AtivoAgenteController::class, 'baixarExecutavel']);
 $router->post('/ativos/agente/exe/upload', [AtivoAgenteController::class, 'uploadExecutavel']);

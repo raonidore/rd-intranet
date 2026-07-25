@@ -365,6 +365,21 @@ class AtivoController extends Controller
         echo json_encode($this->service->solicitarCheckin($id));
     }
 
+    public function solicitarCheckinLote(): void
+    {
+        AuthMiddleware::checkModulo('ativos_novo');
+        header('Content-Type: application/json');
+
+        $ids = array_filter(array_map('intval', $_POST['ids'] ?? []));
+
+        if (empty($ids)) {
+            echo json_encode(['success' => false, 'message' => 'Selecione ao menos uma máquina.']);
+            return;
+        }
+
+        echo json_encode($this->service->solicitarCheckinEmLote($ids));
+    }
+
     public function regenerarChaveAgente(): void
     {
         AuthMiddleware::checkModulo('ativos_dashboard');

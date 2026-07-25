@@ -1474,6 +1474,36 @@ class AtivoService
         ];
     }
 
+    /** Mesma ação de "Forçar coleta agora", só que em várias máquinas de uma vez -- um resumo só no log de auditoria, não um por máquina, pra não poluir o histórico quando forem dezenas/centenas de máquinas. */
+    public function solicitarCheckinEmLote(array $ativoIds): array
+    {
+        $solicitados = 0;
+        $ignorados = 0;
+
+        foreach ($ativoIds as $ativoId) {
+            $ativo = $this->repository->buscarPorId((int)$ativoId);
+
+            if (!$ativo || $ativo['origem'] !== 'agente') {
+                $ignorados++;
+                continue;
+            }
+
+            $this->repository->solicitarCheckin((int)$ativoId);
+            $solicitados++;
+        }
+
+        AuditService::registrar('Ativos', 'Forçar check-in', "Check-in completo solicitado em lote para {$solicitados} máquina(s)." . ($ignorados > 0 ? " {$ignorados} ignorada(s) (sem agente instalado)." : ''));
+
+        if ($solicitados === 0) {
+            return ['success' => true, 'message' => 'Nenhuma das máquinas selecionadas tem o agente instalado.'];
+        }
+
+        return [
+            'success' => true,
+            'message' => "Solicitado para {$solicitados} máquina(s)! Deve chegar em até " . $this->heartbeatIntervaloSegundos() . 's (próximo heartbeat de cada uma).' . ($ignorados > 0 ? " {$ignorados} ignorada(s) por não ter o agente instalado." : ''),
+        ];
+    }
+
     /*
      |---------------------------------------------------------
      | Explorador de arquivos / gerenciador de processos -- leitura com

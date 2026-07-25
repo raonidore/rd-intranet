@@ -148,9 +148,14 @@ function thOrdenavel(string $coluna, string $label, ?string $ordenarChave, array
                         <input class="form-check-input" type="checkbox" id="marcarTodos">
                         <label class="form-check-label small text-muted" for="marcarTodos">Selecionar todos</label>
                     </div>
-                    <button type="submit" class="btn btn-sm btn-outline-secondary" id="botaoEtiquetasLote" disabled>
-                        <i class="bi bi-qr-code"></i> Imprimir etiquetas selecionadas
-                    </button>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="botaoForcarColetaLote" disabled>
+                            <i class="bi bi-arrow-repeat"></i> Forçar coleta agora
+                        </button>
+                        <button type="submit" class="btn btn-sm btn-outline-secondary" id="botaoEtiquetasLote" disabled>
+                            <i class="bi bi-qr-code"></i> Imprimir etiquetas selecionadas
+                        </button>
+                    </div>
                 </div>
                 <table class="table table-hover align-middle mb-0" id="tabelaAtivos">
                     <thead>
@@ -333,10 +338,12 @@ window.addEventListener('load', function () {
     const marcarTodos = document.getElementById('marcarTodos');
     const checkboxes = document.querySelectorAll('.checkbox-ativo');
     const botaoLote = document.getElementById('botaoEtiquetasLote');
+    const botaoForcarColetaLote = document.getElementById('botaoForcarColetaLote');
 
     function atualizarBotao() {
         const algumMarcado = Array.from(checkboxes).some(function (c) { return c.checked; });
         if (botaoLote) botaoLote.disabled = !algumMarcado;
+        if (botaoForcarColetaLote) botaoForcarColetaLote.disabled = !algumMarcado;
     }
 
     if (marcarTodos) {
@@ -554,6 +561,31 @@ window.addEventListener('load', function () {
                 erro.classList.remove('d-none');
                 erro.textContent = 'Não foi possível carregar o panorama da frota (' + e.message + ').';
             });
+    });
+})();
+
+(function () {
+    const botao = document.getElementById('botaoForcarColetaLote');
+    if (!botao) return;
+
+    botao.addEventListener('click', async function () {
+        const ids = Array.from(document.querySelectorAll('.checkbox-ativo:checked')).map(function (c) { return c.value; });
+        if (ids.length === 0) return;
+
+        botao.disabled = true;
+
+        const dados = new URLSearchParams();
+        ids.forEach(function (id) { dados.append('ids[]', id); });
+
+        try {
+            const res = await fetch(<?= json_encode(url('/ativos/solicitar-checkin-lote')) ?>, { method: 'POST', body: dados });
+            const resultado = await res.json();
+            alert(resultado.message || (resultado.success ? 'Solicitado.' : 'Falha ao solicitar.'));
+        } catch (e) {
+            alert('Erro ao comunicar com o servidor.');
+        } finally {
+            botao.disabled = false;
+        }
     });
 })();
 </script>
