@@ -344,6 +344,9 @@ $router->post('/administracao/atualizacoes/passos-manuais/desconfirmar', [Atuali
 
 $router->get('/administracao/empresa', [EmpresaController::class, 'index']);
 $router->post('/administracao/empresa/salvar', [EmpresaController::class, 'salvar']);
+$router->post('/administracao/empresa/logo/upload', [EmpresaController::class, 'logoUpload']);
+$router->post('/administracao/empresa/logo/remover', [EmpresaController::class, 'logoRemover']);
+$router->get('/administracao/empresa/logo', [EmpresaController::class, 'logo']);
 
 $router->get('/administracao/modulos', [SistemaModulosController::class, 'index']);
 $router->post('/administracao/modulos/salvar', [SistemaModulosController::class, 'salvar']);

@@ -587,6 +587,63 @@ class AtivoService
         return true;
     }
 
+    private const EXTENSOES_LOGO_VALIDAS = ['jpg', 'jpeg', 'png'];
+    private const MIME_LOGO = ['jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png'];
+
+    public static function caminhoLogoEmpresa(): string
+    {
+        return __DIR__ . '/../../storage/uploads/empresa/logo';
+    }
+
+    public function logoEmpresaConfigurada(): bool
+    {
+        return is_file(self::caminhoLogoEmpresa());
+    }
+
+    public function logoEmpresaMime(): string
+    {
+        $extensao = ConfigService::get('empresa_logo_ext', 'png') ?: 'png';
+
+        return self::MIME_LOGO[$extensao] ?? 'image/png';
+    }
+
+    public function salvarLogoEmpresa(string $caminhoTemporario, string $nomeOriginal): bool
+    {
+        $extensao = strtolower(pathinfo($nomeOriginal, PATHINFO_EXTENSION));
+        if (!in_array($extensao, self::EXTENSOES_LOGO_VALIDAS, true)) {
+            NotificationService::error('A logo precisa ser .jpg, .jpeg ou .png.');
+            return false;
+        }
+
+        $destino = self::caminhoLogoEmpresa();
+        $pasta = dirname($destino);
+        if (!is_dir($pasta) && !@mkdir($pasta, 0777, true) && !is_dir($pasta)) {
+            NotificationService::error('Não foi possível preparar a pasta de armazenamento no servidor.');
+            return false;
+        }
+
+        if (!@copy($caminhoTemporario, $destino)) {
+            NotificationService::error('Não foi possível salvar a logo no servidor.');
+            return false;
+        }
+
+        ConfigService::set('empresa_logo_ext', $extensao);
+
+        AuditService::registrar('Administração', 'Dados da Empresa', 'Logo da empresa enviada/atualizada.');
+        NotificationService::success('Logo salva.');
+
+        return true;
+    }
+
+    public function removerLogoEmpresa(): void
+    {
+        @unlink(self::caminhoLogoEmpresa());
+        ConfigService::set('empresa_logo_ext', '');
+
+        AuditService::registrar('Administração', 'Dados da Empresa', 'Logo da empresa removida.');
+        NotificationService::success('Logo removida.');
+    }
+
     private function extrairDetalhes(string $tipo, array $post): array
     {
         $campos = self::CAMPOS_DETALHES[$tipo] ?? [];

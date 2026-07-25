@@ -1,8 +1,10 @@
 <?php
 
+use App\Services\AtivoService;
 use App\Services\PermissionService;
 
 $usuarioLogado = $_SESSION['usuario'] ?? ['nome' => 'Usuário'];
+$logoEmpresaConfigurada = (new AtivoService())->logoEmpresaConfigurada();
 $titulo = $titulo ?? 'RD Intranet';
 
 $uriAtual = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?? '/';
@@ -133,6 +135,11 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
     <div class="p-4">
         <h4 class="mb-0">RD Intranet</h4>
         <small class="text-secondary">Painel Administrativo</small>
+        <?php if ($logoEmpresaConfigurada): ?>
+            <div class="mt-2">
+                <img src="<?= url('/administracao/empresa/logo') ?>" alt="" style="max-height:22px;max-width:140px;opacity:.85">
+            </div>
+        <?php endif; ?>
     </div>
 
     <a href="<?= url('/dashboard') ?>" class="<?= in_array($uriAtual, ['/', '/dashboard'], true) ? 'active' : '' ?>">
