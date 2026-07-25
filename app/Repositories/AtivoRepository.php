@@ -525,6 +525,128 @@ class AtivoRepository
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public function substituirPlacasVideo(int $ativoId, array $placas): void
+    {
+        $this->pdo->prepare("DELETE FROM ativos_placas_video WHERE ativo_id = ?")->execute([$ativoId]);
+
+        if (empty($placas)) {
+            return;
+        }
+
+        $stmt = $this->pdo->prepare("
+            INSERT INTO ativos_placas_video (ativo_id, nome, vram_mb, driver_versao, processador_grafico)
+            VALUES (?, ?, ?, ?, ?)
+        ");
+
+        foreach ($placas as $p) {
+            $nome = trim((string)($p['nome'] ?? ''));
+            if ($nome === '') {
+                continue;
+            }
+
+            $driverVersao = trim((string)($p['driver_versao'] ?? ''));
+            $processadorGrafico = trim((string)($p['processador_grafico'] ?? ''));
+
+            $stmt->execute([
+                $ativoId,
+                $nome,
+                isset($p['vram_mb']) ? (int)$p['vram_mb'] : null,
+                $driverVersao !== '' ? $driverVersao : null,
+                $processadorGrafico !== '' ? $processadorGrafico : null,
+            ]);
+        }
+    }
+
+    public function listarPlacasVideo(int $ativoId): array
+    {
+        $stmt = $this->pdo->prepare("SELECT * FROM ativos_placas_video WHERE ativo_id = ? ORDER BY id");
+        $stmt->execute([$ativoId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function substituirControladoras(int $ativoId, array $controladoras): void
+    {
+        $this->pdo->prepare("DELETE FROM ativos_controladoras WHERE ativo_id = ?")->execute([$ativoId]);
+
+        if (empty($controladoras)) {
+            return;
+        }
+
+        $stmt = $this->pdo->prepare("
+            INSERT INTO ativos_controladoras (ativo_id, nome, fabricante, interface, classe)
+            VALUES (?, ?, ?, ?, ?)
+        ");
+
+        foreach ($controladoras as $c) {
+            $nome = trim((string)($c['nome'] ?? ''));
+            if ($nome === '') {
+                continue;
+            }
+
+            $fabricante = trim((string)($c['fabricante'] ?? ''));
+            $interface = trim((string)($c['interface'] ?? ''));
+            $classe = trim((string)($c['classe'] ?? ''));
+
+            $stmt->execute([
+                $ativoId,
+                $nome,
+                $fabricante !== '' ? $fabricante : null,
+                $interface !== '' ? $interface : null,
+                $classe !== '' ? $classe : null,
+            ]);
+        }
+    }
+
+    public function listarControladoras(int $ativoId): array
+    {
+        $stmt = $this->pdo->prepare("SELECT * FROM ativos_controladoras WHERE ativo_id = ? ORDER BY id");
+        $stmt->execute([$ativoId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function substituirBateria(int $ativoId, array $baterias): void
+    {
+        $this->pdo->prepare("DELETE FROM ativos_bateria WHERE ativo_id = ?")->execute([$ativoId]);
+
+        if (empty($baterias)) {
+            return;
+        }
+
+        $stmt = $this->pdo->prepare("
+            INSERT INTO ativos_bateria (ativo_id, nome, fabricante, numero_serie, capacidade_projeto_mwh, capacidade_atual_mwh)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ");
+
+        foreach ($baterias as $b) {
+            $nome = trim((string)($b['nome'] ?? ''));
+            $fabricante = trim((string)($b['fabricante'] ?? ''));
+            $serial = trim((string)($b['numero_serie'] ?? ''));
+
+            if ($nome === '' && $fabricante === '' && $serial === '' && empty($b['capacidade_projeto_mwh']) && empty($b['capacidade_atual_mwh'])) {
+                continue;
+            }
+
+            $stmt->execute([
+                $ativoId,
+                $nome !== '' ? $nome : null,
+                $fabricante !== '' ? $fabricante : null,
+                $serial !== '' ? $serial : null,
+                isset($b['capacidade_projeto_mwh']) ? (int)$b['capacidade_projeto_mwh'] : null,
+                isset($b['capacidade_atual_mwh']) ? (int)$b['capacidade_atual_mwh'] : null,
+            ]);
+        }
+    }
+
+    public function listarBateria(int $ativoId): array
+    {
+        $stmt = $this->pdo->prepare("SELECT * FROM ativos_bateria WHERE ativo_id = ? ORDER BY id");
+        $stmt->execute([$ativoId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function listarVolumes(int $ativoId): array
     {
         $stmt = $this->pdo->prepare("SELECT * FROM ativos_volumes WHERE ativo_id = ? ORDER BY unidade");

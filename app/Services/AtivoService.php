@@ -495,6 +495,21 @@ class AtivoService
         return $this->repository->listarMemoria($ativoId);
     }
 
+    public function listarPlacasVideo(int $ativoId): array
+    {
+        return $this->repository->listarPlacasVideo($ativoId);
+    }
+
+    public function listarControladoras(int $ativoId): array
+    {
+        return $this->repository->listarControladoras($ativoId);
+    }
+
+    public function listarBateria(int $ativoId): array
+    {
+        return $this->repository->listarBateria($ativoId);
+    }
+
     public function listarPortas(int $ativoId): array
     {
         return $this->repository->listarPortas($ativoId);
@@ -1112,6 +1127,9 @@ class AtivoService
         $this->repository->substituirPortasRede($id, array_slice($payload['portas_rede'] ?? [], 0, 300));
         $this->repository->substituirMemoria($id, array_slice($payload['memoria_modulos'] ?? [], 0, 32));
         $this->repository->substituirAtualizacoesWindows($id, array_slice($payload['atualizacoes_windows'] ?? [], 0, 500));
+        $this->repository->substituirPlacasVideo($id, array_slice($payload['placas_video'] ?? [], 0, 8));
+        $this->repository->substituirControladoras($id, array_slice($payload['controladoras'] ?? [], 0, 60));
+        $this->repository->substituirBateria($id, array_slice($payload['bateria'] ?? [], 0, 4));
 
         // Limpa um eventual pedido de "forçar checkin" -- esse checkin que
         // acabou de chegar já é o que estava sendo esperado.
