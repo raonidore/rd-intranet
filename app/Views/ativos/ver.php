@@ -344,6 +344,86 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                 <?php endif; ?>
             </div>
         </div>
+
+        <!-- Placas de vídeo -->
+        <div class="card border-0 shadow-sm mt-3">
+            <div class="card-header bg-white"><strong>Placa de Vídeo</strong></div>
+            <div class="card-body p-0">
+                <?php if (empty($placasVideo)): ?>
+                    <p class="text-muted p-3 mb-0">Nenhuma placa de vídeo coletada ainda. Preenchido automaticamente pelo agente Windows.</p>
+                <?php else: ?>
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr><th>Nome</th><th>VRAM</th><th>Driver</th></tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($placasVideo as $pv): ?>
+                                <tr>
+                                    <td><?= htmlspecialchars($pv['nome'] ?? '—') ?></td>
+                                    <td><?= !empty($pv['vram_mb']) ? htmlspecialchars($pv['vram_mb']) . ' MB' : '—' ?></td>
+                                    <td class="font-monospace small"><?= htmlspecialchars($pv['driver_versao'] ?? '—') ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                    <p class="text-muted small p-2 mb-0">VRAM pode vir vazia em placas com 4GB+ -- limitação do WMI, não do nosso agente.</p>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <!-- Controladoras -->
+        <div class="card border-0 shadow-sm mt-3">
+            <div class="card-header bg-white"><strong>Controladoras</strong></div>
+            <div class="card-body p-0">
+                <?php if (empty($controladoras)): ?>
+                    <p class="text-muted p-3 mb-0">Nenhuma controladora coletada ainda. Preenchido automaticamente pelo agente Windows.</p>
+                <?php else: ?>
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr><th>Nome</th><th>Fabricante</th><th>Interface</th><th>Classe</th></tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($controladoras as $c): ?>
+                                <tr>
+                                    <td><?= htmlspecialchars($c['nome'] ?? '—') ?></td>
+                                    <td><?= htmlspecialchars($c['fabricante'] ?? '—') ?></td>
+                                    <td><?= htmlspecialchars($c['interface'] ?? '—') ?></td>
+                                    <td><?= htmlspecialchars($c['classe'] ?? '—') ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <!-- Bateria -->
+        <div class="card border-0 shadow-sm mt-3">
+            <div class="card-header bg-white"><strong>Bateria</strong></div>
+            <div class="card-body p-0">
+                <?php if (empty($bateria)): ?>
+                    <p class="text-muted p-3 mb-0">Nenhuma bateria coletada -- normal em máquinas de mesa, ou o fabricante não expõe essa informação via WMI.</p>
+                <?php else: ?>
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr><th>Nome</th><th>Fabricante</th><th>Nº de série</th><th>Capacidade de projeto</th><th>Capacidade atual</th></tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($bateria as $b): ?>
+                                <tr>
+                                    <td><?= htmlspecialchars($b['nome'] ?? '—') ?></td>
+                                    <td><?= htmlspecialchars($b['fabricante'] ?? '—') ?></td>
+                                    <td class="font-monospace small"><?= htmlspecialchars($b['numero_serie'] ?? '—') ?></td>
+                                    <td><?= !empty($b['capacidade_projeto_mwh']) ? htmlspecialchars($b['capacidade_projeto_mwh']) . ' mWh' : '—' ?></td>
+                                    <td><?= !empty($b['capacidade_atual_mwh']) ? htmlspecialchars($b['capacidade_atual_mwh']) . ' mWh' : '—' ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                    <p class="text-muted small p-2 mb-0">Capacidade em mWh só vem preenchida em parte dos fabricantes -- limitação do WMI, não do nosso agente.</p>
+                <?php endif; ?>
+            </div>
+        </div>
     </div>
 
     <!-- Memória -->
