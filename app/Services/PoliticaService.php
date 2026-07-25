@@ -549,6 +549,18 @@ public class RdWallpaper {
 $resultadoApi = [RdWallpaper]::SystemParametersInfo(20, 0, $caminho, 3)
 if ($resultadoApi -eq 0) { throw "SystemParametersInfo retornou falha ao trocar o papel de parede." }
 
+# Confirmado ao vivo: em varias maquinas, essa troca de papel de parede
+# (o broadcast SPIF_SENDCHANGE do SystemParametersInfo acima faz o Windows
+# releitar tudo que esta em HKCU:\Control Panel\Desktop) estava derrubando
+# o ClearType/suavizacao de fonte junto, deixando o texto do Windows inteiro
+# borrado. Reforcando os valores certos aqui pra essa regra nunca mais
+# apagar o ClearType de ninguem.
+Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'FontSmoothing' -Value '2' -ErrorAction Stop
+Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'FontSmoothingType' -Value 2 -Type DWord -ErrorAction Stop
+Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'FontSmoothingGamma' -Value 1400 -Type DWord -ErrorAction Stop
+Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'FontSmoothingOrientation' -Value 1 -Type DWord -ErrorAction Stop
+[RdWallpaper]::SystemParametersInfo(75, 1, $null, 3) | Out-Null
+
 New-Item -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop' -Force -ErrorAction Stop | Out-Null
 Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop' -Name 'NoChangingWallPaper' -Value 1 -Type DWord -ErrorAction Stop
 PS1;

@@ -585,7 +585,7 @@ class AtivoRepository
             }
 
             $fabricante = trim((string)($c['fabricante'] ?? ''));
-            $interface = trim((string)($c['interface'] ?? ''));
+            $interface = mb_substr(trim((string)($c['interface'] ?? '')), 0, 100);
             $classe = trim((string)($c['classe'] ?? ''));
 
             $stmt->execute([
