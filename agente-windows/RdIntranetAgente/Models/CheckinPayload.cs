@@ -99,6 +99,15 @@ public class CheckinPayload
     [JsonPropertyName("memoria_modulos")]
     public List<MemoriaItem> MemoriaModulos { get; set; } = new();
 
+    [JsonPropertyName("placas_video")]
+    public List<PlacaVideoItem> PlacasVideo { get; set; } = new();
+
+    [JsonPropertyName("controladoras")]
+    public List<ControladoraItem> Controladoras { get; set; } = new();
+
+    [JsonPropertyName("bateria")]
+    public List<BateriaItem> Bateria { get; set; } = new();
+
     [JsonPropertyName("programas")]
     public List<ProgramaItem> Programas { get; set; } = new();
 
@@ -194,6 +203,54 @@ public class MemoriaItem
 
     [JsonPropertyName("numero_serie")]
     public string? NumeroSerie { get; set; }
+}
+
+public class PlacaVideoItem
+{
+    [JsonPropertyName("nome")]
+    public string Nome { get; set; } = "";
+
+    [JsonPropertyName("vram_mb")]
+    public int? VramMb { get; set; }
+
+    [JsonPropertyName("driver_versao")]
+    public string? DriverVersao { get; set; }
+
+    [JsonPropertyName("processador_grafico")]
+    public string? ProcessadorGrafico { get; set; }
+}
+
+public class ControladoraItem
+{
+    [JsonPropertyName("nome")]
+    public string Nome { get; set; } = "";
+
+    [JsonPropertyName("fabricante")]
+    public string? Fabricante { get; set; }
+
+    [JsonPropertyName("interface")]
+    public string? Interface { get; set; }
+
+    [JsonPropertyName("classe")]
+    public string? Classe { get; set; }
+}
+
+public class BateriaItem
+{
+    [JsonPropertyName("nome")]
+    public string? Nome { get; set; }
+
+    [JsonPropertyName("fabricante")]
+    public string? Fabricante { get; set; }
+
+    [JsonPropertyName("numero_serie")]
+    public string? NumeroSerie { get; set; }
+
+    [JsonPropertyName("capacidade_projeto_mwh")]
+    public int? CapacidadeProjetoMwh { get; set; }
+
+    [JsonPropertyName("capacidade_atual_mwh")]
+    public int? CapacidadeAtualMwh { get; set; }
 }
 
 public class PortaItem

@@ -120,14 +120,32 @@ public static class CollectorService
 
         // ----------------------------------------------------------
         // Placa de video / som / tipo de memoria (Componentes)
-        using (var buscaVideo = new ManagementObjectSearcher("SELECT Name FROM Win32_VideoController"))
+        //
+        // AdapterRAM eh um campo 32-bit assinado no WMI -- placas com 4GB+
+        // de VRAM podem vir com o valor "estourado" (wrap-around), limitacao
+        // conhecida do WMI/driver, nao um bug nosso. Fica NULL nesse caso em
+        // vez de mostrar um numero errado.
+        var placasVideo = new List<PlacaVideoItem>();
+        using (var buscaVideo = new ManagementObjectSearcher("SELECT Name, AdapterRAM, DriverVersion, VideoProcessor FROM Win32_VideoController"))
         {
             foreach (ManagementObject v in buscaVideo.Get())
             {
-                payload.PlacaVideo = v["Name"]?.ToString();
-                break;
+                var nomeVideo = v["Name"]?.ToString()?.Trim();
+                if (string.IsNullOrWhiteSpace(nomeVideo)) continue;
+
+                long? vramBytes = v["AdapterRAM"] != null ? Convert.ToInt64(v["AdapterRAM"]) : null;
+
+                placasVideo.Add(new PlacaVideoItem
+                {
+                    Nome = nomeVideo,
+                    VramMb = (vramBytes is > 0) ? (int)(vramBytes.Value / 1024 / 1024) : null,
+                    DriverVersao = v["DriverVersion"]?.ToString(),
+                    ProcessadorGrafico = v["VideoProcessor"]?.ToString()
+                });
             }
         }
+        payload.PlacaVideo = placasVideo.Count > 0 ? placasVideo[0].Nome : null;
+        payload.PlacasVideo = placasVideo;
 
         using (var buscaSom = new ManagementObjectSearcher("SELECT Name FROM Win32_SoundDevice"))
         {
@@ -227,6 +245,8 @@ public static class CollectorService
         payload.Portas = ObterPortas();
         payload.PortasRede = ObterPortasRede();
         payload.MemoriaModulos = ObterModulosMemoria();
+        payload.Controladoras = ObterControladoras();
+        payload.Bateria = ObterBateria();
         payload.Programas = ObterProgramasInstalados();
         payload.AtualizacoesWindows = ObterAtualizacoesWindows();
         payload.Alertas = ObterAlertas(eventosDesde ?? DateTime.Now.AddHours(-24));
@@ -492,6 +512,138 @@ public static class CollectorService
         }
 
         return modulos;
+    }
+
+    /// <summary>
+    /// Classes de dispositivo (Win32_PnPSignedDriver.DeviceClass) que
+    /// contam como "controladora" pro inventario, igual a lista que o
+    /// GLPI mostra (rede, disco/USB/PCI, placa-mae, video, som,
+    /// bluetooth) -- excluir tudo que nao seja hardware de verdade
+    /// (impressora, monitor, HID generico, etc.).
+    /// </summary>
+    private static readonly HashSet<string> ClassesControladora = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Net", "HDC", "USB", "System", "SCSIAdapter", "Display", "Media", "Bluetooth"
+    };
+
+    private static List<ControladoraItem> ObterControladoras()
+    {
+        var controladoras = new List<ControladoraItem>();
+
+        try
+        {
+            using var busca = new ManagementObjectSearcher("SELECT DeviceName, Manufacturer, DeviceClass, DeviceID FROM Win32_PnPSignedDriver");
+
+            foreach (ManagementObject d in busca.Get())
+            {
+                var classe = d["DeviceClass"]?.ToString();
+                if (classe == null || !ClassesControladora.Contains(classe)) continue;
+
+                var nome = d["DeviceName"]?.ToString()?.Trim();
+                if (string.IsNullOrWhiteSpace(nome)) continue;
+
+                // "Interface" (PCI/USB/ACPI/...) vem do prefixo do DeviceID,
+                // ex: "PCI\VEN_10DE&DEV_..." -> "PCI".
+                var deviceId = d["DeviceID"]?.ToString() ?? "";
+                var barra = deviceId.IndexOf('\\');
+
+                controladoras.Add(new ControladoraItem
+                {
+                    Nome = nome,
+                    Fabricante = d["Manufacturer"]?.ToString()?.Trim(),
+                    Interface = barra > 0 ? deviceId[..barra] : null,
+                    Classe = classe
+                });
+
+                if (controladoras.Count >= 60) break;
+            }
+        }
+        catch
+        {
+            // Win32_PnPSignedDriver pode nao responder em ambientes
+            // restritos -- segue sem essa lista, sem quebrar o checkin.
+        }
+
+        return controladoras;
+    }
+
+    /// <summary>
+    /// Converte os campos de texto de BatteryStaticData -- vem como
+    /// array de UInt16 (codigos de caractere), nao como string nativa,
+    /// peculiaridade conhecida dessa classe WMI especifica.
+    /// </summary>
+    private static string? TextoDeArrayUint16(object? valor)
+    {
+        if (valor is ushort[] codigos)
+        {
+            var texto = new string(codigos.Where(c => c != 0).Select(c => (char)c).ToArray());
+            return texto.Length > 0 ? texto : null;
+        }
+
+        return valor?.ToString();
+    }
+
+    /// <summary>
+    /// Capacidade em mWh (projeto/atual) e numero de serie so existem no
+    /// namespace root\WMI (BatteryStaticData/BatteryFullChargedCapacity),
+    /// nao no root\cimv2 onde o resto da coleta roda -- primeira vez que
+    /// o agente usa um ManagementScope diferente. Muitos fabricantes nao
+    /// implementam essas classes direito (fica tudo vazio) -- e esperado,
+    /// nao e bug; por isso tudo aqui e best-effort dentro de um try/catch,
+    /// igual ao padrao ja usado em ObterTiposDiscoPorIndice.
+    /// </summary>
+    private static List<BateriaItem> ObterBateria()
+    {
+        var baterias = new List<BateriaItem>();
+
+        using (var buscaBasica = new ManagementObjectSearcher("SELECT DeviceID FROM Win32_Battery"))
+        {
+            if (!buscaBasica.Get().Cast<ManagementObject>().Any()) return baterias;
+        }
+
+        try
+        {
+            var escopo = new ManagementScope(@"root\WMI");
+            var porInstancia = new Dictionary<string, BateriaItem>();
+
+            using (var buscaEstatica = new ManagementObjectSearcher(escopo, new ObjectQuery("SELECT InstanceName, DesignedCapacity, SerialNumber, ManufacturerName, DeviceName FROM BatteryStaticData")))
+            {
+                foreach (ManagementObject b in buscaEstatica.Get())
+                {
+                    var instancia = b["InstanceName"]?.ToString() ?? "";
+
+                    porInstancia[instancia] = new BateriaItem
+                    {
+                        Nome = TextoDeArrayUint16(b["DeviceName"]),
+                        Fabricante = TextoDeArrayUint16(b["ManufacturerName"]),
+                        NumeroSerie = TextoDeArrayUint16(b["SerialNumber"]),
+                        CapacidadeProjetoMwh = b["DesignedCapacity"] != null ? Convert.ToInt32(b["DesignedCapacity"]) : null
+                    };
+                }
+            }
+
+            using (var buscaAtual = new ManagementObjectSearcher(escopo, new ObjectQuery("SELECT InstanceName, FullChargedCapacity FROM BatteryFullChargedCapacity")))
+            {
+                foreach (ManagementObject b in buscaAtual.Get())
+                {
+                    var instancia = b["InstanceName"]?.ToString() ?? "";
+                    if (porInstancia.TryGetValue(instancia, out var item) && b["FullChargedCapacity"] != null)
+                    {
+                        item.CapacidadeAtualMwh = Convert.ToInt32(b["FullChargedCapacity"]);
+                    }
+                }
+            }
+
+            baterias.AddRange(porInstancia.Values);
+        }
+        catch
+        {
+            // root\WMI/BatteryStaticData pode nao existir ou nao responder --
+            // maquina tem bateria (confirmado acima) mas sem detalhe de
+            // capacidade; devolve lista vazia em vez de quebrar o checkin.
+        }
+
+        return baterias;
     }
 
     /// <summary>
