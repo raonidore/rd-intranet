@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Security.Principal;
 using System.Threading;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
 namespace RdIntranetAgente;
 
@@ -16,6 +17,8 @@ internal static class Program
             RelancarComoAdministrador();
             return;
         }
+
+        GarantirLinkedConnections();
 
         using var mutex = new Mutex(true, "RdIntranetAgente_SingleInstance", out bool criadoAgora);
 
@@ -51,6 +54,43 @@ internal static class Program
         using var identidade = WindowsIdentity.GetCurrent();
         var principal = new WindowsPrincipal(identidade);
         return principal.IsInRole(WindowsBuiltInRole.Administrator);
+    }
+
+    /// <summary>
+    /// Efeito colateral do agente SEMPRE rodar elevado (ver EstaElevado()
+    /// acima): com UAC ativado, o Windows usa "token dividido" -- um
+    /// processo elevado e um processo normal do MESMO usuário enxergam
+    /// conjuntos DIFERENTES de unidades de rede mapeadas. Uma unidade
+    /// mapeada pelo usuário no Explorer (sessão normal) fica invisível
+    /// pro nosso agente (sempre elevado) -- confirmado ao vivo: sumiu da
+    /// aba "Volumes lógicos" depois que o agente passou a rodar sempre
+    /// elevado, mesmo com a unidade continuando conectada de verdade.
+    /// Documentado pela própria Microsoft (KB3035277); a correção
+    /// oficial é essa chave, que "linka" os dois níveis do token pra
+    /// fins de rede. Só passa a valer pra mapeamentos NOVOS (ou depois
+    /// de logoff/login) -- mapeamentos já feitos antes da chave existir
+    /// continuam invisíveis até o usuário remapear ou relogar.
+    /// </summary>
+    private static void GarantirLinkedConnections()
+    {
+        try
+        {
+            using var chave = Registry.LocalMachine.OpenSubKey(
+                @"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System", writable: true)
+                ?? Registry.LocalMachine.CreateSubKey(
+                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System");
+
+            var atual = chave?.GetValue("EnableLinkedConnections");
+            if (atual == null || Convert.ToInt32(atual) != 1)
+            {
+                chave?.SetValue("EnableLinkedConnections", 1, RegistryValueKind.DWord);
+            }
+        }
+        catch
+        {
+            // melhor esforco -- se falhar (permissao, chave bloqueada por
+            // GPO, etc.) o agente segue normalmente, so sem esse ajuste
+        }
     }
 
     private static void RelancarComoAdministrador()

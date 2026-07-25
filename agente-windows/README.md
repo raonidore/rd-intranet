@@ -275,6 +275,15 @@ liberar, roda uma vez na máquina afetada (não precisa reiniciar):
 reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v LocalAccountTokenFilterPolicy /t REG_DWORD /d 1 /f
 ```
 
+**Outro efeito colateral de sempre rodar elevado**: unidades de rede
+mapeadas pelo usuário na sessão normal (não-elevada) ficam invisíveis
+pro agente -- "token dividido" do UAC, documentado pela Microsoft
+(KB3035277). Desde a v1.0.18 o próprio agente aplica a correção
+sozinho no início (`Program.cs::GarantirLinkedConnections()`, chave
+`EnableLinkedConnections=1` no mesmo caminho acima) -- só vale pra
+mapeamentos novos ou depois de um logoff/login; unidades já mapeadas
+antes disso continuam invisíveis até o usuário remapear ou relogar.
+
 **Poder de verdade, use com critério**: quem tiver acesso ao módulo
 Ativos com permissão de enviar comando (`ativos_novo`) consegue rodar
 qualquer arquivo, comando CMD/PowerShell (com ou sem elevação),
