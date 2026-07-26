@@ -1166,6 +1166,19 @@ import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js'))
     let clienteAtivo = null;
     let ultimaCredencial = null;
 
+    // Um só teclado pra vida inteira do modal (não um por tentativa de
+    // conexao) -- Guacamole.Keyboard prende os listeners no `document` e
+    // não tem como desmontar. Criar um novo a cada reconexão empilhava
+    // handlers, e cada um deles intercepta/consome keydown pra mandar pro
+    // RDP -- confirmado ao vivo: depois de qualquer erro+retry, os campos
+    // de texto do formulário de credencial paravam de aceitar digitação
+    // (só os spinners de número da porta, que não dependem de teclado,
+    // continuavam funcionando). Sempre manda pro client ATIVO no momento
+    // do evento, então nunca precisa recriar.
+    const tecladoGlobal = new Guacamole.Keyboard(document);
+    tecladoGlobal.onkeydown = function (codigo) { if (clienteAtivo) clienteAtivo.sendKeyEvent(1, codigo); };
+    tecladoGlobal.onkeyup = function (codigo) { if (clienteAtivo) clienteAtivo.sendKeyEvent(0, codigo); };
+
     function desconectar() {
         if (clienteAtivo) {
             const c = clienteAtivo;
@@ -1333,6 +1346,11 @@ import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js'))
             display.style.width = '100%';
             display.style.height = '100%';
             display.style.overflow = 'auto';
+            // corpoRdp é flex com align-items-center (pro spinner/formulário
+            // ficarem centralizados) -- sem isso, esse item específico
+            // também herda align-items:center e some com a área útil (0 de
+            // altura visível), mesmo com height:100% no próprio elemento.
+            display.style.alignSelf = 'stretch';
             corpo.appendChild(display);
 
             const tunnel = new Guacamole.WebSocketTunnel(
@@ -1362,10 +1380,6 @@ import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js'))
             mouse.onmousedown = mouse.onmouseup = mouse.onmousemove = function (estado) {
                 client.sendMouseState(estado);
             };
-
-            const teclado = new Guacamole.Keyboard(document);
-            teclado.onkeydown = function (codigo) { client.sendKeyEvent(1, codigo); };
-            teclado.onkeyup = function (codigo) { client.sendKeyEvent(0, codigo); };
         } catch (e) {
             corpo.innerHTML = '<div class="text-white-50 text-center p-4">Erro ao comunicar com o servidor.</div>';
         }
