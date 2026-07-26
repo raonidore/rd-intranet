@@ -997,6 +997,9 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
         <div class="modal-content">
             <div class="modal-header py-2">
                 <h6 class="modal-title"><i class="bi bi-pc-display-horizontal"></i> RDP -- <?= htmlspecialchars($ativo['nome']) ?></h6>
+                <button type="button" class="btn btn-sm btn-outline-light me-2 d-none" id="botaoCtrlAltDelRdp" title="Enviar Ctrl+Alt+Del pra sessão remota (o navegador nunca consegue capturar essa combinação direto do teclado)">
+                    <i class="bi bi-keyboard"></i> Ctrl+Alt+Del
+                </button>
                 <button type="button" class="btn btn-sm btn-outline-light me-2" id="botaoEditarCredencialRdp" title="Trocar host/usuário/senha">
                     <i class="bi bi-gear"></i> Trocar credencial
                 </button>
@@ -1160,6 +1163,7 @@ import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js'))
     const modalEl = document.getElementById('modalRdp');
     const corpo = document.getElementById('corpoRdp');
     const botaoEditar = document.getElementById('botaoEditarCredencialRdp');
+    const botaoCtrlAltDel = document.getElementById('botaoCtrlAltDelRdp');
     const statusInicial = corpo.innerHTML;
     const hostPadrao = <?= json_encode($ativo['ip'] ?? '') ?>;
 
@@ -1180,9 +1184,21 @@ import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js'))
     // ao vivo.
     const tecladoGlobal = new Guacamole.Keyboard(document);
 
+    // Ctrl+Alt+Del nenhum navegador deixa capturar do teclado físico (é
+    // bloqueado no nível do sistema operacional, de propósito, em
+    // qualquer navegador) -- por isso é um botão que manda a combinação
+    // direto pro protocolo, sem depender do teclado.
+    botaoCtrlAltDel.addEventListener('click', function () {
+        if (!clienteAtivo) return;
+        const CTRL = 0xffe3, ALT = 0xffe9, DEL = 0xffff;
+        [CTRL, ALT, DEL].forEach((tecla) => clienteAtivo.sendKeyEvent(1, tecla));
+        [DEL, ALT, CTRL].forEach((tecla) => clienteAtivo.sendKeyEvent(0, tecla));
+    });
+
     function desconectar() {
         tecladoGlobal.onkeydown = null;
         tecladoGlobal.onkeyup = null;
+        botaoCtrlAltDel.classList.add('d-none');
 
         if (pararDeEscalar) {
             pararDeEscalar();
@@ -1382,8 +1398,28 @@ import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js'))
             );
             const client = new Guacamole.Client(tunnel);
             clienteAtivo = client;
+            botaoCtrlAltDel.classList.remove('d-none');
             tecladoGlobal.onkeydown = function (codigo) { if (clienteAtivo) clienteAtivo.sendKeyEvent(1, codigo); };
             tecladoGlobal.onkeyup = function (codigo) { if (clienteAtivo) clienteAtivo.sendKeyEvent(0, codigo); };
+
+            // Área de transferência nos dois sentidos -- só texto (imagem/
+            // arquivo pelo clipboard não é suportado pela maioria dos
+            // clientes Guacamole e complicaria bem mais). Remoto -> local:
+            // o Guacamole avisa via onclipboard toda vez que algo é
+            // copiado do lado de lá. Local -> remoto: não existe evento de
+            // "clipboard mudou" no navegador por segurança, então escuta o
+            // evento nativo de colar (Ctrl+V) na área do RDP.
+            client.onclipboard = function (stream, mimetype) {
+                if (mimetype !== 'text/plain') return;
+                const leitor = new Guacamole.StringReader(stream);
+                let texto = '';
+                leitor.ontext = function (fragmento) { texto += fragmento; };
+                leitor.onend = function () {
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(texto).catch(function () { /* sem permissão -- ignora */ });
+                    }
+                };
+            };
 
             client.onerror = function (status) {
                 mostrarErroConexao(status);
@@ -1432,6 +1468,19 @@ import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js'))
                     down: estado.down,
                 });
             };
+
+            // tabIndex pra o div poder receber foco/evento de colar --
+            // sem isso o navegador nunca dispara "paste" nele.
+            elementoDisplay.tabIndex = -1;
+            elementoDisplay.addEventListener('mousedown', function () { elementoDisplay.focus(); });
+            elementoDisplay.addEventListener('paste', function (e) {
+                const texto = (e.clipboardData || window.clipboardData).getData('text/plain');
+                if (!texto || !clienteAtivo) return;
+                const fluxo = clienteAtivo.createClipboardStream('text/plain');
+                const escritor = new Guacamole.StringWriter(fluxo);
+                escritor.sendText(texto);
+                escritor.sendEnd();
+            });
 
             // Sem isso a tela do RDP fica no tamanho nativo (ex: 1024x768)
             // plantada no canto, com o resto do modal (que é fullscreen)
