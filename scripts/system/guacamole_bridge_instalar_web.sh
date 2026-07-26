@@ -23,6 +23,20 @@ if [ ! -f "$CERT" ] || [ ! -f "$CHAVE_TLS" ]; then
   exit 1
 fi
 
+# Garante leitura via grupo "ssl-cert" na chave privada -- em servidores
+# onde o HTTPS foi ativado ANTES desta feature existir, o arquivo ainda
+# esta com a permissao antiga (600 root:root) e o bridge (usuario
+# dedicado nao-root) nao consegue ler, mesmo depois do proprio
+# certificado_ativar_web.sh ja ter sido corrigido no codigo -- aquela
+# correcao so e reaplicada quando o certificado e reativado/trocado, nao
+# retroativamente. Reaplicado aqui tambem (idempotente, nunca muda o
+# dono real nem afrouxa "outros") pra o instalador da ponte nao depender
+# de ninguem ter reativado o HTTPS antes de rodar isso.
+chgrp ssl-cert /etc/ssl/rd-intranet 2>/dev/null || true
+chmod 750 /etc/ssl/rd-intranet
+chgrp ssl-cert "$CHAVE_TLS" 2>/dev/null || true
+chmod 640 "$CHAVE_TLS"
+
 if [ ! -f "$CHAVE_SEGREDO" ]; then
   echo '{"success":false,"message":"Chave de criptografia da aplicação não encontrada em /etc/rd-intranet/db_secret.key."}'
   exit 1
