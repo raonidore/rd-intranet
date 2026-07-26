@@ -215,6 +215,29 @@ public static class CollectorService
         }
 
         // ----------------------------------------------------------
+        // RDP (Remote Desktop) habilitado -- mesma chave que o proprio
+        // Windows consulta pra tela "Area de Trabalho Remota".
+        // fDenyTSConnections: 0 = habilitado, qualquer outro valor
+        // (tipicamente 1) = desabilitado. Melhor esforco: se a chave nao
+        // existir ou o acesso for negado, segue sem informar em vez de
+        // derrubar a coleta inteira (mesmo padrao do WindowsAtivado acima).
+        try
+        {
+            using var chaveTerminalServer = Registry.LocalMachine.OpenSubKey(
+                @"SYSTEM\CurrentControlSet\Control\Terminal Server");
+            var valorDeny = chaveTerminalServer?.GetValue("fDenyTSConnections");
+
+            if (valorDeny != null)
+            {
+                payload.RdpHabilitado = Convert.ToInt32(valorDeny) == 0 ? "Sim" : "Não";
+            }
+        }
+        catch
+        {
+            // segue sem essa informacao
+        }
+
+        // ----------------------------------------------------------
         // Placa-mãe
         using (var buscaPlaca = new ManagementObjectSearcher("SELECT Manufacturer, Product FROM Win32_BaseBoard"))
         {

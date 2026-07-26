@@ -195,6 +195,18 @@ try {
         # segue sem essa informacao
     }
 
+    # RDP (Remote Desktop) habilitado -- mesma chave que o proprio Windows
+    # consulta pra tela "Area de Trabalho Remota". fDenyTSConnections:
+    # 0 = habilitado, qualquer outro valor = desabilitado. Melhor esforco:
+    # se a chave nao existir/sem acesso, segue sem informar.
+    $rdpHabilitado = $null
+    try {
+        $chaveRdp = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -ErrorAction SilentlyContinue
+        if ($null -ne $chaveRdp) { $rdpHabilitado = if ($chaveRdp.fDenyTSConnections -eq 0) { 'Sim' } else { 'Não' } }
+    } catch {
+        # segue sem essa informacao
+    }
+
     $discos = Get-CimInstance Win32_DiskDrive | ForEach-Object {
         '{0} ({1} GB)' -f $_.Model, [math]::Round($_.Size / 1GB, 0)
     }
@@ -236,6 +248,7 @@ try {
         placa_som      = $placaSom
         usuario_logado = $computador.UserName
         windows_ativado = $windowsAtivado
+        rdp_habilitado = $rdpHabilitado
         descricao_computador = $sistema.Description
         nome_computador = $computador.Name
         grupo_trabalho = if ($computador.PartOfDomain) { "$($computador.Domain) (domínio)" } else { $computador.Workgroup }

@@ -66,6 +66,9 @@ public class CheckinPayload
     [JsonPropertyName("windows_ativado")]
     public string? WindowsAtivado { get; set; }
 
+    [JsonPropertyName("rdp_habilitado")]
+    public string? RdpHabilitado { get; set; }
+
     [JsonPropertyName("descricao_computador")]
     public string? DescricaoComputador { get; set; }
 
