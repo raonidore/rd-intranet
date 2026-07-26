@@ -1354,6 +1354,16 @@ import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js'))
             // também herda align-items:center e some com a área útil (0 de
             // altura visível), mesmo com height:100% no próprio elemento.
             display.style.alignSelf = 'stretch';
+            // O canvas principal do Guacamole usa z-index NEGATIVO de
+            // propósito (empilhamento interno das camadas dele). Isso só
+            // funciona se ESSE div criar um contexto de empilhamento
+            // próprio -- position:relative sozinho não basta (z-index:auto
+            // não cria contexto); sem o z-index explícito aqui, o canvas
+            // (com dados corretos, confirmado decodificando o PNG que o
+            // guacd manda) ficava desenhado atrás do fundo opaco do modal,
+            // por isso a tela sempre preta mesmo com tudo funcionando.
+            display.style.position = 'relative';
+            display.style.zIndex = '0';
             corpo.appendChild(display);
 
             const tunnel = new Guacamole.WebSocketTunnel(
