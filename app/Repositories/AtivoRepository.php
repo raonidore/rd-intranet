@@ -851,6 +851,48 @@ class AtivoRepository
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * Ativos gerenciados pelo agente que compartilham o mesmo nome de
+     * máquina mas têm machine_guid diferente -- sinal de identidade
+     * instável (comum em VMs sem BIOS/SMBIOS customizado: o agente cai no
+     * MachineGuid do registro do Windows, que pode variar entre reinícios
+     * do agente sem o Windows ter sido reinstalado de verdade, criando um
+     * ativo novo em vez de continuar atualizando o mesmo -- ver comentário
+     * em CollectorService.ObterMachineGuidComSerial no agente).
+     *
+     * @return array<string, array<int, array>> nome da máquina => lista dos ativos duplicados (mais antigo primeiro)
+     */
+    public function duplicatasPorNome(): array
+    {
+        $nomes = $this->pdo->query("
+            SELECT nome
+            FROM ativos
+            WHERE origem = 'agente' AND machine_guid IS NOT NULL AND machine_guid <> '' AND nome IS NOT NULL AND nome <> ''
+            GROUP BY nome
+            HAVING COUNT(DISTINCT machine_guid) > 1
+        ")->fetchAll(PDO::FETCH_COLUMN);
+
+        if (empty($nomes)) {
+            return [];
+        }
+
+        $marcadores = implode(',', array_fill(0, count($nomes), '?'));
+        $stmt = $this->pdo->prepare("
+            SELECT id, codigo_patrimonio, nome, tipo, ip, agente_versao, machine_guid, ultimo_heartbeat, ultimo_checkin, criado_em
+            FROM ativos
+            WHERE nome IN ({$marcadores})
+            ORDER BY nome, criado_em
+        ");
+        $stmt->execute($nomes);
+
+        $porNome = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $linha) {
+            $porNome[$linha['nome']][] = $linha;
+        }
+
+        return $porNome;
+    }
+
     public function listarProgramas(int $ativoId): array
     {
         $stmt = $this->pdo->prepare("SELECT * FROM ativos_programas WHERE ativo_id = ? ORDER BY nome");

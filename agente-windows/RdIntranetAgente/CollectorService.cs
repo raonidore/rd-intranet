@@ -300,14 +300,34 @@ public static class CollectorService
 
     private static (string MachineGuid, string? SerialBios) ObterMachineGuidComSerial()
     {
+        var config = Config.Carregar();
+
         // Escape manual (Config.MachineGuidOverride) -- ver comentario no
         // Config.cs. Usado ao pe da letra, sem nenhuma deteccao, pra
         // maquinas reformatadas que precisam continuar sendo o mesmo
         // ativo de antes.
-        var override_ = Config.Carregar().MachineGuidOverride?.Trim();
+        var override_ = config.MachineGuidOverride?.Trim();
         if (!string.IsNullOrEmpty(override_))
         {
-            return (override_, null);
+            return (override_, ObterSerialBios());
+        }
+
+        var serialBios = ObterSerialBios();
+
+        // Cache do identificador (Config.MachineGuidCache) -- confirmado ao
+        // vivo (v1.0.19, maquina QEMU sem serial de BIOS/UUID SMBIOS
+        // configurado) que redetectar do zero a cada reinicio do agente
+        // pode cair em ramos diferentes da deteccao abaixo e gerar um
+        // identificador DIFERENTE sem o Windows ter sido reinstalado --
+        // virou ativo duplicado no portal. Uma vez calculado, trava aqui
+        // pro resto da vida desta instalacao do Windows (o arquivo fica em
+        // LocalAppData -- some numa reformatacao de verdade, preservando o
+        // comportamento historico de "reformatou = ativo novo" pra quem
+        // nao configurou o override acima).
+        var cache = config.MachineGuidCache?.Trim();
+        if (!string.IsNullOrEmpty(cache))
+        {
+            return (cache, serialBios);
         }
 
         // Identificacao estavel da maquina, da mais confiavel pra menos:
@@ -316,44 +336,62 @@ public static class CollectorService
         //    com um texto de fabrica tipo "To Be Filled By O.E.M.";
         // 2) UUID da SMBIOS -- tambem sobrevive a reinstalacao, e mais
         //    raro vir vazio/generico do que o serial de texto, mas ainda
-        //    acontece em placas bem baratas;
+        //    acontece em placas bem baratas (e em VMs sem SMBIOS
+        //    customizado pelo hypervisor);
         // 3) MachineGuid do registro -- unico problema: e regenerado do
         //    zero TODA reinstalacao do Windows, entao uma maquina generica
         //    que caia aqui e for reformatada vira um ativo novo no
         //    inventario (por isso o override acima existe, pra corrigir
         //    esse caso manualmente).
-        string? serialBios = null;
-        using (var buscaBios = new ManagementObjectSearcher("SELECT SerialNumber FROM Win32_BIOS"))
-        {
-            foreach (ManagementObject bios in buscaBios.Get())
-            {
-                serialBios = bios["SerialNumber"]?.ToString();
-            }
-        }
+        string machineGuid;
 
         if (serialBios != null && !SerialInvalido(serialBios.Trim()))
         {
-            return ($"BIOS-{serialBios.Trim()}", serialBios);
+            machineGuid = $"BIOS-{serialBios.Trim()}";
         }
-
-        string? uuidSmbios = null;
-        using (var buscaUuid = new ManagementObjectSearcher("SELECT UUID FROM Win32_ComputerSystemProduct"))
+        else
         {
-            foreach (ManagementObject item in buscaUuid.Get())
+            string? uuidSmbios = null;
+            using (var buscaUuid = new ManagementObjectSearcher("SELECT UUID FROM Win32_ComputerSystemProduct"))
             {
-                uuidSmbios = item["UUID"]?.ToString();
+                foreach (ManagementObject item in buscaUuid.Get())
+                {
+                    uuidSmbios = item["UUID"]?.ToString();
+                }
             }
+
+            var uuidValido = uuidSmbios != null
+                && !UuidsInvalidos.Any(invalido => string.Equals(invalido, uuidSmbios.Trim(), System.StringComparison.OrdinalIgnoreCase));
+
+            machineGuid = uuidValido
+                ? $"SMBIOS-{uuidSmbios!.Trim()}"
+                : $"REG-{ObterMachineGuidRegistro()}";
         }
 
-        var uuidValido = uuidSmbios != null
-            && !UuidsInvalidos.Any(invalido => string.Equals(invalido, uuidSmbios.Trim(), System.StringComparison.OrdinalIgnoreCase));
-
-        if (uuidValido)
+        try
         {
-            return ($"SMBIOS-{uuidSmbios!.Trim()}", serialBios);
+            config.MachineGuidCache = machineGuid;
+            config.Salvar();
+        }
+        catch
+        {
+            // segue mesmo se nao conseguir gravar o cache -- pior caso,
+            // volta a redetectar no proximo reinicio (comportamento de
+            // antes desta correcao, nao uma regressao nova)
         }
 
-        return ($"REG-{ObterMachineGuidRegistro()}", serialBios);
+        return (machineGuid, serialBios);
+    }
+
+    private static string? ObterSerialBios()
+    {
+        string? serialBios = null;
+        using var buscaBios = new ManagementObjectSearcher("SELECT SerialNumber FROM Win32_BIOS");
+        foreach (ManagementObject bios in buscaBios.Get())
+        {
+            serialBios = bios["SerialNumber"]?.ToString();
+        }
+        return serialBios;
     }
 
     private static string ObterMachineGuidRegistro()

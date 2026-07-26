@@ -24,6 +24,24 @@ public class Config
     /// </summary>
     public string MachineGuidOverride { get; set; } = "";
 
+    /// <summary>
+    /// Cache do identificador calculado (BIOS/SMBIOS/registro -- ver
+    /// CollectorService.ObterMachineGuidComSerial) na PRIMEIRA vez que a
+    /// deteccao rodou nesta instalacao do Windows. Motivo: confirmado ao
+    /// vivo (v1.0.19, maquina virtualizada QEMU sem serial de BIOS/UUID
+    /// SMBIOS configurado) que redetectar do zero a cada reinicio do
+    /// agente pode cair em ramos diferentes da deteccao (e portanto gerar
+    /// um identificador diferente) sem o Windows ter sido reinstalado --
+    /// virou ativo duplicado no portal. Uma vez calculado, o identificador
+    /// fica travado aqui e nunca mais e redetectado nesta instalacao --
+    /// sobrevive a atualizacoes/reinicios do agente, mas NAO sobrevive a
+    /// uma reformatacao de verdade (este arquivo fica em LocalAppData, e
+    /// apagado junto), entao o comportamento historico documentado no
+    /// MachineGuidOverride acima (reformatar = vira ativo novo, a menos
+    /// que o override seja preenchido a mao) continua valendo.
+    /// </summary>
+    public string MachineGuidCache { get; set; } = "";
+
     public bool EstaConfigurado => !string.IsNullOrWhiteSpace(ServerUrl) && !string.IsNullOrWhiteSpace(ApiKey);
 
     private static string PastaDados => Path.Combine(

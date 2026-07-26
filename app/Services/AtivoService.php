@@ -151,6 +151,7 @@ class AtivoService
             'por_tipo' => $this->repository->contarPorTipo(),
             'por_status' => $this->repository->contarPorStatus(),
             'recentes' => $this->repository->recentes(),
+            'duplicatas' => $this->repository->duplicatasPorNome(),
         ];
     }
 

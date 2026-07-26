@@ -15,6 +15,35 @@ $statusCores = [
 
 <?= Alert::flash() ?>
 
+<?php if (!empty($duplicatas)): ?>
+<div class="alert alert-warning border-0 shadow-sm mb-4">
+    <div class="d-flex align-items-start gap-2">
+        <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+        <div class="flex-grow-1">
+            <strong><?= count($duplicatas) ?> possível<?= count($duplicatas) > 1 ? 'eis' : '' ?> duplicata<?= count($duplicatas) > 1 ? 's' : '' ?> de ativo detectada<?= count($duplicatas) > 1 ? 's' : '' ?></strong>
+            <div class="small text-muted mb-2">
+                Máquinas com o mesmo nome cadastradas mais de uma vez, com identificador diferente -- geralmente o agente perdeu a identidade estável dela (comum em VMs sem BIOS/SMBIOS customizado pelo hypervisor). Confira e decida manualmente qual manter.
+            </div>
+            <?php foreach ($duplicatas as $nome => $itens): ?>
+                <div class="mb-2">
+                    <div class="fw-semibold"><?= htmlspecialchars($nome) ?></div>
+                    <ul class="mb-0 small">
+                        <?php foreach ($itens as $item): ?>
+                            <li>
+                                <a href="<?= url('/ativos/ver?id=' . (int)$item['id']) ?>"><?= htmlspecialchars($item['codigo_patrimonio']) ?></a>
+                                -- agente v<?= htmlspecialchars($item['agente_versao'] ?: '?') ?>,
+                                IP <?= htmlspecialchars($item['ip'] ?: '-') ?>,
+                                cadastrado em <?= htmlspecialchars(data_br($item['criado_em'])) ?>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <div>
         <h4 class="mb-1"><i class="bi bi-boxes me-1"></i> Ativos de TI</h4>
