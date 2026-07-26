@@ -541,7 +541,79 @@ public static class CollectorService
             });
         }
 
+        // A consulta WMI acima só enxerga unidade de rede mapeada na MESMA
+        // sessão do processo que roda a consulta -- e o agente roda como
+        // SYSTEM (tarefa agendada), numa sessão totalmente separada da do
+        // usuário que está logado na tela. Mapeamento feito pelo usuário
+        // (Mapear unidade de rede / "net use") nunca aparece pra SYSTEM por
+        // WMI, mesmo funcionando normalmente pra quem está logado --
+        // confirmado ao vivo (unidade visível no Explorer, WMI sempre
+        // vazio). O contorno é ler direto do registro, que É compartilhado
+        // entre sessões: a área HKEY_USERS\<SID>\Network do usuário
+        // interativo fica acessível a qualquer processo, incluindo SYSTEM,
+        // enquanto o perfil dele estiver carregado (ou seja, enquanto
+        // estiver logado). Só não dá pra saber espaço usado/livre por esse
+        // caminho -- só a letra e o destino.
+        foreach (var unidadeRegistro in ObterUnidadesRedeViaRegistro())
+        {
+            if (volumes.Any(v => v.Rede && string.Equals(v.Unidade, unidadeRegistro.Unidade, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            volumes.Add(unidadeRegistro);
+        }
+
         return volumes;
+    }
+
+    private static List<VolumeItem> ObterUnidadesRedeViaRegistro()
+    {
+        var unidades = new List<VolumeItem>();
+
+        try
+        {
+            using var busca = new ManagementObjectSearcher("SELECT UserName FROM Win32_ComputerSystem");
+            var usuario = busca.Get().Cast<ManagementObject>().FirstOrDefault()?["UserName"]?.ToString();
+            if (string.IsNullOrWhiteSpace(usuario))
+            {
+                return unidades;
+            }
+
+            var sid = new System.Security.Principal.NTAccount(usuario)
+                .Translate(typeof(System.Security.Principal.SecurityIdentifier)).Value;
+
+            using var chaveRede = Registry.Users.OpenSubKey($@"{sid}\Network");
+            if (chaveRede == null)
+            {
+                return unidades;
+            }
+
+            foreach (var letra in chaveRede.GetSubKeyNames())
+            {
+                using var chaveLetra = chaveRede.OpenSubKey(letra);
+                var caminho = chaveLetra?.GetValue("RemotePath")?.ToString();
+                if (string.IsNullOrWhiteSpace(caminho))
+                {
+                    continue;
+                }
+
+                unidades.Add(new VolumeItem
+                {
+                    Unidade = letra + ":",
+                    Rede = true,
+                    CaminhoRede = caminho
+                });
+            }
+        }
+        catch
+        {
+            // sem usuario logado, SID nao resolve, ou hive do usuario nao
+            // carregada -- segue sem essas unidades, nao quebra o resto da
+            // coleta
+        }
+
+        return unidades;
     }
 
     private static List<MemoriaItem> ObterModulosMemoria()

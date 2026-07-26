@@ -311,6 +311,41 @@ try {
         }
     })
 
+    # A consulta WMI acima so enxerga unidade de rede mapeada na MESMA
+    # sessao do processo que roda a consulta -- e o agente roda como
+    # SYSTEM (tarefa agendada), numa sessao totalmente separada da do
+    # usuario que esta logado na tela. Mapeamento feito pelo usuario
+    # (Mapear unidade de rede / "net use") nunca aparece pra SYSTEM por
+    # WMI, mesmo funcionando normalmente pra quem esta logado -- confirmado
+    # ao vivo (unidade visivel no Explorer, WMI sempre vazio). O contorno e
+    # ler direto do registro, que E compartilhado entre sessoes: a area
+    # HKEY_USERS\<SID>\Network do usuario interativo fica acessivel a
+    # qualquer processo, incluindo SYSTEM, enquanto o perfil dele estiver
+    # carregado (ou seja, enquanto estiver logado). So nao da pra saber
+    # espaco usado/livre por esse caminho -- so a letra e o destino.
+    try {
+        $usuarioLogado = (Get-CimInstance Win32_ComputerSystem).UserName
+        if ($usuarioLogado) {
+            $sid = (New-Object System.Security.Principal.NTAccount($usuarioLogado)).Translate([System.Security.Principal.SecurityIdentifier]).Value
+            $chaveRede = "Registry::HKEY_USERS\$sid\Network"
+            if (Test-Path $chaveRede) {
+                $letrasJaListadas = @($payload.volumes | Where-Object { $_.rede } | ForEach-Object { $_.unidade })
+                Get-ChildItem $chaveRede -ErrorAction SilentlyContinue | ForEach-Object {
+                    $letra = "$($_.PSChildName):"
+                    if ($letrasJaListadas -contains $letra) { return }
+                    $caminho = (Get-ItemProperty -Path $_.PSPath -Name RemotePath -ErrorAction SilentlyContinue).RemotePath
+                    if ($caminho) {
+                        $payload.volumes += @{ unidade = $letra; rede = $true; caminho_rede = $caminho }
+                    }
+                }
+            }
+        }
+    } catch {
+        # sem usuario logado, SID nao resolve, ou hive do usuario nao
+        # carregada -- segue sem essas unidades, nao quebra o resto da
+        # coleta
+    }
+
     # --------------------------------------------------------------
     # Modulos de memoria fisica (um por pente de RAM instalado)
     $payload.memoria_modulos = @(Get-CimInstance Win32_PhysicalMemory -ErrorAction SilentlyContinue | ForEach-Object {
