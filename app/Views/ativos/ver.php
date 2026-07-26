@@ -1340,6 +1340,11 @@ import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js'))
 
         const dados = new URLSearchParams();
         dados.set('ativo_id', botao.dataset.id);
+        // Pede pro RDP já nascer no tamanho do modal (em vez do padrão
+        // 1024x768) -- sem isso, num modal widescreen sobra bastante
+        // espaço vazio nas laterais (confirmado ao vivo).
+        dados.set('largura', corpo.clientWidth);
+        dados.set('altura', corpo.clientHeight);
 
         try {
             const res = await fetch(<?= json_encode(url('/ativos/rdp/conectar')) ?>, { method: 'POST', body: dados });

@@ -85,7 +85,9 @@ class RdpController extends Controller
             return;
         }
 
-        $token = $this->service->gerarToken($ativoId);
+        $largura = (int)($_POST['largura'] ?? 1024);
+        $altura = (int)($_POST['altura'] ?? 768);
+        $token = $this->service->gerarToken($ativoId, $largura, $altura);
         if ($token === null) {
             echo json_encode(['success' => false, 'message' => 'Nenhuma credencial de RDP configurada pra este ativo.']);
             return;

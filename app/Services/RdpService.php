@@ -167,7 +167,15 @@ class RdpService
      * direto na fonte do guacamole-lite: base64(JSON{iv,value}), iv/value
      * cada um também em base64.
      */
-    public function gerarToken(int $ativoId): ?string
+    /**
+     * $largura/$altura -- tamanho (em pixels CSS) da área do modal no
+     * navegador, pra a sessão RDP já nascer nessa resolução em vez de
+     * sempre 1024x768 (proporção 4:3 -- sobrava bastante espaço vazio nas
+     * laterais num modal widescreen, confirmado ao vivo). Clampados pra
+     * uma faixa razoável -- nunca confiar em número vindo do front sem
+     * limite.
+     */
+    public function gerarToken(int $ativoId, int $largura = 1024, int $altura = 768): ?string
     {
         $item = $this->repository->buscarPorAtivo($ativoId);
         if ($item === null) {
@@ -179,6 +187,9 @@ class RdpService
         } catch (\RuntimeException $e) {
             return null;
         }
+
+        $largura = max(640, min(3840, $largura));
+        $altura = max(480, min(2160, $altura));
 
         $payload = json_encode([
             'connection' => [
@@ -192,6 +203,9 @@ class RdpService
                     'ignore-cert' => 'true',
                     'enable-drive' => 'false',
                     'create-drive-path' => 'false',
+                    'width' => (string)$largura,
+                    'height' => (string)$altura,
+                    'dpi' => '96',
                     // Windows 10/11 usa por padrão o pipeline gráfico RDPGFX
                     // (H.264) -- o FreeRDP por trás do guacd às vezes conecta
                     // normal (cursor aparece, sessão fica de pé) mas nunca
