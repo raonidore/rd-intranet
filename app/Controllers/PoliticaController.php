@@ -234,6 +234,23 @@ class PoliticaController extends Controller
         exit;
     }
 
+    /** Servida no thumbnail de pré-visualização da tela. */
+    public function wallpaperImagem(): void
+    {
+        AuthMiddleware::checkModulo('ativos_politicas');
+
+        if (!$this->service->wallpaperConfigurado()) {
+            http_response_code(404);
+            return;
+        }
+
+        $caminho = PoliticaService::caminhoWallpaper();
+        header('Content-Type: ' . $this->service->wallpaperMime());
+        header('Content-Length: ' . filesize($caminho));
+        header('Cache-Control: private, max-age=300');
+        readfile($caminho);
+    }
+
     /** Aplica ou remove UMA regra em N máquinas selecionadas (fogo-e-esquece, ver histórico de cada ativo depois). */
     public function aplicarEmLote(): void
     {

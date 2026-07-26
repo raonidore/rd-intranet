@@ -73,8 +73,10 @@ use App\Services\PoliticaService;
     <div class="card-body">
         <p class="text-muted small">Uma imagem só, entregue igual ao Company Portal/pacote de provisionamento -- envie aqui antes de aplicar a regra "Papel de parede corporativo" numa máquina.</p>
         <?php if ($wallpaperInfo): ?>
-            <div class="d-flex justify-content-between align-items-center border rounded p-2" style="max-width:480px">
-                <span class="small">
+            <div class="d-flex align-items-center gap-3 border rounded p-2" style="max-width:480px">
+                <img src="<?= url('/ativos/politicas/wallpaper/imagem') ?>" alt="Pré-visualização do papel de parede"
+                     class="rounded border" style="width:96px;height:54px;object-fit:cover;flex-shrink:0">
+                <span class="small flex-grow-1">
                     <i class="bi bi-file-earmark-image"></i> <?= htmlspecialchars($wallpaperInfo['nome']) ?>
                     <span class="text-muted">(enviado em <?= htmlspecialchars($wallpaperInfo['enviado_em']) ?>)</span>
                 </span>

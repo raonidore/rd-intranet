@@ -499,6 +499,7 @@ $router->get('/ativos/solicitacoes/resultado', [AtivoController::class, 'resulta
 $router->get('/ativos/politicas', [PoliticaController::class, 'index']);
 $router->post('/ativos/politicas/wallpaper/upload', [PoliticaController::class, 'wallpaperUpload']);
 $router->post('/ativos/politicas/wallpaper/remover', [PoliticaController::class, 'wallpaperRemover']);
+$router->get('/ativos/politicas/wallpaper/imagem', [PoliticaController::class, 'wallpaperImagem']);
 $router->post('/ativos/politicas/aplicar-em-lote', [PoliticaController::class, 'aplicarEmLote']);
 $router->post('/ativos/politicas/salvar-maquina', [PoliticaController::class, 'salvarMaquina']);
 $router->get('/ativos/politicas/status-maquina', [PoliticaController::class, 'statusMaquina']);

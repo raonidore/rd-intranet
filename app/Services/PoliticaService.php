@@ -461,6 +461,13 @@ PS1;
         ];
     }
 
+    public function wallpaperMime(): string
+    {
+        $extensao = strtolower(pathinfo(ConfigService::get(self::CHAVE_WALLPAPER_NOME, '') ?: '', PATHINFO_EXTENSION));
+
+        return $extensao === 'png' ? 'image/png' : 'image/jpeg';
+    }
+
     public function salvarWallpaper(string $caminhoTemporario, string $nomeOriginal): bool
     {
         $extensao = strtolower(pathinfo($nomeOriginal, PATHINFO_EXTENSION));
