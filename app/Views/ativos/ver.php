@@ -1165,6 +1165,7 @@ import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js'))
 
     let clienteAtivo = null;
     let ultimaCredencial = null;
+    let pararDeEscalar = null;
 
     // Um só teclado pra vida inteira do modal (não um por tentativa de
     // conexao) -- Guacamole.Keyboard prende os listeners no `document` e
@@ -1182,6 +1183,11 @@ import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js'))
     function desconectar() {
         tecladoGlobal.onkeydown = null;
         tecladoGlobal.onkeyup = null;
+
+        if (pararDeEscalar) {
+            pararDeEscalar();
+            pararDeEscalar = null;
+        }
 
         if (clienteAtivo) {
             const c = clienteAtivo;
@@ -1388,13 +1394,31 @@ import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js'))
                 }
             };
 
-            display.appendChild(client.getDisplay().getElement());
+            const guacDisplay = client.getDisplay();
+            display.appendChild(guacDisplay.getElement());
             client.connect();
 
             const mouse = new Guacamole.Mouse(display);
             mouse.onmousedown = mouse.onmouseup = mouse.onmousemove = function (estado) {
                 client.sendMouseState(estado);
             };
+
+            // Sem isso a tela do RDP fica no tamanho nativo (ex: 1024x768)
+            // plantada no canto, com o resto do modal (que é fullscreen)
+            // vazio -- reduz/amplia mantendo a proporção pra ocupar a área
+            // disponível. getWidth()/getHeight() só ficam certos depois do
+            // guacd mandar a resolução real (evento onresize), por isso
+            // não dá pra escalar direto após connect().
+            function ajustarEscala() {
+                const larguraNativa = guacDisplay.getWidth();
+                const alturaNativa = guacDisplay.getHeight();
+                if (!larguraNativa || !alturaNativa) return;
+                const escala = Math.min(corpo.clientWidth / larguraNativa, corpo.clientHeight / alturaNativa);
+                guacDisplay.scale(escala > 0 ? escala : 1);
+            }
+            guacDisplay.onresize = ajustarEscala;
+            window.addEventListener('resize', ajustarEscala);
+            pararDeEscalar = function () { window.removeEventListener('resize', ajustarEscala); };
         } catch (e) {
             corpo.innerHTML = '<div class="text-white-50 text-center p-4">Erro ao comunicar com o servidor.</div>';
         }
