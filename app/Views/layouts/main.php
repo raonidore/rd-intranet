@@ -268,7 +268,8 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         || PermissionService::temAcesso('infra_certificado')
         || PermissionService::temAcesso('infra_dependencias')
         || PermissionService::temAcesso('infra_speedtest')
-        || PermissionService::temAcesso('infra_ddns');
+        || PermissionService::temAcesso('infra_ddns')
+        || PermissionService::temAcesso('infra_tuneis');
     ?>
     <?php if ($temInfra): ?>
     <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuInfra"
@@ -373,6 +374,12 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         <?php if (PermissionService::temAcesso('infra_ddns')): ?>
         <a href="<?= url('/infraestrutura/ddns') ?>" class="<?= str_starts_with($uriAtual, '/infraestrutura/ddns') ? 'active' : '' ?>">
             <i class="bi bi-globe2 me-2"></i> DNS Dinâmico
+        </a>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('infra_tuneis')): ?>
+        <a href="<?= url('/infraestrutura/tuneis') ?>" class="<?= str_starts_with($uriAtual, '/infraestrutura/tuneis') ? 'active' : '' ?>">
+            <i class="bi bi-signpost-split me-2"></i> Túneis
         </a>
         <?php endif; ?>
     </div>

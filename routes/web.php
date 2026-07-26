@@ -33,6 +33,7 @@ use App\Controllers\CertificadoController;
 use App\Controllers\DependenciaController;
 use App\Controllers\SpeedtestController;
 use App\Controllers\DdnsController;
+use App\Controllers\TunelController;
 use App\Controllers\VpnController;
 use App\Controllers\VpnWireguardController;
 use App\Controllers\VpnOpenvpnController;
@@ -223,6 +224,14 @@ $router->get('/infraestrutura/ddns/desativar', [DdnsController::class, 'desativa
 $router->post('/infraestrutura/ddns/atualizar-agora', [DdnsController::class, 'atualizarAgora']);
 $router->post('/infraestrutura/ddns/atualizar-todas', [DdnsController::class, 'atualizarTodasAgora']);
 $router->post('/infraestrutura/ddns/automatica', [DdnsController::class, 'ativarAtualizacaoAutomatica']);
+
+$router->get('/infraestrutura/tuneis', [TunelController::class, 'index']);
+$router->post('/infraestrutura/tuneis/tailscale/configurar', [TunelController::class, 'tailscaleConfigurarSalvar']);
+$router->post('/infraestrutura/tuneis/tailscale/conectar', [TunelController::class, 'tailscaleConectar']);
+$router->post('/infraestrutura/tuneis/tailscale/desconectar', [TunelController::class, 'tailscaleDesconectar']);
+$router->post('/infraestrutura/tuneis/cloudflare/configurar', [TunelController::class, 'cloudflareConfigurarSalvar']);
+$router->post('/infraestrutura/tuneis/cloudflare/criar', [TunelController::class, 'cloudflareCriar']);
+$router->post('/infraestrutura/tuneis/cloudflare/remover', [TunelController::class, 'cloudflareRemover']);
 
 $router->get('/vpn', [VpnController::class, 'dashboard']);
 $router->get('/vpn/ikev2/servidor', [VpnIkev2Controller::class, 'servidor']);
