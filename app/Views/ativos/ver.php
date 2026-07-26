@@ -997,10 +997,10 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
         <div class="modal-content">
             <div class="modal-header py-2">
                 <h6 class="modal-title"><i class="bi bi-pc-display-horizontal"></i> RDP -- <?= htmlspecialchars($ativo['nome']) ?></h6>
-                <button type="button" class="btn btn-sm btn-outline-light me-2 d-none" id="botaoCtrlAltDelRdp" title="Enviar Ctrl+Alt+Del pra sessão remota (o navegador nunca consegue capturar essa combinação direto do teclado)">
+                <button type="button" class="btn btn-sm btn-outline-secondary me-2 d-none" id="botaoCtrlAltDelRdp" title="Enviar Ctrl+Alt+Del pra sessão remota (o navegador nunca consegue capturar essa combinação direto do teclado)">
                     <i class="bi bi-keyboard"></i> Ctrl+Alt+Del
                 </button>
-                <button type="button" class="btn btn-sm btn-outline-light me-2" id="botaoEditarCredencialRdp" title="Trocar host/usuário/senha">
+                <button type="button" class="btn btn-sm btn-outline-secondary me-2" id="botaoEditarCredencialRdp" title="Trocar host/usuário/senha">
                     <i class="bi bi-gear"></i> Trocar credencial
                 </button>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
