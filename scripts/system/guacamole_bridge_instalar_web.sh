@@ -65,6 +65,17 @@ if [ ! -f "$PASTA_INSTALACAO/package.json" ]; then
   rm -f /tmp/rd_guacbr_out_$$ /tmp/rd_guacbr_err_$$
 fi
 
+# O usuario dedicado do bridge nao consegue ler /etc/rd-intranet/db_secret.key
+# direto (0640 root:www-data -- so root e o grupo www-data, confirmado ao
+# vivo: EACCES). Em vez de colocar o bridge no grupo www-data (mais
+# acesso do que precisa -- esse grupo tambem cobre storage/uploads etc),
+# copia o CONTEUDO da chave pra um arquivo proprio do bridge, dono
+# guacbridge, 0600. Refeito a cada instalacao/reparo -- se a chave da
+# aplicacao mudar algum dia, um novo "Preparar suporte a RDP" resincroniza.
+CHAVE_BRIDGE="${PASTA_INSTALACAO}/shared.key"
+cp "$CHAVE_SEGREDO" "$CHAVE_BRIDGE"
+chmod 600 "$CHAVE_BRIDGE"
+
 cat > "$PASTA_INSTALACAO/server.js" <<EOF
 // Gerado por guacamole_bridge_instalar_web.sh -- não editar na mão, esse
 // arquivo é sobrescrito a cada reinstalação/reparo.
@@ -73,7 +84,7 @@ const https = require('https');
 const GuacamoleLite = require('guacamole-lite');
 
 const PORTA = ${PORTA};
-const chaveCompartilhada = Buffer.from(fs.readFileSync('${CHAVE_SEGREDO}', 'utf8').trim(), 'base64');
+const chaveCompartilhada = Buffer.from(fs.readFileSync('${PASTA_INSTALACAO}/shared.key', 'utf8').trim(), 'base64');
 
 const servidorHttps = https.createServer({
     cert: fs.readFileSync('${CERT}'),
