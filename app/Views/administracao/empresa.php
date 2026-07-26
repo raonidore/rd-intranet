@@ -34,25 +34,26 @@ use App\Components\Alert;
 <div class="card border-0 shadow-sm mt-3" style="max-width:560px">
     <div class="card-body">
         <label class="form-label">Logo da empresa</label>
-        <div class="form-text mb-2">Aparece pequena, abaixo de "RD Intranet / Painel Administrativo" no menu lateral. Opcional.</div>
+        <div class="form-text mb-2">
+            Aparece pequena, abaixo de "RD Intranet / Painel Administrativo" no menu lateral. Opcional.
+            Redimensionada automaticamente pro padrão <strong>320&times;120px</strong> (mantendo a proporção, sem cortar) antes de enviar -- PNG com fundo transparente funciona melhor.
+        </div>
 
         <?php if ($logoConfigurada): ?>
-            <div class="d-flex justify-content-between align-items-center border rounded p-2">
+            <div class="d-flex justify-content-between align-items-center border rounded p-2 mb-2">
                 <img src="<?= url('/administracao/empresa/logo') ?>" alt="Logo da empresa" style="max-height:36px;max-width:180px">
                 <button type="button" class="btn btn-sm btn-outline-danger" onclick="document.getElementById('formRemoverLogoEmpresa').submit()"><i class="bi bi-trash"></i></button>
             </div>
             <form method="post" action="<?= url('/administracao/empresa/logo/remover') ?>" id="formRemoverLogoEmpresa" class="d-none"></form>
-        <?php else: ?>
-            <form method="post" action="<?= url('/administracao/empresa/logo/upload') ?>" enctype="multipart/form-data" class="d-flex gap-2" id="formUploadLogoEmpresa">
-                <input type="file" name="logo" id="inputLogoEmpresa" accept=".jpg,.jpeg,.png" class="form-control form-control-sm" required>
-                <button type="submit" class="btn btn-sm btn-outline-secondary text-nowrap"><i class="bi bi-upload"></i> Enviar</button>
-            </form>
-            <div class="form-text mt-1">Redimensionada automaticamente pro padrão <strong>320&times;120px</strong> (mantendo a proporção, sem cortar) antes de enviar. PNG com fundo transparente funciona melhor.</div>
         <?php endif; ?>
+
+        <form method="post" action="<?= url('/administracao/empresa/logo/upload') ?>" enctype="multipart/form-data" class="d-flex gap-2" id="formUploadLogoEmpresa">
+            <input type="file" name="logo" id="inputLogoEmpresa" accept=".jpg,.jpeg,.png" class="form-control form-control-sm" required>
+            <button type="submit" class="btn btn-sm btn-outline-secondary text-nowrap"><i class="bi bi-upload"></i> <?= $logoConfigurada ? 'Trocar' : 'Enviar' ?></button>
+        </form>
     </div>
 </div>
 
-<?php if (!$logoConfigurada): ?>
 <script>
 (function () {
     var LARGURA_MAX = 320;
@@ -93,7 +94,6 @@ use App\Components\Alert;
     });
 })();
 </script>
-<?php endif; ?>
 
 <?php
 $conteudo = ob_get_clean();
