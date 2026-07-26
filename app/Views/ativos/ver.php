@@ -1168,18 +1168,21 @@ import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js'))
 
     // Um só teclado pra vida inteira do modal (não um por tentativa de
     // conexao) -- Guacamole.Keyboard prende os listeners no `document` e
-    // não tem como desmontar. Criar um novo a cada reconexão empilhava
-    // handlers, e cada um deles intercepta/consome keydown pra mandar pro
-    // RDP -- confirmado ao vivo: depois de qualquer erro+retry, os campos
-    // de texto do formulário de credencial paravam de aceitar digitação
-    // (só os spinners de número da porta, que não dependem de teclado,
-    // continuavam funcionando). Sempre manda pro client ATIVO no momento
-    // do evento, então nunca precisa recriar.
+    // não tem como desmontar, então criar um novo a cada reconexão
+    // empilhava handlers. A biblioteca só faz preventDefault/intercepta a
+    // tecla quando onkeydown/onkeyup estão definidos (conferido na fonte,
+    // guacamole-common.min.js: "t.onkeydown && ... e.preventDefault()") --
+    // por isso os dois ficam null aqui embaixo, e só viram função de fato
+    // dentro de conectar()/desconectar(). Sem isso (ou deixando os dois
+    // sempre setados), a digitação para de funcionar em QUALQUER campo de
+    // texto da página inteira, com ou sem sessão RDP ativa -- confirmado
+    // ao vivo.
     const tecladoGlobal = new Guacamole.Keyboard(document);
-    tecladoGlobal.onkeydown = function (codigo) { if (clienteAtivo) clienteAtivo.sendKeyEvent(1, codigo); };
-    tecladoGlobal.onkeyup = function (codigo) { if (clienteAtivo) clienteAtivo.sendKeyEvent(0, codigo); };
 
     function desconectar() {
+        tecladoGlobal.onkeydown = null;
+        tecladoGlobal.onkeyup = null;
+
         if (clienteAtivo) {
             const c = clienteAtivo;
             clienteAtivo = null;
@@ -1358,6 +1361,8 @@ import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js'))
             );
             const client = new Guacamole.Client(tunnel);
             clienteAtivo = client;
+            tecladoGlobal.onkeydown = function (codigo) { if (clienteAtivo) clienteAtivo.sendKeyEvent(1, codigo); };
+            tecladoGlobal.onkeyup = function (codigo) { if (clienteAtivo) clienteAtivo.sendKeyEvent(0, codigo); };
 
             client.onerror = function (status) {
                 mostrarErroConexao(status);
