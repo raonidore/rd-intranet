@@ -56,7 +56,7 @@ fi
 # ---------------------------------------------------------------------
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq git php-cli php-mysql php-xml php-mbstring unzip curl
+apt-get install -y -qq git php-cli php-mysql php-xml php-mbstring php-gd unzip curl
 
 # ---------------------------------------------------------------------
 # 2) Clona o repositorio como REPO_USER (mantem o dono correto desde o

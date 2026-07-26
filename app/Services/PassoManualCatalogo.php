@@ -29,6 +29,15 @@ class PassoManualCatalogo
                     return $resultado['success'] && trim($resultado['output']) === 'OK';
                 },
             ],
+            [
+                'chave' => 'instalar_php_gd',
+                'titulo' => 'Instalar extensão PHP GD',
+                'descricao' => 'Sem ela, a logo da empresa (Administração > Dados da Empresa) e qualquer processamento de imagem futuro no servidor ficam sem revalidação/redimensionamento -- só o que for feito no navegador. Instalações novas já saem com isso via scripts/install.sh; servidores existentes precisam rodar uma vez.',
+                'comando' => 'sudo apt-get update && sudo apt-get install -y php-gd && sudo systemctl restart apache2',
+                'verificar' => function (): ?bool {
+                    return extension_loaded('gd');
+                },
+            ],
         ];
     }
 }

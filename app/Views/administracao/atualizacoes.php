@@ -83,11 +83,12 @@ $blocoPasso = function (array $p): string {
             </div>
             <div class="text-end" style="min-width: 220px;">
                 <?php if ($p['status'] === 'auto'): ?>
-                    <?= Badge::make('Detectado automaticamente', 'success') ?>
+                    <?= Badge::make('Executado', 'success') ?>
+                    <div class="small text-muted mt-1">detectado automaticamente</div>
                 <?php elseif ($p['status'] === 'manual'): ?>
-                    <?= Badge::make('Confirmado manualmente', 'success') ?>
+                    <?= Badge::make('Executado', 'success') ?>
                     <div class="small text-muted mt-1">
-                        em <?= htmlspecialchars(data_br($p['confirmado_em'])) ?><?= $p['confirmado_por_nome'] ? ' por ' . htmlspecialchars($p['confirmado_por_nome']) : '' ?>
+                        confirmado em <?= htmlspecialchars(data_br($p['confirmado_em'])) ?><?= $p['confirmado_por_nome'] ? ' por ' . htmlspecialchars($p['confirmado_por_nome']) : '' ?>
                     </div>
                     <form method="post" action="<?= url('/administracao/atualizacoes/passos-manuais/desconfirmar') ?>" class="mt-1"
                           onsubmit="return confirm('Desfazer a confirmação deste passo?');">

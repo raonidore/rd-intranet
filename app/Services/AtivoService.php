@@ -589,6 +589,8 @@ class AtivoService
 
     private const EXTENSOES_LOGO_VALIDAS = ['jpg', 'jpeg', 'png'];
     private const MIME_LOGO = ['jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png'];
+    private const LOGO_LARGURA_MAX = 320;
+    private const LOGO_ALTURA_MAX = 120;
 
     public static function caminhoLogoEmpresa(): string
     {
@@ -615,10 +617,9 @@ class AtivoService
             return false;
         }
 
-        // O redimensionamento pro padrão 320x120 acontece no navegador (o
-        // servidor não tem GD/Imagick instalado) -- esse limite aqui é só
-        // uma trava contra alguém mandar um arquivo gigante direto pro
-        // endpoint, sem passar pelo canvas do formulário.
+        // O redimensionamento pro padrão 320x120 já acontece no navegador
+        // via canvas -- esse limite aqui é só uma trava contra alguém
+        // mandar um arquivo gigante direto pro endpoint, sem passar por lá.
         if (filesize($caminhoTemporario) > 3 * 1024 * 1024) {
             NotificationService::error('Arquivo muito grande (máximo 3MB).');
             return false;
@@ -631,12 +632,24 @@ class AtivoService
             return false;
         }
 
-        if (!@copy($caminhoTemporario, $destino)) {
+        $extensaoFinal = $extensao;
+
+        // Reforço no servidor (o canvas do navegador pode ser pulado
+        // enviando direto pro endpoint): com GD disponível, revalida que é
+        // uma imagem de verdade (não só a extensão) e redimensiona de novo
+        // pro mesmo padrão, sempre virando PNG.
+        if (extension_loaded('gd')) {
+            if (!$this->redimensionarLogoEmpresa($caminhoTemporario, $destino)) {
+                NotificationService::error('Arquivo não é uma imagem válida.');
+                return false;
+            }
+            $extensaoFinal = 'png';
+        } elseif (!@copy($caminhoTemporario, $destino)) {
             NotificationService::error('Não foi possível salvar a logo no servidor.');
             return false;
         }
 
-        ConfigService::set('empresa_logo_ext', $extensao);
+        ConfigService::set('empresa_logo_ext', $extensaoFinal);
 
         AuditService::registrar('Administração', 'Dados da Empresa', 'Logo da empresa enviada/atualizada.');
         NotificationService::success('Logo salva.');
@@ -651,6 +664,45 @@ class AtivoService
 
         AuditService::registrar('Administração', 'Dados da Empresa', 'Logo da empresa removida.');
         NotificationService::success('Logo removida.');
+    }
+
+    /** Mesmo padrão 320x120 do canvas do navegador (não amplia, mantém proporção), sempre gravando PNG com transparência preservada. */
+    private function redimensionarLogoEmpresa(string $origem, string $destino): bool
+    {
+        $info = @getimagesize($origem);
+        if ($info === false) {
+            return false;
+        }
+
+        [$largura, $altura, $tipo] = $info;
+
+        $imagemOrigem = match ($tipo) {
+            IMAGETYPE_JPEG => @imagecreatefromjpeg($origem),
+            IMAGETYPE_PNG => @imagecreatefrompng($origem),
+            default => false,
+        };
+
+        if ($imagemOrigem === false) {
+            return false;
+        }
+
+        $escala = min(1, self::LOGO_LARGURA_MAX / $largura, self::LOGO_ALTURA_MAX / $altura);
+        $larguraFinal = max(1, (int)round($largura * $escala));
+        $alturaFinal = max(1, (int)round($altura * $escala));
+
+        $imagemFinal = imagecreatetruecolor($larguraFinal, $alturaFinal);
+        imagealphablending($imagemFinal, false);
+        imagesavealpha($imagemFinal, true);
+        imagefill($imagemFinal, 0, 0, imagecolorallocatealpha($imagemFinal, 0, 0, 0, 127));
+        imagealphablending($imagemFinal, true);
+        imagecopyresampled($imagemFinal, $imagemOrigem, 0, 0, 0, 0, $larguraFinal, $alturaFinal, $largura, $altura);
+
+        $ok = imagepng($imagemFinal, $destino);
+
+        imagedestroy($imagemOrigem);
+        imagedestroy($imagemFinal);
+
+        return $ok;
     }
 
     private function extrairDetalhes(string $tipo, array $post): array
