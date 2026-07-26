@@ -15,7 +15,8 @@ class AtivoRepository
     }
 
     private const SELECT_COM_CATALOGOS = "
-        SELECT a.*, cs.nome AS setor_nome, cl.nome AS localizacao_nome
+        SELECT a.*, cs.nome AS setor_nome, cl.nome AS localizacao_nome,
+            EXISTS(SELECT 1 FROM ativos_rdp_credenciais r WHERE r.ativo_id = a.id) AS rdp_configurado
         FROM ativos a
         LEFT JOIN ativos_catalogos cs ON cs.id = a.setor_id
         LEFT JOIN ativos_catalogos cl ON cl.id = a.localizacao_id

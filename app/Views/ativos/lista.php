@@ -173,7 +173,12 @@ function thOrdenavel(string $coluna, string $label, ?string $ordenarChave, array
                             <tr>
                                 <td><input type="checkbox" class="form-check-input checkbox-ativo" name="ids[]" value="<?= (int)$a['id'] ?>"></td>
                                 <td class="font-monospace small" data-col="codigo"><?= htmlspecialchars($a['codigo_patrimonio']) ?></td>
-                                <td data-col="nome"><?= htmlspecialchars($a['nome']) ?></td>
+                                <td data-col="nome">
+                                    <?= htmlspecialchars($a['nome']) ?>
+                                    <?php if (!empty($a['rdp_configurado'])): ?>
+                                        <i class="bi bi-pc-display-horizontal text-primary" data-bs-toggle="tooltip" title="RDP configurado"></i>
+                                    <?php endif; ?>
+                                </td>
                                 <td data-col="apelido"><?= htmlspecialchars($a['apelido'] ?: '—') ?></td>
                                 <td data-col="tipo"><i class="bi <?= AtivoService::TIPOS[$a['tipo']]['icone'] ?>"></i> <?= htmlspecialchars(AtivoService::TIPOS[$a['tipo']]['label']) ?></td>
                                 <td data-col="status"><?= Badge::make(htmlspecialchars(AtivoService::STATUS[$a['status']] ?? $a['status']), $statusCores[$a['status']] ?? 'secondary') ?></td>
