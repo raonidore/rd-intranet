@@ -1,0 +1,271 @@
+<?php
+
+namespace App\Services;
+
+use App\Repositories\IptablesRegraRepository;
+use App\Repositories\RdpCredencialRepository;
+
+/**
+ * RDP pelo navegador (Ativos > ficha da máquina) -- conecta num RDP que
+ * JÁ existe na máquina Windows (nada instalado no alvo), via guacd
+ * (traduz o protocolo) + ponte guacamole-lite (WebSocket, própria porta,
+ * TLS com o mesmo certificado do Apache -- ver
+ * scripts/system/guacamole_bridge_instalar_web.sh pro raciocínio de não
+ * passar isso pelo proxy do Apache, mesma decisão já tomada pro
+ * MeshCentral).
+ *
+ * Credencial por ativo (não config única do servidor, diferente do
+ * módulo Túneis) -- mesmo padrão de segredo por linha do db_conexoes
+ * (senha_cifrada via CryptoService, nunca devolvida em claro por leitura
+ * comum).
+ */
+class RdpService
+{
+    private const PORTA_BRIDGE = 8092;
+    private const SCRIPT_GUACD = '/opt/rdtecnologia/scripts/guacd_instalar_web.sh';
+    private const SCRIPT_BRIDGE = '/opt/rdtecnologia/scripts/guacamole_bridge_instalar_web.sh';
+    private const CHAVE_SEGREDO = '/etc/rd-intranet/db_secret.key';
+
+    private RdpCredencialRepository $repository;
+    private LinuxService $linux;
+
+    public function __construct()
+    {
+        $this->repository = new RdpCredencialRepository();
+        $this->linux = new LinuxService();
+    }
+
+    /** Credencial sem a senha -- pra preencher o formulário/mostrar o host já salvo. */
+    public function credencial(int $ativoId): ?array
+    {
+        $item = $this->repository->buscarPorAtivo($ativoId);
+        if ($item) {
+            unset($item['senha_cifrada']);
+        }
+
+        return $item;
+    }
+
+    public function credencialSalva(int $ativoId): bool
+    {
+        return $this->repository->buscarPorAtivo($ativoId) !== null;
+    }
+
+    /**
+     * Fluxo inteiro dessa feature é modal + fetch (sem recarregar a
+     * página) -- por isso devolve ['success','message'] direto em vez de
+     * usar NotificationService (que é pro flash da PRÓXIMA carga de
+     * página via redirect, não se aplica aqui).
+     */
+    public function salvarCredencial(int $ativoId, string $host, int $porta, string $usuario, string $senha): array
+    {
+        $host = trim($host);
+        $usuario = trim($usuario);
+
+        if ($host === '' || $usuario === '') {
+            return ['success' => false, 'message' => 'Informe o host e o usuário do RDP.'];
+        }
+
+        if ($porta < 1 || $porta > 65535) {
+            return ['success' => false, 'message' => 'Porta inválida.'];
+        }
+
+        $existente = $this->repository->buscarPorAtivo($ativoId);
+
+        if ($senha === '') {
+            if (!$existente) {
+                return ['success' => false, 'message' => 'Informe a senha do RDP.'];
+            }
+            $senhaCifrada = $existente['senha_cifrada'];
+        } else {
+            $senhaCifrada = CryptoService::encriptar($senha);
+        }
+
+        $this->repository->salvar($ativoId, $host, $porta, $usuario, $senhaCifrada);
+
+        AuditService::registrar('Ativos', 'RDP', "Credencial de RDP salva pro ativo #{$ativoId}.");
+
+        return ['success' => true, 'message' => 'Credencial salva.'];
+    }
+
+    public function removerCredencial(int $ativoId): array
+    {
+        $this->repository->remover($ativoId);
+
+        AuditService::registrar('Ativos', 'RDP', "Credencial de RDP removida do ativo #{$ativoId}.");
+
+        return ['success' => true, 'message' => 'Credencial removida.'];
+    }
+
+    /**
+     * Estado ao vivo (nunca cacheado) do gateway compartilhado por todos
+     * os ativos -- guacd, ponte e porta no firewall. Não checa o
+     * certificado HTTPS aqui: /etc/ssl/rd-intranet é 0750 root:root, o
+     * PHP roda como www-data e não consegue nem ler o diretório --
+     * is_file() daria sempre false mesmo com HTTPS ativo (confirmado ao
+     * vivo). Quem confirma isso de verdade é o próprio script de
+     * instalação, rodando como root (ver instalarGateway()).
+     */
+    public function statusGateway(): array
+    {
+        return [
+            'guacd_instalado' => $this->linux->executar('command -v guacd')['success'],
+            'guacd_ativo' => trim($this->linux->executar('systemctl is-active guacd')['output']) === 'active',
+            'bridge_ativo' => trim($this->linux->executar('systemctl is-active rd-guac-bridge')['output']) === 'active',
+            'porta_liberada' => $this->portaLiberadaNoFirewall(),
+        ];
+    }
+
+    public function gatewayPronto(): bool
+    {
+        $status = $this->statusGateway();
+
+        return $status['guacd_ativo'] && $status['bridge_ativo'] && $status['porta_liberada'];
+    }
+
+    public function instalarGateway(): array
+    {
+        $guacd = $this->resultadoScript(
+            $this->linux->executarScript(self::SCRIPT_GUACD),
+            'Falha ao instalar o guacd.'
+        );
+        if (!$guacd['success']) {
+            return $guacd;
+        }
+
+        $bridge = $this->resultadoScript(
+            $this->linux->executarScript(self::SCRIPT_BRIDGE),
+            'Falha ao instalar a ponte RDP.'
+        );
+        if (!$bridge['success']) {
+            return $bridge;
+        }
+
+        $firewall = $this->liberarPortaNoFirewall();
+        if (!($firewall['success'] ?? false)) {
+            return $firewall;
+        }
+
+        AuditService::registrar('Ativos', 'RDP', 'Suporte a RDP pelo navegador instalado neste servidor.');
+
+        return ['success' => true, 'message' => 'Suporte a RDP pelo navegador pronto.'];
+    }
+
+    /**
+     * Token único de conexão pro guacamole-lite -- JSON com host/usuário/
+     * senha cifrado AES-256-CBC com a MESMA chave de 32 bytes já usada
+     * pelo CryptoService (reaproveitada em vez de provisionar mais um
+     * segredo; o bridge lê o mesmo arquivo). Formato do envelope conferido
+     * direto na fonte do guacamole-lite: base64(JSON{iv,value}), iv/value
+     * cada um também em base64.
+     */
+    public function gerarToken(int $ativoId): ?string
+    {
+        $item = $this->repository->buscarPorAtivo($ativoId);
+        if ($item === null) {
+            return null;
+        }
+
+        try {
+            $senha = CryptoService::decriptar($item['senha_cifrada']);
+        } catch (\RuntimeException $e) {
+            return null;
+        }
+
+        $payload = json_encode([
+            'connection' => [
+                'type' => 'rdp',
+                'settings' => [
+                    'hostname' => $item['host'],
+                    'port' => (string)$item['porta'],
+                    'username' => $item['usuario'],
+                    'password' => $senha,
+                    'security' => 'any',
+                    'ignore-cert' => 'true',
+                    'enable-drive' => 'false',
+                    'create-drive-path' => 'false',
+                ],
+            ],
+        ]);
+
+        $chave = $this->chaveCompartilhada();
+        if ($chave === null) {
+            return null;
+        }
+
+        $iv = random_bytes(16);
+        $cifrado = openssl_encrypt($payload, 'aes-256-cbc', $chave, OPENSSL_RAW_DATA, $iv);
+        if ($cifrado === false) {
+            return null;
+        }
+
+        $envelope = json_encode([
+            'iv' => base64_encode($iv),
+            'value' => base64_encode($cifrado),
+        ]);
+
+        return base64_encode($envelope);
+    }
+
+    public function portaBridge(): int
+    {
+        return self::PORTA_BRIDGE;
+    }
+
+    private function chaveCompartilhada(): ?string
+    {
+        if (!is_readable(self::CHAVE_SEGREDO)) {
+            return null;
+        }
+
+        $chave = base64_decode(trim(file_get_contents(self::CHAVE_SEGREDO)));
+
+        return $chave !== false ? $chave : null;
+    }
+
+    private function portaLiberadaNoFirewall(): bool
+    {
+        $repo = new IptablesRegraRepository();
+        $porta = (string)self::PORTA_BRIDGE;
+
+        foreach ($repo->buscarPorOrigemTemplate('liberar_porta') as $regra) {
+            if (!empty($regra['ativo']) && (string)($regra['porta_destino'] ?? '') === $porta) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** Mesmo padrão de AcessoRemotoService::liberarPortaNoFirewall() -- ACCEPT de entrada é aditivo, confirma na hora em vez de deixar pendente na janela de rollback do Firewall. */
+    private function liberarPortaNoFirewall(): array
+    {
+        $firewall = new IptablesService();
+
+        $resultado = $firewall->aplicarTemplate('liberar_porta', [
+            'protocolo' => 'tcp',
+            'porta' => (string)self::PORTA_BRIDGE,
+        ]);
+
+        if (!$resultado['success']) {
+            return $resultado;
+        }
+
+        return $firewall->confirmar();
+    }
+
+    private function resultadoScript(array $execResultado, string $mensagemPadrao): array
+    {
+        $dados = json_decode($execResultado['output'], true);
+
+        if (is_array($dados) && isset($dados['success'])) {
+            return [
+                'success' => (bool)$dados['success'],
+                'message' => (string)($dados['message'] ?? $mensagemPadrao),
+                'detalhes' => $execResultado['output'],
+            ];
+        }
+
+        return ['success' => false, 'message' => $mensagemPadrao, 'detalhes' => $execResultado['output']];
+    }
+}

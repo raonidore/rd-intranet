@@ -14,10 +14,20 @@ if [ ! -f /etc/ssl/rd-intranet/atual.crt ] || [ ! -f /etc/ssl/rd-intranet/atual.
 fi
 
 mkdir -p /etc/ssl/rd-intranet
+
+# Grupo "ssl-cert" (convencao padrao Debian/Ubuntu) le a chave privada sem
+# precisar rodar como root -- usado pela ponte RDP pelo navegador
+# (guacamole_bridge_instalar_web.sh), que reaproveita este mesmo
+# certificado do Apache pra terminar TLS. So concede leitura de grupo,
+# nunca afrouxa "outros" nem muda o dono real (continua root). O grupo
+# "ssl-cert" existe por padrao no Ubuntu/Debian (pacote base), nao
+# precisa ser criado aqui.
+chgrp ssl-cert /etc/ssl/rd-intranet 2>/dev/null || true
 chmod 750 /etc/ssl/rd-intranet
-chown root:root /etc/ssl/rd-intranet/atual.crt /etc/ssl/rd-intranet/atual.key
+chown root:root /etc/ssl/rd-intranet/atual.crt
+chown root:ssl-cert /etc/ssl/rd-intranet/atual.key
 chmod 644 /etc/ssl/rd-intranet/atual.crt
-chmod 600 /etc/ssl/rd-intranet/atual.key
+chmod 640 /etc/ssl/rd-intranet/atual.key
 
 VHOST="/etc/apache2/sites-available/rd.intranet-ssl.conf"
 if [ ! -f "$VHOST" ]; then

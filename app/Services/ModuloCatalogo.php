@@ -51,6 +51,7 @@ class ModuloCatalogo
         'ativos_novo' => ['label' => 'Ativos - Novo/Editar', 'grupo' => 'Ativos'],
         'ativos_cadastros' => ['label' => 'Ativos - Cadastros (Setor/Localização)', 'grupo' => 'Ativos'],
         'ativos_acesso_remoto' => ['label' => 'Ativos - Acesso Remoto', 'grupo' => 'Ativos'],
+        'ativos_rdp' => ['label' => 'Ativos - RDP', 'grupo' => 'Ativos'],
         'ativos_etiqueta_config' => ['label' => 'Ativos - Configurações de Etiqueta', 'grupo' => 'Ativos'],
         'ativos_politicas' => ['label' => 'Ativos - Regras de Segurança', 'grupo' => 'Ativos'],
         'entra_dashboard' => ['label' => 'Entra - Dashboard', 'grupo' => 'Microsoft Entra'],

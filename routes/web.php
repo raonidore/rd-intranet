@@ -47,6 +47,7 @@ use App\Controllers\AtivoController;
 use App\Controllers\AtivoAgenteController;
 use App\Controllers\PoliticaController;
 use App\Controllers\AcessoRemotoController;
+use App\Controllers\RdpController;
 use App\Controllers\EtiquetaConfigController;
 use App\Controllers\EmpresaController;
 use App\Controllers\SistemaModulosController;
@@ -496,6 +497,12 @@ $router->post('/ativos/acesso-remoto/compartilhar', [AcessoRemotoController::cla
 $router->post('/ativos/acesso-remoto/liberar-porta', [AcessoRemotoController::class, 'liberarPorta']);
 $router->get('/ativos/acesso-remoto/mesh-agente', [AcessoRemotoController::class, 'baixarMeshAgente']);
 $router->post('/ativos/acesso-remoto/mesh-agente/upload', [AcessoRemotoController::class, 'uploadMeshAgente']);
+
+$router->get('/ativos/rdp/status', [RdpController::class, 'status']);
+$router->post('/ativos/rdp/credencial', [RdpController::class, 'salvarCredencial']);
+$router->post('/ativos/rdp/credencial/remover', [RdpController::class, 'removerCredencial']);
+$router->post('/ativos/rdp/instalar', [RdpController::class, 'instalarGateway']);
+$router->post('/ativos/rdp/conectar', [RdpController::class, 'conectar']);
 $router->get('/ativos/etiqueta-config', [EtiquetaConfigController::class, 'index']);
 $router->post('/ativos/etiqueta-config/salvar', [EtiquetaConfigController::class, 'salvar']);
 $router->post('/ativos/etiqueta-config/preview', [EtiquetaConfigController::class, 'preview']);

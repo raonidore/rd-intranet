@@ -4,6 +4,7 @@ ob_start();
 use App\Components\Alert;
 use App\Components\Badge;
 use App\Services\AtivoService;
+use App\Services\PermissionService;
 
 $statusCores = [
     'ativo' => 'success',
@@ -141,6 +142,11 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
         <?php if (!empty($ativo['mesh_device_id'])): ?>
             <button type="button" class="btn btn-outline-primary" id="botaoTelaRemota" data-id="<?= (int)$ativo['id'] ?>">
                 <i class="bi bi-display"></i> Tela remota
+            </button>
+        <?php endif; ?>
+        <?php if (in_array($ativo['tipo'], ['computador', 'servidor'], true) && PermissionService::temAcesso('ativos_rdp')): ?>
+            <button type="button" class="btn btn-outline-primary" id="botaoRdp" data-id="<?= (int)$ativo['id'] ?>">
+                <i class="bi bi-pc-display-horizontal"></i> RDP
             </button>
         <?php endif; ?>
         <?php if (!empty($ativo['snmp_habilitado']) && !empty($ativo['ip'])): ?>
@@ -985,6 +991,26 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     </div>
 </div>
 
+<!-- Modal de RDP pelo navegador -->
+<div class="modal fade" id="modalRdp" tabindex="-1">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title"><i class="bi bi-pc-display-horizontal"></i> RDP -- <?= htmlspecialchars($ativo['nome']) ?></h6>
+                <button type="button" class="btn btn-sm btn-outline-light me-2" id="botaoEditarCredencialRdp" title="Trocar host/usuário/senha">
+                    <i class="bi bi-gear"></i>
+                </button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0 d-flex align-items-center justify-content-center bg-dark" id="corpoRdp">
+                <div class="text-white-50">
+                    <i class="bi bi-hourglass-split"></i> Verificando...
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Modal do Explorador de Arquivos -->
 <div class="modal fade" id="modalExplorador" tabindex="-1">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
@@ -1122,7 +1148,216 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
         corpo.innerHTML = statusInicial;
     });
 })();
+</script>
 
+<script type="module">
+import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js')) ?>;
+
+(function () {
+    const botao = document.getElementById('botaoRdp');
+    if (!botao) return;
+
+    const modalEl = document.getElementById('modalRdp');
+    const corpo = document.getElementById('corpoRdp');
+    const botaoEditar = document.getElementById('botaoEditarCredencialRdp');
+    const statusInicial = corpo.innerHTML;
+    const hostPadrao = <?= json_encode($ativo['ip'] ?? '') ?>;
+
+    let clienteAtivo = null;
+    let ultimaCredencial = null;
+
+    function desconectar() {
+        if (clienteAtivo) {
+            clienteAtivo.disconnect();
+            clienteAtivo = null;
+        }
+    }
+
+    function formularioCredencial(credencial) {
+        botaoEditar.classList.toggle('d-none', !credencial);
+
+        corpo.innerHTML = '';
+        const wrap = document.createElement('div');
+        wrap.className = 'p-4';
+        wrap.style.maxWidth = '420px';
+        wrap.style.width = '100%';
+        wrap.innerHTML = `
+            <form id="formCredencialRdp">
+                <div class="mb-2">
+                    <label class="form-label small text-white-50">Host</label>
+                    <input type="text" name="host" class="form-control form-control-sm" required>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small text-white-50">Porta</label>
+                    <input type="number" name="porta" class="form-control form-control-sm" value="3389" required>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small text-white-50">Usuário</label>
+                    <input type="text" name="usuario" class="form-control form-control-sm" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small text-white-50">Senha</label>
+                    <input type="password" name="senha" class="form-control form-control-sm">
+                </div>
+                <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-check-lg"></i> Salvar e conectar</button>
+            </form>
+        `;
+        corpo.appendChild(wrap);
+
+        const form = wrap.querySelector('#formCredencialRdp');
+        form.host.value = credencial?.host || hostPadrao;
+        form.porta.value = credencial?.porta || 3389;
+        form.usuario.value = credencial?.usuario || '';
+        form.senha.placeholder = credencial ? '•••••••• (deixe em branco pra manter)' : '';
+        form.senha.required = !credencial;
+
+        form.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            const dados = new URLSearchParams(new FormData(form));
+            dados.set('ativo_id', botao.dataset.id);
+
+            corpo.innerHTML = '<div class="text-white-50 text-center p-4"><i class="bi bi-hourglass-split"></i> Salvando...</div>';
+
+            try {
+                const res = await fetch(<?= json_encode(url('/ativos/rdp/credencial')) ?>, { method: 'POST', body: dados });
+                const resultado = await res.json();
+
+                if (!resultado.success) {
+                    corpo.innerHTML = '<div class="text-white-50 text-center p-4">' + (resultado.message || 'Falha ao salvar.') + '</div>';
+                    return;
+                }
+
+                conectar();
+            } catch (e) {
+                corpo.innerHTML = '<div class="text-white-50 text-center p-4">Erro ao comunicar com o servidor.</div>';
+            }
+        });
+    }
+
+    function telaPreparo() {
+        corpo.innerHTML = '';
+        const wrap = document.createElement('div');
+        wrap.className = 'text-white-50 text-center p-4';
+        wrap.innerHTML = `
+            <p>O suporte a RDP pelo navegador ainda não está pronto neste servidor (guacd + ponte de conexão).</p>
+            <button type="button" class="btn btn-sm btn-outline-light" id="botaoPrepararRdp">
+                <i class="bi bi-gear"></i> Preparar suporte a RDP no navegador
+            </button>
+        `;
+        corpo.appendChild(wrap);
+
+        wrap.querySelector('#botaoPrepararRdp').addEventListener('click', async function () {
+            this.disabled = true;
+            this.innerHTML = '<i class="bi bi-hourglass-split"></i> Instalando (pode levar alguns minutos)...';
+
+            try {
+                const res = await fetch(<?= json_encode(url('/ativos/rdp/instalar')) ?>, { method: 'POST' });
+                const resultado = await res.json();
+
+                if (!resultado.success) {
+                    corpo.innerHTML = '<div class="text-white-50 text-center p-4">' + (resultado.message || 'Falha ao instalar.') + '</div>';
+                    return;
+                }
+
+                abrirModal();
+            } catch (e) {
+                corpo.innerHTML = '<div class="text-white-50 text-center p-4">Erro ao comunicar com o servidor.</div>';
+            }
+        });
+    }
+
+    async function conectar() {
+        botaoEditar.classList.remove('d-none');
+        corpo.innerHTML = '<div class="text-white-50 text-center p-4"><i class="bi bi-hourglass-split"></i> Conectando...</div>';
+
+        const dados = new URLSearchParams();
+        dados.set('ativo_id', botao.dataset.id);
+
+        try {
+            const res = await fetch(<?= json_encode(url('/ativos/rdp/conectar')) ?>, { method: 'POST', body: dados });
+            const resultado = await res.json();
+
+            if (!resultado.success) {
+                corpo.innerHTML = '<div class="text-white-50 text-center p-4">' + (resultado.message || 'Falha ao conectar.') + '</div>';
+                return;
+            }
+
+            corpo.innerHTML = '';
+            const display = document.createElement('div');
+            display.style.width = '100%';
+            display.style.height = '100%';
+            display.style.overflow = 'auto';
+            corpo.appendChild(display);
+
+            const tunnel = new Guacamole.WebSocketTunnel(
+                'wss://' + location.hostname + ':' + resultado.porta + '/?token=' + encodeURIComponent(resultado.token)
+            );
+            const client = new Guacamole.Client(tunnel);
+            clienteAtivo = client;
+
+            client.onerror = function (erro) {
+                corpo.innerHTML = '<div class="text-white-50 text-center p-4">Erro na sessão RDP: ' + (erro?.message || 'desconhecido') + '</div>';
+            };
+
+            display.appendChild(client.getDisplay().getElement());
+            client.connect();
+
+            const mouse = new Guacamole.Mouse(display);
+            mouse.onmousedown = mouse.onmouseup = mouse.onmousemove = function (estado) {
+                client.sendMouseState(estado);
+            };
+
+            const teclado = new Guacamole.Keyboard(document);
+            teclado.onkeydown = function (codigo) { client.sendKeyEvent(1, codigo); };
+            teclado.onkeyup = function (codigo) { client.sendKeyEvent(0, codigo); };
+        } catch (e) {
+            corpo.innerHTML = '<div class="text-white-50 text-center p-4">Erro ao comunicar com o servidor.</div>';
+        }
+    }
+
+    async function abrirModal() {
+        botaoEditar.classList.add('d-none');
+        corpo.innerHTML = '<div class="text-white-50 text-center p-4"><i class="bi bi-hourglass-split"></i> Verificando...</div>';
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+
+        try {
+            const res = await fetch(<?= json_encode(url('/ativos/rdp/status')) ?> + '?ativo_id=' + botao.dataset.id);
+            const resultado = await res.json();
+
+            const g = resultado.gateway || {};
+            ultimaCredencial = resultado.credencial || null;
+
+            if (!(g.guacd_ativo && g.bridge_ativo && g.porta_liberada)) {
+                telaPreparo();
+                return;
+            }
+
+            if (ultimaCredencial) {
+                conectar();
+            } else {
+                formularioCredencial(null);
+            }
+        } catch (e) {
+            corpo.innerHTML = '<div class="text-white-50 text-center p-4">Erro ao comunicar com o servidor.</div>';
+        }
+    }
+
+    botao.addEventListener('click', abrirModal);
+
+    botaoEditar.addEventListener('click', function () {
+        desconectar();
+        formularioCredencial(ultimaCredencial);
+    });
+
+    modalEl.addEventListener('hidden.bs.modal', function () {
+        desconectar();
+        corpo.innerHTML = statusInicial;
+        botaoEditar.classList.add('d-none');
+    });
+})();
+</script>
+
+<script>
 /**
  * Solicita uma leitura ao vivo (listar_arquivos/listar_processos) e
  * espera o agente responder via heartbeat -- ver AtivoService::
