@@ -1383,7 +1383,7 @@ import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js'))
             const g = resultado.gateway || {};
             ultimaCredencial = resultado.credencial || null;
 
-            if (!(g.guacd_ativo && g.bridge_ativo && g.porta_liberada)) {
+            if (!(g.guacd_ativo && g.bridge_ativo && g.proxy_configurado)) {
                 telaPreparo();
                 return;
             }
