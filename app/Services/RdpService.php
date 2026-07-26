@@ -2,17 +2,21 @@
 
 namespace App\Services;
 
-use App\Repositories\IptablesRegraRepository;
 use App\Repositories\RdpCredencialRepository;
 
 /**
  * RDP pelo navegador (Ativos > ficha da máquina) -- conecta num RDP que
  * JÁ existe na máquina Windows (nada instalado no alvo), via guacd
- * (traduz o protocolo) + ponte guacamole-lite (WebSocket, própria porta,
- * TLS com o mesmo certificado do Apache -- ver
- * scripts/system/guacamole_bridge_instalar_web.sh pro raciocínio de não
- * passar isso pelo proxy do Apache, mesma decisão já tomada pro
- * MeshCentral).
+ * (traduz o protocolo) + ponte guacamole-lite (WebSocket, só em
+ * 127.0.0.1) + proxy reverso do Apache (mesma porta HTTPS que o site já
+ * usa, ver scripts/system/rdp_proxy_ativar_web.sh). Decisão revertida em
+ * relação à primeira versão (porta própria + TLS na própria ponte, igual
+ * ao MeshCentral): confirmado ao vivo que isso exige liberar mais uma
+ * porta no roteador/NAT de CADA servidor pra acesso remoto funcionar --
+ * inviável administrando vários servidores atrás de NAT com mapeamento
+ * mínimo de portas. Proxy pela mesma porta do site elimina essa
+ * exigência (e de quebra tira a ponte da necessidade de ler certificado
+ * nenhum -- quem termina TLS agora é o Apache).
  *
  * Credencial por ativo (não config única do servidor, diferente do
  * módulo Túneis) -- mesmo padrão de segredo por linha do db_conexoes
@@ -21,9 +25,11 @@ use App\Repositories\RdpCredencialRepository;
  */
 class RdpService
 {
-    private const PORTA_BRIDGE = 8092;
     private const SCRIPT_GUACD = '/opt/rdtecnologia/scripts/guacd_instalar_web.sh';
     private const SCRIPT_BRIDGE = '/opt/rdtecnologia/scripts/guacamole_bridge_instalar_web.sh';
+    private const SCRIPT_PROXY = '/opt/rdtecnologia/scripts/rdp_proxy_ativar_web.sh';
+    private const VHOST_SSL = '/etc/apache2/sites-available/rd.intranet-ssl.conf';
+    private const MARCA_PROXY = '# RD Intranet - proxy da ponte RDP pelo navegador';
     private const CHAVE_SEGREDO = '/etc/rd-intranet/db_secret.key';
 
     private RdpCredencialRepository $repository;
@@ -99,12 +105,11 @@ class RdpService
 
     /**
      * Estado ao vivo (nunca cacheado) do gateway compartilhado por todos
-     * os ativos -- guacd, ponte e porta no firewall. Não checa o
-     * certificado HTTPS aqui: /etc/ssl/rd-intranet é 0750 root:root, o
-     * PHP roda como www-data e não consegue nem ler o diretório --
-     * is_file() daria sempre false mesmo com HTTPS ativo (confirmado ao
-     * vivo). Quem confirma isso de verdade é o próprio script de
-     * instalação, rodando como root (ver instalarGateway()).
+     * os ativos -- guacd, ponte e proxy do Apache. O vhost SSL
+     * (/etc/apache2/sites-available/rd.intranet-ssl.conf) é 644 root:root
+     * -- world-readable, confirmado, diferente do certificado em si --
+     * então dá pra checar o proxy direto por aqui, sem precisar do script
+     * root.
      */
     public function statusGateway(): array
     {
@@ -112,7 +117,7 @@ class RdpService
             'guacd_instalado' => $this->linux->executar('command -v guacd')['success'],
             'guacd_ativo' => trim($this->linux->executar('systemctl is-active guacd')['output']) === 'active',
             'bridge_ativo' => trim($this->linux->executar('systemctl is-active rd-guac-bridge')['output']) === 'active',
-            'porta_liberada' => $this->portaLiberadaNoFirewall(),
+            'proxy_configurado' => is_readable(self::VHOST_SSL) && str_contains(file_get_contents(self::VHOST_SSL), self::MARCA_PROXY),
         ];
     }
 
@@ -120,7 +125,7 @@ class RdpService
     {
         $status = $this->statusGateway();
 
-        return $status['guacd_ativo'] && $status['bridge_ativo'] && $status['porta_liberada'];
+        return $status['guacd_ativo'] && $status['bridge_ativo'] && $status['proxy_configurado'];
     }
 
     public function instalarGateway(): array
@@ -141,9 +146,12 @@ class RdpService
             return $bridge;
         }
 
-        $firewall = $this->liberarPortaNoFirewall();
-        if (!($firewall['success'] ?? false)) {
-            return $firewall;
+        $proxy = $this->resultadoScript(
+            $this->linux->executarScript(self::SCRIPT_PROXY),
+            'Falha ao configurar o proxy do RDP no Apache.'
+        );
+        if (!$proxy['success']) {
+            return $proxy;
         }
 
         AuditService::registrar('Ativos', 'RDP', 'Suporte a RDP pelo navegador instalado neste servidor.');
@@ -207,11 +215,6 @@ class RdpService
         return base64_encode($envelope);
     }
 
-    public function portaBridge(): int
-    {
-        return self::PORTA_BRIDGE;
-    }
-
     private function chaveCompartilhada(): ?string
     {
         if (!is_readable(self::CHAVE_SEGREDO)) {
@@ -221,37 +224,6 @@ class RdpService
         $chave = base64_decode(trim(file_get_contents(self::CHAVE_SEGREDO)));
 
         return $chave !== false ? $chave : null;
-    }
-
-    private function portaLiberadaNoFirewall(): bool
-    {
-        $repo = new IptablesRegraRepository();
-        $porta = (string)self::PORTA_BRIDGE;
-
-        foreach ($repo->buscarPorOrigemTemplate('liberar_porta') as $regra) {
-            if (!empty($regra['ativo']) && (string)($regra['porta_destino'] ?? '') === $porta) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /** Mesmo padrão de AcessoRemotoService::liberarPortaNoFirewall() -- ACCEPT de entrada é aditivo, confirma na hora em vez de deixar pendente na janela de rollback do Firewall. */
-    private function liberarPortaNoFirewall(): array
-    {
-        $firewall = new IptablesService();
-
-        $resultado = $firewall->aplicarTemplate('liberar_porta', [
-            'protocolo' => 'tcp',
-            'porta' => (string)self::PORTA_BRIDGE,
-        ]);
-
-        if (!$resultado['success']) {
-            return $resultado;
-        }
-
-        return $firewall->confirmar();
     }
 
     private function resultadoScript(array $execResultado, string $mensagemPadrao): array

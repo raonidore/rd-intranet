@@ -1188,7 +1188,7 @@ import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js'))
     function mostrarErroConexao(status) {
         desconectar();
 
-        let mensagem = 'A conexão foi encerrada.';
+        let mensagem = 'A conexão foi encerrada, sem detalhe do motivo -- confira se o host/porta estão certos e se o RDP está ligado nessa máquina.';
         if (status) {
             mensagem = MENSAGENS_ERRO_RDP[status.code] || ('Falha na sessão RDP' + (status.message ? ': ' + status.message : ' (código ' + status.code + ').'));
         }
@@ -1304,6 +1304,16 @@ import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js'))
 
     async function conectar() {
         botaoEditar.classList.remove('d-none');
+
+        // O proxy do RDP só existe no vhost HTTPS (ver
+        // rdp_proxy_ativar_web.sh) -- acessando o painel por HTTP puro não
+        // tem como funcionar (não é so "recomendado usar https", é uma
+        // exigência real dessa feature).
+        if (location.protocol !== 'https:') {
+            corpo.innerHTML = '<div class="text-white-50 text-center p-4"><p>Acesse este painel via <strong>HTTPS</strong> pra usar RDP pelo navegador -- agora você está em HTTP (' + location.protocol + '//' + location.host + ').</p></div>';
+            return;
+        }
+
         corpo.innerHTML = '<div class="text-white-50 text-center p-4"><i class="bi bi-hourglass-split"></i> Conectando...</div>';
 
         const dados = new URLSearchParams();
@@ -1326,7 +1336,7 @@ import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js'))
             corpo.appendChild(display);
 
             const tunnel = new Guacamole.WebSocketTunnel(
-                'wss://' + location.hostname + ':' + resultado.porta + '/?token=' + encodeURIComponent(resultado.token)
+                'wss://' + location.host + '/rdp-ws?token=' + encodeURIComponent(resultado.token)
             );
             const client = new Guacamole.Client(tunnel);
             clienteAtivo = client;

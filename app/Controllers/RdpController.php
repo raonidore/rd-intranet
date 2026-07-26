@@ -93,6 +93,6 @@ class RdpController extends Controller
 
         AuditService::registrar('Ativos', 'RDP', "Sessão de RDP pelo navegador aberta para o ativo #{$ativoId}.");
 
-        echo json_encode(['success' => true, 'token' => $token, 'porta' => $this->service->portaBridge()]);
+        echo json_encode(['success' => true, 'token' => $token]);
     }
 }

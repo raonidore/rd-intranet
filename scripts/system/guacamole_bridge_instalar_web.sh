@@ -2,40 +2,26 @@
 # guacamole_bridge_instalar_web.sh
 # Instala a ponte WebSocket<->guacd (pacote npm "guacamole-lite") como
 # serviço systemd próprio, rodando como usuário dedicado não-root -- mesmo
-# molde de meshcentral_instalar_web.sh. Escuta na própria porta (não atrás
-# do Apache -- mesma decisão já documentada em meshcentral_instalar_web.sh
-# sobre WebSocket atrás de proxy reverso ser frágil), com TLS/WSS
-# terminado pelo próprio Node reaproveitando o MESMO certificado que o
-# Apache já usa (/etc/ssl/rd-intranet/atual.{crt,key}) -- assim o
-# navegador não recebe aviso de certificado não confiável.
+# molde de meshcentral_instalar_web.sh. Escuta SÓ em 127.0.0.1 (nunca em
+# interface pública) -- quem fala com o navegador é o Apache, via proxy
+# reverso (ver rdp_proxy_ativar_web.sh), não a ponte diretamente.
+#
+# Decisão revertida em relação à primeira versão desta feature (porta
+# própria + TLS terminado aqui): confirmado ao vivo que isso exige o
+# admin liberar mais uma porta no roteador/NAT em CADA servidor pra
+# acesso remoto funcionar -- inviável pra quem administra vários
+# servidores atrás de NAT com mapeamento mínimo de portas (só a do site).
+# Proxy pela mesma porta do site elimina essa exigência, e como bônus a
+# ponte nem precisa mais ler certificado nenhum (quem termina TLS agora é
+# o Apache) -- fim do problema de permissão do certificado que já foi
+# corrigido duas vezes nesse desenho antigo.
 
 set -u
 
 PASTA_INSTALACAO="/opt/rd-guac-bridge"
 USUARIO="guacbridge"
 PORTA=8092
-CERT="/etc/ssl/rd-intranet/atual.crt"
-CHAVE_TLS="/etc/ssl/rd-intranet/atual.key"
 CHAVE_SEGREDO="/etc/rd-intranet/db_secret.key"
-
-if [ ! -f "$CERT" ] || [ ! -f "$CHAVE_TLS" ]; then
-  echo '{"success":false,"message":"Nenhum certificado HTTPS ativo em /etc/ssl/rd-intranet/ -- configure em Infraestrutura > Certificado Digital antes de ativar RDP pelo navegador."}'
-  exit 1
-fi
-
-# Garante leitura via grupo "ssl-cert" na chave privada -- em servidores
-# onde o HTTPS foi ativado ANTES desta feature existir, o arquivo ainda
-# esta com a permissao antiga (600 root:root) e o bridge (usuario
-# dedicado nao-root) nao consegue ler, mesmo depois do proprio
-# certificado_ativar_web.sh ja ter sido corrigido no codigo -- aquela
-# correcao so e reaplicada quando o certificado e reativado/trocado, nao
-# retroativamente. Reaplicado aqui tambem (idempotente, nunca muda o
-# dono real nem afrouxa "outros") pra o instalador da ponte nao depender
-# de ninguem ter reativado o HTTPS antes de rodar isso.
-chgrp ssl-cert /etc/ssl/rd-intranet 2>/dev/null || true
-chmod 750 /etc/ssl/rd-intranet
-chgrp ssl-cert "$CHAVE_TLS" 2>/dev/null || true
-chmod 640 "$CHAVE_TLS"
 
 if [ ! -f "$CHAVE_SEGREDO" ]; then
   echo '{"success":false,"message":"Chave de criptografia da aplicação não encontrada em /etc/rd-intranet/db_secret.key."}'
@@ -57,13 +43,6 @@ fi
 if ! id "$USUARIO" >/dev/null 2>&1; then
   useradd --system --home-dir "$PASTA_INSTALACAO" --shell /usr/sbin/nologin "$USUARIO"
 fi
-
-# Grupo "ssl-cert" e a convencao padrao Debian/Ubuntu pra servicos nao-root
-# lerem chave privada TLS sem precisar rodar como root -- so adiciona
-# leitura de grupo, nunca afrouxa "outros" nem muda o dono real (continua
-# root). certificado_ativar_web.sh preserva esse grupo em toda troca de
-# certificado (ver comentario la).
-usermod -aG ssl-cert "$USUARIO"
 
 mkdir -p "$PASTA_INSTALACAO"
 
@@ -94,25 +73,24 @@ cat > "$PASTA_INSTALACAO/server.js" <<EOF
 // Gerado por guacamole_bridge_instalar_web.sh -- não editar na mão, esse
 // arquivo é sobrescrito a cada reinstalação/reparo.
 const fs = require('fs');
-const https = require('https');
+const http = require('http');
 const GuacamoleLite = require('guacamole-lite');
 
 const PORTA = ${PORTA};
 const chaveCompartilhada = Buffer.from(fs.readFileSync('${PASTA_INSTALACAO}/shared.key', 'utf8').trim(), 'base64');
 
-const servidorHttps = https.createServer({
-    cert: fs.readFileSync('${CERT}'),
-    key: fs.readFileSync('${CHAVE_TLS}'),
-});
+// TLS quem termina agora e o Apache (proxy reverso) -- a ponte so fala
+// com o Apache via loopback, texto puro mesmo, sem risco real.
+const servidorHttp = http.createServer();
 
 new GuacamoleLite(
-    { server: servidorHttps },
+    { server: servidorHttp },
     { host: '127.0.0.1', port: 4822 },
     { crypt: { cypher: 'AES-256-CBC', key: chaveCompartilhada } }
 );
 
-servidorHttps.listen(PORTA, () => {
-    console.log('Ponte RDP (guacamole-lite) ouvindo em :' + PORTA);
+servidorHttp.listen(PORTA, '127.0.0.1', () => {
+    console.log('Ponte RDP (guacamole-lite) ouvindo em 127.0.0.1:' + PORTA);
 });
 EOF
 
@@ -143,7 +121,7 @@ systemctl restart rd-guac-bridge
 sleep 2
 
 if systemctl is-active --quiet rd-guac-bridge; then
-  echo "{\"success\":true,\"message\":\"Ponte RDP instalada e rodando na porta ${PORTA}.\"}"
+  echo "{\"success\":true,\"message\":\"Ponte RDP instalada e rodando (127.0.0.1:${PORTA}).\"}"
 else
   ULTIMO_LOG="$(journalctl -u rd-guac-bridge -n 20 --no-pager 2>/dev/null | tr '\n' ' ' | sed 's/"/\\"/g')"
   echo "{\"success\":false,\"message\":\"Ponte RDP instalada mas o serviço não subiu. Log: ${ULTIMO_LOG}\"}"
