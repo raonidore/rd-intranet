@@ -1395,12 +1395,37 @@ import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js'))
             };
 
             const guacDisplay = client.getDisplay();
-            display.appendChild(guacDisplay.getElement());
+            const elementoDisplay = guacDisplay.getElement();
+            display.appendChild(elementoDisplay);
             client.connect();
 
-            const mouse = new Guacamole.Mouse(display);
+            // O cursor remoto já é desenhado pelo próprio Guacamole (é a
+            // "seta" que se move na tela do RDP) -- sem esconder o cursor
+            // nativo do navegador aqui, ficam os dois visíveis ao mesmo
+            // tempo, um seguindo o outro com pequena defasagem (confirmado
+            // ao vivo: "2 mouses").
+            display.style.cursor = 'none';
+
+            // Guacamole.Mouse calcula a posição em pixels crus relativos
+            // ao elemento que ele escuta (sem noção nenhuma de escala) --
+            // por isso escuta direto no elemento do Guacamole (que é o que
+            // de fato encolhe/cresce com guacDisplay.scale()), e divide
+            // x/y pela escala atual antes de mandar pro RDP. Sem isso, com
+            // a tela redimensionada (ver escala acima), o clique caía num
+            // ponto bem diferente de onde o cursor remoto aparecia --
+            // confirmado ao vivo, os dois cursores "descolavam".
+            const mouse = new Guacamole.Mouse(elementoDisplay);
             mouse.onmousedown = mouse.onmouseup = mouse.onmousemove = function (estado) {
-                client.sendMouseState(estado);
+                const escalaAtual = guacDisplay.getScale() || 1;
+                client.sendMouseState({
+                    x: estado.x / escalaAtual,
+                    y: estado.y / escalaAtual,
+                    left: estado.left,
+                    middle: estado.middle,
+                    right: estado.right,
+                    up: estado.up,
+                    down: estado.down,
+                });
             };
 
             // Sem isso a tela do RDP fica no tamanho nativo (ex: 1024x768)
