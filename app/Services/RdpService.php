@@ -192,6 +192,12 @@ class RdpService
                     'ignore-cert' => 'true',
                     'enable-drive' => 'false',
                     'create-drive-path' => 'false',
+                    // Windows 10/11 usa por padrão o pipeline gráfico RDPGFX
+                    // (H.264) -- o FreeRDP por trás do guacd às vezes conecta
+                    // normal (cursor aparece, sessão fica de pé) mas nunca
+                    // desenha a área de trabalho nesse modo. Desabilitar volta
+                    // pro bitmap clássico, que sempre funciona.
+                    'disable-gfx' => 'true',
                 ],
             ],
         ]);
