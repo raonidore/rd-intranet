@@ -97,10 +97,12 @@ class TunelController extends Controller
 
     private function notificarEVoltar(array $resultado): void
     {
+        $detalhes = $resultado['detalhes'] ?? null;
+
         if ($resultado['success']) {
-            NotificationService::success($resultado['message']);
+            NotificationService::success($resultado['message'], $detalhes);
         } else {
-            NotificationService::error($resultado['message']);
+            NotificationService::error($resultado['message'], $detalhes);
         }
 
         $this->voltar();

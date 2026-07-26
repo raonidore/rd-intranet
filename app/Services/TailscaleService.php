@@ -112,25 +112,28 @@ class TailscaleService
         }
 
         if (!$this->status()['instalado']) {
-            $instalacao = $this->linux->executarScript(self::SCRIPT, ['instalar']);
-            $dadosInstalacao = json_decode($instalacao['output'], true);
-            if (!($dadosInstalacao['success'] ?? false)) {
-                return ['success' => false, 'message' => $dadosInstalacao['message'] ?? 'Falha ao instalar o Tailscale.'];
+            $instalacao = $this->resultadoScript(
+                $this->linux->executarScript(self::SCRIPT, ['instalar']),
+                'Falha ao instalar o Tailscale.'
+            );
+            if (!$instalacao['success']) {
+                return $instalacao;
             }
         }
 
         $authkey = $this->gerarAuthKey($token);
         if (!$authkey['sucesso']) {
-            return ['success' => false, 'message' => $authkey['mensagem']];
+            return ['success' => false, 'message' => $authkey['mensagem'], 'detalhes' => $authkey['detalhes'] ?? null];
         }
 
         $hostname = $this->hostnameDesejadoAtual();
         $comando = 'sudo ' . escapeshellarg(self::SCRIPT) . ' conectar' . ($hostname !== '' ? ' ' . escapeshellarg($hostname) : '');
-        $resultado = $this->linux->executarComEntrada($comando, $authkey['dados']);
-        $dados = json_decode($resultado['output'], true);
-
-        if (!($dados['success'] ?? false)) {
-            return ['success' => false, 'message' => $dados['message'] ?? 'Falha ao conectar ao Tailscale.'];
+        $resultado = $this->resultadoScript(
+            $this->linux->executarComEntrada($comando, $authkey['dados']),
+            'Falha ao conectar ao Tailscale.'
+        );
+        if (!$resultado['success']) {
+            return $resultado;
         }
 
         ConfigService::set(self::CHAVE_CONECTADO_DESDE, date('Y-m-d H:i:s'));
@@ -146,17 +149,40 @@ class TailscaleService
             $args[] = '--logout';
         }
 
-        $resultado = $this->linux->executarScript(self::SCRIPT, $args);
-        $dados = json_decode($resultado['output'], true);
-
-        if (!($dados['success'] ?? false)) {
-            return ['success' => false, 'message' => $dados['message'] ?? 'Falha ao desconectar.'];
+        $resultado = $this->resultadoScript(
+            $this->linux->executarScript(self::SCRIPT, $args),
+            'Falha ao desconectar.'
+        );
+        if (!$resultado['success']) {
+            return $resultado;
         }
 
         ConfigService::set(self::CHAVE_CONECTADO_DESDE, '');
         AuditService::registrar('Infraestrutura', 'Túneis', 'Servidor desconectado do tailnet' . ($logout ? ' (logout completo)' : '') . '.');
 
         return ['success' => true, 'message' => 'Desconectado.'];
+    }
+
+    /**
+     * Traduz a saída de um script _web.sh pro formato ['success','message','detalhes']
+     * -- se a saída não for o JSON esperado (script não sincronizado, sudo
+     * falhou, etc.), usa a mensagem padrão mas guarda o texto cru em
+     * 'detalhes' (botão "Detalhes técnicos" do Alert), em vez de esconder a
+     * causa real atrás de um fallback genérico.
+     */
+    private function resultadoScript(array $execResultado, string $mensagemPadrao): array
+    {
+        $dados = json_decode($execResultado['output'], true);
+
+        if (is_array($dados) && isset($dados['success'])) {
+            return [
+                'success' => (bool)$dados['success'],
+                'message' => (string)($dados['message'] ?? $mensagemPadrao),
+                'detalhes' => $execResultado['output'],
+            ];
+        }
+
+        return ['success' => false, 'message' => $mensagemPadrao, 'detalhes' => $execResultado['output']];
     }
 
     private function apiTokenAtual(): ?string
@@ -209,7 +235,7 @@ class TailscaleService
         curl_close($ch);
 
         if ($resposta === false) {
-            return ['sucesso' => false, 'dados' => null, 'mensagem' => "Erro de comunicação com o Tailscale: {$erroCurl}"];
+            return ['sucesso' => false, 'dados' => null, 'mensagem' => "Erro de comunicação com o Tailscale: {$erroCurl}", 'detalhes' => null];
         }
 
         $dados = json_decode($resposta, true);
@@ -220,6 +246,6 @@ class TailscaleService
 
         $mensagemErro = $dados['message'] ?? "Erro HTTP {$codigo} ao gerar authkey (confira o API Token/Tailnet).";
 
-        return ['sucesso' => false, 'dados' => null, 'mensagem' => $mensagemErro];
+        return ['sucesso' => false, 'dados' => null, 'mensagem' => $mensagemErro, 'detalhes' => "HTTP {$codigo}\n{$resposta}"];
     }
 }

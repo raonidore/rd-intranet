@@ -127,10 +127,12 @@ class CloudflareTunnelService
         // faz sentido desinstalar só porque um passo posterior falhou
         // (mesmo raciocínio do certbot ficar instalado mesmo se uma
         // tentativa de emissão Let's Encrypt falhar).
-        $instalacao = $this->linux->executarScript(self::SCRIPT, ['instalar']);
-        $dadosInstalacao = json_decode($instalacao['output'], true);
-        if (!($dadosInstalacao['success'] ?? false)) {
-            return ['success' => false, 'message' => $dadosInstalacao['message'] ?? 'Falha ao instalar o cloudflared.'];
+        $instalacao = $this->resultadoScript(
+            $this->linux->executarScript(self::SCRIPT, ['instalar']),
+            'Falha ao instalar o cloudflared.'
+        );
+        if (!$instalacao['success']) {
+            return $instalacao;
         }
 
         $desfazer = [];
@@ -141,11 +143,11 @@ class CloudflareTunnelService
                 'config_src' => 'cloudflare',
             ], $token);
             if (!$resposta['sucesso']) {
-                return ['success' => false, 'message' => $resposta['mensagem']];
+                return ['success' => false, 'message' => $resposta['mensagem'], 'detalhes' => $this->corpoBruto($resposta)];
             }
             $tunnelId = $resposta['dados']['result']['id'] ?? null;
             if (!$tunnelId) {
-                return ['success' => false, 'message' => 'A Cloudflare não retornou o ID do túnel criado.'];
+                return ['success' => false, 'message' => 'A Cloudflare não retornou o ID do túnel criado.', 'detalhes' => $this->corpoBruto($resposta)];
             }
             $desfazer[] = fn() => $this->chamarApi('DELETE', "/accounts/{$accountId}/cfd_tunnel/{$tunnelId}", null, $token);
 
@@ -159,14 +161,14 @@ class CloudflareTunnelService
             ], $token);
             if (!$resposta['sucesso']) {
                 $this->executarDesfazer($desfazer);
-                return ['success' => false, 'message' => $resposta['mensagem']];
+                return ['success' => false, 'message' => $resposta['mensagem'], 'detalhes' => $this->corpoBruto($resposta)];
             }
 
             $resposta = $this->chamarApi('GET', "/accounts/{$accountId}/cfd_tunnel/{$tunnelId}/token", null, $token);
             $connectorToken = $resposta['dados']['result'] ?? null;
             if (!$resposta['sucesso'] || !$connectorToken) {
                 $this->executarDesfazer($desfazer);
-                return ['success' => false, 'message' => $resposta['mensagem'] ?: 'Não foi possível obter o token de conexão do túnel.'];
+                return ['success' => false, 'message' => $resposta['mensagem'] ?: 'Não foi possível obter o token de conexão do túnel.', 'detalhes' => $this->corpoBruto($resposta)];
             }
 
             $resposta = $this->chamarApi('POST', "/zones/{$zoneId}/dns_records", [
@@ -177,7 +179,7 @@ class CloudflareTunnelService
             ], $token);
             if (!$resposta['sucesso']) {
                 $this->executarDesfazer($desfazer);
-                return ['success' => false, 'message' => $resposta['mensagem']];
+                return ['success' => false, 'message' => $resposta['mensagem'], 'detalhes' => $this->corpoBruto($resposta)];
             }
             $dnsRecordId = $resposta['dados']['result']['id'] ?? null;
             if ($dnsRecordId) {
@@ -185,11 +187,13 @@ class CloudflareTunnelService
             }
 
             $comando = 'sudo ' . escapeshellarg(self::SCRIPT) . ' servico_instalar';
-            $resultado = $this->linux->executarComEntrada($comando, $connectorToken);
-            $dadosServico = json_decode($resultado['output'], true);
-            if (!($dadosServico['success'] ?? false)) {
+            $resultadoServico = $this->resultadoScript(
+                $this->linux->executarComEntrada($comando, $connectorToken),
+                'Falha ao instalar o serviço do cloudflared.'
+            );
+            if (!$resultadoServico['success']) {
                 $this->executarDesfazer($desfazer);
-                return ['success' => false, 'message' => $dadosServico['message'] ?? 'Falha ao instalar o serviço do cloudflared.'];
+                return $resultadoServico;
             }
 
             ConfigService::set(self::CHAVE_TUNNEL_ID, $tunnelId);
@@ -202,6 +206,28 @@ class CloudflareTunnelService
             $this->executarDesfazer($desfazer);
             return ['success' => false, 'message' => 'Erro inesperado ao criar o túnel: ' . $e->getMessage()];
         }
+    }
+
+    /** Traduz a saída de um script _web.sh pro formato ['success','message','detalhes'] -- ver TailscaleService::resultadoScript() pro mesmo raciocínio. */
+    private function resultadoScript(array $execResultado, string $mensagemPadrao): array
+    {
+        $dados = json_decode($execResultado['output'], true);
+
+        if (is_array($dados) && isset($dados['success'])) {
+            return [
+                'success' => (bool)$dados['success'],
+                'message' => (string)($dados['message'] ?? $mensagemPadrao),
+                'detalhes' => $execResultado['output'],
+            ];
+        }
+
+        return ['success' => false, 'message' => $mensagemPadrao, 'detalhes' => $execResultado['output']];
+    }
+
+    /** Corpo bruto (JSON) da última resposta da API, pro botão "Detalhes técnicos". */
+    private function corpoBruto(array $resposta): ?string
+    {
+        return $resposta['dados'] !== null ? json_encode($resposta['dados'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) : null;
     }
 
     public function remover(): array
