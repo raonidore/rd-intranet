@@ -998,7 +998,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             <div class="modal-header py-2">
                 <h6 class="modal-title"><i class="bi bi-pc-display-horizontal"></i> RDP -- <?= htmlspecialchars($ativo['nome']) ?></h6>
                 <button type="button" class="btn btn-sm btn-outline-light me-2" id="botaoEditarCredencialRdp" title="Trocar host/usuário/senha">
-                    <i class="bi bi-gear"></i>
+                    <i class="bi bi-gear"></i> Trocar credencial
                 </button>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
@@ -1168,9 +1168,45 @@ import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js'))
 
     function desconectar() {
         if (clienteAtivo) {
-            clienteAtivo.disconnect();
+            const c = clienteAtivo;
             clienteAtivo = null;
+            try { c.disconnect(); } catch (e) { /* já desconectado */ }
         }
+    }
+
+    // Codigos do protocolo Guacamole (Guacamole.Status.Code) que valem a
+    // pena traduzir pra uma mensagem especifica -- o resto cai num
+    // fallback generico. Referencia: guacamole-common-js Status.js.
+    const MENSAGENS_ERRO_RDP = {
+        0x0301: 'Usuário ou senha incorretos (ou sem permissão de acesso remoto nessa máquina).',
+        0x0308: 'A máquina não respondeu a tempo -- confira se o RDP está ligado e o host/porta estão certos.',
+        0x0204: 'Não encontrei essa máquina no host/porta informados.',
+        0x0207: 'Não consegui alcançar essa máquina -- confira o host/porta.',
+        0x0208: 'Essa máquina está indisponível agora -- confira se está ligada e com o RDP habilitado.',
+    };
+
+    function mostrarErroConexao(status) {
+        desconectar();
+
+        let mensagem = 'A conexão foi encerrada.';
+        if (status) {
+            mensagem = MENSAGENS_ERRO_RDP[status.code] || ('Falha na sessão RDP' + (status.message ? ': ' + status.message : ' (código ' + status.code + ').'));
+        }
+
+        corpo.innerHTML = '';
+        const aviso = document.createElement('div');
+        aviso.className = 'text-white-50 text-center p-4';
+        aviso.innerHTML = `
+            <p>${mensagem}</p>
+            <button type="button" class="btn btn-sm btn-outline-light" id="botaoTentarNovamenteRdp">
+                <i class="bi bi-arrow-repeat"></i> Trocar credencial e tentar de novo
+            </button>
+        `;
+        corpo.appendChild(aviso);
+
+        aviso.querySelector('#botaoTentarNovamenteRdp').addEventListener('click', function () {
+            formularioCredencial(ultimaCredencial);
+        });
     }
 
     function formularioCredencial(credencial) {
@@ -1295,8 +1331,18 @@ import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js'))
             const client = new Guacamole.Client(tunnel);
             clienteAtivo = client;
 
-            client.onerror = function (erro) {
-                corpo.innerHTML = '<div class="text-white-50 text-center p-4">Erro na sessão RDP: ' + (erro?.message || 'desconhecido') + '</div>';
+            client.onerror = function (status) {
+                mostrarErroConexao(status);
+            };
+
+            // Cobre o caso de desconexao sem onerror explicito (ex: guacd
+            // fecha a sessao por credencial invalida sem mandar um erro de
+            // protocolo claro) -- sem isso, a tela so ficava preta e parada,
+            // sem nenhum aviso (confirmado ao vivo).
+            client.onstatechange = function (estado) {
+                if (estado === 5 && clienteAtivo === client) {
+                    mostrarErroConexao(null);
+                }
             };
 
             display.appendChild(client.getDisplay().getElement());
