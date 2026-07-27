@@ -698,6 +698,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
         <div class="hitech-panel">
             <div class="hitech-topbar">
                 <span class="hitech-breadcrumb"><i class="bi bi-terminal"></i> Gerenciador de processos</span>
+                <input type="search" class="form-control form-control-sm" id="filtroProcessos" placeholder="Pesquisar por nome ou PID..." style="max-width: 260px;">
                 <span class="text-muted small" id="totalProcessos"></span>
             </div>
             <div class="hitech-body" id="corpoProcessos">
@@ -1857,14 +1858,20 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro) {
 
     const corpoEl = document.getElementById('corpoProcessos');
     const totalEl = document.getElementById('totalProcessos');
+    const filtroEl = document.getElementById('filtroProcessos');
     const ativoId = <?= (int)$ativo['id'] ?>;
     let jaCarregouUmaVez = false;
+    let processosCarregados = [];
 
     function renderTabela(itens) {
-        totalEl.textContent = itens.length + ' processo(s)';
+        totalEl.textContent = itens.length === processosCarregados.length
+            ? itens.length + ' processo(s)'
+            : itens.length + ' de ' + processosCarregados.length + ' processo(s)';
 
         if (!itens.length) {
-            corpoEl.innerHTML = '<div class="hitech-empty">Nenhum processo retornado.</div>';
+            corpoEl.innerHTML = '<div class="hitech-empty">' +
+                (processosCarregados.length ? 'Nenhum processo encontrado com esse filtro.' : 'Nenhum processo retornado.') +
+                '</div>';
             return;
         }
 
@@ -1924,13 +1931,27 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro) {
         corpoEl.appendChild(tabela);
     }
 
+    function aplicarFiltro() {
+        const termo = filtroEl.value.trim().toLowerCase();
+        if (!termo) {
+            renderTabela(processosCarregados);
+            return;
+        }
+
+        renderTabela(processosCarregados.filter(function (item) {
+            return (item.nome || '').toLowerCase().includes(termo) || String(item.pid).includes(termo);
+        }));
+    }
+
     async function carregarProcessos() {
         corpoEl.innerHTML = '<div class="hitech-loading"><div class="spinner-border" role="status"></div><div class="mt-2">Consultando processos...</div></div>';
         totalEl.textContent = '';
 
         try {
             const resposta = await pedirEAguardarSolicitacao(ativoId, 'listar_processos', null);
-            renderTabela(resposta.resultado);
+            processosCarregados = resposta.resultado;
+            filtroEl.value = '';
+            renderTabela(processosCarregados);
         } catch (e) {
             corpoEl.innerHTML = '';
             const div = document.createElement('div');
@@ -1962,6 +1983,7 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro) {
     }
 
     botaoAtualizar.addEventListener('click', carregarProcessos);
+    filtroEl.addEventListener('input', aplicarFiltro);
 
     const abaProcessosBotao = document.querySelector('[data-bs-target="#abaProcessos"]');
     if (abaProcessosBotao) {
