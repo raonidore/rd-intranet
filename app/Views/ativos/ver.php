@@ -501,7 +501,8 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                 <?php endif; ?>
                                 <?php if ($agenteSuportaExplorador): ?>
                                     <button type="button" class="btn btn-sm btn-outline-primary mt-2 botao-explorar-volume"
-                                            data-unidade="<?= htmlspecialchars($v['unidade']) ?>">
+                                            data-unidade="<?= htmlspecialchars($v['unidade']) ?>"
+                                            data-caminho-rede="<?= $ehRede ? htmlspecialchars($v['caminho_rede'] ?? '') : '' ?>">
                                         <i class="bi bi-folder2-open"></i> Explorar arquivos
                                     </button>
                                 <?php elseif ($ativo['origem'] === 'agente'): ?>
@@ -1604,6 +1605,10 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro) {
     }
 
     function renderBreadcrumb(caminho) {
+        // Caminho de rede (\\servidor\pasta) some o prefixo \\ ao dividir
+        // por \ -- sem recolocar, clicar num segmento do breadcrumb manda
+        // um caminho quebrado (falta o \\ pro Windows reconhecer como UNC).
+        const ehRede = caminho.startsWith('\\\\');
         const partes = caminho.replace(/\\+$/, '').split('\\').filter(Boolean);
         breadcrumbEl.innerHTML = '';
 
@@ -1612,7 +1617,7 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro) {
             return;
         }
 
-        let acumulado = '';
+        let acumulado = ehRede ? '\\\\' : '';
         partes.forEach(function (parte, i) {
             acumulado += parte + '\\';
             const caminhoDoSegmento = acumulado;
@@ -1847,7 +1852,17 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro) {
     botoes.forEach(function (botao) {
         botao.addEventListener('click', function () {
             bootstrap.Modal.getOrCreateInstance(modalEl).show();
-            carregarPasta(botao.dataset.unidade + '\\');
+
+            // Unidade de rede mapeada (letra tipo M:) só existe na sessão
+            // do usuário que fez o mapeamento -- o agente roda como SYSTEM
+            // (tarefa agendada), sessão totalmente separada, então "M:\"
+            // não existe pra ele (erro "Could not find a part of the
+            // path"). O caminho UNC por trás da letra (\\servidor\pasta)
+            // não depende de sessão nenhuma, então usa ele quando
+            // disponível -- confirmado ao vivo como a causa desse erro.
+            const caminhoRede = botao.dataset.caminhoRede;
+            const caminhoInicial = caminhoRede ? caminhoRede.replace(/\\+$/, '') + '\\' : (botao.dataset.unidade + '\\');
+            carregarPasta(caminhoInicial);
         });
     });
 })();
