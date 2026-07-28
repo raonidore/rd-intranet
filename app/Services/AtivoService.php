@@ -1010,6 +1010,83 @@ class AtivoService
         }
     }
 
+    /*
+     |---------------------------------------------------------
+     | Credencial de acesso a unidade de rede mapeada, por MAQUINA -- mesmo
+     | raciocinio da elevação acima: a mesma pasta pode estar mapeada em
+     | várias máquinas, cada uma logada com um usuário diferente, então não
+     | dá pra reaproveitar uma credencial única por caminho. Usada pelo
+     | agente (rodando como SYSTEM) pra autenticar via `net use` antes de
+     | explorar arquivos num caminho \\servidor\pasta -- SYSTEM não enxerga
+     | o mapeamento feito pela sessão do usuário logado, então precisa da
+     | própria credencial pra montar a sessão SMB dele mesmo.
+     |---------------------------------------------------------
+     */
+
+    public function credenciaisRedeConfiguradas(int $ativoId): bool
+    {
+        $ativo = $this->repository->buscarPorId($ativoId);
+
+        return $ativo !== null
+            && trim((string)($ativo['rede_usuario'] ?? '')) !== ''
+            && trim((string)($ativo['rede_senha_cifrada'] ?? '')) !== '';
+    }
+
+    public function usuarioRedeAtual(int $ativoId): string
+    {
+        $ativo = $this->repository->buscarPorId($ativoId);
+
+        return trim((string)($ativo['rede_usuario'] ?? ''));
+    }
+
+    public function salvarCredenciaisRede(int $ativoId, string $usuario, string $senha): bool
+    {
+        $usuario = trim($usuario);
+        $senha = trim($senha);
+
+        if ($usuario === '' || ($senha === '' && !$this->credenciaisRedeConfiguradas($ativoId))) {
+            NotificationService::error('Informe o usuário e a senha de acesso à unidade de rede.');
+            return false;
+        }
+
+        $senhaCifrada = $senha !== '' ? CryptoService::encriptar($senha) : null;
+        $this->repository->salvarCredenciaisRede($ativoId, $usuario, $senhaCifrada);
+
+        AuditService::registrar('Ativos', 'Credenciais de rede', "Credenciais de rede do ativo #{$ativoId} atualizadas (usuário: {$usuario}).");
+        NotificationService::success('Credenciais de rede salvas para esta máquina.');
+
+        return true;
+    }
+
+    public function removerCredenciaisRede(int $ativoId): void
+    {
+        $this->repository->salvarCredenciaisRede($ativoId, null, null);
+
+        AuditService::registrar('Ativos', 'Credenciais de rede', "Credenciais de rede do ativo #{$ativoId} removidas.");
+        NotificationService::success('Credenciais de rede removidas -- explorar arquivos numa unidade de rede mapeada volta a falhar (SYSTEM não tem a sessão do usuário que mapeou).');
+    }
+
+    /** Só chamado internamente ao montar a resposta do heartbeat pra uma solicitação de arquivo em caminho de rede -- nunca exposto pra fora. */
+    private function credenciaisRedeParaAgente(int $ativoId): ?array
+    {
+        $ativo = $this->repository->buscarPorId($ativoId);
+        $senhaCifrada = trim((string)($ativo['rede_senha_cifrada'] ?? ''));
+        $usuario = trim((string)($ativo['rede_usuario'] ?? ''));
+
+        if ($usuario === '' || $senhaCifrada === '') {
+            return null;
+        }
+
+        try {
+            return [
+                'usuario' => $usuario,
+                'senha' => CryptoService::decriptar($senhaCifrada),
+            ];
+        } catch (\RuntimeException $e) {
+            return null;
+        }
+    }
+
     /**
      * Distribuição do agente Windows em C#/WinForms (.exe) -- diferente do
      * .ps1 (que é texto, gerado sob demanda a cada download), o .exe é um
@@ -1550,6 +1627,20 @@ class AtivoService
                     if ($credencial !== null) {
                         $item['usuario_elevacao'] = $credencial['usuario'];
                         $item['senha_elevacao'] = $credencial['senha'];
+                    }
+                }
+
+                // Mesma lógica -- só manda quando a solicitação de fato
+                // aponta pra um caminho de rede (\\servidor\pasta). SYSTEM
+                // (conta que roda o agente) não enxerga o mapeamento feito
+                // pela sessão do usuário logado, então precisa autenticar
+                // sozinho antes de acessar.
+                if (in_array($item['tipo'], ['listar_arquivos', 'baixar_arquivo'], true)
+                    && str_starts_with((string)$item['parametro'], '\\\\')) {
+                    $credencialRede = $this->credenciaisRedeParaAgente($ativoId);
+                    if ($credencialRede !== null) {
+                        $item['usuario_rede'] = $credencialRede['usuario'];
+                        $item['senha_rede'] = $credencialRede['senha'];
                     }
                 }
 

@@ -516,6 +516,48 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                 <?php endforeach; ?>
             </div>
             <p class="text-muted small mt-2 mb-0">Fabricante e número de série do disco físico nem sempre são informados pelo Windows -- depende do driver/controlador de cada fabricante. Unidades de rede mapeadas (letra ligada a um caminho \\servidor\pasta) aparecem marcadas como "Rede" -- dá pra explorar os arquivos nelas do mesmo jeito.</p>
+
+            <?php $temVolumeRede = !empty(array_filter($volumes, fn($v) => !empty($v['rede']))); ?>
+            <?php if ($temVolumeRede && $agenteSuportaExplorador): ?>
+                <div class="card border-0 shadow-sm mt-3">
+                    <div class="card-header bg-white"><strong><i class="bi bi-hdd-network"></i> Credencial de acesso à unidade de rede</strong></div>
+                    <div class="card-body">
+                        <p class="text-muted small mb-2">
+                            O agente roda como <code>SYSTEM</code> (tarefa agendada), numa sessão separada da do
+                            usuário que está logado e mapeou a unidade -- por isso "Explorar arquivos" numa unidade
+                            de rede falha com "usuário/senha incorretos" sem essa credencial configurada aqui. Cada
+                            máquina normalmente está logada com um usuário diferente no mesmo compartilhamento, por
+                            isso é por máquina, não uma credencial só pra frota inteira.
+                        </p>
+                        <div class="d-flex justify-content-between align-items-center mb-2 small flex-wrap gap-1">
+                            <span></span>
+                            <?php if ($redeConfigurada): ?>
+                                <span class="text-success"><i class="bi bi-check-circle"></i> Configurada (<?= htmlspecialchars($redeUsuarioAtual) ?>)</span>
+                            <?php else: ?>
+                                <span class="text-warning"><i class="bi bi-exclamation-triangle"></i> Não configurada</span>
+                            <?php endif; ?>
+                        </div>
+                        <form method="post" action="<?= url('/ativos/rede/credenciais') ?>" class="row g-2 align-items-end">
+                            <input type="hidden" name="id" value="<?= (int)$ativo['id'] ?>">
+                            <div class="col-sm-5">
+                                <input type="text" name="usuario" class="form-control form-control-sm" value="<?= htmlspecialchars($redeUsuarioAtual) ?>" placeholder="DOMINIO\usuario ou usuário local">
+                            </div>
+                            <div class="col-sm-5">
+                                <input type="password" name="senha" class="form-control form-control-sm" placeholder="<?= $redeConfigurada ? '••••••••  (deixe em branco pra manter)' : 'senha' ?>">
+                            </div>
+                            <div class="col-sm-2">
+                                <button type="submit" class="btn btn-sm btn-primary w-100">Salvar</button>
+                            </div>
+                        </form>
+                        <?php if ($redeConfigurada): ?>
+                            <form method="post" action="<?= url('/ativos/rede/remover') ?>" class="mt-2">
+                                <input type="hidden" name="id" value="<?= (int)$ativo['id'] ?>">
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> Remover credencial de rede desta máquina</button>
+                            </form>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            <?php endif; ?>
         <?php endif; ?>
     </div>
 

@@ -466,6 +466,8 @@ $router->post('/ativos/agente/regenerar-chave', [AtivoController::class, 'regene
 $router->post('/ativos/agente/desativar-chave', [AtivoController::class, 'desativarChaveAgente']);
 $router->post('/ativos/elevacao/credenciais', [AtivoController::class, 'salvarCredenciaisElevacao']);
 $router->post('/ativos/elevacao/remover', [AtivoController::class, 'removerCredenciaisElevacao']);
+$router->post('/ativos/rede/credenciais', [AtivoController::class, 'salvarCredenciaisRede']);
+$router->post('/ativos/rede/remover', [AtivoController::class, 'removerCredenciaisRede']);
 $router->post('/ativos/comunicacao/salvar', [AtivoController::class, 'salvarIntervaloComunicacao']);
 $router->post('/ativos/heartbeat/salvar', [AtivoController::class, 'salvarIntervaloHeartbeat']);
 $router->post('/ativos/solicitar-checkin', [AtivoController::class, 'solicitarCheckin']);

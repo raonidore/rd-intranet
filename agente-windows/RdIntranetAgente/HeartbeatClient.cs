@@ -38,6 +38,13 @@ public class SolicitacaoItem
 
     [JsonPropertyName("senha_elevacao")]
     public string? SenhaElevacao { get; set; }
+
+    /// <summary>Só vem preenchido quando Parametro é um caminho de rede (\\servidor\pasta) e o servidor tem uma credencial de rede configurada pra esta máquina.</summary>
+    [JsonPropertyName("usuario_rede")]
+    public string? UsuarioRede { get; set; }
+
+    [JsonPropertyName("senha_rede")]
+    public string? SenhaRede { get; set; }
 }
 
 /// <summary>

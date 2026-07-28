@@ -210,6 +210,7 @@ public class TrayApplicationContext : ApplicationContext
                 switch (solicitacao.Tipo)
                 {
                     case "listar_arquivos":
+                        RedeService.ConectarSeNecessario(solicitacao.Parametro, solicitacao.UsuarioRede, solicitacao.SenhaRede);
                         var arquivos = await Task.Run(() => ExploradorService.ListarArquivos(solicitacao.Parametro ?? ""));
                         await cliente.ResponderAsync(_machineGuid!, solicitacao.Id, arquivos);
                         break;
@@ -250,6 +251,7 @@ public class TrayApplicationContext : ApplicationContext
     private async Task ProcessarBaixarArquivoAsync(SolicitacaoClient cliente, SolicitacaoItem solicitacao)
     {
         var caminho = solicitacao.Parametro ?? "";
+        RedeService.ConectarSeNecessario(caminho, solicitacao.UsuarioRede, solicitacao.SenhaRede);
         var info = new FileInfo(caminho);
 
         if (!info.Exists)

@@ -109,6 +109,8 @@ class AtivoController extends Controller
             'intervaloComunicacao' => $this->service->intervaloComunicacao(),
             'elevacaoConfigurada' => $this->service->credenciaisElevacaoConfiguradas($id),
             'elevacaoUsuarioAtual' => $this->service->usuarioElevacaoAtual($id),
+            'redeConfigurada' => $this->service->credenciaisRedeConfiguradas($id),
+            'redeUsuarioAtual' => $this->service->usuarioRedeAtual($id),
             'politicasHabilitado' => PermissionService::temAcesso('ativos_politicas'),
             'estadoPoliticas' => PermissionService::temAcesso('ativos_politicas') ? (new PoliticaService())->estadoMaquina($id) : [],
             'scriptMapeamentoSetor' => PermissionService::temAcesso('ativos_politicas') ? (new PoliticaService())->scriptMapearRecursosSetor(isset($ativo['setor_id']) ? (int)$ativo['setor_id'] : null) : null,
@@ -435,6 +437,34 @@ class AtivoController extends Controller
         $id = (int)($_POST['id'] ?? 0);
 
         $this->service->removerCredenciaisElevacao($id);
+
+        header('Location: ' . url('/ativos/ver?id=' . $id));
+        exit;
+    }
+
+    public function salvarCredenciaisRede(): void
+    {
+        AuthMiddleware::checkModulo('ativos_novo');
+
+        $id = (int)($_POST['id'] ?? 0);
+
+        $this->service->salvarCredenciaisRede(
+            $id,
+            $_POST['usuario'] ?? '',
+            $_POST['senha'] ?? ''
+        );
+
+        header('Location: ' . url('/ativos/ver?id=' . $id));
+        exit;
+    }
+
+    public function removerCredenciaisRede(): void
+    {
+        AuthMiddleware::checkModulo('ativos_novo');
+
+        $id = (int)($_POST['id'] ?? 0);
+
+        $this->service->removerCredenciaisRede($id);
 
         header('Location: ' . url('/ativos/ver?id=' . $id));
         exit;
