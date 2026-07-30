@@ -10,11 +10,13 @@ if [ -z "$NOVO_NOME" ] || echo "$NOVO_NOME" | grep -qP '[<>:"/\\|?*\x00-\x1f]'; 
     echo '{"success":false,"message":"Nome invalido"}'; exit 1
 fi
 
+# caminho via sys.argv, nao interpolado na string -- ver comentario em
+# excluir_arquivo_samba_web.sh (apostrofo no nome quebrava a string Python)
 REAL_ANTIGO=$(python3 -c "
-import os
-p = os.path.realpath('$BASE/$REL_ANTIGO')
-print(p if p.startswith('$BASE') else '')
-" 2>/dev/null)
+import os, sys
+p = os.path.realpath(sys.argv[1])
+print(p if p.startswith(sys.argv[2]) else '')
+" "$BASE/$REL_ANTIGO" "$BASE" 2>/dev/null)
 
 [ -z "$REAL_ANTIGO" ] || [ ! -e "$REAL_ANTIGO" ] && echo '{"success":false,"message":"Item nao encontrado"}' && exit 1
 

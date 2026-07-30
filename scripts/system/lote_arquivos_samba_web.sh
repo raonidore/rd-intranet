@@ -68,7 +68,9 @@ if [ "$ACAO" != "excluir" ]; then
     escrever_status "erro" 0 0 "Pasta de destino invalida."
     exit 1
   fi
-  REAL_DEST=$(python3 -c "import os; p=os.path.realpath('$BASE/$DEST_DIR_REL'); print(p if p.startswith('$BASE') else '')" 2>/dev/null)
+  # caminho via sys.argv, nao interpolado na string -- ver comentario
+  # abaixo, no loop principal (apostrofo no nome quebrava a string Python)
+  REAL_DEST=$(python3 -c "import os,sys; p=os.path.realpath(sys.argv[1]); print(p if p.startswith(sys.argv[2]) else '')" "$BASE/$DEST_DIR_REL" "$BASE" 2>/dev/null)
   if [ -z "$REAL_DEST" ] || [ ! -d "$REAL_DEST" ]; then
     escrever_status "erro" 0 0 "Pasta de destino nao encontrada."
     exit 1
@@ -90,7 +92,13 @@ for REL in "$@"; do
     continue
   fi
 
-  REAL=$(python3 -c "import os; p=os.path.realpath('$BASE/$REL'); print(p if p.startswith('$BASE') else '')" 2>/dev/null)
+  # "$REL" via sys.argv, NUNCA interpolado direto na string de codigo --
+  # um nome de arquivo com apostrofo (comum em portugues, ex: "d'oce")
+  # interpolado quebra a string Python no meio, o realpath falha
+  # silenciosamente (2>/dev/null escondia o erro) e reporta "nao
+  # encontrado" pra um arquivo que existe de verdade. Foi exatamente isso
+  # que aconteceu na primeira vez que este script rodou em producao.
+  REAL=$(python3 -c "import os,sys; p=os.path.realpath(sys.argv[1]); print(p if p.startswith(sys.argv[2]) else '')" "$BASE/$REL" "$BASE" 2>/dev/null)
   if [ -z "$REAL" ] || [ ! -e "$REAL" ]; then
     ERROS+=("$(basename "$REL"): nao encontrado")
     escrever_status "rodando" "$PROCESSADOS" "$TOTAL" ""

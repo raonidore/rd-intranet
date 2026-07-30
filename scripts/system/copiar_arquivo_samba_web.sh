@@ -7,10 +7,12 @@ for v in "$SRC_REL" "$DEST_DIR_REL"; do
     echo "$v" | grep -q '\.\.' && echo '{"success":false,"message":"Caminho invalido"}' && exit 1
 done
 
-REAL_SRC=$(python3 -c "import os; p=os.path.realpath('$BASE/$SRC_REL'); print(p if p.startswith('$BASE') else '')" 2>/dev/null)
+# caminhos via sys.argv, nao interpolados na string -- ver comentario em
+# excluir_arquivo_samba_web.sh (apostrofo no nome quebrava a string Python)
+REAL_SRC=$(python3 -c "import os,sys; p=os.path.realpath(sys.argv[1]); print(p if p.startswith(sys.argv[2]) else '')" "$BASE/$SRC_REL" "$BASE" 2>/dev/null)
 [ -z "$REAL_SRC" ] || [ ! -e "$REAL_SRC" ] && echo '{"success":false,"message":"Origem nao encontrada"}' && exit 1
 
-REAL_DEST=$(python3 -c "import os; p=os.path.realpath('$BASE/$DEST_DIR_REL'); print(p if p.startswith('$BASE') else '')" 2>/dev/null)
+REAL_DEST=$(python3 -c "import os,sys; p=os.path.realpath(sys.argv[1]); print(p if p.startswith(sys.argv[2]) else '')" "$BASE/$DEST_DIR_REL" "$BASE" 2>/dev/null)
 [ -z "$REAL_DEST" ] || [ ! -d "$REAL_DEST" ] && echo '{"success":false,"message":"Destino nao encontrado"}' && exit 1
 
 DEST_FILE="$REAL_DEST/$(basename "$REAL_SRC")"
