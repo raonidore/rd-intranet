@@ -104,7 +104,7 @@ class SambaArquivosController extends Controller
             $resp = json_decode($raw, true);
 
             if (!is_array($resp) || isset($resp['error'])) {
-                $this->view('samba/arquivos', $viewBase + ['erro' => $resp['error'] ?? 'Erro ao buscar arquivos.', 'arquivos' => []]);
+                $this->view('samba/arquivos', array_merge($viewBase, ['erro' => $resp['error'] ?? 'Erro ao buscar arquivos.', 'arquivos' => []]));
                 return;
             }
 
@@ -114,13 +114,21 @@ class SambaArquivosController extends Controller
             // TODOS os arquivos correspondentes, nunca so os primeiros 1000
             // exibidos na tabela (numero errado aqui pode virar informacao
             // errada repassada pro cliente).
-            $this->view('samba/arquivos', $viewBase + [
+            //
+            // IMPORTANTE: array_merge(), NAO "$viewBase + [...]" -- o
+            // operador "+" de array mantem o valor do lado ESQUERDO quando
+            // a mesma chave existe nos dois (o oposto do que eu queria
+            // aqui, ja que $viewBase so tem os defaults). Foi exatamente
+            // esse bug que fez "truncado"/"totalReal"/"bytesTotalReal"
+            // ficarem sempre nos valores padrao (false/0), mesmo com a
+            // busca retornando os numeros certos.
+            $this->view('samba/arquivos', array_merge($viewBase, [
                 'arquivos'       => $arquivos,
                 'truncado'       => !empty($resp['truncado']),
                 'totalReal'      => (int)($resp['total_real'] ?? count($arquivos)),
                 'bytesTotalReal' => (int)($resp['bytes_total_real'] ?? 0),
                 'erro'           => null,
-            ]);
+            ]));
             return;
         }
 
@@ -128,7 +136,7 @@ class SambaArquivosController extends Controller
         $list = json_decode($raw, true);
 
         if (!is_array($list) || isset($list['error'])) {
-            $this->view('samba/arquivos', $viewBase + ['erro' => $list['error'] ?? 'Erro ao listar arquivos.', 'arquivos' => []]);
+            $this->view('samba/arquivos', array_merge($viewBase, ['erro' => $list['error'] ?? 'Erro ao listar arquivos.', 'arquivos' => []]));
             return;
         }
 
@@ -137,7 +145,7 @@ class SambaArquivosController extends Controller
             $list
         );
 
-        $this->view('samba/arquivos', $viewBase + ['arquivos' => $arquivos, 'erro' => null]);
+        $this->view('samba/arquivos', array_merge($viewBase, ['arquivos' => $arquivos, 'erro' => null]));
     }
 
     /** Formata um item (pasta ou arquivo) pro shape que a view espera -- compartilhado entre listagem normal e resultado de busca. */
