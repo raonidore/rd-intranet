@@ -17,6 +17,7 @@ if (!$comando) {
     echo "  migrate                 Aplica as migrations pendentes em database/migrations/\n";
     echo "  atualizacao:verificar   Busca origin/main e atualiza o cache de 'há atualização?'\n";
     echo "  antivirus:verificar     Escaneia os compartilhamentos do Samba em busca de ameaças\n";
+    echo "  backup:executar <id>    Roda o backup em nuvem do destino <id> (Backup > Configuração)\n";
     exit;
 }
 
@@ -174,6 +175,36 @@ switch ($comando) {
         echo "OK: snapshot de tráfego IKEv2 coletado.\n";
 
         break;
+
+    case 'backup:executar':
+        $destinoId = (int)garantirNome($nome);
+        $service = new \App\Services\BackupService();
+
+        $resultado = $service->executarAgora($destinoId, 'agendada');
+        if (!$resultado['success']) {
+            echo "ERRO: {$resultado['message']}\n";
+            exit(1);
+        }
+
+        // job de cron: espera terminar (o cron nao teria como acompanhar
+        // progresso depois) fazendo o mesmo polling que o botao "Rodar
+        // agora" da tela faz via HTTP, so que sincrono aqui.
+        $execucaoId = $resultado['execucao_id'];
+        $status = ['status' => 'rodando'];
+
+        while (in_array($status['status'], ['rodando', 'desconhecido'], true)) {
+            sleep(3);
+            $status = $service->statusExecucao($execucaoId);
+        }
+
+        if ($status['status'] === 'concluida') {
+            echo "OK: backup concluido -- " . ($status['arquivos_enviados'] ?? 0) . " arquivo(s), "
+                . ($status['bytes_enviados'] ?? 0) . " byte(s) enviados.\n";
+            break;
+        }
+
+        echo "ERRO: " . ($status['mensagem'] ?: 'falha desconhecida ao executar o backup') . "\n";
+        exit(1);
 
     case 'ativos:coletar-snmp':
         $resultado = (new \App\Services\AtivoService())->coletarSnmpTodos();

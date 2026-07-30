@@ -13,11 +13,12 @@ ob_start();
 .share-card.desativado{opacity:.65;background:#f8f9fa;}
 </style>
 
-<div class="row mb-4">
+<div class="row g-3 mb-4">
     <?= StatCard::make('Compartilhamentos', $total) ?>
     <?= StatCard::make('Ativos', $ativos) ?>
     <?= StatCard::make('Com lixeira', $lixeira) ?>
     <?= StatCard::make('Bloqueio extensão', $bloqueioExtensoes) ?>
+    <?= StatCard::make('Backup nuvem', $backupNuvem) ?>
 </div>
 
 <?= Alert::flash() ?>
@@ -72,6 +73,10 @@ ob_start();
                     <?= (int)$c['bloqueio_extensoes']
                         ? Badge::make('Bloqueio extensões','danger')
                         : Badge::make('Sem bloqueio','secondary') ?>
+
+                    <?= (int)$c['backup_nuvem_ativo']
+                        ? Badge::make('Backup nuvem','info')
+                        : Badge::make('Sem backup nuvem','secondary') ?>
                 </div>
             </div>
 
@@ -99,6 +104,16 @@ ob_start();
                    title="Segurança">
                     <i class="bi bi-shield-lock"></i> Segurança
                 </a>
+
+                <form method="post" action="<?= url('/samba/compartilhamentos/backup/alternar') ?>" class="d-inline">
+                    <input type="hidden" name="id" value="<?= (int)$c['id'] ?>">
+                    <button type="submit"
+                            class="btn btn-sm <?= (int)$c['backup_nuvem_ativo'] ? 'btn-outline-info' : 'btn-outline-secondary' ?>"
+                            title="<?= (int)$c['backup_nuvem_ativo'] ? 'Desativar backup em nuvem' : 'Ativar backup em nuvem' ?>">
+                        <i class="bi <?= (int)$c['backup_nuvem_ativo'] ? 'bi-cloud-check' : 'bi-cloud' ?>"></i>
+                        Backup nuvem
+                    </button>
+                </form>
 
                 <a href="<?= url('/samba/compartilhamentos/excluir?id=' . $c['id']) ?>"
                    class="btn btn-outline-danger btn-sm"

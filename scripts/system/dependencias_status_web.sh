@@ -22,6 +22,9 @@ declare -A COMANDOS=(
   [acl]="getfacl"
   [traceroute]="traceroute"
   [iputils-ping]="ping"
+  [qrencode]="qrencode"
+  [snmp]="snmpget"
+  [rclone]="rclone"
 )
 
 for CHAVE in "${!COMANDOS[@]}"; do

@@ -27,6 +27,7 @@ $abrirBancoDados = $rdSecaoAtiva(['/banco-dados']);
 $abrirInfraestrutura = $rdSecaoAtiva(['/infraestrutura']);
 $abrirSamba = $rdSecaoAtiva(['/samba', '/deploy']);
 $abrirSeguranca = $rdSecaoAtiva(['/seguranca']);
+$abrirBackup = $rdSecaoAtiva(['/backup']);
 $abrirVpn = $rdSecaoAtiva(['/vpn']);
 $abrirSistema = $rdSecaoAtiva(['/administracao', '/auditoria']);
 $abrirEntra = $rdSecaoAtiva(['/entra']);
@@ -132,12 +133,12 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
 <body>
 
 <div class="sidebar">
-    <div class="p-4">
-        <h4 class="mb-0">RD Intranet</h4>
-        <small class="text-secondary">Painel Administrativo</small>
+    <div class="p-4 text-center">
+        <img src="<?= url('/assets/img/logord.png') ?>" alt="RD Intranet" style="width:100%; max-width:220px; display:block; margin:0 auto; border-radius:14px;">
+        <small class="d-block mt-2" style="color:#cbd5e1;">Painel Administrativo</small>
         <?php if ($logoEmpresaConfigurada): ?>
-            <div class="mt-2">
-                <img src="<?= url('/administracao/empresa/logo') ?>" alt="" style="max-height:22px;max-width:140px;opacity:.85">
+            <div class="mt-3" style="background:#fff; border-radius:12px; padding:10px 14px; display:inline-block; box-shadow:0 2px 6px rgba(0,0,0,.25);">
+                <img src="<?= url('/administracao/empresa/logo') ?>" alt="" style="max-height:32px;max-width:160px;display:block;">
             </div>
         <?php endif; ?>
     </div>
@@ -590,6 +591,29 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
     </div>
     <?php endif; ?>
 
+    <?php
+    $temBackup = PermissionService::temAcesso('backup_configuracao') || PermissionService::temAcesso('backup_historico');
+    ?>
+    <?php if ($temBackup): ?>
+    <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuBackup"
+            aria-expanded="<?= $abrirBackup ? 'true' : 'false' ?>">
+        <span><i class="bi bi-cloud-arrow-up me-2"></i>Backup</span>
+        <i class="bi bi-chevron-right chevron"></i>
+    </button>
+    <div class="collapse <?= $abrirBackup ? 'show' : '' ?>" id="menuBackup">
+        <?php if (PermissionService::temAcesso('backup_configuracao')): ?>
+        <a href="<?= url('/backup/configuracao') ?>" class="<?= $uriAtual === '/backup/configuracao' ? 'active' : '' ?>">
+            <i class="bi bi-gear me-2"></i> Configuração
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('backup_historico')): ?>
+        <a href="<?= url('/backup/historico') ?>" class="<?= $uriAtual === '/backup/historico' ? 'active' : '' ?>">
+            <i class="bi bi-clock-history me-2"></i> Histórico
+        </a>
+        <?php endif; ?>
+    </div>
+    <?php endif; ?>
+
     <?php if (PermissionService::temAcesso('entra_dashboard') || PermissionService::temAcesso('entra_usuarios') || PermissionService::temAcesso('entra_configuracao')): ?>
     <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuEntra"
             aria-expanded="<?= $abrirEntra ? 'true' : 'false' ?>">
@@ -648,6 +672,9 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         </a>
         <a href="<?= url('/administracao/empresa') ?>" class="<?= str_starts_with($uriAtual, '/administracao/empresa') ? 'active' : '' ?>">
             <i class="bi bi-building me-2"></i> Dados da Empresa
+        </a>
+        <a href="<?= url('/administracao/email') ?>" class="<?= str_starts_with($uriAtual, '/administracao/email') ? 'active' : '' ?>">
+            <i class="bi bi-envelope me-2"></i> E-mail
         </a>
 
         <button class="menu-toggle menu-toggle-sub" type="button" data-bs-toggle="collapse" data-bs-target="#menuSistemaModulos"

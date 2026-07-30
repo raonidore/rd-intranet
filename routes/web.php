@@ -43,12 +43,14 @@ use App\Controllers\VpnIkev2Controller;
 use App\Controllers\VpnIkev2SaidaController;
 use App\Controllers\AtualizacaoController;
 use App\Controllers\AntivirusController;
+use App\Controllers\BackupController;
 use App\Controllers\AtivoController;
 use App\Controllers\AtivoAgenteController;
 use App\Controllers\PoliticaController;
 use App\Controllers\AcessoRemotoController;
 use App\Controllers\RdpController;
 use App\Controllers\EtiquetaConfigController;
+use App\Controllers\EmailConfigController;
 use App\Controllers\EmpresaController;
 use App\Controllers\SistemaModulosController;
 use App\Controllers\EntraController;
@@ -87,6 +89,7 @@ $router->get('/samba/compartilhamentos/seguranca', [SambaCompartilhamentoControl
 $router->post('/samba/compartilhamentos/seguranca', [SambaCompartilhamentoController::class, 'segurancaSalvar']);
 $router->get('/samba/compartilhamentos/excluir', [SambaCompartilhamentoController::class, 'excluirForm']);
 $router->post('/samba/compartilhamentos/excluir', [SambaCompartilhamentoController::class, 'excluir']);
+$router->post('/samba/compartilhamentos/backup/alternar', [SambaCompartilhamentoController::class, 'alternarBackup']);
 $router->get('/samba/lixeira', [SambaLixeiraController::class, 'index']);
 $router->post('/samba/lixeira/restaurar', [SambaLixeiraController::class, 'restaurar']);
 $router->post('/samba/lixeira/excluir', [SambaLixeiraController::class, 'excluir']);
@@ -331,6 +334,16 @@ $router->post('/seguranca/antivirus/tempo-real/desativar', [AntivirusController:
 $router->post('/seguranca/antivirus/verificacao-periodica', [AntivirusController::class, 'verificacaoPeriodica']);
 $router->post('/seguranca/antivirus/quarentena/excluir', [AntivirusController::class, 'quarentenaExcluir']);
 
+$router->get('/backup/configuracao', [BackupController::class, 'configuracao']);
+$router->post('/backup/configuracao/salvar', [BackupController::class, 'salvar']);
+$router->post('/backup/configuracao/excluir', [BackupController::class, 'excluir']);
+$router->post('/backup/configuracao/ativar', [BackupController::class, 'ativar']);
+$router->post('/backup/configuracao/testar', [BackupController::class, 'testarConexao']);
+$router->post('/backup/configuracao/agendar', [BackupController::class, 'agendar']);
+$router->post('/backup/executar', [BackupController::class, 'executarAgora']);
+$router->get('/backup/status', [BackupController::class, 'status']);
+$router->get('/backup/historico', [BackupController::class, 'historico']);
+
 $router->get('/administracao/usuarios', [UserController::class, 'index']);
 $router->get('/administracao/usuarios/novo', [UserController::class, 'novoForm']);
 $router->post('/administracao/usuarios/novo', [UserController::class, 'novo']);
@@ -357,6 +370,10 @@ $router->post('/administracao/empresa/salvar', [EmpresaController::class, 'salva
 $router->post('/administracao/empresa/logo/upload', [EmpresaController::class, 'logoUpload']);
 $router->post('/administracao/empresa/logo/remover', [EmpresaController::class, 'logoRemover']);
 $router->get('/administracao/empresa/logo', [EmpresaController::class, 'logo']);
+
+$router->get('/administracao/email', [EmailConfigController::class, 'index']);
+$router->post('/administracao/email/salvar', [EmailConfigController::class, 'salvar']);
+$router->post('/administracao/email/testar', [EmailConfigController::class, 'testar']);
 
 $router->get('/administracao/modulos', [SistemaModulosController::class, 'index']);
 $router->post('/administracao/modulos/salvar', [SistemaModulosController::class, 'salvar']);

@@ -59,6 +59,8 @@ class ModuloCatalogo
         'entra_configuracao' => ['label' => 'Entra - Configuração', 'grupo' => 'Microsoft Entra'],
         'entra_dispositivos' => ['label' => 'Entra - Dispositivos (Intune)', 'grupo' => 'Microsoft Entra'],
         'entra_perfis_configuracao' => ['label' => 'Entra - Perfis de Configuração (Intune)', 'grupo' => 'Microsoft Entra'],
+        'backup_configuracao' => ['label' => 'Configuração', 'grupo' => 'Backup'],
+        'backup_historico' => ['label' => 'Histórico', 'grupo' => 'Backup'],
     ];
 
     public static function chaves(): array
@@ -94,7 +96,7 @@ class ModuloCatalogo
      */
 
     public const GRUPOS_TOGGLEAVEIS = [
-        'Apache', 'Banco de Dados', 'Ativos', 'Infraestrutura', 'VPN', 'Samba', 'Segurança', 'Microsoft Entra',
+        'Apache', 'Banco de Dados', 'Ativos', 'Infraestrutura', 'VPN', 'Samba', 'Segurança', 'Microsoft Entra', 'Backup',
     ];
 
     /** Grupos que nascem desligados em instalações novas -- opt-in, não fazem parte do uso típico. */

@@ -174,6 +174,14 @@ class DependenciaCatalogo
                 'usado_em' => 'Ativos (coleta SNMP)',
                 'obrigatorio' => false,
             ],
+            [
+                'chave' => 'rclone',
+                'nome' => 'rclone',
+                'pacote' => 'rclone',
+                'descricao' => 'Motor de sincronização usado para espelhar os compartilhamentos do Samba em Backblaze B2, Amazon S3 ou Google Drive.',
+                'usado_em' => 'Backup em Nuvem',
+                'obrigatorio' => false,
+            ],
         ];
     }
 

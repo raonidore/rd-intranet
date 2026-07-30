@@ -6,7 +6,7 @@
 # composer se o composer.lock mudou e reaplica os passos de setup
 # idempotentes que o install.sh tambem roda (setup_acl_admin,
 # setup_db_secret_key, setup_iptables_persistencia, setup_rotas_extras,
-# setup_samba_base) -- assim qualquer diretorio/config/servico que uma
+# setup_rclone, setup_samba_base) -- assim qualquer diretorio/config/servico que uma
 # atualizacao passe a exigir se reconcilia sozinho, sem precisar de SSH.
 # Nunca faz reset/force -- se a arvore local nao puder avancar em
 # fast-forward (historico divergente), falha e nao mexe em nada, pra nao
@@ -55,7 +55,7 @@ if [ -f composer.lock ] && [ "$LOCK_ANTES" != "$LOCK_DEPOIS" ] && command -v com
   fi
 fi
 
-for SETUP in setup_timezone setup_acl_admin setup_db_secret_key setup_iptables_persistencia setup_rotas_extras; do
+for SETUP in setup_timezone setup_acl_admin setup_db_secret_key setup_iptables_persistencia setup_rotas_extras setup_rclone; do
   SAIDA_SETUP=$(bash "$REPO_DIR/scripts/system/${SETUP}.sh" 2>&1)
   if [ $? -ne 0 ]; then
     echo "{\"success\":false,\"message\":\"Codigo atualizado, mas falhou em ${SETUP}.sh: ${SAIDA_SETUP//\"/\\\"}\"}"

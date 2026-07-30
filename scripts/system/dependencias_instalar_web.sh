@@ -32,6 +32,7 @@ declare -A PACOTES=(
   [iputils-ping]="iputils-ping"
   [qrencode]="qrencode"
   [snmp]="snmp"
+  [rclone]="rclone"
 )
 
 PACOTE="${PACOTES[$CHAVE]:-}"

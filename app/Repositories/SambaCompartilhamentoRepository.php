@@ -211,4 +211,39 @@ class SambaCompartilhamentoRepository
             ->query("SELECT COUNT(*) FROM samba_compartilhamentos WHERE bloqueio_extensoes=1")
             ->fetchColumn();
     }
+
+    public function contarComBackupAtivo(): int
+    {
+        return (int)$this->pdo
+            ->query("SELECT COUNT(*) FROM samba_compartilhamentos WHERE backup_nuvem_ativo=1")
+            ->fetchColumn();
+    }
+
+    public function alternarBackup(int $id): bool
+    {
+        $stmt = $this->pdo->prepare("
+            UPDATE samba_compartilhamentos
+               SET backup_nuvem_ativo = NOT backup_nuvem_ativo
+             WHERE id = ?
+        ");
+
+        return $stmt->execute([$id]);
+    }
+
+    /**
+     * Compartilhamentos ativos marcados para backup em nuvem -- usado por
+     * BackupService::executarAgora() pra saber O QUE sincronizar (ver
+     * migration 2026_07_29_backup_por_compartilhamento.sql).
+     */
+    public function listarAtivosParaBackup(): array
+    {
+        $stmt = $this->pdo->query("
+            SELECT id, nome, caminho
+            FROM samba_compartilhamentos
+            WHERE status = 'ativo' AND backup_nuvem_ativo = 1
+            ORDER BY nome
+        ");
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 }

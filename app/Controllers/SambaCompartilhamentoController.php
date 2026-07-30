@@ -31,7 +31,19 @@ class SambaCompartilhamentoController extends Controller
             'ativos' => $dashboard['ativos'],
             'lixeira' => $dashboard['lixeira'],
             'bloqueioExtensoes' => $dashboard['bloqueio_extensoes'],
+            'backupNuvem' => $dashboard['backup_nuvem'],
         ]);
+    }
+
+    public function alternarBackup(): void
+    {
+        AuthMiddleware::checkModulo('samba_compartilhamentos');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $this->service->alternarBackup($id);
+
+        header('Location: ' . url('/samba/compartilhamentos'));
+        exit;
     }
 
     public function novoForm(): void

@@ -3,6 +3,7 @@
 /storage/cache/*
 /storage/uploads/*
 /storage/samba_acl_status/*
+/storage/backup_status/*
 .env
 /app/Config/database.php
 *.log

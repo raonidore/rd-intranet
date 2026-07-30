@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Repositories\BackupDestinoRepository;
 use App\Repositories\SambaCompartilhamentoRepository;
 use App\Repositories\SambaUsuarioRepository;
 
@@ -30,7 +31,43 @@ class SambaCompartilhamentoService
             'ativos' => $this->repository->contarAtivos(),
             'lixeira' => $this->repository->contarComLixeira(),
             'bloqueio_extensoes' => $this->repository->contarComBloqueioExtensoes(),
+            'backup_nuvem' => $this->repository->contarComBackupAtivo(),
         ];
+    }
+
+    public function alternarBackup(int $id): void
+    {
+        $compartilhamento = $this->buscar($id);
+
+        if (!$compartilhamento) {
+            NotificationService::error('Compartilhamento não encontrado.');
+            return;
+        }
+
+        $this->repository->alternarBackup($id);
+
+        $ativo = !(int)$compartilhamento['backup_nuvem_ativo'];
+
+        AuditService::registrar(
+            'Samba',
+            'Backup em nuvem',
+            ($ativo ? 'Ativado' : 'Desativado') . ' backup em nuvem para ' . $compartilhamento['nome'] . '.'
+        );
+
+        // Ativar a flag sem nenhum destino de nuvem configurado nao tem
+        // efeito nenhum ate que um exista (BackupService::executarAgora()
+        // so olha compartilhamentos ativos NA HORA de rodar) -- avisa pra
+        // nao passar a impressao de que o backup ja esta acontecendo.
+        if ($ativo && empty((new BackupDestinoRepository())->listar())) {
+            NotificationService::success(
+                'Backup em nuvem ativado para ' . $compartilhamento['nome'] . '. '
+                . 'Atenção: nenhum destino de backup foi configurado ainda -- '
+                . 'vá em Backup > Configuração para cadastrar um, senão nada será enviado.'
+            );
+            return;
+        }
+
+        NotificationService::success('Backup em nuvem ' . ($ativo ? 'ativado' : 'desativado') . ' para ' . $compartilhamento['nome'] . '.');
     }
 
     public function buscar(int $id): ?array
