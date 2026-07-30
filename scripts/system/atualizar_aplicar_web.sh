@@ -16,6 +16,26 @@
 
 set -u
 
+# Este script chama sync-system-scripts.sh mais abaixo, que copia TODOS os
+# scripts de scripts/system/ para /opt/rdtecnologia/scripts/ -- inclusive
+# este arquivo aqui, que naquele momento ainda esta rodando a partir de
+# exatamente esse caminho. O "cp" reescreve o conteudo do arquivo NO MESMO
+# inode enquanto o bash ainda esta lendo dali, embaixo do proprio processo
+# -- o resultado e uma leitura corrompida (offset do arquivo antigo caindo
+# no meio do conteudo novo) que derruba o script com erros de sintaxe tipo
+# "unexpected EOF" perto do fim, de forma intermitente (depende de timing).
+# Por isso, antes de fazer qualquer coisa, copia a si mesmo pra um arquivo
+# temporario imutavel e reexecuta a partir dali -- so a copia em /opt fica
+# sujeita a ser sobrescrita por sync-system-scripts.sh, nunca o processo
+# que de fato esta em execucao.
+if [ "${RD_ATUALIZAR_REEXEC:-}" != "1" ]; then
+  RD_TMP_SELF="$(mktemp /tmp/rd_atualizar_XXXXXX.sh)"
+  cp "$0" "$RD_TMP_SELF"
+  chmod +x "$RD_TMP_SELF"
+  RD_ATUALIZAR_REEXEC=1 exec bash "$RD_TMP_SELF" "$@"
+fi
+trap 'rm -f "$0"' EXIT
+
 REPO_DIR="/var/www/rd.intranet"
 REPO_USER="ti"
 BRANCH="main"
