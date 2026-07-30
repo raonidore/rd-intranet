@@ -67,14 +67,49 @@ class SambaArquivosController extends Controller
         return is_array($result) ? $result : ['success' => false, 'message' => 'Resposta inesperada.'];
     }
 
-    // ── Listagem ─────────────────────────────────────────────────────────
+    // ── Listagem / busca ─────────────────────────────────────────────────
     public function index(): void
     {
         AuthMiddleware::checkModulo('samba_arquivos');
 
         $rel = $this->validarRel($_GET['path'] ?? '');
         if ($rel === null) {
-            $this->view('samba/arquivos', ['erro' => 'Caminho inválido.', 'arquivos' => [], 'pathAtual' => '', 'breadcrumb' => []]);
+            $this->view('samba/arquivos', [
+                'erro' => 'Caminho inválido.', 'arquivos' => [], 'pathAtual' => '', 'breadcrumb' => [],
+                'buscaAtiva' => false, 'termoBusca' => '', 'extensoesBusca' => '', 'truncado' => false,
+            ]);
+            return;
+        }
+
+        $termo      = trim($_GET['nome'] ?? '');
+        $extensoes  = trim($_GET['extensoes'] ?? '');
+        $buscaAtiva = $termo !== '' || $extensoes !== '';
+
+        $viewBase = [
+            'pathAtual'      => $rel,
+            'breadcrumb'     => $this->breadcrumb($rel),
+            'buscaAtiva'     => $buscaAtiva,
+            'termoBusca'     => $termo,
+            'extensoesBusca' => $extensoes,
+            'truncado'       => false,
+        ];
+
+        if ($buscaAtiva) {
+            $raw  = trim($this->scriptOutput('/opt/rdtecnologia/scripts/buscar_arquivos_samba_web.sh', [$rel, $termo, $extensoes]));
+            $resp = json_decode($raw, true);
+
+            if (!is_array($resp) || isset($resp['error'])) {
+                $this->view('samba/arquivos', $viewBase + ['erro' => $resp['error'] ?? 'Erro ao buscar arquivos.', 'arquivos' => []]);
+                return;
+            }
+
+            $arquivos = array_map(fn(array $item) => $this->shapeItem($item, $item['rel']), $resp['itens'] ?? []);
+
+            $this->view('samba/arquivos', $viewBase + [
+                'arquivos' => $arquivos,
+                'truncado' => !empty($resp['truncado']),
+                'erro'     => null,
+            ]);
             return;
         }
 
@@ -82,38 +117,34 @@ class SambaArquivosController extends Controller
         $list = json_decode($raw, true);
 
         if (!is_array($list) || isset($list['error'])) {
-            $this->view('samba/arquivos', [
-                'erro'       => $list['error'] ?? 'Erro ao listar arquivos.',
-                'arquivos'   => [],
-                'pathAtual'  => $rel,
-                'breadcrumb' => $this->breadcrumb($rel),
-            ]);
+            $this->view('samba/arquivos', $viewBase + ['erro' => $list['error'] ?? 'Erro ao listar arquivos.', 'arquivos' => []]);
             return;
         }
 
-        $arquivos = array_map(function (array $item) use ($rel): array {
-            $ext      = strtolower(pathinfo($item['name'], PATHINFO_EXTENSION));
-            $itemPath = $rel ? $rel . '/' . $item['name'] : $item['name'];
+        $arquivos = array_map(
+            fn(array $item) => $this->shapeItem($item, $rel ? $rel . '/' . $item['name'] : $item['name']),
+            $list
+        );
 
-            return [
-                'type'     => $item['type'],
-                'name'     => $item['name'],
-                'size'     => $item['size'],
-                'modified' => $item['modified'] ? date('d/m/Y H:i', $item['modified']) : '-',
-                'ext'      => $ext,
-                'icon'     => $this->icon($item['type'], $ext),
-                'viewable' => $item['type'] === 'file' && in_array($ext, self::extConfig()['visualizar']),
-                'editable' => $item['type'] === 'file' && in_array($ext, self::extConfig()['editar']),
-                'path'     => $itemPath,
-            ];
-        }, $list);
+        $this->view('samba/arquivos', $viewBase + ['arquivos' => $arquivos, 'erro' => null]);
+    }
 
-        $this->view('samba/arquivos', [
-            'arquivos'   => $arquivos,
-            'pathAtual'  => $rel,
-            'breadcrumb' => $this->breadcrumb($rel),
-            'erro'       => null,
-        ]);
+    /** Formata um item (pasta ou arquivo) pro shape que a view espera -- compartilhado entre listagem normal e resultado de busca. */
+    private function shapeItem(array $item, string $itemPath): array
+    {
+        $ext = strtolower(pathinfo($item['name'], PATHINFO_EXTENSION));
+
+        return [
+            'type'     => $item['type'],
+            'name'     => $item['name'],
+            'size'     => $item['size'],
+            'modified' => $item['modified'] ? date('d/m/Y H:i', $item['modified']) : '-',
+            'ext'      => $ext,
+            'icon'     => $this->icon($item['type'], $ext),
+            'viewable' => $item['type'] === 'file' && in_array($ext, self::extConfig()['visualizar']),
+            'editable' => $item['type'] === 'file' && in_array($ext, self::extConfig()['editar']),
+            'path'     => $itemPath,
+        ];
     }
 
     // ── Download ─────────────────────────────────────────────────────────
@@ -336,6 +367,115 @@ class SambaArquivosController extends Controller
         }
 
         echo json_encode($this->jsonOutput('/opt/rdtecnologia/scripts/mover_arquivo_samba_web.sh', [$src, $destDir]));
+    }
+
+    // ── Ações em lote (seleção múltipla, ex: resultado de busca) ───────────
+    // Reaproveita os MESMOS scripts de item único num loop -- cada caminho
+    // e validado/processado independentemente; um item invalido ou que
+    // falhe nao aborta os demais, a resposta traz o resumo de quantos
+    // deram certo e o detalhe de quem falhou (e por que).
+
+    public function loteExcluir(): void
+    {
+        AuthMiddleware::checkModulo('samba_arquivos');
+        header('Content-Type: application/json');
+
+        [$sucesso, $falhas] = $this->executarLote($_POST['paths'] ?? [], function (string $path): array {
+            return $this->jsonOutput('/opt/rdtecnologia/scripts/excluir_arquivo_samba_web.sh', [$path]);
+        });
+
+        echo json_encode([
+            'success' => empty($falhas),
+            'message' => $this->resumoLote($sucesso, $falhas, 'excluído(s)'),
+            'sucesso' => $sucesso,
+            'falhas'  => $falhas,
+        ]);
+    }
+
+    public function loteMover(): void
+    {
+        AuthMiddleware::checkModulo('samba_arquivos');
+        header('Content-Type: application/json');
+
+        $destDir = $this->validarRel($_POST['dest_dir'] ?? '');
+        if ($destDir === null) {
+            echo json_encode(['success' => false, 'message' => 'Pasta de destino inválida.']); return;
+        }
+
+        [$sucesso, $falhas] = $this->executarLote($_POST['paths'] ?? [], function (string $path) use ($destDir): array {
+            return $this->jsonOutput('/opt/rdtecnologia/scripts/mover_arquivo_samba_web.sh', [$path, $destDir]);
+        });
+
+        echo json_encode([
+            'success' => empty($falhas),
+            'message' => $this->resumoLote($sucesso, $falhas, 'movido(s)'),
+            'sucesso' => $sucesso,
+            'falhas'  => $falhas,
+        ]);
+    }
+
+    public function loteCopiar(): void
+    {
+        AuthMiddleware::checkModulo('samba_arquivos');
+        header('Content-Type: application/json');
+
+        $destDir = $this->validarRel($_POST['dest_dir'] ?? '');
+        if ($destDir === null) {
+            echo json_encode(['success' => false, 'message' => 'Pasta de destino inválida.']); return;
+        }
+
+        [$sucesso, $falhas] = $this->executarLote($_POST['paths'] ?? [], function (string $path) use ($destDir): array {
+            return $this->jsonOutput('/opt/rdtecnologia/scripts/copiar_arquivo_samba_web.sh', [$path, $destDir]);
+        });
+
+        echo json_encode([
+            'success' => empty($falhas),
+            'message' => $this->resumoLote($sucesso, $falhas, 'copiado(s)'),
+            'sucesso' => $sucesso,
+            'falhas'  => $falhas,
+        ]);
+    }
+
+    /**
+     * @param mixed $pathsBrutos vindo direto de $_POST['paths'] (array de strings)
+     * @return array{0: int, 1: array} [quantidade com sucesso, lista de falhas {path, message}]
+     */
+    private function executarLote($pathsBrutos, callable $acao): array
+    {
+        $sucesso = 0;
+        $falhas  = [];
+
+        foreach ((array)$pathsBrutos as $pathBruto) {
+            $path = $this->validarRel((string)$pathBruto);
+
+            if ($path === null) {
+                $falhas[] = ['path' => (string)$pathBruto, 'message' => 'Caminho inválido.'];
+                continue;
+            }
+
+            $resultado = $acao($path);
+
+            if (!empty($resultado['success'])) {
+                $sucesso++;
+            } else {
+                $falhas[] = ['path' => $path, 'message' => $resultado['message'] ?? 'Falha desconhecida.'];
+            }
+        }
+
+        return [$sucesso, $falhas];
+    }
+
+    private function resumoLote(int $sucesso, array $falhas, string $verbo): string
+    {
+        $total = $sucesso + count($falhas);
+
+        if (empty($falhas)) {
+            return $sucesso . ' item(ns) ' . $verbo . ' com sucesso.';
+        }
+
+        $nomes = implode(', ', array_map(fn($f) => basename($f['path']), $falhas));
+
+        return "{$sucesso} de {$total} item(ns) {$verbo}. Falharam: {$nomes}.";
     }
 
     // ── Criar novo arquivo ────────────────────────────────────────────────

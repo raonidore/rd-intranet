@@ -116,6 +116,9 @@ $router->post('/samba/arquivos/excluir', [SambaArquivosController::class, 'exclu
 $router->post('/samba/arquivos/renomear', [SambaArquivosController::class, 'renomear']);
 $router->post('/samba/arquivos/criar', [SambaArquivosController::class, 'criarArquivo']);
 $router->post('/samba/arquivos/pasta', [SambaArquivosController::class, 'criarPasta']);
+$router->post('/samba/arquivos/lote-excluir', [SambaArquivosController::class, 'loteExcluir']);
+$router->post('/samba/arquivos/lote-mover', [SambaArquivosController::class, 'loteMover']);
+$router->post('/samba/arquivos/lote-copiar', [SambaArquivosController::class, 'loteCopiar']);
 
 $router->get('/infraestrutura/servidor', [ServerController::class, 'index']);
 $router->get('/infraestrutura/servidor/api', [ServerController::class, 'api']);

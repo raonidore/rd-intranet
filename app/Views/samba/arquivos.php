@@ -85,17 +85,98 @@ function formatBytes(int $bytes): string {
     </div>
 </div>
 
+<!-- Busca / filtro -->
+<div class="fm-card card mb-3">
+    <div class="card-body py-2">
+        <form method="get" action="<?= url('/samba/arquivos') ?>" class="row g-2 align-items-center">
+            <input type="hidden" name="path" value="<?= htmlspecialchars($pathAtual) ?>">
+            <div class="col-md-4">
+                <input type="text" class="form-control form-control-sm" name="nome"
+                       value="<?= htmlspecialchars($termoBusca) ?>" placeholder="Nome contém...">
+            </div>
+            <div class="col-md-4">
+                <input type="text" class="form-control form-control-sm" name="extensoes"
+                       value="<?= htmlspecialchars($extensoesBusca) ?>" placeholder="Extensões: mp3, exe, mp4...">
+            </div>
+            <div class="col-md-auto">
+                <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search me-1"></i>Buscar</button>
+            </div>
+            <?php if ($buscaAtiva): ?>
+            <div class="col-md-auto">
+                <a href="<?= url('/samba/arquivos?path=' . urlencode($pathAtual)) ?>" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-x-lg me-1"></i>Limpar busca
+                </a>
+            </div>
+            <?php endif; ?>
+            <div class="col-md-auto text-muted small">
+                Busca recursiva a partir de "<?= htmlspecialchars($pathAtual ?: 'Compartilhamentos') ?>" e subpastas.
+            </div>
+        </form>
+    </div>
+</div>
+
 <?php if (!empty($erro)): ?>
     <div class="alert alert-danger"><?= htmlspecialchars($erro) ?></div>
 <?php endif; ?>
+
+<?php if ($buscaAtiva && $truncado): ?>
+    <div class="alert alert-warning py-2 small">
+        <i class="bi bi-exclamation-triangle me-1"></i>
+        Mostrando os primeiros 1000 resultados -- refine a busca (nome ou extensão) pra ver o restante.
+    </div>
+<?php endif; ?>
+
+<?php if ($buscaAtiva && empty($erro)): ?>
+    <?php $totalBytesBusca = array_sum(array_column($arquivos, 'size')); ?>
+    <div class="mb-3 small text-muted">
+        <i class="bi bi-info-circle me-1"></i>
+        A busca retornou <strong><?= count($arquivos) ?></strong> arquivo(s), totalizando
+        <strong><?= htmlspecialchars(formatBytes($totalBytesBusca)) ?></strong>.
+    </div>
+<?php endif; ?>
+
+<!-- Itens por página -->
+<?php if (!empty($arquivos)): ?>
+<div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+    <div class="small text-muted" id="pag-resumo"></div>
+    <div class="d-flex align-items-center gap-2">
+        <label class="small text-muted mb-0">Itens por página:</label>
+        <select class="form-select form-select-sm" id="pag-tamanho" style="width:auto">
+            <option value="15">15</option>
+            <option value="30" selected>30</option>
+            <option value="45">45</option>
+            <option value="todos">Todos</option>
+        </select>
+    </div>
+</div>
+<?php endif; ?>
+
+<!-- Barra de ações em lote -->
+<div class="fm-card card mb-3 d-none" id="barra-lote">
+    <div class="card-body py-2 d-flex align-items-center gap-2 flex-wrap">
+        <strong class="small" id="lote-contagem">0 selecionado(s)</strong>
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-lote-mover">
+            <i class="bi bi-arrows-move me-1"></i>Mover selecionados para...
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-lote-copiar">
+            <i class="bi bi-copy me-1"></i>Copiar selecionados para...
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-danger" id="btn-lote-excluir">
+            <i class="bi bi-trash me-1"></i>Excluir selecionados
+        </button>
+    </div>
+</div>
 
 <!-- Tabela de arquivos -->
 <div class="fm-card card">
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0" id="fm-table">
+            <?php $totalColunas = $buscaAtiva ? 6 : 5; ?>
             <thead>
                 <tr>
+                    <th style="width:26px"><input type="checkbox" class="form-check-input" id="marcar-todos"></th>
                     <th style="width:40%">Nome</th>
+                    <?php if ($buscaAtiva): ?><th>Caminho</th><?php endif; ?>
                     <th>Tamanho</th>
                     <th>Modificado em</th>
                     <th class="text-end">Ações</th>
@@ -104,15 +185,18 @@ function formatBytes(int $bytes): string {
             <tbody>
                 <?php if (empty($arquivos)): ?>
                     <tr>
-                        <td colspan="4" class="text-center text-muted py-5">
+                        <td colspan="<?= $totalColunas ?>" class="text-center text-muted py-5">
                             <i class="bi bi-folder2 display-6 d-block mb-2"></i>
-                            Pasta vazia
+                            <?= $buscaAtiva ? 'Nenhum resultado encontrado' : 'Pasta vazia' ?>
                         </td>
                     </tr>
                 <?php endif; ?>
 
                 <?php foreach ($arquivos as $f): ?>
                 <tr class="fm-row" data-type="<?= $f['type'] ?>" data-path="<?= htmlspecialchars($f['path']) ?>">
+                    <td>
+                        <input type="checkbox" class="form-check-input checkbox-item" value="<?= htmlspecialchars($f['path']) ?>">
+                    </td>
                     <td>
                         <i class="bi <?= $f['icon'] ?> me-2"></i>
                         <?php if ($f['type'] === 'dir'): ?>
@@ -124,6 +208,9 @@ function formatBytes(int $bytes): string {
                             <span class="fm-name"><?= htmlspecialchars($f['name']) ?></span>
                         <?php endif; ?>
                     </td>
+                    <?php if ($buscaAtiva): ?>
+                    <td class="text-muted small"><?= htmlspecialchars(dirname($f['path']) === '.' ? '/' : dirname($f['path'])) ?></td>
+                    <?php endif; ?>
                     <td class="text-muted" style="font-size:13px">
                         <?= htmlspecialchars(formatBytes($f['size'])) ?>
                     </td>
@@ -193,6 +280,10 @@ function formatBytes(int $bytes): string {
         </table>
     </div>
 </div>
+
+<nav class="mt-3" id="pag-nav" style="display:none">
+    <ul class="pagination pagination-sm justify-content-center flex-wrap" id="pag-lista"></ul>
+</nav>
 
 <!-- Modal Upload -->
 <div class="modal fade" id="modalUpload" tabindex="-1">
@@ -418,6 +509,9 @@ function formatBytes(int $bytes): string {
     const URL_PASTA = '<?= url('/samba/arquivos/pasta') ?>';
     const URL_LER = '<?= url('/samba/arquivos/ler') ?>';
     const URL_SALVAR = '<?= url('/samba/arquivos/salvar') ?>';
+    const URL_LOTE_EXCLUIR = '<?= url('/samba/arquivos/lote-excluir') ?>';
+    const URL_LOTE_MOVER = '<?= url('/samba/arquivos/lote-mover') ?>';
+    const URL_LOTE_COPIAR = '<?= url('/samba/arquivos/lote-copiar') ?>';
 
     let editorPath = '';
 
@@ -503,9 +597,12 @@ function formatBytes(int $bytes): string {
             showToast(data.message, data.success);
             if (data.success) {
                 btn.closest('tr').remove();
+                atualizarBarraLote();
+                aplicarPaginacao();
                 if (!document.querySelector('#fm-table tbody tr')) {
+                    var totalColunas = document.querySelectorAll('#fm-table thead th').length;
                     document.querySelector('#fm-table tbody').innerHTML =
-                        '<tr><td colspan="4" class="text-center text-muted py-5"><i class="bi bi-folder2 display-6 d-block mb-2"></i>Pasta vazia</td></tr>';
+                        '<tr><td colspan="' + totalColunas + '" class="text-center text-muted py-5"><i class="bi bi-folder2 display-6 d-block mb-2"></i>Pasta vazia</td></tr>';
                 }
             }
         } catch(e) { showToast('Erro ao comunicar com o servidor.', false); }
@@ -671,13 +768,28 @@ function formatBytes(int $bytes): string {
         }
     }
 
+    var cmSrcPaths = null; // array quando aberto em modo lote; null quando e um item so (usa cmSrcPath)
+
     function cmAbrir(action, path, name) {
+        cmSrcPaths = null;
         cmAction  = action;
         cmSrcPath = path;
         document.getElementById('cm-titulo').innerHTML =
             (action === 'copiar' ? '<i class="bi bi-copy me-2"></i>Copiar para...' : '<i class="bi bi-arrows-move me-2"></i>Mover para...');
         document.getElementById('cm-acao-label').textContent = action === 'copiar' ? 'Copiando' : 'Movendo';
         document.getElementById('cm-src-nome').textContent = name;
+        document.getElementById('cm-btn-label').textContent = action === 'copiar' ? 'Copiar aqui' : 'Mover aqui';
+        var modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalCopiarMover'));
+        modal.show();
+    }
+
+    function cmAbrirLote(action, paths) {
+        cmAction   = action;
+        cmSrcPaths = paths;
+        document.getElementById('cm-titulo').innerHTML =
+            (action === 'copiar' ? '<i class="bi bi-copy me-2"></i>Copiar selecionados para...' : '<i class="bi bi-arrows-move me-2"></i>Mover selecionados para...');
+        document.getElementById('cm-acao-label').textContent = action === 'copiar' ? 'Copiando' : 'Movendo';
+        document.getElementById('cm-src-nome').textContent = paths.length + ' item(ns) selecionado(s)';
         document.getElementById('cm-btn-label').textContent = action === 'copiar' ? 'Copiar aqui' : 'Mover aqui';
         var modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalCopiarMover'));
         modal.show();
@@ -695,18 +807,26 @@ function formatBytes(int $bytes): string {
     });
 
     document.getElementById('btn-confirmar-cm').addEventListener('click', async function() {
-        var url = cmAction === 'copiar' ? URL_COPIAR : URL_MOVER;
+        var lote = Array.isArray(cmSrcPaths);
+        var url;
+        if (lote) {
+            url = cmAction === 'copiar' ? URL_LOTE_COPIAR : URL_LOTE_MOVER;
+        } else {
+            url = cmAction === 'copiar' ? URL_COPIAR : URL_MOVER;
+        }
         try {
             var fd = new FormData();
-            fd.append('src',      cmSrcPath);
+            if (lote) {
+                cmSrcPaths.forEach(function(p) { fd.append('paths[]', p); });
+            } else {
+                fd.append('src', cmSrcPath);
+            }
             fd.append('dest_dir', cmPickerPath);
             var res  = await fetch(url, { method: 'POST', body: fd });
             var data = await res.json();
-            showToast(data.message, data.success);
-            if (data.success) {
-                bootstrap.Modal.getInstance(document.getElementById('modalCopiarMover')).hide();
-                if (cmAction === 'mover') setTimeout(function() { location.reload(); }, 700);
-            }
+            showToast(data.message, data.success !== false);
+            bootstrap.Modal.getInstance(document.getElementById('modalCopiarMover')).hide();
+            if (cmAction === 'mover') setTimeout(function() { location.reload(); }, 700);
         } catch(e) { showToast('Erro ao executar operação.', false); }
     });
 
@@ -895,6 +1015,173 @@ function formatBytes(int $bytes): string {
     });
     document.getElementById('modalNovaPasta').addEventListener('hidden.bs.modal', function() {
         document.getElementById('nova-pasta-nome').value = '';
+    });
+
+    // ── Paginação client-side (os resultados já vêm todos numa resposta só,
+    // só escondemos/mostramos as linhas via CSS -- sem round-trip novo) ────
+    var pagTamanhoSel = document.getElementById('pag-tamanho');
+    var pagResumo = document.getElementById('pag-resumo');
+    var pagNav = document.getElementById('pag-nav');
+    var pagLista = document.getElementById('pag-lista');
+    var pagAtual = 1;
+
+    function linhasDados() {
+        return Array.from(document.querySelectorAll('#fm-table tbody tr.fm-row'));
+    }
+
+    function aplicarPaginacao() {
+        var linhas = linhasDados();
+        var total = linhas.length;
+
+        if (total === 0) {
+            if (pagNav) pagNav.style.display = 'none';
+            if (pagResumo) pagResumo.textContent = '';
+            return;
+        }
+
+        var tamanho = (pagTamanhoSel && pagTamanhoSel.value === 'todos') ? total : parseInt(pagTamanhoSel ? pagTamanhoSel.value : '30', 10);
+        var totalPaginas = Math.max(1, Math.ceil(total / tamanho));
+        if (pagAtual > totalPaginas) pagAtual = totalPaginas;
+
+        var inicio = (pagAtual - 1) * tamanho;
+        var fim = inicio + tamanho;
+
+        linhas.forEach(function(tr, i) {
+            tr.style.display = (i >= inicio && i < fim) ? '' : 'none';
+        });
+
+        if (pagResumo) {
+            pagResumo.textContent = 'Mostrando ' + (inicio + 1) + '–' + Math.min(fim, total) + ' de ' + total;
+        }
+
+        renderizarPagLista(totalPaginas);
+
+        // o "selecionar todos" reflete a pagina atual -- ao trocar de
+        // pagina, reavalia o estado dele contra os itens agora visiveis
+        if (typeof atualizarBarraLote === 'function') atualizarBarraLote();
+    }
+
+    function renderizarPagLista(totalPaginas) {
+        if (!pagLista || !pagNav) return;
+        pagLista.innerHTML = '';
+
+        if (totalPaginas <= 1) {
+            pagNav.style.display = 'none';
+            return;
+        }
+        pagNav.style.display = '';
+
+        function item(label, page, ativo, desabilitado) {
+            var li = document.createElement('li');
+            li.className = 'page-item' + (ativo ? ' active' : '') + (desabilitado ? ' disabled' : '');
+            var a = document.createElement('a');
+            a.className = 'page-link';
+            a.href = '#';
+            a.textContent = label;
+            if (!desabilitado && !ativo) {
+                a.addEventListener('click', function(e) { e.preventDefault(); pagAtual = page; aplicarPaginacao(); });
+            }
+            li.appendChild(a);
+            return li;
+        }
+
+        pagLista.appendChild(item('«', pagAtual - 1, false, pagAtual === 1));
+
+        var janela = 2;
+        for (var p = 1; p <= totalPaginas; p++) {
+            if (p === 1 || p === totalPaginas || (p >= pagAtual - janela && p <= pagAtual + janela)) {
+                pagLista.appendChild(item(String(p), p, p === pagAtual, false));
+            } else if (p === pagAtual - janela - 1 || p === pagAtual + janela + 1) {
+                var li = document.createElement('li');
+                li.className = 'page-item disabled';
+                li.innerHTML = '<span class="page-link">&hellip;</span>';
+                pagLista.appendChild(li);
+            }
+        }
+
+        pagLista.appendChild(item('»', pagAtual + 1, false, pagAtual === totalPaginas));
+    }
+
+    if (pagTamanhoSel) {
+        pagTamanhoSel.addEventListener('change', function() { pagAtual = 1; aplicarPaginacao(); });
+        aplicarPaginacao();
+    }
+
+    // ── Seleção múltipla / ações em lote ───────────────────────────────────
+    var marcarTodos   = document.getElementById('marcar-todos');
+    var barraLote     = document.getElementById('barra-lote');
+    var loteContagem  = document.getElementById('lote-contagem');
+
+    function checkboxesItem() {
+        return document.querySelectorAll('.checkbox-item');
+    }
+
+    // Só os checkboxes da página atual (linha não escondida pela paginação)
+    // -- "Selecionar todos" reflete e marca só o que está visível.
+    function checkboxesVisiveis() {
+        return Array.from(checkboxesItem()).filter(function(c) {
+            var tr = c.closest('tr');
+            return tr && tr.style.display !== 'none';
+        });
+    }
+
+    function pathsSelecionados() {
+        return Array.from(checkboxesItem()).filter(function(c) { return c.checked; }).map(function(c) { return c.value; });
+    }
+
+    function atualizarBarraLote() {
+        // aplicarPaginacao() chama isto na carga inicial da pagina, antes
+        // de "marcarTodos" (mais abaixo no script) ser inicializado -- sem
+        // esta guarda, essa primeira chamada quebraria com TypeError e
+        // derrubaria o resto do script.
+        if (!marcarTodos) return;
+
+        var n = pathsSelecionados().length;
+        barraLote.classList.toggle('d-none', n === 0);
+        loteContagem.textContent = n + ' selecionado(s)';
+
+        var visiveis = checkboxesVisiveis();
+        var marcadosVisiveis = visiveis.filter(function(c) { return c.checked; }).length;
+        marcarTodos.checked = visiveis.length > 0 && marcadosVisiveis === visiveis.length;
+        marcarTodos.indeterminate = marcadosVisiveis > 0 && marcadosVisiveis < visiveis.length;
+    }
+
+    marcarTodos.addEventListener('change', function() {
+        checkboxesVisiveis().forEach(function(c) { c.checked = marcarTodos.checked; });
+        atualizarBarraLote();
+    });
+
+    document.addEventListener('change', function(e) {
+        if (e.target.classList && e.target.classList.contains('checkbox-item')) {
+            atualizarBarraLote();
+        }
+    });
+
+    document.getElementById('btn-lote-excluir').addEventListener('click', async function() {
+        var paths = pathsSelecionados();
+        if (paths.length === 0) return;
+        if (!confirm('Confirma a exclusão de ' + paths.length + ' item(ns) selecionado(s)? Esta ação não pode ser desfeita.')) return;
+
+        try {
+            var fd = new FormData();
+            paths.forEach(function(p) { fd.append('paths[]', p); });
+            var res = await fetch(URL_LOTE_EXCLUIR, { method: 'POST', body: fd });
+            var data = await res.json();
+            showToast(data.message, data.success !== false);
+            setTimeout(function() { location.reload(); }, 800);
+        } catch(e) { showToast('Erro ao comunicar com o servidor.', false); }
+    });
+
+    document.getElementById('btn-lote-mover').addEventListener('click', function() {
+        var paths = pathsSelecionados();
+        if (paths.length === 0) return;
+        cmAbrirLote('mover', paths);
+    });
+
+    document.getElementById('btn-lote-copiar').addEventListener('click', function() {
+        var paths = pathsSelecionados();
+        if (paths.length === 0) return;
+        cmAbrirLote('copiar', paths);
     });
 })();
 </script>
