@@ -5,12 +5,14 @@ namespace App\Controllers;
 use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
 use App\Services\ConfigService;
+use App\Services\LinuxService;
 
 class SambaArquivosController extends Controller
 {
     private const BASE_PATH  = '/srv/samba/Compartilhamentos';
     private const MAX_UPLOAD = 100 * 1024 * 1024;
     private const EXT_DEFAULT = 'txt,csv,log,conf,cfg,ini,xml,json,html,css,js,php,py,sql,sh,md';
+    private const LOTE_STATUS_DIR = '/var/www/rd.intranet/storage/samba_lote_status';
 
     private static function extConfig(): array
     {
@@ -77,6 +79,7 @@ class SambaArquivosController extends Controller
             $this->view('samba/arquivos', [
                 'erro' => 'Caminho inválido.', 'arquivos' => [], 'pathAtual' => '', 'breadcrumb' => [],
                 'buscaAtiva' => false, 'termoBusca' => '', 'extensoesBusca' => '', 'truncado' => false,
+                'totalReal' => 0, 'bytesTotalReal' => 0,
             ]);
             return;
         }
@@ -92,6 +95,8 @@ class SambaArquivosController extends Controller
             'termoBusca'     => $termo,
             'extensoesBusca' => $extensoes,
             'truncado'       => false,
+            'totalReal'      => 0,
+            'bytesTotalReal' => 0,
         ];
 
         if ($buscaAtiva) {
@@ -105,10 +110,16 @@ class SambaArquivosController extends Controller
 
             $arquivos = array_map(fn(array $item) => $this->shapeItem($item, $item['rel']), $resp['itens'] ?? []);
 
+            // total_real/bytes_total_real vem do script -- SEMPRE contam
+            // TODOS os arquivos correspondentes, nunca so os primeiros 1000
+            // exibidos na tabela (numero errado aqui pode virar informacao
+            // errada repassada pro cliente).
             $this->view('samba/arquivos', $viewBase + [
-                'arquivos' => $arquivos,
-                'truncado' => !empty($resp['truncado']),
-                'erro'     => null,
+                'arquivos'       => $arquivos,
+                'truncado'       => !empty($resp['truncado']),
+                'totalReal'      => (int)($resp['total_real'] ?? count($arquivos)),
+                'bytesTotalReal' => (int)($resp['bytes_total_real'] ?? 0),
+                'erro'           => null,
             ]);
             return;
         }
@@ -370,26 +381,20 @@ class SambaArquivosController extends Controller
     }
 
     // ── Ações em lote (seleção múltipla, ex: resultado de busca) ───────────
-    // Reaproveita os MESMOS scripts de item único num loop -- cada caminho
-    // e validado/processado independentemente; um item invalido ou que
-    // falhe nao aborta os demais, a resposta traz o resumo de quantos
-    // deram certo e o detalhe de quem falhou (e por que).
+    // Um lote de centenas de itens excluidos/movidos/copiados um a um via
+    // sudo (processo novo por item) e caro demais pra uma unica requisicao
+    // HTTP aguentar sem estourar o tempo -- por isso roda em segundo plano
+    // (lote_arquivos_samba_web.sh) e o portal acompanha por polling, mesmo
+    // esquema ja usado pela ACL de compartilhamentos e pelo Backup em
+    // Nuvem (ver SambaCompartilhamentoService::statusAplicacaoAcl() /
+    // BackupService::statusExecucao()).
 
     public function loteExcluir(): void
     {
         AuthMiddleware::checkModulo('samba_arquivos');
         header('Content-Type: application/json');
 
-        [$sucesso, $falhas] = $this->executarLote($_POST['paths'] ?? [], function (string $path): array {
-            return $this->jsonOutput('/opt/rdtecnologia/scripts/excluir_arquivo_samba_web.sh', [$path]);
-        });
-
-        echo json_encode([
-            'success' => empty($falhas),
-            'message' => $this->resumoLote($sucesso, $falhas, 'excluído(s)'),
-            'sucesso' => $sucesso,
-            'falhas'  => $falhas,
-        ]);
+        echo json_encode($this->iniciarLote('excluir', $_POST['paths'] ?? [], null));
     }
 
     public function loteMover(): void
@@ -402,16 +407,7 @@ class SambaArquivosController extends Controller
             echo json_encode(['success' => false, 'message' => 'Pasta de destino inválida.']); return;
         }
 
-        [$sucesso, $falhas] = $this->executarLote($_POST['paths'] ?? [], function (string $path) use ($destDir): array {
-            return $this->jsonOutput('/opt/rdtecnologia/scripts/mover_arquivo_samba_web.sh', [$path, $destDir]);
-        });
-
-        echo json_encode([
-            'success' => empty($falhas),
-            'message' => $this->resumoLote($sucesso, $falhas, 'movido(s)'),
-            'sucesso' => $sucesso,
-            'falhas'  => $falhas,
-        ]);
+        echo json_encode($this->iniciarLote('mover', $_POST['paths'] ?? [], $destDir));
     }
 
     public function loteCopiar(): void
@@ -424,58 +420,58 @@ class SambaArquivosController extends Controller
             echo json_encode(['success' => false, 'message' => 'Pasta de destino inválida.']); return;
         }
 
-        [$sucesso, $falhas] = $this->executarLote($_POST['paths'] ?? [], function (string $path) use ($destDir): array {
-            return $this->jsonOutput('/opt/rdtecnologia/scripts/copiar_arquivo_samba_web.sh', [$path, $destDir]);
-        });
-
-        echo json_encode([
-            'success' => empty($falhas),
-            'message' => $this->resumoLote($sucesso, $falhas, 'copiado(s)'),
-            'sucesso' => $sucesso,
-            'falhas'  => $falhas,
-        ]);
+        echo json_encode($this->iniciarLote('copiar', $_POST['paths'] ?? [], $destDir));
     }
 
     /**
      * @param mixed $pathsBrutos vindo direto de $_POST['paths'] (array de strings)
-     * @return array{0: int, 1: array} [quantidade com sucesso, lista de falhas {path, message}]
+     * @return array{success: bool, message: string, execucao_id?: string, total?: int}
      */
-    private function executarLote($pathsBrutos, callable $acao): array
+    private function iniciarLote(string $acao, $pathsBrutos, ?string $destDir): array
     {
-        $sucesso = 0;
-        $falhas  = [];
-
+        $paths = [];
         foreach ((array)$pathsBrutos as $pathBruto) {
             $path = $this->validarRel((string)$pathBruto);
-
-            if ($path === null) {
-                $falhas[] = ['path' => (string)$pathBruto, 'message' => 'Caminho inválido.'];
-                continue;
-            }
-
-            $resultado = $acao($path);
-
-            if (!empty($resultado['success'])) {
-                $sucesso++;
-            } else {
-                $falhas[] = ['path' => $path, 'message' => $resultado['message'] ?? 'Falha desconhecida.'];
+            if ($path !== null) {
+                $paths[] = $path;
             }
         }
 
-        return [$sucesso, $falhas];
+        if (empty($paths)) {
+            return ['success' => false, 'message' => 'Nenhum item válido selecionado.'];
+        }
+
+        $execucaoId = bin2hex(random_bytes(8));
+
+        $args = [$execucaoId, $acao, $destDir ?? ''];
+        foreach ($paths as $path) {
+            $args[] = $path;
+        }
+
+        (new LinuxService())->executarScriptEmSegundoPlano(
+            '/opt/rdtecnologia/scripts/lote_arquivos_samba_web.sh',
+            $args
+        );
+
+        return ['success' => true, 'execucao_id' => $execucaoId, 'total' => count($paths)];
     }
 
-    private function resumoLote(int $sucesso, array $falhas, string $verbo): string
+    // ── Status de uma ação em lote em andamento (polling) ──────────────────
+    public function loteStatus(): void
     {
-        $total = $sucesso + count($falhas);
+        AuthMiddleware::checkModulo('samba_arquivos');
+        header('Content-Type: application/json');
 
-        if (empty($falhas)) {
-            return $sucesso . ' item(ns) ' . $verbo . ' com sucesso.';
+        $id = preg_replace('/[^a-f0-9]/', '', (string)($_GET['id'] ?? ''));
+        $arquivo = self::LOTE_STATUS_DIR . "/{$id}.json";
+
+        if ($id === '' || !is_file($arquivo)) {
+            echo json_encode(['status' => 'desconhecido']);
+            return;
         }
 
-        $nomes = implode(', ', array_map(fn($f) => basename($f['path']), $falhas));
-
-        return "{$sucesso} de {$total} item(ns) {$verbo}. Falharam: {$nomes}.";
+        $dados = json_decode((string)file_get_contents($arquivo), true);
+        echo json_encode(is_array($dados) ? $dados : ['status' => 'desconhecido']);
     }
 
     // ── Criar novo arquivo ────────────────────────────────────────────────

@@ -119,6 +119,7 @@ $router->post('/samba/arquivos/pasta', [SambaArquivosController::class, 'criarPa
 $router->post('/samba/arquivos/lote-excluir', [SambaArquivosController::class, 'loteExcluir']);
 $router->post('/samba/arquivos/lote-mover', [SambaArquivosController::class, 'loteMover']);
 $router->post('/samba/arquivos/lote-copiar', [SambaArquivosController::class, 'loteCopiar']);
+$router->get('/samba/arquivos/lote-status', [SambaArquivosController::class, 'loteStatus']);
 
 $router->get('/infraestrutura/servidor', [ServerController::class, 'index']);
 $router->get('/infraestrutura/servidor/api', [ServerController::class, 'api']);

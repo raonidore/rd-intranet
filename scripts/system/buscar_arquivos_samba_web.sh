@@ -15,9 +15,13 @@
 # pasta nenhuma). Pastas cujo nome comeca com "." (ex: .recycle) sao
 # puladas, mesmo criterio da listagem normal.
 #
-# Teto de resultados (MAX_RESULTADOS) pra nao travar em compartilhamentos
-# com dezenas de milhares de arquivos -- para o walk assim que atinge o
-# teto e sinaliza "truncado":true na resposta.
+# Teto de resultados (MAX_RESULTADOS) na TABELA exibida, pra nao travar o
+# navegador em compartilhamentos com dezenas de milhares de arquivos -- mas
+# a contagem e a soma de tamanho ("total_real"/"bytes_total_real") sempre
+# percorrem TODOS os arquivos correspondentes, nunca so os primeiros 1000.
+# Isso importa de verdade: um numero errado aqui pode virar informacao
+# errada repassada pro cliente (ex: "achei 1000 arquivos, 3.5GB" quando na
+# real eram 1569 arquivos, 3.8GB -- ja aconteceu).
 
 BASE="/srv/samba/Compartilhamentos"
 REL="${1:-}"
@@ -47,7 +51,8 @@ termo_lower = termo.strip().lower()
 extensoes = [e.strip().lower().lstrip('.') for e in extensoes_csv.split(',') if e.strip()]
 
 itens = []
-truncado = False
+total_real = 0
+bytes_total_real = 0
 
 for raiz, dirs, arquivos in os.walk(real):
     dirs[:] = [d for d in dirs if not d.startswith('.')]
@@ -70,21 +75,25 @@ for raiz, dirs, arquivos in os.walk(real):
         except OSError:
             continue
 
-        rel_base = os.path.relpath(caminho_completo, base)
-        itens.append({
-            "type": "file",
-            "name": nome,
-            "size": st.st_size,
-            "modified": int(st.st_mtime),
-            "rel": rel_base.replace(os.sep, '/'),
-        })
+        # conta e soma SEMPRE (nunca para no teto) -- so a LISTA exibida
+        # na tabela e limitada, os numeros de total tem que ser exatos
+        total_real += 1
+        bytes_total_real += st.st_size
 
-        if len(itens) >= MAX_RESULTADOS:
-            truncado = True
-            break
+        if len(itens) < MAX_RESULTADOS:
+            rel_base = os.path.relpath(caminho_completo, base)
+            itens.append({
+                "type": "file",
+                "name": nome,
+                "size": st.st_size,
+                "modified": int(st.st_mtime),
+                "rel": rel_base.replace(os.sep, '/'),
+            })
 
-    if truncado:
-        break
-
-print(json.dumps({"itens": itens, "truncado": truncado}))
+print(json.dumps({
+    "itens": itens,
+    "truncado": total_real > MAX_RESULTADOS,
+    "total_real": total_real,
+    "bytes_total_real": bytes_total_real,
+}))
 PYEOF

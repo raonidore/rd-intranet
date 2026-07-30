@@ -122,16 +122,17 @@ function formatBytes(int $bytes): string {
 <?php if ($buscaAtiva && $truncado): ?>
     <div class="alert alert-warning py-2 small">
         <i class="bi bi-exclamation-triangle me-1"></i>
-        Mostrando os primeiros 1000 resultados -- refine a busca (nome ou extensão) pra ver o restante.
+        A tabela abaixo mostra só os primeiros 1000 arquivos (senão a página trava) -- refine a busca (nome ou
+        extensão) pra ver o restante individualmente. <strong>O total abaixo já é exato e considera todos eles</strong>,
+        não só os 1000 exibidos.
     </div>
 <?php endif; ?>
 
 <?php if ($buscaAtiva && empty($erro)): ?>
-    <?php $totalBytesBusca = array_sum(array_column($arquivos, 'size')); ?>
     <div class="mb-3 small text-muted">
         <i class="bi bi-info-circle me-1"></i>
-        A busca retornou <strong><?= count($arquivos) ?></strong> arquivo(s), totalizando
-        <strong><?= htmlspecialchars(formatBytes($totalBytesBusca)) ?></strong>.
+        A busca retornou <strong><?= number_format($totalReal, 0, ',', '.') ?></strong> arquivo(s), totalizando
+        <strong><?= htmlspecialchars(formatBytes($bytesTotalReal)) ?></strong>.
     </div>
 <?php endif; ?>
 
@@ -164,6 +165,19 @@ function formatBytes(int $bytes): string {
         <button type="button" class="btn btn-sm btn-outline-danger" id="btn-lote-excluir">
             <i class="bi bi-trash me-1"></i>Excluir selecionados
         </button>
+    </div>
+</div>
+
+<!-- Progresso da ação em lote (roda em segundo plano) -->
+<div class="fm-card card mb-3 d-none" id="lote-progresso">
+    <div class="card-body py-3">
+        <p class="mb-2 small text-muted" id="lote-progresso-texto">
+            Processando (isso roda em segundo plano -- pode navegar para outra tela, a ação continua mesmo assim)...
+        </p>
+        <div class="progress" style="height:20px">
+            <div class="progress-bar progress-bar-striped progress-bar-animated" id="lote-progresso-barra" style="width:0%">0%</div>
+        </div>
+        <div class="alert alert-danger mt-3 d-none" id="lote-progresso-erro"></div>
     </div>
 </div>
 
@@ -512,8 +526,74 @@ function formatBytes(int $bytes): string {
     const URL_LOTE_EXCLUIR = '<?= url('/samba/arquivos/lote-excluir') ?>';
     const URL_LOTE_MOVER = '<?= url('/samba/arquivos/lote-mover') ?>';
     const URL_LOTE_COPIAR = '<?= url('/samba/arquivos/lote-copiar') ?>';
+    const URL_LOTE_STATUS = '<?= url('/samba/arquivos/lote-status') ?>';
 
     let editorPath = '';
+
+    // ── Acompanha uma ação em lote rodando em segundo plano (excluir/mover/
+    // copiar centenas de itens de uma vez pode levar bem mais que o tempo
+    // de uma requisição HTTP aguenta) ──────────────────────────────────────
+    var lotePollInterval = null;
+
+    function lotePararPoll() {
+        if (lotePollInterval) { clearInterval(lotePollInterval); lotePollInterval = null; }
+    }
+
+    function loteAcompanhar(execucaoId, verbo) {
+        var painel = document.getElementById('lote-progresso');
+        var texto = document.getElementById('lote-progresso-texto');
+        var barra = document.getElementById('lote-progresso-barra');
+        var erroBox = document.getElementById('lote-progresso-erro');
+
+        lotePararPoll();
+        painel.classList.remove('d-none');
+        erroBox.classList.add('d-none');
+        texto.classList.remove('d-none');
+        barra.classList.add('progress-bar-animated');
+        barra.style.width = '0%';
+        barra.textContent = '0%';
+        painel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+        lotePollInterval = setInterval(async function() {
+            try {
+                var res = await fetch(URL_LOTE_STATUS + '?id=' + encodeURIComponent(execucaoId));
+                var dados = await res.json();
+
+                if (dados.status === 'rodando') {
+                    var pct = dados.percentual || 0;
+                    barra.style.width = pct + '%';
+                    barra.textContent = pct + '%';
+                    texto.textContent = 'Processando (' + (dados.processados || 0) + ' de ' + (dados.total || 0) + ')...';
+                    return;
+                }
+
+                if (dados.status === 'concluido') {
+                    lotePararPoll();
+                    barra.style.width = '100%';
+                    barra.textContent = '100%';
+                    barra.classList.remove('progress-bar-animated');
+                    texto.textContent = (dados.total || 0) + ' item(ns) ' + verbo + ' com sucesso.';
+                    showToast((dados.total || 0) + ' item(ns) ' + verbo + ' com sucesso.', true);
+                    setTimeout(function() { location.reload(); }, 1200);
+                    return;
+                }
+
+                if (dados.status === 'erro') {
+                    lotePararPoll();
+                    barra.classList.remove('progress-bar-animated');
+                    texto.classList.add('d-none');
+                    erroBox.textContent = (dados.processados || 0) + ' de ' + (dados.total || 0) + ' processado(s) antes do erro: ' + (dados.mensagem || 'falha desconhecida.');
+                    erroBox.classList.remove('d-none');
+                    showToast('Concluído com falhas -- veja o detalhe na tela.', false);
+                    setTimeout(function() { location.reload(); }, 3500);
+                    return;
+                }
+                // "desconhecido" -- job ainda nao escreveu o primeiro status, continua tentando
+            } catch (e) {
+                // falha de rede pontual -- tenta de novo no proximo tick
+            }
+        }, 1200);
+    }
 
     function showToast(msg, ok) {
         var el = document.getElementById('fm-toast');
@@ -824,6 +904,17 @@ function formatBytes(int $bytes): string {
             fd.append('dest_dir', cmPickerPath);
             var res  = await fetch(url, { method: 'POST', body: fd });
             var data = await res.json();
+
+            if (lote) {
+                bootstrap.Modal.getInstance(document.getElementById('modalCopiarMover')).hide();
+                if (!data.success) {
+                    showToast(data.message || 'Erro ao iniciar a operação.', false);
+                    return;
+                }
+                loteAcompanhar(data.execucao_id, cmAction === 'copiar' ? 'copiado(s)' : 'movido(s)');
+                return;
+            }
+
             showToast(data.message, data.success !== false);
             bootstrap.Modal.getInstance(document.getElementById('modalCopiarMover')).hide();
             if (cmAction === 'mover') setTimeout(function() { location.reload(); }, 700);
@@ -1167,8 +1258,13 @@ function formatBytes(int $bytes): string {
             paths.forEach(function(p) { fd.append('paths[]', p); });
             var res = await fetch(URL_LOTE_EXCLUIR, { method: 'POST', body: fd });
             var data = await res.json();
-            showToast(data.message, data.success !== false);
-            setTimeout(function() { location.reload(); }, 800);
+
+            if (!data.success) {
+                showToast(data.message || 'Erro ao iniciar a exclusão.', false);
+                return;
+            }
+
+            loteAcompanhar(data.execucao_id, 'excluído(s)');
         } catch(e) { showToast('Erro ao comunicar com o servidor.', false); }
     });
 
