@@ -2,7 +2,7 @@
 BACKUP="$1"
 ARQUIVO_RD="/etc/apache2/conf-available/rd-intranet.conf"
 
-if [ -z "$BACKUP" ] || echo "$BACKUP" | grep -q '\.\.'; then
+if [ -z "$BACKUP" ] || echo "$BACKUP" | grep -qE '(^|/)\.\.(/|$)'; then
     echo '{"success":false,"message":"Arquivo invalido"}'; exit 1
 fi
 if [ ! -f "$BACKUP" ] || [[ "$BACKUP" != /etc/apache2/rd/backups/rd-intranet_* ]]; then

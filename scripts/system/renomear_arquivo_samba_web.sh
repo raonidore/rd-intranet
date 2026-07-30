@@ -3,7 +3,7 @@ BASE="/srv/samba/Compartilhamentos"
 REL_ANTIGO="$1"
 NOVO_NOME="$2"
 
-if echo "$REL_ANTIGO" | grep -q '\.\.'; then
+if echo "$REL_ANTIGO" | grep -qE '(^|/)\.\.(/|$)'; then
     echo '{"success":false,"message":"Caminho invalido"}'; exit 1
 fi
 if [ -z "$NOVO_NOME" ] || echo "$NOVO_NOME" | grep -qP '[<>:"/\\|?*\x00-\x1f]'; then

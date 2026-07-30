@@ -35,7 +35,19 @@ class SambaArquivosController extends Controller
     {
         $rel = trim($rel, '/');
 
-        if (str_contains($rel, '..') || str_contains($rel, "\0")) {
+        if (str_contains($rel, "\0")) {
+            return null;
+        }
+
+        // Rejeita ".." so quando aparece como SEGMENTO de caminho (ex:
+        // "a/../b", "..", "../a"), nunca como substring qualquer -- um
+        // str_contains($rel, '..') ingenuo rejeitava nomes de arquivo
+        // legitimos que so continham reticencias no titulo (ex: "Nada....
+        // mp3"), descartando silenciosamente itens validos de uma selecao
+        // em lote sem avisar o usuario (a real proteção contra path
+        // traversal é o realpath()+startswith() dos scripts, isto aqui é
+        // só uma primeira barreira).
+        if (in_array('..', explode('/', $rel), true)) {
             return null;
         }
 

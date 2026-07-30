@@ -64,7 +64,7 @@ fi
 
 REAL_DEST=""
 if [ "$ACAO" != "excluir" ]; then
-  if echo "$DEST_DIR_REL" | grep -q '\.\.'; then
+  if echo "$DEST_DIR_REL" | grep -qE '(^|/)\.\.(/|$)'; then
     escrever_status "erro" 0 0 "Pasta de destino invalida."
     exit 1
   fi
@@ -86,7 +86,7 @@ escrever_status "rodando" 0 "$TOTAL" ""
 for REL in "$@"; do
   PROCESSADOS=$((PROCESSADOS + 1))
 
-  if echo "$REL" | grep -q '\.\.'; then
+  if echo "$REL" | grep -qE '(^|/)\.\.(/|$)'; then
     ERROS+=("$(basename "$REL"): caminho invalido")
     escrever_status "rodando" "$PROCESSADOS" "$TOTAL" ""
     continue

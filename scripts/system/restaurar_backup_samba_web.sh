@@ -1,6 +1,6 @@
 #!/bin/bash
 BACKUP="$1"
-if [ -z "$BACKUP" ] || echo "$BACKUP" | grep -q '\.\.'; then
+if [ -z "$BACKUP" ] || echo "$BACKUP" | grep -qE '(^|/)\.\.(/|$)'; then
     echo '{"success":false,"message":"Arquivo invalido"}'; exit 1
 fi
 if [ ! -f "$BACKUP" ] || [[ "$BACKUP" != /etc/samba/smb.conf.bkp.* ]]; then

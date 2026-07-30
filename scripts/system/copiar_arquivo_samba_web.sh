@@ -4,7 +4,7 @@ SRC_REL="$1"
 DEST_DIR_REL="$2"
 
 for v in "$SRC_REL" "$DEST_DIR_REL"; do
-    echo "$v" | grep -q '\.\.' && echo '{"success":false,"message":"Caminho invalido"}' && exit 1
+    echo "$v" | grep -qE '(^|/)\.\.(/|$)' && echo '{"success":false,"message":"Caminho invalido"}' && exit 1
 done
 
 # caminhos via sys.argv, nao interpolados na string -- ver comentario em

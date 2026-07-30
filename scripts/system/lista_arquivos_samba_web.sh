@@ -2,7 +2,7 @@
 BASE="/srv/samba/Compartilhamentos"
 REL="${1:-}"
 
-if echo "$REL" | grep -q '\.\.'; then
+if echo "$REL" | grep -qE '(^|/)\.\.(/|$)'; then
     echo '{"error":"Caminho invalido"}'; exit 1
 fi
 

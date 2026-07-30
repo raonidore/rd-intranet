@@ -28,7 +28,7 @@ REL="${1:-}"
 TERMO="${2:-}"
 EXTENSOES="${3:-}"
 
-if echo "$REL" | grep -q '\.\.'; then
+if echo "$REL" | grep -qE '(^|/)\.\.(/|$)'; then
     echo '{"error":"Caminho invalido"}'; exit 1
 fi
 

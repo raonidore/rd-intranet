@@ -2,7 +2,7 @@
 BASE="/srv/samba/Compartilhamentos"
 TMPFILE="$1"
 REL="$2"
-if echo "$REL" | grep -q '\.\.'; then echo '{"success":false,"message":"Caminho invalido"}'; exit 1; fi
+if echo "$REL" | grep -qE '(^|/)\.\.(/|$)'; then echo '{"success":false,"message":"Caminho invalido"}'; exit 1; fi
 # caminho via sys.argv, nao interpolado na string -- ver comentario em
 # excluir_arquivo_samba_web.sh (apostrofo no nome quebrava a string Python)
 REAL=$(python3 -c "import os,sys; p=os.path.normpath(sys.argv[1]); print(p if p.startswith(sys.argv[2]) else '')" "$BASE/$REL" "$BASE" 2>/dev/null)
