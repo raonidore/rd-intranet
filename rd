@@ -206,6 +206,40 @@ switch ($comando) {
         echo "ERRO: " . ($status['mensagem'] ?: 'falha desconhecida ao executar o backup') . "\n";
         exit(1);
 
+    case 'config-backup:gerar':
+        $service = new \App\Services\ConfigBackupService();
+
+        $senha = $service->senhaAgendada();
+        if ($senha === null) {
+            echo "ERRO: agendamento de backup de configuracao ativo, mas nenhuma senha de backups agendados foi configurada (Sistema > Configuracoes).\n";
+            exit(1);
+        }
+
+        $resultado = $service->gerar($senha, 'agendado');
+        if (!$resultado['success']) {
+            echo "ERRO: {$resultado['message']}\n";
+            exit(1);
+        }
+
+        // mesmo raciocinio de backup:executar -- o cron nao teria como
+        // acompanhar progresso depois, entao espera terminar aqui,
+        // fazendo o mesmo polling que a tela faz via HTTP.
+        $execucaoId = $resultado['execucao_id'];
+        $status = ['status' => 'rodando'];
+
+        while (in_array($status['status'], ['rodando', 'desconhecido'], true)) {
+            sleep(3);
+            $status = $service->status($execucaoId);
+        }
+
+        if ($status['status'] === 'concluido') {
+            echo "OK: backup de configuracao gerado -- " . ($status['tamanho_bytes'] ?? 0) . " byte(s).\n";
+            break;
+        }
+
+        echo "ERRO: " . ($status['mensagem'] ?: 'falha desconhecida ao gerar o backup de configuracao') . "\n";
+        exit(1);
+
     case 'ativos:coletar-snmp':
         $resultado = (new \App\Services\AtivoService())->coletarSnmpTodos();
         echo "OK: SNMP coletado em {$resultado['sucesso']}/{$resultado['total']} ativo(s).\n";
