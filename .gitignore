@@ -5,6 +5,9 @@
 /storage/samba_acl_status/*
 /storage/backup_status/*
 /storage/samba_lote_status/*
+/storage/config_backups/*
+/storage/config_backup_status/*
+/storage/config_restore_status/*
 .env
 /app/Config/database.php
 *.log

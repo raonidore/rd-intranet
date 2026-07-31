@@ -230,6 +230,54 @@ class CloudflareTunnelService
         return $resposta['dados'] !== null ? json_encode($resposta['dados'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) : null;
     }
 
+    /**
+     * Reconecta o serviço local (cloudflared) a um túnel que JÁ existe na
+     * Cloudflare -- usado depois de uma restauração de configuração, onde
+     * `configuracoes` (com o tunnel_id antigo) acabou de ser repovoada pelo
+     * banco restaurado, então tunelCriado() já é true e criar() recusaria
+     * rodar (ele só cria túnel novo). Busca um connector token fresco do
+     * túnel existente (mesma chamada de API já usada dentro de criar()) e
+     * reinstala o serviço local -- não cria túnel nem registro DNS novos,
+     * então não há nada para desfazer em caso de falha.
+     */
+    public function reconectarServicoLocal(): array
+    {
+        if (!$this->configurado() || !$this->tunelCriado()) {
+            return ['success' => false, 'message' => 'Nenhum túnel configurado para reconectar.'];
+        }
+
+        $token = $this->apiTokenAtual();
+        $accountId = $this->accountIdAtual();
+        $tunnelId = ConfigService::get(self::CHAVE_TUNNEL_ID, '') ?: '';
+
+        $instalacao = $this->resultadoScript(
+            $this->linux->executarScript(self::SCRIPT, ['instalar']),
+            'Falha ao instalar o cloudflared.'
+        );
+        if (!$instalacao['success']) {
+            return $instalacao;
+        }
+
+        $resposta = $this->chamarApi('GET', "/accounts/{$accountId}/cfd_tunnel/{$tunnelId}/token", null, (string)$token);
+        $connectorToken = $resposta['dados']['result'] ?? null;
+        if (!$resposta['sucesso'] || !$connectorToken) {
+            return ['success' => false, 'message' => $resposta['mensagem'] ?: 'Não foi possível obter o token de conexão do túnel.'];
+        }
+
+        $comando = 'sudo ' . escapeshellarg(self::SCRIPT) . ' servico_instalar';
+        $resultadoServico = $this->resultadoScript(
+            $this->linux->executarComEntrada($comando, $connectorToken),
+            'Falha ao instalar o serviço do cloudflared.'
+        );
+        if (!$resultadoServico['success']) {
+            return $resultadoServico;
+        }
+
+        AuditService::registrar('Infraestrutura', 'Túneis', 'Serviço do Cloudflare Tunnel reconectado após restauração de configuração.');
+
+        return ['success' => true, 'message' => 'Túnel reconectado.'];
+    }
+
     public function remover(): array
     {
         $token = $this->apiTokenAtual();

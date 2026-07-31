@@ -50,6 +50,7 @@ use App\Controllers\PoliticaController;
 use App\Controllers\AcessoRemotoController;
 use App\Controllers\RdpController;
 use App\Controllers\EtiquetaConfigController;
+use App\Controllers\ConfiguracoesController;
 use App\Controllers\EmailConfigController;
 use App\Controllers\EmpresaController;
 use App\Controllers\SistemaModulosController;
@@ -307,6 +308,7 @@ $router->post('/vpn/wireguard/saida/remover', [VpnWireguardSaidaController::clas
 $router->get('/deploy', [DeployCenterController::class, 'index']);
 $router->get('/deploy/samba/aplicar', [DeployCenterController::class, 'aplicarSamba']);
 $router->post('/deploy/configuracoes', [DeployCenterController::class, 'salvarConfiguracoes']);
+$router->post('/deploy/extensoes-perigosas', [DeployCenterController::class, 'salvarExtensoesPerigosas']);
 
 $router->get('/samba/configuracao', [SambaConfiguracaoController::class, 'index']);
 $router->post('/samba/configuracao/salvar', [SambaConfiguracaoController::class, 'salvar']);
@@ -347,6 +349,7 @@ $router->post('/backup/configuracao/agendar', [BackupController::class, 'agendar
 $router->post('/backup/executar', [BackupController::class, 'executarAgora']);
 $router->get('/backup/status', [BackupController::class, 'status']);
 $router->get('/backup/historico', [BackupController::class, 'historico']);
+$router->get('/backup/historico/arquivos', [BackupController::class, 'arquivosAlterados']);
 
 $router->get('/administracao/usuarios', [UserController::class, 'index']);
 $router->get('/administracao/usuarios/novo', [UserController::class, 'novoForm']);
@@ -381,6 +384,16 @@ $router->post('/administracao/email/testar', [EmailConfigController::class, 'tes
 
 $router->get('/administracao/modulos', [SistemaModulosController::class, 'index']);
 $router->post('/administracao/modulos/salvar', [SistemaModulosController::class, 'salvar']);
+
+$router->get('/administracao/configuracoes', [ConfiguracoesController::class, 'index']);
+$router->post('/administracao/configuracoes/gerar', [ConfiguracoesController::class, 'gerar']);
+$router->get('/administracao/configuracoes/gerar-status', [ConfiguracoesController::class, 'gerarStatus']);
+$router->get('/administracao/configuracoes/download', [ConfiguracoesController::class, 'download']);
+$router->post('/administracao/configuracoes/agendar-salvar', [ConfiguracoesController::class, 'agendarSalvar']);
+$router->post('/administracao/configuracoes/agendar-excluir', [ConfiguracoesController::class, 'agendarExcluir']);
+$router->post('/administracao/configuracoes/restaurar-upload', [ConfiguracoesController::class, 'restaurarUpload']);
+$router->get('/administracao/configuracoes/restaurar-status', [ConfiguracoesController::class, 'restaurarStatus']);
+$router->post('/administracao/configuracoes/restaurar-finalizar', [ConfiguracoesController::class, 'restaurarFinalizar']);
 
 $router->get('/entra/dashboard', [EntraController::class, 'dashboard']);
 $router->get('/entra/configuracao', [EntraController::class, 'configuracaoForm']);

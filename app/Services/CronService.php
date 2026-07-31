@@ -232,7 +232,7 @@ class CronService
      * `configuracoes` (cron_sync_em/cron_sync_erro) pra a tela avisar que
      * o cron do sistema pode estar fora de sincronia.
      */
-    private function regenerarArquivo(): array
+    public function regenerarArquivo(): array
     {
         $linhas = [
             '# Arquivo gerado automaticamente pela RD Intranet (Infraestrutura > Cron).',

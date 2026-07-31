@@ -676,6 +676,9 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         <a href="<?= url('/administracao/email') ?>" class="<?= str_starts_with($uriAtual, '/administracao/email') ? 'active' : '' ?>">
             <i class="bi bi-envelope me-2"></i> E-mail
         </a>
+        <a href="<?= url('/administracao/configuracoes') ?>" class="<?= str_starts_with($uriAtual, '/administracao/configuracoes') ? 'active' : '' ?>">
+            <i class="bi bi-shield-lock me-2"></i> Configurações (Backup/Restauração)
+        </a>
 
         <button class="menu-toggle menu-toggle-sub" type="button" data-bs-toggle="collapse" data-bs-target="#menuSistemaModulos"
                 aria-expanded="<?= $abrirSistemaModulos ? 'true' : 'false' ?>">
