@@ -43,6 +43,7 @@ class AtivoService
         'condicao' => ['label' => 'Condição', 'ordenar' => null, 'padrao' => true],
         'setor' => ['label' => 'Setor', 'ordenar' => 'setor_nome', 'padrao' => true],
         'localizacao' => ['label' => 'Localização', 'ordenar' => 'localizacao_nome', 'padrao' => true],
+        'responsavel' => ['label' => 'Responsável', 'ordenar' => 'responsavel', 'padrao' => false],
         'versao_agente' => ['label' => 'Versão do Agente', 'ordenar' => 'agente_versao', 'padrao' => true],
         'ip' => ['label' => 'IP Principal', 'ordenar' => 'ip', 'padrao' => false],
         'so' => ['label' => 'S.O.', 'ordenar' => 'sistema_operacional', 'padrao' => false],

@@ -36,6 +36,7 @@ class AtivoRepository
         'setor_nome' => 'cs.nome',
         'localizacao_nome' => 'cl.nome',
         'agente_versao' => 'a.agente_versao',
+        'responsavel' => 'a.responsavel',
         'ip' => 'a.ip',
         'sistema_operacional' => "JSON_UNQUOTE(JSON_EXTRACT(a.detalhes, '$.sistema_operacional'))",
     ];

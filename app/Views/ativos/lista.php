@@ -204,6 +204,7 @@ function thOrdenavel(string $coluna, string $label, ?string $ordenarChave, array
                                 </td>
                                 <td class="small text-muted" data-col="setor"><?= htmlspecialchars($a['setor_nome'] ?? '—') ?></td>
                                 <td class="small text-muted" data-col="localizacao"><?= htmlspecialchars($a['localizacao_nome'] ?? '—') ?></td>
+                                <td class="small text-muted" data-col="responsavel"><?= htmlspecialchars($a['responsavel'] ?: '—') ?></td>
                                 <td class="small" data-col="versao_agente">
                                     <?php if (empty($a['agente_versao'])): ?>
                                         <span class="text-muted">—</span>
