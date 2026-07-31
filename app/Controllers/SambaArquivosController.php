@@ -12,6 +12,31 @@ class SambaArquivosController extends Controller
     private const BASE_PATH  = '/srv/samba/Compartilhamentos';
     private const MAX_UPLOAD = 100 * 1024 * 1024;
     private const EXT_DEFAULT = 'txt,csv,log,conf,cfg,ini,xml,json,html,css,js,php,py,sql,sh,md';
+
+    // Imagens tem visualizador proprio (like PDF), nao passam pela lista
+    // configuravel de "Extensoes permitidas" do Deploy Center -- aquela
+    // lista e pra arquivos de TEXTO (le como string/JSON), nunca funcionaria
+    // pra binario mesmo se o admin adicionar "jpg" nela (foi exatamente o
+    // bug relatado: json_encode() falha com bytes invalidos em UTF-8).
+    private const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'ico'];
+    private const IMAGE_MIMES = [
+        'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png',
+        'gif' => 'image/gif', 'webp' => 'image/webp', 'bmp' => 'image/bmp', 'ico' => 'image/x-icon',
+    ];
+
+    // Mesmo raciocinio das imagens -- video tambem tem visualizador proprio.
+    // Formatos antigos (avi/wmv/flv, comuns em treinamentos corporativos
+    // gravados ha anos) nao tem decoder nativo no navegador -- o <video>
+    // mostra a mensagem padrao de "formato nao suportado" sozinho, sem
+    // quebrar a tela; o botao de download ao lado continua funcionando
+    // sempre. Decisao do cliente: mostrar o botao pra todo formato mesmo
+    // assim, em vez de restringir soo a mp4/webm/mov (que tocam de verdade).
+    private const VIDEO_EXTS = ['mp4', 'webm', 'ogv', 'ogg', 'mov', 'm4v', 'avi', 'mkv', 'wmv', 'flv', '3gp'];
+    private const VIDEO_MIMES = [
+        'mp4' => 'video/mp4', 'webm' => 'video/webm', 'ogv' => 'video/ogg', 'ogg' => 'video/ogg',
+        'mov' => 'video/quicktime', 'm4v' => 'video/x-m4v', 'avi' => 'video/x-msvideo',
+        'mkv' => 'video/x-matroska', 'wmv' => 'video/x-ms-wmv', 'flv' => 'video/x-flv', '3gp' => 'video/3gpp',
+    ];
     private const LOTE_STATUS_DIR = '/var/www/rd.intranet/storage/samba_lote_status';
 
     private static function extConfig(): array
@@ -164,16 +189,24 @@ class SambaArquivosController extends Controller
     private function shapeItem(array $item, string $itemPath): array
     {
         $ext = strtolower(pathinfo($item['name'], PATHINFO_EXTENSION));
+        $ehImagem = $item['type'] === 'file' && in_array($ext, self::IMAGE_EXTS, true);
+        $ehVideo  = $item['type'] === 'file' && in_array($ext, self::VIDEO_EXTS, true);
 
         return [
             'type'     => $item['type'],
             'name'     => $item['name'],
-            'size'     => $item['size'],
-            'modified' => $item['modified'] ? date('d/m/Y H:i', $item['modified']) : '-',
+            'size'        => $item['size'],
+            'modified'    => $item['modified'] ? date('d/m/Y H:i', $item['modified']) : '-',
+            'modified_ts' => (int)($item['modified'] ?? 0),
             'ext'      => $ext,
             'icon'     => $this->icon($item['type'], $ext),
-            'viewable' => $item['type'] === 'file' && in_array($ext, self::extConfig()['visualizar']),
-            'editable' => $item['type'] === 'file' && in_array($ext, self::extConfig()['editar']),
+            // imagem/video nunca sao viewable/editable pelo visualizador de
+            // texto, mesmo que o admin tenha adicionado a extensao na lista
+            // do Deploy Center por engano -- cada um tem botao proprio
+            'viewable' => $item['type'] === 'file' && !$ehImagem && !$ehVideo && in_array($ext, self::extConfig()['visualizar']),
+            'editable' => $item['type'] === 'file' && !$ehImagem && !$ehVideo && in_array($ext, self::extConfig()['editar']),
+            'isImage'  => $ehImagem,
+            'isVideo'  => $ehVideo,
             'path'     => $itemPath,
         ];
     }
@@ -208,12 +241,18 @@ class SambaArquivosController extends Controller
         }
 
         $ext = strtolower(pathinfo($rel, PATHINFO_EXTENSION));
-        if ($ext !== 'pdf') {
+        if ($ext === 'pdf') {
+            $mime = 'application/pdf';
+        } elseif (isset(self::IMAGE_MIMES[$ext])) {
+            $mime = self::IMAGE_MIMES[$ext];
+        } elseif (isset(self::VIDEO_MIMES[$ext])) {
+            $mime = self::VIDEO_MIMES[$ext];
+        } else {
             http_response_code(415); exit('Tipo de arquivo não suportado para visualização.');
         }
 
         $name = basename($rel);
-        header('Content-Type: application/pdf');
+        header('Content-Type: ' . $mime);
         header('Content-Disposition: inline; filename="' . rawurlencode($name) . '"');
         header('Cache-Control: no-store');
         header('X-Frame-Options: SAMEORIGIN');

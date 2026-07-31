@@ -26,8 +26,38 @@ function formatBytes(int $bytes): string {
 
 <style>
 .fm-card { border:0; border-radius:14px; box-shadow:0 4px 14px rgba(0,0,0,.06); }
-.fm-breadcrumb { background:#f1f5f9; border-radius:8px; padding:8px 14px; }
-.fm-breadcrumb .breadcrumb { margin:0; }
+.fm-breadcrumb {
+    background:#fff; border:1px solid #e2e8f0; border-radius:12px;
+    padding:8px 10px; box-shadow:0 1px 4px rgba(0,0,0,.04);
+}
+.fm-crumbs { display:flex; flex-wrap:wrap; align-items:center; row-gap:4px; }
+.fm-crumb-group { display:inline-flex; align-items:center; gap:2px; }
+.fm-crumb {
+    display:inline-flex; align-items:center; gap:6px;
+    padding:5px 12px; border-radius:8px; font-size:13.5px;
+    color:#475569; text-decoration:none; white-space:nowrap;
+    transition:background .15s ease, color .15s ease;
+}
+a.fm-crumb:hover { background:#eff6ff; color:#2563eb; }
+.fm-crumb i { font-size:13px; opacity:.7; }
+.fm-crumb-atual {
+    background:linear-gradient(135deg, #2563eb, #1d4ed8);
+    color:#fff; font-weight:600;
+    box-shadow:0 2px 6px rgba(37,99,235,.25);
+}
+.fm-crumb-atual i { opacity:1; }
+.fm-crumb-sep { color:#cbd5e1; font-size:11px; display:inline-flex; align-items:center; padding:0 2px; }
+.fm-search-info {
+    display:inline-flex; align-items:flex-start; gap:6px; max-width:100%;
+    font-size:12.5px; color:#64748b; background:#f8fafc; border:1px solid #e2e8f0;
+    border-radius:8px; padding:6px 10px; line-height:1.5;
+}
+.fm-search-info i { margin-top:2px; opacity:.8; }
+.fm-search-path {
+    font-family:ui-monospace, SFMono-Regular, Consolas, monospace; font-size:12px;
+    background:#eef2ff; color:#4338ca; padding:1px 6px; border-radius:5px;
+    overflow-wrap:anywhere;
+}
 .fm-row:hover { background:#f8fafc; cursor:pointer; }
 .fm-name { font-weight:500; }
 .fm-actions .btn { font-size:11px; padding:2px 8px; }
@@ -35,6 +65,10 @@ function formatBytes(int $bytes): string {
 .drop-zone.drag-over { border-color:#2563eb; background:#eff6ff; }
 .editor-textarea { font-family:monospace; font-size:13px; min-height:400px; resize:vertical; }
 .toast-container { position:fixed; top:20px; right:20px; z-index:9999; }
+.fm-th-sort { cursor:pointer; user-select:none; white-space:nowrap; }
+.fm-th-sort:hover { color:#2563eb; }
+.fm-sort-icon { font-size:11px; margin-left:2px; opacity:.4; }
+.fm-th-sort.fm-sort-ativo .fm-sort-icon { opacity:1; }
 </style>
 
 <div class="toast-container">
@@ -50,20 +84,27 @@ function formatBytes(int $bytes): string {
 <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
     <div>
         <h4 class="mb-1"><i class="bi bi-folder2-open me-2"></i>Arquivos dos Compartilhamentos</h4>
-        <nav class="fm-breadcrumb mt-2">
-            <ol class="breadcrumb">
+        <nav class="fm-breadcrumb mt-2" aria-label="breadcrumb">
+            <div class="fm-crumbs">
                 <?php foreach ($breadcrumb as $i => $crumb): ?>
-                    <?php if ($i < count($breadcrumb) - 1): ?>
-                        <li class="breadcrumb-item">
-                            <a href="<?= url('/samba/arquivos?path=' . urlencode($crumb['path'])) ?>">
+                    <span class="fm-crumb-group">
+                        <?php if ($i > 0): ?>
+                            <i class="bi bi-chevron-right fm-crumb-sep"></i>
+                        <?php endif; ?>
+                        <?php if ($i < count($breadcrumb) - 1): ?>
+                            <a href="<?= url('/samba/arquivos?path=' . urlencode($crumb['path'])) ?>" class="fm-crumb">
+                                <i class="bi <?= $i === 0 ? 'bi-hdd-network' : 'bi-folder2' ?>"></i>
                                 <?= htmlspecialchars($crumb['name']) ?>
                             </a>
-                        </li>
-                    <?php else: ?>
-                        <li class="breadcrumb-item active"><?= htmlspecialchars($crumb['name']) ?></li>
-                    <?php endif; ?>
+                        <?php else: ?>
+                            <span class="fm-crumb fm-crumb-atual">
+                                <i class="bi bi-folder2-open"></i>
+                                <?= htmlspecialchars($crumb['name']) ?>
+                            </span>
+                        <?php endif; ?>
+                    </span>
                 <?php endforeach; ?>
-            </ol>
+            </div>
         </nav>
     </div>
     <div class="d-flex gap-2 flex-wrap">
@@ -108,10 +149,11 @@ function formatBytes(int $bytes): string {
                 </a>
             </div>
             <?php endif; ?>
-            <div class="col-md-auto text-muted small">
-                Busca recursiva a partir de "<?= htmlspecialchars($pathAtual ?: 'Compartilhamentos') ?>" e subpastas.
-            </div>
         </form>
+        <div class="fm-search-info mt-2">
+            <i class="bi bi-info-circle"></i>
+            Busca recursiva a partir de <span class="fm-search-path"><?= htmlspecialchars($pathAtual ?: 'Compartilhamentos') ?></span> e subpastas.
+        </div>
     </div>
 </div>
 
@@ -189,10 +231,10 @@ function formatBytes(int $bytes): string {
             <thead>
                 <tr>
                     <th style="width:26px"><input type="checkbox" class="form-check-input" id="marcar-todos"></th>
-                    <th style="width:40%">Nome</th>
+                    <th style="width:40%" class="fm-th-sort" data-sort="name">Nome <i class="bi fm-sort-icon"></i></th>
                     <?php if ($buscaAtiva): ?><th>Caminho</th><?php endif; ?>
-                    <th>Tamanho</th>
-                    <th>Modificado em</th>
+                    <th class="fm-th-sort" data-sort="size">Tamanho <i class="bi fm-sort-icon"></i></th>
+                    <th class="fm-th-sort" data-sort="modified">Modificado em <i class="bi fm-sort-icon"></i></th>
                     <th class="text-end">Ações</th>
                 </tr>
             </thead>
@@ -207,7 +249,10 @@ function formatBytes(int $bytes): string {
                 <?php endif; ?>
 
                 <?php foreach ($arquivos as $f): ?>
-                <tr class="fm-row" data-type="<?= $f['type'] ?>" data-path="<?= htmlspecialchars($f['path']) ?>">
+                <tr class="fm-row" data-type="<?= $f['type'] ?>" data-path="<?= htmlspecialchars($f['path']) ?>"
+                    data-name="<?= htmlspecialchars(mb_strtolower($f['name'])) ?>"
+                    data-size="<?= (int)$f['size'] ?>"
+                    data-modified="<?= (int)$f['modified_ts'] ?>">
                     <td>
                         <input type="checkbox" class="form-check-input checkbox-item" value="<?= htmlspecialchars($f['path']) ?>">
                     </td>
@@ -237,6 +282,22 @@ function formatBytes(int $bytes): string {
                                 data-name="<?= htmlspecialchars($f['name']) ?>"
                                 title="Visualizar PDF">
                                 <i class="bi bi-eye"></i>
+                            </button>
+                            <?php endif; ?>
+                            <?php if (!empty($f['isImage'])): ?>
+                            <button class="btn btn-sm btn-outline-info btn-view-image"
+                                data-path="<?= htmlspecialchars($f['path']) ?>"
+                                data-name="<?= htmlspecialchars($f['name']) ?>"
+                                title="Visualizar imagem">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                            <?php endif; ?>
+                            <?php if (!empty($f['isVideo'])): ?>
+                            <button class="btn btn-sm btn-outline-dark btn-view-video"
+                                data-path="<?= htmlspecialchars($f['path']) ?>"
+                                data-name="<?= htmlspecialchars($f['name']) ?>"
+                                title="Visualizar vídeo">
+                                <i class="bi bi-play-circle"></i>
                             </button>
                             <?php endif; ?>
                             <a href="<?= url('/samba/arquivos/download?path=' . urlencode($f['path'])) ?>"
@@ -504,6 +565,58 @@ function formatBytes(int $bytes): string {
             </div>
             <div class="modal-body p-0" style="flex:1;overflow:hidden">
                 <iframe id="pdf-frame" src="" style="width:100%;height:100%;border:0;display:block"></iframe>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Visualizador Imagem -->
+<div class="modal fade" id="modalImagem" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0">
+                    <i class="bi bi-file-earmark-image text-info me-2"></i>
+                    <span id="imagem-title"></span>
+                </h6>
+                <div class="d-flex gap-2 align-items-center ms-auto me-2">
+                    <a id="imagem-download-link" href="#" class="btn btn-sm btn-outline-primary" download>
+                        <i class="bi bi-download me-1"></i>Download
+                    </a>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center p-3" style="background:#111;">
+                <img id="imagem-preview" src="" style="max-width:100%;max-height:75vh;">
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Visualizador Vídeo -->
+<div class="modal fade" id="modalVideo" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0">
+                    <i class="bi bi-file-earmark-play text-dark me-2"></i>
+                    <span id="video-title"></span>
+                </h6>
+                <div class="d-flex gap-2 align-items-center ms-auto me-2">
+                    <a id="video-download-link" href="#" class="btn btn-sm btn-outline-primary" download>
+                        <i class="bi bi-download me-1"></i>Download
+                    </a>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center p-3" style="background:#111;">
+                <video id="video-preview" src="" controls style="max-width:100%;max-height:75vh;">
+                    Seu navegador não consegue reproduzir este formato de vídeo -- use o botão Download acima.
+                </video>
+                <p class="small text-muted mt-2 mb-0">
+                    Formatos antigos (.avi, .wmv, .flv com codecs antigos) podem não tocar no navegador --
+                    nesse caso, baixe o arquivo pra assistir num player local.
+                </p>
             </div>
         </div>
     </div>
@@ -1046,6 +1159,43 @@ function formatBytes(int $bytes): string {
         document.getElementById('pdf-frame').src = '';
     });
 
+    // ── Visualizar Imagem ────────────────────────────────────────────────
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.btn-view-image');
+        if (!btn) return;
+        var path = btn.dataset.path;
+        var name = btn.dataset.name;
+        var url  = URL_VISUALIZAR + '?path=' + encodeURIComponent(path);
+        document.getElementById('imagem-title').textContent = name;
+        document.getElementById('imagem-preview').src = url;
+        document.getElementById('imagem-download-link').href = '<?= url('/samba/arquivos/download') ?>?path=' + encodeURIComponent(path);
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalImagem')).show();
+    });
+
+    document.getElementById('modalImagem').addEventListener('hidden.bs.modal', function() {
+        document.getElementById('imagem-preview').src = '';
+    });
+
+    // ── Visualizar Vídeo ─────────────────────────────────────────────────
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.btn-view-video');
+        if (!btn) return;
+        var path = btn.dataset.path;
+        var name = btn.dataset.name;
+        var url  = URL_VISUALIZAR + '?path=' + encodeURIComponent(path);
+        document.getElementById('video-title').textContent = name;
+        document.getElementById('video-preview').src = url;
+        document.getElementById('video-download-link').href = '<?= url('/samba/arquivos/download') ?>?path=' + encodeURIComponent(path);
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalVideo')).show();
+    });
+
+    document.getElementById('modalVideo').addEventListener('hidden.bs.modal', function() {
+        var video = document.getElementById('video-preview');
+        video.pause();
+        video.removeAttribute('src');
+        video.load();
+    });
+
     // ── Editor ───────────────────────────────────────────────────────────
     document.addEventListener('click', async function(e) {
         var btn = e.target.closest('.btn-edit');
@@ -1197,6 +1347,54 @@ function formatBytes(int $bytes): string {
         pagTamanhoSel.addEventListener('change', function() { pagAtual = 1; aplicarPaginacao(); });
         aplicarPaginacao();
     }
+
+    // ── Ordenação por coluna (clicando em Nome/Tamanho/Modificado em) ──────
+    // Reordena as próprias linhas no DOM (mesmo raciocínio da paginação:
+    // tudo já veio numa resposta só, sem round-trip novo) e reaplica a
+    // paginação, já que ela depende da ordem atual das linhas no tbody.
+    var sortAtual = { chave: null, direcao: 1 };
+
+    function valorOrdenacao(tr, chave) {
+        if (chave === 'size') return parseInt(tr.dataset.size || '0', 10);
+        if (chave === 'modified') return parseInt(tr.dataset.modified || '0', 10);
+        return tr.dataset.name || '';
+    }
+
+    function ordenarPor(chave) {
+        var tbody = document.querySelector('#fm-table tbody');
+        var linhas = linhasDados();
+        if (linhas.length === 0) return;
+
+        if (sortAtual.chave === chave) {
+            sortAtual.direcao *= -1;
+        } else {
+            sortAtual.chave = chave;
+            sortAtual.direcao = 1;
+        }
+
+        linhas.sort(function(a, b) {
+            var va = valorOrdenacao(a, chave);
+            var vb = valorOrdenacao(b, chave);
+            var cmp = (typeof va === 'string') ? va.localeCompare(vb, 'pt-BR') : (va - vb);
+            return cmp * sortAtual.direcao;
+        });
+
+        linhas.forEach(function(tr) { tbody.appendChild(tr); });
+
+        document.querySelectorAll('.fm-th-sort').forEach(function(th) {
+            var ativo = th.dataset.sort === chave;
+            th.classList.toggle('fm-sort-ativo', ativo);
+            th.querySelector('.fm-sort-icon').className =
+                'bi fm-sort-icon ' + (ativo ? (sortAtual.direcao === 1 ? 'bi-arrow-up' : 'bi-arrow-down') : '');
+        });
+
+        pagAtual = 1;
+        aplicarPaginacao();
+    }
+
+    document.querySelectorAll('.fm-th-sort').forEach(function(th) {
+        th.addEventListener('click', function() { ordenarPor(th.dataset.sort); });
+    });
 
     // ── Seleção múltipla / ações em lote ───────────────────────────────────
     var marcarTodos   = document.getElementById('marcar-todos');
