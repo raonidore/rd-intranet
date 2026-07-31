@@ -38,6 +38,13 @@ RETENCAO_DIAS="${4:-30}"
 shift 4
 
 STATUS_FILE="$STATUS_DIR/${EXECUCAO_ID}.json"
+# um registro por linha (JSON Lines) de cada arquivo novo/atualizado/excluido
+# desta execucao, em TODOS os compartilhamentos -- BackupService le este
+# arquivo ao detectar o status final e persiste em backup_execucao_arquivos
+# (Backup > Historico, botao "Ver arquivos").
+ARQUIVOS_JSONL="$STATUS_DIR/${EXECUCAO_ID}.arquivos.jsonl"
+: > "$ARQUIVOS_JSONL"
+chmod 644 "$ARQUIVOS_JSONL"
 CONFIG="/etc/rd-intranet/rclone/rclone.conf"
 
 escrever_status() {
@@ -172,7 +179,7 @@ while [ "$#" -ge 2 ]; do
     --config "$CONFIG" \
     --backup-dir "$PASTA_VERSAO" \
     --exclude ".recycle/**" \
-    --use-json-log --stats-log-level NOTICE --stats 5s \
+    --use-json-log --stats-log-level NOTICE --stats 5s -v \
     --log-file "$LOG_FILE" &
   PID_RCLONE=$!
 
@@ -220,7 +227,86 @@ while [ "$#" -ge 2 ]; do
     continue
   fi
 
-  VERSOES_SHARE=$(rclone lsf -R --files-only --config "$CONFIG" "$PASTA_VERSAO" 2>/dev/null | wc -l)
+  # Detalhe por arquivo desta sincronizacao (Backup > Historico, "Ver
+  # arquivos"): qualquer item que apareceu em PASTA_VERSAO tinha uma
+  # versao anterior movida pra la pelo --backup-dir (prova fisica de que
+  # existia antes, com o tamanho antigo certo -- nao depende de nenhuma
+  # mensagem de log) -- se ainda existe localmente foi "atualizado", senao
+  # foi "excluido". Arquivos "Copied (new)" no log que NAO passaram por
+  # PASTA_VERSAO sao genuinamente novos. rclone lsjson funciona igual pra
+  # qualquer backend (local/B2/S3/Drive), entao PASTA_VERSAO (um caminho
+  # remoto tipo "destino-1:bucket/prefixo/.versoes/nome/timestamp") e lido
+  # do jeito certo, nao como pasta local.
+  VERSOES_JSON_FILE="$STATUS_DIR/${EXECUCAO_ID}.${NOME}.versoes.json"
+  rclone lsjson -R --files-only --config "$CONFIG" "$PASTA_VERSAO" > "$VERSOES_JSON_FILE" 2>/dev/null
+
+  VERSOES_SHARE=$(python3 - "$NOME" "$CAMINHO" "$VERSOES_JSON_FILE" "$LOG_FILE" "$ARQUIVOS_JSONL" << 'PYEOF'
+import json, os, sys
+
+nome, caminho, versoes_json_file, log_file, saida_file = sys.argv[1:6]
+
+vistos = set()
+linhas_saida = []
+
+try:
+    with open(versoes_json_file) as f:
+        itens = json.load(f)
+except (OSError, ValueError):
+    itens = []
+
+for item in itens:
+    rel = item.get('Path')
+    if not rel:
+        continue
+    vistos.add(rel)
+    tam_anterior = item.get('Size')
+
+    caminho_local = os.path.join(caminho, rel)
+    if os.path.exists(caminho_local):
+        try:
+            tam_novo = os.path.getsize(caminho_local)
+        except OSError:
+            tam_novo = None
+        tipo = 'atualizado'
+    else:
+        tam_novo = None
+        tipo = 'excluido'
+
+    linhas_saida.append({
+        'compartilhamento': nome, 'caminho': rel, 'tipo': tipo,
+        'tamanho_anterior': tam_anterior, 'tamanho_novo': tam_novo,
+    })
+
+if os.path.isfile(log_file):
+    with open(log_file, errors='replace') as f:
+        for linha in f:
+            try:
+                d = json.loads(linha)
+            except ValueError:
+                continue
+            if d.get('msg') == 'Copied (new)' and 'object' in d:
+                rel = d['object']
+                if rel in vistos:
+                    continue
+                vistos.add(rel)
+                caminho_local = os.path.join(caminho, rel)
+                try:
+                    tamanho = os.path.getsize(caminho_local)
+                except OSError:
+                    tamanho = None
+                linhas_saida.append({
+                    'compartilhamento': nome, 'caminho': rel, 'tipo': 'novo',
+                    'tamanho_anterior': None, 'tamanho_novo': tamanho,
+                })
+
+with open(saida_file, 'a') as out:
+    for item in linhas_saida:
+        out.write(json.dumps(item) + '\n')
+
+print(len(itens))
+PYEOF
+)
+  rm -f "$VERSOES_JSON_FILE"
   VERSOES_ACUM=$((VERSOES_ACUM + VERSOES_SHARE))
 
   # retencao: expurga pastas de .versoes/ deste compartilhamento mais

@@ -49,6 +49,7 @@ $rotuloProvider = fn(?string $p) => match ($p) {
                         <th>Arquivos</th>
                         <th>Enviado</th>
                         <th>Versões</th>
+                        <th class="text-end">Detalhe</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -90,6 +91,14 @@ $rotuloProvider = fn(?string $p) => match ($p) {
                                     ? Badge::make((string)(int)$e['versoes_criadas'], 'warning')
                                     : Badge::make('0', 'secondary') ?>
                             </td>
+                            <td class="text-end">
+                                <?php if ($e['status'] !== 'executando'): ?>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary botao-ver-arquivos"
+                                            data-execucao-id="<?= (int)$e['id'] ?>" data-quando="<?= htmlspecialchars(data_br($e['iniciado_em'])) ?>">
+                                        <i class="bi bi-list-ul"></i> Ver arquivos
+                                    </button>
+                                <?php endif; ?>
+                            </td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
@@ -98,9 +107,41 @@ $rotuloProvider = fn(?string $p) => match ($p) {
     </div>
 </div>
 
+<!-- Modal "Ver arquivos" -->
+<div class="modal fade" id="modalArquivos" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Arquivos alterados -- <span id="arquivosModalQuando"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="arquivosModalCarregando" class="text-center text-muted py-4">
+                    <div class="spinner-border spinner-border-sm"></div> Carregando...
+                </div>
+                <div id="arquivosModalVazio" class="text-center text-muted py-4 d-none">
+                    Nenhuma mudança de arquivo registrada nesta execução.
+                </div>
+                <table class="table table-sm table-hover d-none" id="arquivosModalTabela">
+                    <thead>
+                        <tr>
+                            <th>Compartilhamento</th>
+                            <th>Arquivo</th>
+                            <th>Tipo</th>
+                            <th>Tamanho</th>
+                        </tr>
+                    </thead>
+                    <tbody id="arquivosModalCorpo"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 (function () {
     const urlStatus = <?= json_encode(url('/backup/status')) ?>;
+    const urlArquivos = <?= json_encode(url('/backup/historico/arquivos')) ?>;
 
     function formatarBytes(bytes) {
         if (!bytes || bytes <= 0) return '0 B';
@@ -135,6 +176,61 @@ $rotuloProvider = fn(?string $p) => match ($p) {
                 // falha de rede pontual -- tenta de novo no proximo tick
             }
         }, 2000);
+    });
+
+    // --- Modal "Ver arquivos" ---
+    const ROTULO_TIPO = {
+        novo: '<span class="badge text-bg-success">Novo</span>',
+        atualizado: '<span class="badge text-bg-warning">Atualizado</span>',
+        excluido: '<span class="badge text-bg-danger">Excluído</span>',
+    };
+
+    function escapeHtml(s) {
+        const div = document.createElement('div');
+        div.textContent = s;
+        return div.innerHTML;
+    }
+
+    function celulaTamanho(item) {
+        if (item.tipo === 'novo') return formatarBytes(item.tamanho_novo);
+        if (item.tipo === 'excluido') return formatarBytes(item.tamanho_anterior) + ' <span class="text-muted">(removido)</span>';
+        return formatarBytes(item.tamanho_anterior) + ' <i class="bi bi-arrow-right mx-1 text-muted"></i> ' + formatarBytes(item.tamanho_novo);
+    }
+
+    document.querySelectorAll('.botao-ver-arquivos').forEach(function (botao) {
+        botao.addEventListener('click', async function () {
+            document.getElementById('arquivosModalQuando').textContent = botao.dataset.quando;
+            document.getElementById('arquivosModalCarregando').classList.remove('d-none');
+            document.getElementById('arquivosModalVazio').classList.add('d-none');
+            document.getElementById('arquivosModalTabela').classList.add('d-none');
+
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('modalArquivos')).show();
+
+            try {
+                const res = await fetch(urlArquivos + '?execucao_id=' + encodeURIComponent(botao.dataset.execucaoId));
+                const itens = await res.json();
+
+                document.getElementById('arquivosModalCarregando').classList.add('d-none');
+
+                if (!Array.isArray(itens) || itens.length === 0) {
+                    document.getElementById('arquivosModalVazio').classList.remove('d-none');
+                    return;
+                }
+
+                document.getElementById('arquivosModalCorpo').innerHTML = itens.map(function (item) {
+                    return '<tr><td class="small">' + escapeHtml(item.compartilhamento) + '</td>' +
+                        '<td class="small font-monospace">' + escapeHtml(item.caminho_relativo) + '</td>' +
+                        '<td>' + (ROTULO_TIPO[item.tipo] || item.tipo) + '</td>' +
+                        '<td class="small">' + celulaTamanho(item) + '</td></tr>';
+                }).join('');
+
+                document.getElementById('arquivosModalTabela').classList.remove('d-none');
+            } catch (e) {
+                document.getElementById('arquivosModalCarregando').classList.add('d-none');
+                document.getElementById('arquivosModalVazio').textContent = 'Erro de rede ao carregar os arquivos.';
+                document.getElementById('arquivosModalVazio').classList.remove('d-none');
+            }
+        });
     });
 })();
 </script>

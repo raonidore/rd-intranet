@@ -154,4 +154,14 @@ class BackupController extends Controller
             'execucoes' => $this->service->historico(),
         ]);
     }
+
+    public function arquivosAlterados(): void
+    {
+        AuthMiddleware::checkModulo('backup_historico');
+        header('Content-Type: application/json');
+
+        $execucaoId = (int)($_GET['execucao_id'] ?? 0);
+
+        echo json_encode($this->service->arquivosAlterados($execucaoId));
+    }
 }

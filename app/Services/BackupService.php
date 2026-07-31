@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Repositories\BackupDestinoRepository;
+use App\Repositories\BackupExecucaoArquivoRepository;
 use App\Repositories\BackupExecucaoRepository;
 use App\Repositories\SambaCompartilhamentoRepository;
 
@@ -14,6 +15,7 @@ class BackupService
     private LinuxService $linux;
     private BackupDestinoRepository $repo;
     private BackupExecucaoRepository $execucaoRepo;
+    private BackupExecucaoArquivoRepository $execucaoArquivoRepo;
     private SambaCompartilhamentoRepository $compartilhamentoRepo;
 
     public function __construct()
@@ -21,6 +23,7 @@ class BackupService
         $this->linux = new LinuxService();
         $this->repo = new BackupDestinoRepository();
         $this->execucaoRepo = new BackupExecucaoRepository();
+        $this->execucaoArquivoRepo = new BackupExecucaoArquivoRepository();
         $this->compartilhamentoRepo = new SambaCompartilhamentoRepository();
     }
 
@@ -285,6 +288,8 @@ class BackupService
                     $mensagemErro
                 );
 
+                $this->persistirArquivosAlterados($execucaoId);
+
                 $destino = $this->repo->buscar((int)$execucao['destino_id']);
 
                 if ($destino && $status === 'concluida' && $destino['provider'] === 'drive') {
@@ -298,6 +303,39 @@ class BackupService
         }
 
         return $dados;
+    }
+
+    /**
+     * Lê o arquivo .arquivos.jsonl (escrito pelo próprio script, um JSON por
+     * linha) e persiste em backup_execucao_arquivos -- chamado uma única vez,
+     * na mesma transição de estado que finaliza a execução em statusExecucao().
+     */
+    private function persistirArquivosAlterados(int $execucaoId): void
+    {
+        if ($this->execucaoArquivoRepo->jaRegistrado($execucaoId)) {
+            return;
+        }
+
+        $arquivo = self::STATUS_DIR . "/{$execucaoId}.arquivos.jsonl";
+        if (!is_file($arquivo)) {
+            return;
+        }
+
+        $linhas = [];
+        foreach (file($arquivo, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [] as $linhaBruta) {
+            $item = json_decode($linhaBruta, true);
+            if (is_array($item) && isset($item['compartilhamento'], $item['caminho'], $item['tipo'])) {
+                $linhas[] = $item;
+            }
+        }
+
+        $this->execucaoArquivoRepo->inserirLote($execucaoId, $linhas);
+    }
+
+    /** Detalhe por arquivo de uma execução (Backup > Histórico, botão "Ver arquivos"). */
+    public function arquivosAlterados(int $execucaoId): array
+    {
+        return $this->execucaoArquivoRepo->listarPorExecucao($execucaoId);
     }
 
     /**
@@ -540,7 +578,7 @@ class BackupService
     }
 
     /** bucket[/prefixo] (B2/S3) ou vazio (Drive, escopado por root_folder_id) */
-    private function destinoRemoto(array $destino): string
+    public function destinoRemoto(array $destino): string
     {
         switch ($destino['provider']) {
             case 'b2':
