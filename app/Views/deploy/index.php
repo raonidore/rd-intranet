@@ -306,6 +306,49 @@ $pendente = (int)($samba['alteracoes_pendentes'] ?? 0) === 1;
     </div>
 </div>
 
+<!-- ── Configurações: Extensões perigosas (bloqueio no Samba) ────────── -->
+<div class="card shadow-sm border-0 mt-4">
+    <div class="card-header bg-white d-flex align-items-center gap-2">
+        <i class="bi bi-shield-exclamation text-danger"></i>
+        <strong>Gerenciador de Arquivos — Extensões perigosas</strong>
+    </div>
+    <div class="card-body">
+        <label class="form-label">
+            <i class="bi bi-shield-exclamation me-1 text-danger"></i>
+            <strong>Extensões perigosas</strong>
+            <span class="text-muted ms-1" style="font-size:12px">
+                — bloqueadas nos compartilhamentos com a proteção ativa (Samba &gt; Compartilhamentos, aba
+                Segurança). Clique na extensão para ativar/desativar; vermelho = bloqueada, cinza = desativada.
+            </span>
+        </label>
+        <div class="ext-tags-box d-flex flex-wrap gap-1 p-2 border rounded mb-2" id="tags-perigosas" style="min-height:42px">
+            <?php foreach ($extensoesPerigosas as $item): ?>
+            <span class="badge <?= $item['ativo'] ? 'bg-danger' : 'bg-secondary' ?> ext-tag ext-tag-perigosa d-inline-flex align-items-center gap-1"
+                  data-ext="<?= htmlspecialchars($item['ext']) ?>" data-ativo="<?= $item['ativo'] ? '1' : '0' ?>"
+                  role="button" title="Clique para ativar/desativar">
+                .<?= htmlspecialchars($item['ext']) ?>
+                <button type="button" class="btn-close btn-close-white" style="font-size:9px"></button>
+            </span>
+            <?php endforeach; ?>
+        </div>
+        <div class="input-group input-group-sm" style="max-width:320px">
+            <span class="input-group-text">.</span>
+            <input type="text" class="form-control" id="input-perigosa" placeholder="ex: iso" maxlength="20">
+            <button class="btn btn-outline-danger" id="btn-add-perigosa"><i class="bi bi-plus"></i></button>
+        </div>
+        <div class="mt-3 d-flex justify-content-between align-items-center">
+            <small class="text-muted">
+                <i class="bi bi-exclamation-triangle me-1"></i>
+                Depois de salvar, clique em "🚀 Aplicar Configuração" (topo da página) pra propagar aos compartilhamentos.
+            </small>
+            <button class="btn btn-danger btn-sm" id="btn-salvar-ext-perigosas">
+                <i class="bi bi-floppy me-1"></i>Salvar extensões perigosas
+            </button>
+        </div>
+        <div id="ext-perigosas-result" class="mt-2"></div>
+    </div>
+</div>
+
 <script>
 (function() {
     const SAVE_URL = '<?= url('/deploy/configuracoes') ?>';
@@ -354,6 +397,69 @@ $pendente = (int)($samba['alteracoes_pendentes'] ?? 0) === 1;
             setTimeout(function() { resultEl.innerHTML = ''; }, 3000);
         } catch(e) {
             document.getElementById('ext-result').innerHTML = '<div class="alert alert-danger py-2 mb-0">Erro ao salvar.</div>';
+        }
+    });
+
+    // ── Extensões perigosas (bloqueio no Samba) -- mesmo padrão de tag box
+    // das seções acima, com uma diferença: a tag tem estado ativo/inativo
+    // (cor vermelha/cinza), alternado ao clicar nela; o "x" continua
+    // removendo a tag da lista por completo. ─────────────────────────────
+    const SAVE_URL_PERIGOSAS = '<?= url('/deploy/extensoes-perigosas') ?>';
+    var boxPerigosas = document.getElementById('tags-perigosas');
+
+    function makeBadgePerigosa(ext, ativo) {
+        const span = document.createElement('span');
+        span.className = 'badge ' + (ativo ? 'bg-danger' : 'bg-secondary') + ' ext-tag ext-tag-perigosa d-inline-flex align-items-center gap-1';
+        span.dataset.ext = ext;
+        span.dataset.ativo = ativo ? '1' : '0';
+        span.setAttribute('role', 'button');
+        span.title = 'Clique para ativar/desativar';
+        span.innerHTML = '.' + ext + ' <button type="button" class="btn-close btn-close-white" style="font-size:9px"></button>';
+        return span;
+    }
+
+    function alternarAtivaPerigosa(span) {
+        var ativo = span.dataset.ativo !== '1';
+        span.dataset.ativo = ativo ? '1' : '0';
+        span.classList.toggle('bg-danger', ativo);
+        span.classList.toggle('bg-secondary', !ativo);
+    }
+
+    boxPerigosas.addEventListener('click', function(e) {
+        var fechar = e.target.closest('.btn-close');
+        if (fechar) { fechar.closest('.ext-tag-perigosa').remove(); return; }
+        var tag = e.target.closest('.ext-tag-perigosa');
+        if (tag) alternarAtivaPerigosa(tag);
+    });
+
+    document.getElementById('btn-add-perigosa').addEventListener('click', function() {
+        var input = document.getElementById('input-perigosa');
+        var ext = input.value.toLowerCase().trim().replace(/^\.+/, '').replace(/[^a-z0-9]/g, '');
+        if (!ext) return;
+        if (boxPerigosas.querySelector('[data-ext="' + ext + '"]')) { input.value = ''; return; }
+        boxPerigosas.appendChild(makeBadgePerigosa(ext, true));
+        input.value = '';
+        input.focus();
+    });
+
+    document.getElementById('input-perigosa').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); document.getElementById('btn-add-perigosa').click(); }
+    });
+
+    document.getElementById('btn-salvar-ext-perigosas').addEventListener('click', async function() {
+        var itens = [...boxPerigosas.querySelectorAll('.ext-tag-perigosa')].map(function(t) {
+            return { ext: t.dataset.ext, ativo: t.dataset.ativo === '1' };
+        });
+        try {
+            var fd = new FormData();
+            fd.append('itens', JSON.stringify(itens));
+            var res  = await fetch(SAVE_URL_PERIGOSAS, { method: 'POST', body: fd });
+            var data = await res.json();
+            var resultEl = document.getElementById('ext-perigosas-result');
+            resultEl.innerHTML = '<div class="alert alert-' + (data.success ? 'success' : 'danger') + ' py-2 mb-0">' + data.message + '</div>';
+            setTimeout(function() { resultEl.innerHTML = ''; }, 3000);
+        } catch(e) {
+            document.getElementById('ext-perigosas-result').innerHTML = '<div class="alert alert-danger py-2 mb-0">Erro ao salvar.</div>';
         }
     });
 })();

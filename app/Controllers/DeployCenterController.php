@@ -4,8 +4,10 @@ namespace App\Controllers;
 
 use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
+use App\Services\AuditService;
 use App\Services\DeployCenterService;
 use App\Services\ConfigService;
+use App\Services\ExtensaoPerigosaService;
 
 class DeployCenterController extends Controller
 {
@@ -32,6 +34,7 @@ class DeployCenterController extends Controller
                 ConfigService::get('samba_arquivos_ext_visualizar', self::EXT_DEFAULT)))),
             'extEditar'      => array_filter(array_map('trim', explode(',',
                 ConfigService::get('samba_arquivos_ext_editar', self::EXT_DEFAULT)))),
+            'extensoesPerigosas' => ExtensaoPerigosaService::listar(),
         ]);
     }
 
@@ -52,6 +55,24 @@ class DeployCenterController extends Controller
         ConfigService::set('samba_arquivos_ext_editar',     $sanitize($_POST['ext_editar']     ?? ''));
 
         echo json_encode(['success' => true, 'message' => 'Configurações salvas com sucesso.']);
+    }
+
+    public function salvarExtensoesPerigosas(): void
+    {
+        AuthMiddleware::checkModulo('deploy');
+        header('Content-Type: application/json');
+
+        $itens = json_decode($_POST['itens'] ?? '[]', true);
+        if (!is_array($itens)) {
+            echo json_encode(['success' => false, 'message' => 'Dados inválidos.']);
+            return;
+        }
+
+        $resultado = ExtensaoPerigosaService::salvar($itens);
+
+        AuditService::registrar('Deploy', 'Salvar extensões perigosas', $resultado['message']);
+
+        echo json_encode($resultado);
     }
 
     public function aplicarSamba(): void

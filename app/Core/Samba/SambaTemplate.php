@@ -2,6 +2,8 @@
 
 namespace App\Core\Samba;
 
+use App\Services\ExtensaoPerigosaService;
+
 class SambaTemplate
 {
     public static function global(): string
@@ -81,11 +83,20 @@ CONF;
 CONF;
 
         if ((int)($share['bloqueio_extensoes'] ?? 0) === 1) {
-            $config .= <<<CONF
-   veto files = /*.exe/*.com/*.bat/*.cmd/*.dll/*.msi/*.scr/*.pif/*.cpl/*.ps1/*.psm1/*.vbs/*.vbe/*.js/*.jse/*.wsf/*.wsh/*.jar/*.reg/*.hta/*.lnk/*.apk/*.deb/*.rpm/*.appimage/*.sh/*.bin/
-   delete veto files = yes
+            // lista vem do catalogo editavel em Deploy Center -- "Extensoes
+            // perigosas" (ExtensaoPerigosaService), nao mais fixa aqui. Cada
+            // extensao ja passou por sanitizacao alfanumerica no momento de
+            // salvar (ExtensaoPerigosaService::salvar()), entao e seguro
+            // interpolar direto na linha "veto files" (formato do Samba:
+            // padroes separados e delimitados por "/").
+            $extensoesAtivas = ExtensaoPerigosaService::listarAtivas();
 
-CONF;
+            if (!empty($extensoesAtivas)) {
+                $vetoFiles = '/' . implode('/', array_map(fn(string $ext) => "*.{$ext}", $extensoesAtivas)) . '/';
+
+                $config .= "   veto files = {$vetoFiles}\n"
+                    . "   delete veto files = yes\n\n";
+            }
         }
 
         return $config;
