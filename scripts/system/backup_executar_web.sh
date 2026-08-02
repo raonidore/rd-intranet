@@ -240,10 +240,10 @@ while [ "$#" -ge 2 ]; do
   VERSOES_JSON_FILE="$STATUS_DIR/${EXECUCAO_ID}.${NOME}.versoes.json"
   rclone lsjson -R --files-only --config "$CONFIG" "$PASTA_VERSAO" > "$VERSOES_JSON_FILE" 2>/dev/null
 
-  VERSOES_SHARE=$(python3 - "$NOME" "$CAMINHO" "$VERSOES_JSON_FILE" "$LOG_FILE" "$ARQUIVOS_JSONL" << 'PYEOF'
+  VERSOES_SHARE=$(python3 - "$NOME" "$CAMINHO" "$VERSOES_JSON_FILE" "$LOG_FILE" "$ARQUIVOS_JSONL" "$TIMESTAMP" << 'PYEOF'
 import json, os, sys
 
-nome, caminho, versoes_json_file, log_file, saida_file = sys.argv[1:6]
+nome, caminho, versoes_json_file, log_file, saida_file, timestamp = sys.argv[1:7]
 
 vistos = set()
 linhas_saida = []
@@ -275,6 +275,10 @@ for item in itens:
     linhas_saida.append({
         'compartilhamento': nome, 'caminho': rel, 'tipo': tipo,
         'tamanho_anterior': tam_anterior, 'tamanho_novo': tam_novo,
+        # pasta .versoes/<compartilhamento>/<timestamp>/ onde a versao
+        # ANTERIOR deste arquivo foi preservada -- so existe pra
+        # atualizado/excluido (novo nao tem versao anterior nenhuma)
+        'timestamp_versao': timestamp,
     })
 
 if os.path.isfile(log_file):

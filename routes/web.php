@@ -350,6 +350,8 @@ $router->post('/backup/executar', [BackupController::class, 'executarAgora']);
 $router->get('/backup/status', [BackupController::class, 'status']);
 $router->get('/backup/historico', [BackupController::class, 'historico']);
 $router->get('/backup/historico/arquivos', [BackupController::class, 'arquivosAlterados']);
+$router->post('/backup/historico/arquivos/restaurar', [BackupController::class, 'restaurarArquivo']);
+$router->get('/backup/historico/arquivos/baixar', [BackupController::class, 'baixarArquivo']);
 
 $router->get('/administracao/usuarios', [UserController::class, 'index']);
 $router->get('/administracao/usuarios/novo', [UserController::class, 'novoForm']);

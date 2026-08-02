@@ -122,6 +122,12 @@ $rotuloProvider = fn(?string $p) => match ($p) {
                 <div id="arquivosModalVazio" class="text-center text-muted py-4 d-none">
                     Nenhuma mudança de arquivo registrada nesta execução.
                 </div>
+                <div class="alert alert-secondary py-2 small mb-3 d-none" id="arquivosModalAviso">
+                    <i class="bi bi-info-circle me-1"></i>
+                    "Restaurar" sobrescreve o arquivo atual do compartilhamento com esta versão -- o que estiver lá
+                    agora é arquivado automaticamente antes, então dá pra desfazer se restaurar a errada.
+                </div>
+                <div id="arquivosModalResultado" class="mb-3"></div>
                 <table class="table table-sm table-hover d-none" id="arquivosModalTabela">
                     <thead>
                         <tr>
@@ -129,6 +135,7 @@ $rotuloProvider = fn(?string $p) => match ($p) {
                             <th>Arquivo</th>
                             <th>Tipo</th>
                             <th>Tamanho</th>
+                            <th class="text-end">Ação</th>
                         </tr>
                     </thead>
                     <tbody id="arquivosModalCorpo"></tbody>
@@ -142,6 +149,8 @@ $rotuloProvider = fn(?string $p) => match ($p) {
 (function () {
     const urlStatus = <?= json_encode(url('/backup/status')) ?>;
     const urlArquivos = <?= json_encode(url('/backup/historico/arquivos')) ?>;
+    const urlBaixarArquivo = <?= json_encode(url('/backup/historico/arquivos/baixar')) ?>;
+    const urlRestaurarArquivo = <?= json_encode(url('/backup/historico/arquivos/restaurar')) ?>;
 
     function formatarBytes(bytes) {
         if (!bytes || bytes <= 0) return '0 B';
@@ -197,11 +206,57 @@ $rotuloProvider = fn(?string $p) => match ($p) {
         return formatarBytes(item.tamanho_anterior) + ' <i class="bi bi-arrow-right mx-1 text-muted"></i> ' + formatarBytes(item.tamanho_novo);
     }
 
+    function celulaAcao(item) {
+        // "novo" nao tem versao anterior nenhuma pra restaurar/baixar --
+        // so atualizado/excluido passam por .versoes/ (ver timestamp_versao)
+        if (item.tipo === 'novo' || !item.timestamp_versao) return '';
+        return '<button type="button" class="btn btn-sm btn-outline-primary botao-baixar-versao" data-id="' + item.id + '" title="Baixar esta versão">' +
+            '<i class="bi bi-download"></i></button> ' +
+            '<button type="button" class="btn btn-sm btn-outline-warning botao-restaurar-versao" data-id="' + item.id + '" ' +
+            'data-caminho="' + escapeHtml(item.compartilhamento + '/' + item.caminho_relativo) + '" title="Restaurar esta versão">' +
+            '<i class="bi bi-arrow-counterclockwise"></i></button>';
+    }
+
+    function mostrarResultado(msg, ok) {
+        const el = document.getElementById('arquivosModalResultado');
+        el.innerHTML = '<div class="alert alert-' + (ok ? 'success' : 'danger') + ' py-2 mb-0">' + escapeHtml(msg) + '</div>';
+        setTimeout(function () { el.innerHTML = ''; }, 5000);
+    }
+
+    document.getElementById('arquivosModalCorpo').addEventListener('click', async function (e) {
+        const btnBaixar = e.target.closest('.botao-baixar-versao');
+        if (btnBaixar) {
+            window.location = urlBaixarArquivo + '?arquivo_id=' + encodeURIComponent(btnBaixar.dataset.id);
+            return;
+        }
+
+        const btnRestaurar = e.target.closest('.botao-restaurar-versao');
+        if (btnRestaurar) {
+            if (!confirm('Restaurar esta versão de "' + btnRestaurar.dataset.caminho + '"? O arquivo atual no compartilhamento será substituído (uma cópia dele é arquivada automaticamente antes, então dá pra desfazer).')) {
+                return;
+            }
+            btnRestaurar.disabled = true;
+            try {
+                const dados = new URLSearchParams();
+                dados.set('arquivo_id', btnRestaurar.dataset.id);
+                const res = await fetch(urlRestaurarArquivo, { method: 'POST', body: dados });
+                const resposta = await res.json();
+                mostrarResultado(resposta.message || (resposta.success ? 'Restaurado.' : 'Falha ao restaurar.'), !!resposta.success);
+            } catch (e2) {
+                mostrarResultado('Erro de rede ao restaurar.', false);
+            } finally {
+                btnRestaurar.disabled = false;
+            }
+        }
+    });
+
     document.querySelectorAll('.botao-ver-arquivos').forEach(function (botao) {
         botao.addEventListener('click', async function () {
             document.getElementById('arquivosModalQuando').textContent = botao.dataset.quando;
             document.getElementById('arquivosModalCarregando').classList.remove('d-none');
             document.getElementById('arquivosModalVazio').classList.add('d-none');
+            document.getElementById('arquivosModalAviso').classList.add('d-none');
+            document.getElementById('arquivosModalResultado').innerHTML = '';
             document.getElementById('arquivosModalTabela').classList.add('d-none');
 
             bootstrap.Modal.getOrCreateInstance(document.getElementById('modalArquivos')).show();
@@ -221,9 +276,11 @@ $rotuloProvider = fn(?string $p) => match ($p) {
                     return '<tr><td class="small">' + escapeHtml(item.compartilhamento) + '</td>' +
                         '<td class="small font-monospace">' + escapeHtml(item.caminho_relativo) + '</td>' +
                         '<td>' + (ROTULO_TIPO[item.tipo] || item.tipo) + '</td>' +
-                        '<td class="small">' + celulaTamanho(item) + '</td></tr>';
+                        '<td class="small">' + celulaTamanho(item) + '</td>' +
+                        '<td class="text-end">' + celulaAcao(item) + '</td></tr>';
                 }).join('');
 
+                document.getElementById('arquivosModalAviso').classList.remove('d-none');
                 document.getElementById('arquivosModalTabela').classList.remove('d-none');
             } catch (e) {
                 document.getElementById('arquivosModalCarregando').classList.add('d-none');

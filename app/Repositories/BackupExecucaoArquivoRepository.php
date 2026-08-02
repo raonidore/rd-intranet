@@ -15,7 +15,7 @@ class BackupExecucaoArquivoRepository
     }
 
     /**
-     * @param array<int, array{compartilhamento: string, caminho: string, tipo: string, tamanho_anterior: ?int, tamanho_novo: ?int}> $linhas
+     * @param array<int, array{compartilhamento: string, caminho: string, tipo: string, tamanho_anterior: ?int, tamanho_novo: ?int, timestamp_versao?: ?string}> $linhas
      */
     public function inserirLote(int $execucaoId, array $linhas): void
     {
@@ -25,8 +25,8 @@ class BackupExecucaoArquivoRepository
 
         $stmt = $this->pdo->prepare("
             INSERT INTO backup_execucao_arquivos
-                (execucao_id, compartilhamento, caminho_relativo, tipo, tamanho_anterior, tamanho_novo)
-            VALUES (?, ?, ?, ?, ?, ?)
+                (execucao_id, compartilhamento, caminho_relativo, tipo, timestamp_versao, tamanho_anterior, tamanho_novo)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         ");
 
         foreach ($linhas as $linha) {
@@ -35,6 +35,7 @@ class BackupExecucaoArquivoRepository
                 $linha['compartilhamento'],
                 $linha['caminho'],
                 $linha['tipo'],
+                $linha['timestamp_versao'] ?? null,
                 $linha['tamanho_anterior'],
                 $linha['tamanho_novo'],
             ]);
@@ -47,6 +48,16 @@ class BackupExecucaoArquivoRepository
         $stmt->execute([$execucaoId]);
 
         return (bool)$stmt->fetchColumn();
+    }
+
+    public function buscar(int $id): ?array
+    {
+        $stmt = $this->pdo->prepare("SELECT * FROM backup_execucao_arquivos WHERE id = ? LIMIT 1");
+        $stmt->execute([$id]);
+
+        $item = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $item ?: null;
     }
 
     public function listarPorExecucao(int $execucaoId): array

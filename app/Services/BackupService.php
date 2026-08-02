@@ -339,6 +339,128 @@ class BackupService
     }
 
     /**
+     * Sobrescreve o arquivo ATUAL do compartilhamento com a versão que
+     * estava guardada em .versoes/ no momento dessa execução -- cobre
+     * tanto "recuperar um arquivo excluído" quanto "desfazer uma edição
+     * errada". O próprio script arquiva a versão atual (a que está sendo
+     * substituída agora) antes de sobrescrever, então restaurar a versão
+     * errada por engano também é desfazível.
+     *
+     * @return array{success: bool, message: string}
+     */
+    public function restaurarArquivo(int $arquivoId): array
+    {
+        $contexto = $this->contextoArquivo($arquivoId);
+        if (isset($contexto['erro'])) {
+            return ['success' => false, 'message' => $contexto['erro']];
+        }
+
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/backup_restaurar_arquivo_web.sh', [
+            $contexto['remote'],
+            $contexto['destino_remoto'],
+            $contexto['arquivo']['compartilhamento'],
+            $contexto['arquivo']['timestamp_versao'],
+            $contexto['arquivo']['caminho_relativo'],
+            'restaurar',
+            $contexto['caminho_local_base'],
+        ]);
+
+        $dados = json_decode(trim($resultado['output']), true);
+        $final = is_array($dados) ? $dados : ['success' => false, 'message' => $resultado['output']];
+
+        AuditService::registrar(
+            'Backup',
+            'Restaurar arquivo',
+            $contexto['arquivo']['compartilhamento'] . '/' . $contexto['arquivo']['caminho_relativo'] . ' -- ' . ($final['message'] ?? '')
+        );
+
+        return $final;
+    }
+
+    /**
+     * Busca a versão arquivada pra um arquivo temporário local, pro
+     * controller servir como download -- nunca mexe no compartilhamento
+     * em si (ao contrário de restaurarArquivo()).
+     *
+     * @return array{success: bool, message: string, caminho?: string, nome?: string}
+     */
+    public function prepararDownloadArquivo(int $arquivoId): array
+    {
+        $contexto = $this->contextoArquivo($arquivoId);
+        if (isset($contexto['erro'])) {
+            return ['success' => false, 'message' => $contexto['erro']];
+        }
+
+        $nomeArquivo = basename($contexto['arquivo']['caminho_relativo']);
+        $caminhoTemp = tempnam(sys_get_temp_dir(), 'rd_backup_versao_') . '_' . preg_replace('/[^A-Za-z0-9._-]/', '_', $nomeArquivo);
+
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/backup_restaurar_arquivo_web.sh', [
+            $contexto['remote'],
+            $contexto['destino_remoto'],
+            $contexto['arquivo']['compartilhamento'],
+            $contexto['arquivo']['timestamp_versao'],
+            $contexto['arquivo']['caminho_relativo'],
+            'baixar',
+            $contexto['caminho_local_base'],
+            $caminhoTemp,
+        ]);
+
+        $dados = json_decode(trim($resultado['output']), true);
+
+        if (!is_array($dados) || empty($dados['success']) || !is_file($caminhoTemp)) {
+            @unlink($caminhoTemp);
+            return ['success' => false, 'message' => is_array($dados) ? ($dados['message'] ?? 'Falha ao buscar a versão.') : $resultado['output']];
+        }
+
+        AuditService::registrar('Backup', 'Baixar versão de arquivo', $contexto['arquivo']['compartilhamento'] . '/' . $contexto['arquivo']['caminho_relativo']);
+
+        return ['success' => true, 'message' => 'OK', 'caminho' => $caminhoTemp, 'nome' => $nomeArquivo];
+    }
+
+    /**
+     * Resolve tudo que os dois métodos acima precisam a partir só do id
+     * da linha em backup_execucao_arquivos: o destino de nuvem usado
+     * naquela execução (remote/destino_remoto) e o caminho local real do
+     * compartilhamento (nunca confia em nome de compartilhamento vindo do
+     * cliente -- sempre resolve pelo cadastro).
+     *
+     * @return array{erro: string}|array{arquivo: array, remote: string, destino_remoto: string, caminho_local_base: string}
+     */
+    private function contextoArquivo(int $arquivoId): array
+    {
+        $arquivo = $this->execucaoArquivoRepo->buscar($arquivoId);
+        if (!$arquivo) {
+            return ['erro' => 'Registro de arquivo não encontrado.'];
+        }
+
+        if (!in_array($arquivo['tipo'], ['atualizado', 'excluido'], true) || empty($arquivo['timestamp_versao'])) {
+            return ['erro' => 'Este item não tem uma versão anterior pra restaurar (era um arquivo novo nessa execução).'];
+        }
+
+        $execucao = $this->execucaoRepo->buscar((int)$arquivo['execucao_id']);
+        if (!$execucao) {
+            return ['erro' => 'Execução de backup não encontrada.'];
+        }
+
+        $destino = $this->repo->buscar((int)$execucao['destino_id']);
+        if (!$destino) {
+            return ['erro' => 'Destino de backup dessa execução não existe mais.'];
+        }
+
+        $compartilhamento = $this->compartilhamentoRepo->buscarPorNome($arquivo['compartilhamento']);
+        if (!$compartilhamento) {
+            return ['erro' => 'Compartilhamento "' . $arquivo['compartilhamento'] . '" não existe mais no cadastro do Samba.'];
+        }
+
+        return [
+            'arquivo' => $arquivo,
+            'remote' => self::nomeRemote((int)$destino['id']),
+            'destino_remoto' => $this->destinoRemoto($destino),
+            'caminho_local_base' => $compartilhamento['caminho'],
+        ];
+    }
+
+    /**
      * Dispara o relatório diário e/ou o alerta de falha do destino, se as
      * flags estiverem ativas (Backup > Configuração, editar destino).
      * Um SMTP fora do ar ou mal configurado nunca deve derrubar o backup

@@ -164,4 +164,34 @@ class BackupController extends Controller
 
         echo json_encode($this->service->arquivosAlterados($execucaoId));
     }
+
+    public function restaurarArquivo(): void
+    {
+        AuthMiddleware::checkModulo('backup_historico');
+        header('Content-Type: application/json');
+
+        $arquivoId = (int)($_POST['arquivo_id'] ?? 0);
+
+        echo json_encode($this->service->restaurarArquivo($arquivoId));
+    }
+
+    public function baixarArquivo(): void
+    {
+        AuthMiddleware::checkModulo('backup_historico');
+
+        $arquivoId = (int)($_GET['arquivo_id'] ?? 0);
+        $resultado = $this->service->prepararDownloadArquivo($arquivoId);
+
+        if (!$resultado['success']) {
+            http_response_code(404);
+            echo $resultado['message'];
+            return;
+        }
+
+        header('Content-Type: application/octet-stream');
+        header('Content-Disposition: attachment; filename="' . rawurlencode($resultado['nome']) . '"');
+        header('Content-Length: ' . filesize($resultado['caminho']));
+        readfile($resultado['caminho']);
+        @unlink($resultado['caminho']);
+    }
 }
