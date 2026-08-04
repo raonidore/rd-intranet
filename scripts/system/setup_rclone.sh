@@ -24,7 +24,18 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 if ! command -v rclone >/dev/null 2>&1; then
-  apt-get update -qq
+  # "|| true": apt-get update retorna erro se QUALQUER repositorio de
+  # terceiros configurado no servidor estiver quebrado (ex: o repo da
+  # Ookla/speedtest-cli parou de funcionar de vez, "402 Payment Required",
+  # depois que o packagecloud.io descontinuou a hospedagem gratuita) --
+  # mesmo sem nenhuma relacao com rclone, esse setup roda em TODO
+  # "Atualizar agora" (reaplicacao idempotente) e nao pode travar a
+  # atualizacao do sistema inteiro por causa de um repositorio de terceiro
+  # alheio. rclone vem do repositorio padrao do Ubuntu/Debian, que nao
+  # depende do que quebrou -- segue best effort, o apt-get install abaixo
+  # falha por conta propria (com erro proprio) se realmente nao tiver
+  # como instalar.
+  apt-get update -qq || true
   apt-get install -y -qq rclone
 else
   echo "rclone ja instalado ($(rclone version | head -1))."

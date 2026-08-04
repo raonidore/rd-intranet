@@ -129,39 +129,44 @@ class LinuxService
      */
     public function executarScriptEmSegundoPlanoComEntrada(string $script, array $parametros, string $entrada): void
     {
+        // Pipe de proc_open NAO funciona aqui -- confirmado ao vivo
+        // (reproduzido isolado): quando um comando roda em background
+        // ("&") dentro de um shell nao-interativo, o POSIX manda o shell
+        // trocar a entrada padrao dele por /dev/null automaticamente, a
+        // MENOS que o proprio comando tenha uma redirecao explicita de
+        // entrada -- descartando silenciosamente qualquer pipe herdado do
+        // processo pai. Por isso a senha nunca chegava no script
+        // (ficava lendo stdin vazio, "cat -" retornava string vazia na
+        // hora).
+        //
+        // Solução: escreve a entrada num arquivo temporário 600 e
+        // redireciona a entrada do comando EXPLICITAMENTE desse arquivo
+        // ("< arquivo") -- isso satisfaz a excecao do POSIX (redirecao
+        // explicita dentro do comando) e o shell nao substitui mais por
+        // /dev/null. O arquivo e apagado imediatamente depois de disparar
+        // o comando: a redirecao do shell ja abre o descritor ANTES de
+        // devolver o controle pro processo pai (fork+redirect+exec e uma
+        // sequencia sincrona do ponto de vista de quem chamou), entao
+        // apagar o nome do arquivo em seguida e seguro -- o processo em
+        // segundo plano mantem seu proprio descritor aberto pro conteudo,
+        // mesmo sem o arquivo mais existir no disco (testado: o conteudo
+        // chega certinho mesmo com 1s de atraso proposital antes da
+        // leitura, depois do unlink já ter rodado).
+        $tmpEntrada = tempnam(sys_get_temp_dir(), 'rd_stdin_');
+        chmod($tmpEntrada, 0600);
+        file_put_contents($tmpEntrada, $entrada);
+
         $cmd = "nohup sudo " . escapeshellarg($script);
 
         foreach ($parametros as $valor) {
             $cmd .= " " . escapeshellarg($valor);
         }
 
-        // "nohup ... &" -- mesmo mecanismo de executarScriptEmSegundoPlano()
-        // pra desacoplar o processo do ciclo de vida do request (sobrevive
-        // ao fim do request mesmo que o processo intermediario do proc_open
-        // seja encerrado). stdout/stderr redirecionados no proprio comando
-        // (nao via descritor do proc_open) porque, uma vez em background
-        // com "&", o filho real herda os fds do "sh -c" que o lancou -- os
-        // descritores 1/2 do proc_open abaixo cobrem esse "sh -c" em si.
-        $cmd .= " > /dev/null 2>&1 &";
+        $cmd .= " < " . escapeshellarg($tmpEntrada) . " > /dev/null 2>&1 &";
 
-        $descritores = [
-            0 => ['pipe', 'r'],
-            1 => ['file', '/dev/null', 'a'],
-            2 => ['file', '/dev/null', 'a'],
-        ];
+        exec($cmd);
 
-        $processo = proc_open($cmd, $descritores, $pipes);
-        if (!is_resource($processo)) {
-            return;
-        }
-
-        fwrite($pipes[0], $entrada);
-        fclose($pipes[0]);
-        proc_close($processo);
-        // proc_close() aqui so espera o "sh -c" IMEDIATO terminar (que so
-        // dispara o "&" e retorna na hora) -- nao espera o script em si,
-        // que ja foi desacoplado pelo nohup+&. Sem isso o pipe as vezes
-        // fica com o descritor preso, mesmo com fclose() no lado de escrita.
+        @unlink($tmpEntrada);
     }
 
     /**
