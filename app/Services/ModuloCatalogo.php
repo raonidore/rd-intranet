@@ -44,6 +44,7 @@ class ModuloCatalogo
         'apache_modulos' => ['label' => 'Módulos Apache', 'grupo' => 'Apache'],
         'apache_config' => ['label' => 'Config. Global Apache', 'grupo' => 'Apache'],
         'bd_mysql' => ['label' => 'MySQL/MariaDB', 'grupo' => 'Banco de Dados'],
+        'ssh_conexoes' => ['label' => 'Conexões SSH', 'grupo' => 'SSH'],
         'auditoria' => ['label' => 'Auditoria', 'grupo' => 'Segurança'],
         'seguranca_antivirus' => ['label' => 'Antivírus', 'grupo' => 'Segurança'],
         'ativos_dashboard' => ['label' => 'Ativos - Dashboard', 'grupo' => 'Ativos'],

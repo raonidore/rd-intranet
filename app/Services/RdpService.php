@@ -25,20 +25,13 @@ use App\Repositories\RdpCredencialRepository;
  */
 class RdpService
 {
-    private const SCRIPT_GUACD = '/opt/rdtecnologia/scripts/guacd_instalar_web.sh';
-    private const SCRIPT_BRIDGE = '/opt/rdtecnologia/scripts/guacamole_bridge_instalar_web.sh';
-    private const SCRIPT_PROXY = '/opt/rdtecnologia/scripts/rdp_proxy_ativar_web.sh';
-    private const VHOST_SSL = '/etc/apache2/sites-available/rd.intranet-ssl.conf';
-    private const MARCA_PROXY = '# RD Intranet - proxy da ponte RDP pelo navegador';
-    private const CHAVE_SEGREDO = '/etc/rd-intranet/db_secret.key';
-
     private RdpCredencialRepository $repository;
-    private LinuxService $linux;
+    private GuacdGatewayService $gateway;
 
     public function __construct()
     {
         $this->repository = new RdpCredencialRepository();
-        $this->linux = new LinuxService();
+        $this->gateway = new GuacdGatewayService();
     }
 
     /** Credencial sem a senha -- pra preencher o formulário/mostrar o host já salvo. */
@@ -113,61 +106,29 @@ class RdpService
      */
     public function statusGateway(): array
     {
-        return [
-            'guacd_instalado' => $this->linux->executar('command -v guacd')['success'],
-            'guacd_ativo' => trim($this->linux->executar('systemctl is-active guacd')['output']) === 'active',
-            'bridge_ativo' => trim($this->linux->executar('systemctl is-active rd-guac-bridge')['output']) === 'active',
-            'proxy_configurado' => is_readable(self::VHOST_SSL) && str_contains(file_get_contents(self::VHOST_SSL), self::MARCA_PROXY),
-        ];
+        return $this->gateway->status();
     }
 
     public function gatewayPronto(): bool
     {
-        $status = $this->statusGateway();
-
-        return $status['guacd_ativo'] && $status['bridge_ativo'] && $status['proxy_configurado'];
+        return $this->gateway->pronto();
     }
 
     public function instalarGateway(): array
     {
-        $guacd = $this->resultadoScript(
-            $this->linux->executarScript(self::SCRIPT_GUACD),
-            'Falha ao instalar o guacd.'
-        );
-        if (!$guacd['success']) {
-            return $guacd;
+        $resultado = $this->gateway->instalar();
+
+        if ($resultado['success']) {
+            AuditService::registrar('Ativos', 'RDP', 'Suporte a RDP pelo navegador instalado neste servidor.');
         }
 
-        $bridge = $this->resultadoScript(
-            $this->linux->executarScript(self::SCRIPT_BRIDGE),
-            'Falha ao instalar a ponte RDP.'
-        );
-        if (!$bridge['success']) {
-            return $bridge;
-        }
-
-        $proxy = $this->resultadoScript(
-            $this->linux->executarScript(self::SCRIPT_PROXY),
-            'Falha ao configurar o proxy do RDP no Apache.'
-        );
-        if (!$proxy['success']) {
-            return $proxy;
-        }
-
-        AuditService::registrar('Ativos', 'RDP', 'Suporte a RDP pelo navegador instalado neste servidor.');
-
-        return ['success' => true, 'message' => 'Suporte a RDP pelo navegador pronto.'];
+        return $resultado;
     }
 
     /**
-     * Token único de conexão pro guacamole-lite -- JSON com host/usuário/
-     * senha cifrado AES-256-CBC com a MESMA chave de 32 bytes já usada
-     * pelo CryptoService (reaproveitada em vez de provisionar mais um
-     * segredo; o bridge lê o mesmo arquivo). Formato do envelope conferido
-     * direto na fonte do guacamole-lite: base64(JSON{iv,value}), iv/value
-     * cada um também em base64.
-     */
-    /**
+     * Token único de conexão pro guacamole-lite (cifragem delegada a
+     * GuacdGatewayService::gerarToken()).
+     *
      * $largura/$altura -- tamanho (em pixels CSS) da área do modal no
      * navegador, pra a sessão RDP já nascer nessa resolução em vez de
      * sempre 1024x768 (proporção 4:3 -- sobrava bastante espaço vazio nas
@@ -191,73 +152,27 @@ class RdpService
         $largura = max(640, min(3840, $largura));
         $altura = max(480, min(2160, $altura));
 
-        $payload = json_encode([
-            'connection' => [
-                'type' => 'rdp',
-                'settings' => [
-                    'hostname' => $item['host'],
-                    'port' => (string)$item['porta'],
-                    'username' => $item['usuario'],
-                    'password' => $senha,
-                    'security' => 'any',
-                    'ignore-cert' => 'true',
-                    'enable-drive' => 'false',
-                    'create-drive-path' => 'false',
-                    'width' => (string)$largura,
-                    'height' => (string)$altura,
-                    'dpi' => '96',
-                    // Windows 10/11 usa por padrão o pipeline gráfico RDPGFX
-                    // (H.264) -- o FreeRDP por trás do guacd às vezes conecta
-                    // normal (cursor aparece, sessão fica de pé) mas nunca
-                    // desenha a área de trabalho nesse modo. Desabilitar volta
-                    // pro bitmap clássico, que sempre funciona.
-                    'disable-gfx' => 'true',
-                ],
+        return $this->gateway->gerarToken([
+            'type' => 'rdp',
+            'settings' => [
+                'hostname' => $item['host'],
+                'port' => (string)$item['porta'],
+                'username' => $item['usuario'],
+                'password' => $senha,
+                'security' => 'any',
+                'ignore-cert' => 'true',
+                'enable-drive' => 'false',
+                'create-drive-path' => 'false',
+                'width' => (string)$largura,
+                'height' => (string)$altura,
+                'dpi' => '96',
+                // Windows 10/11 usa por padrão o pipeline gráfico RDPGFX
+                // (H.264) -- o FreeRDP por trás do guacd às vezes conecta
+                // normal (cursor aparece, sessão fica de pé) mas nunca
+                // desenha a área de trabalho nesse modo. Desabilitar volta
+                // pro bitmap clássico, que sempre funciona.
+                'disable-gfx' => 'true',
             ],
         ]);
-
-        $chave = $this->chaveCompartilhada();
-        if ($chave === null) {
-            return null;
-        }
-
-        $iv = random_bytes(16);
-        $cifrado = openssl_encrypt($payload, 'aes-256-cbc', $chave, OPENSSL_RAW_DATA, $iv);
-        if ($cifrado === false) {
-            return null;
-        }
-
-        $envelope = json_encode([
-            'iv' => base64_encode($iv),
-            'value' => base64_encode($cifrado),
-        ]);
-
-        return base64_encode($envelope);
-    }
-
-    private function chaveCompartilhada(): ?string
-    {
-        if (!is_readable(self::CHAVE_SEGREDO)) {
-            return null;
-        }
-
-        $chave = base64_decode(trim(file_get_contents(self::CHAVE_SEGREDO)));
-
-        return $chave !== false ? $chave : null;
-    }
-
-    private function resultadoScript(array $execResultado, string $mensagemPadrao): array
-    {
-        $dados = json_decode($execResultado['output'], true);
-
-        if (is_array($dados) && isset($dados['success'])) {
-            return [
-                'success' => (bool)$dados['success'],
-                'message' => (string)($dados['message'] ?? $mensagemPadrao),
-                'detalhes' => $execResultado['output'],
-            ];
-        }
-
-        return ['success' => false, 'message' => $mensagemPadrao, 'detalhes' => $execResultado['output']];
     }
 }

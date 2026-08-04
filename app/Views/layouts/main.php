@@ -24,6 +24,7 @@ $rdSecaoAtiva = function (array $prefixos) use ($uriAtual): bool {
 
 $abrirApache = $rdSecaoAtiva(['/apache']);
 $abrirBancoDados = $rdSecaoAtiva(['/banco-dados']);
+$abrirSsh = $rdSecaoAtiva(['/ssh']);
 $abrirInfraestrutura = $rdSecaoAtiva(['/infraestrutura']);
 $abrirSamba = $rdSecaoAtiva(['/samba', '/deploy']);
 $abrirSeguranca = $rdSecaoAtiva(['/seguranca']);
@@ -195,6 +196,19 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
     <div class="collapse <?= $abrirBancoDados ? 'show' : '' ?>" id="menuBancoDados">
         <a href="<?= url('/banco-dados/conexoes') ?>" class="<?= $uriAtual === '/banco-dados/conexoes' || str_starts_with($uriAtual, '/banco-dados/console') ? 'active' : '' ?>">
             <i class="bi bi-hdd-stack me-2"></i> Conexões / Console
+        </a>
+    </div>
+    <?php endif; ?>
+
+    <?php if (PermissionService::temAcesso('ssh_conexoes')): ?>
+    <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuSsh"
+            aria-expanded="<?= $abrirSsh ? 'true' : 'false' ?>">
+        <span><i class="bi bi-hdd-network me-2"></i>SSH</span>
+        <i class="bi bi-chevron-right chevron"></i>
+    </button>
+    <div class="collapse <?= $abrirSsh ? 'show' : '' ?>" id="menuSsh">
+        <a href="<?= url('/ssh/conexoes') ?>" class="<?= str_starts_with($uriAtual, '/ssh') ? 'active' : '' ?>">
+            <i class="bi bi-terminal me-2"></i> Conexões
         </a>
     </div>
     <?php endif; ?>

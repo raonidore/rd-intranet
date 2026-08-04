@@ -26,6 +26,7 @@ use App\Controllers\HardwareController;
 use App\Controllers\NetworkRouteController;
 use App\Controllers\NetworkToolsController;
 use App\Controllers\DbConexaoController;
+use App\Controllers\SshConexaoController;
 use App\Controllers\DbConsoleController;
 use App\Controllers\CronController;
 use App\Controllers\IptablesController;
@@ -461,6 +462,22 @@ $router->get('/banco-dados/conexoes/desativar', [DbConexaoController::class, 'de
 $router->get('/banco-dados/conexoes/excluir', [DbConexaoController::class, 'excluirForm']);
 $router->post('/banco-dados/conexoes/excluir', [DbConexaoController::class, 'excluir']);
 $router->post('/banco-dados/conexoes/testar', [DbConexaoController::class, 'testar']);
+
+$router->get('/ssh/conexoes', [SshConexaoController::class, 'index']);
+$router->get('/ssh/conexoes/novo', [SshConexaoController::class, 'novoForm']);
+$router->post('/ssh/conexoes/novo', [SshConexaoController::class, 'novo']);
+$router->get('/ssh/conexoes/editar', [SshConexaoController::class, 'editarForm']);
+$router->post('/ssh/conexoes/editar', [SshConexaoController::class, 'editar']);
+$router->get('/ssh/conexoes/credencial', [SshConexaoController::class, 'credencialForm']);
+$router->post('/ssh/conexoes/credencial', [SshConexaoController::class, 'credencial']);
+$router->get('/ssh/conexoes/ativar', [SshConexaoController::class, 'ativar']);
+$router->get('/ssh/conexoes/desativar', [SshConexaoController::class, 'desativar']);
+$router->get('/ssh/conexoes/excluir', [SshConexaoController::class, 'excluirForm']);
+$router->post('/ssh/conexoes/excluir', [SshConexaoController::class, 'excluir']);
+$router->post('/ssh/conexoes/testar', [SshConexaoController::class, 'testar']);
+$router->post('/ssh/conexoes/conectar', [SshConexaoController::class, 'conectar']);
+$router->get('/ssh/conexoes/gateway/status', [SshConexaoController::class, 'statusGateway']);
+$router->post('/ssh/conexoes/gateway/instalar', [SshConexaoController::class, 'instalarGateway']);
 
 $router->get('/banco-dados/console', [DbConsoleController::class, 'bancos']);
 $router->get('/banco-dados/console/tabelas', [DbConsoleController::class, 'tabelas']);
