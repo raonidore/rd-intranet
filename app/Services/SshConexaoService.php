@@ -166,7 +166,12 @@ class SshConexaoService
      * navegador, mesmo raciocínio do RDP (clampados, nunca confiar em
      * número vindo do front sem limite).
      */
-    public function gerarToken(int $id, int $largura = 1024, int $altura = 768): ?string
+    /**
+     * $senhaDigitada -- só usada quando tipo_autenticacao === 'perguntar'
+     * (conexão cadastrada de propósito sem credencial salva; o usuário
+     * digita a senha a cada conexão, nunca fica gravada neste servidor).
+     */
+    public function gerarToken(int $id, int $largura = 1024, int $altura = 768, ?string $senhaDigitada = null): ?string
     {
         $item = $this->repository->buscarPorId($id);
         if ($item === null) {
@@ -188,7 +193,12 @@ class SshConexaoService
         ];
 
         try {
-            if ($item['tipo_autenticacao'] === 'chave_privada') {
+            if ($item['tipo_autenticacao'] === 'perguntar') {
+                if ($senhaDigitada === null || $senhaDigitada === '') {
+                    return null;
+                }
+                $settings['password'] = $senhaDigitada;
+            } elseif ($item['tipo_autenticacao'] === 'chave_privada') {
                 if (empty($item['chave_privada_cifrada'])) {
                     return null;
                 }
@@ -234,10 +244,24 @@ class SshConexaoService
      */
     private function validarCredencial(array $dados, ?array $existente): ?array
     {
-        $tipo = ($dados['tipo_autenticacao'] ?? '') === 'chave_privada' ? 'chave_privada' : 'senha';
+        $tipoRaw = $dados['tipo_autenticacao'] ?? '';
+        $tipo = in_array($tipoRaw, ['chave_privada', 'perguntar'], true) ? $tipoRaw : 'senha';
         $senha = trim($dados['senha'] ?? '');
         $chave = trim($dados['chave_privada'] ?? '');
         $chaveSenha = trim($dados['chave_privada_senha'] ?? '');
+
+        // Nada pra cifrar/guardar -- o usuário digita a senha a cada
+        // conexão (ver SshConexaoService::gerarToken()); é a única opção
+        // deste trio que aceita qualquer coisa nos campos de senha/chave
+        // sem validar, já que eles nem existem no formulário pra esse tipo.
+        if ($tipo === 'perguntar') {
+            return [
+                'tipo_autenticacao' => 'perguntar',
+                'senha_cifrada' => null,
+                'chave_privada_cifrada' => null,
+                'chave_privada_senha_cifrada' => null,
+            ];
+        }
 
         if ($tipo === 'senha') {
             if ($senha === '') {

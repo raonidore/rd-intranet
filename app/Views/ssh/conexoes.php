@@ -58,15 +58,20 @@ ob_start();
                         <td><?= (int)$c['porta'] ?></td>
                         <td><?= htmlspecialchars($c['usuario']) ?></td>
                         <td>
-                            <?= $c['tipo_autenticacao'] === 'chave_privada'
-                                ? '<i class="bi bi-file-earmark-lock"></i> Chave privada'
-                                : '<i class="bi bi-key"></i> Senha' ?>
+                            <?php if ($c['tipo_autenticacao'] === 'chave_privada'): ?>
+                                <i class="bi bi-file-earmark-lock"></i> Chave privada
+                            <?php elseif ($c['tipo_autenticacao'] === 'perguntar'): ?>
+                                <i class="bi bi-question-circle"></i> Perguntar na hora
+                            <?php else: ?>
+                                <i class="bi bi-key"></i> Senha
+                            <?php endif; ?>
                         </td>
                         <td><?= (int)$c['ativo'] === 1 ? Badge::make('Ativo', 'success') : Badge::make('Desativado', 'danger') ?></td>
                         <td class="text-end">
                             <div class="btn-group" role="group">
                                 <button type="button" class="btn btn-sm btn-outline-success botao-conectar"
-                                        data-id="<?= $c['id'] ?>" data-nome="<?= htmlspecialchars($c['nome']) ?>" title="Abrir terminal">
+                                        data-id="<?= $c['id'] ?>" data-nome="<?= htmlspecialchars($c['nome']) ?>"
+                                        data-tipo="<?= htmlspecialchars($c['tipo_autenticacao']) ?>" title="Abrir terminal">
                                     <i class="bi bi-terminal"></i>
                                 </button>
                                 <button type="button" class="btn btn-sm btn-outline-info botao-testar" data-id="<?= $c['id'] ?>" title="Testar conexão">
@@ -174,6 +179,7 @@ import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js'))
 
     let clienteAtivo = null;
     let idAtual = null;
+    let tipoAtual = null;
     let pararDeEscalar = null;
 
     // Mesmo raciocínio do RDP em Ativos > ver.php: um só teclado pra vida
@@ -199,11 +205,27 @@ import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js'))
 
     function mostrarErro(mensagem) {
         desconectar();
+
+        if (tipoAtual === 'perguntar') {
+            corpo.innerHTML = '';
+            const aviso = document.createElement('div');
+            aviso.className = 'text-white-50 text-center p-4';
+            aviso.innerHTML = `
+                <p>${mensagem || 'A sessão foi encerrada, sem detalhe do motivo -- confira a senha.'}</p>
+                <button type="button" class="btn btn-sm btn-outline-light" id="botaoTentarNovamenteSsh">
+                    <i class="bi bi-arrow-repeat"></i> Tentar de novo
+                </button>
+            `;
+            corpo.appendChild(aviso);
+            aviso.querySelector('#botaoTentarNovamenteSsh').addEventListener('click', formularioSenha);
+            return;
+        }
+
         corpo.innerHTML = '<div class="text-white-50 text-center p-4">' +
             (mensagem || 'A sessão foi encerrada, sem detalhe do motivo.') + '</div>';
     }
 
-    function telaPreparo() {
+    function telaPreparo(senhaDigitada) {
         corpo.innerHTML = '';
         const wrap = document.createElement('div');
         wrap.className = 'text-white-50 text-center p-4';
@@ -228,14 +250,38 @@ import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js'))
                     return;
                 }
 
-                conectar();
+                conectar(senhaDigitada);
             } catch (e) {
                 corpo.innerHTML = '<div class="text-white-50 text-center p-4">Erro ao comunicar com o servidor.</div>';
             }
         });
     }
 
-    async function conectar() {
+    function formularioSenha() {
+        corpo.innerHTML = '';
+        const wrap = document.createElement('div');
+        wrap.className = 'p-4';
+        wrap.style.maxWidth = '360px';
+        wrap.style.width = '100%';
+        wrap.innerHTML = `
+            <p class="text-white-50 text-center small">Essa conexão não guarda senha neste servidor -- digite pra conectar agora.</p>
+            <form id="formSenhaSsh">
+                <div class="mb-3">
+                    <label class="form-label small text-white-50">Senha SSH</label>
+                    <input type="password" name="senha" class="form-control form-control-sm" autofocus required>
+                </div>
+                <button type="submit" class="btn btn-sm btn-primary w-100"><i class="bi bi-terminal"></i> Conectar</button>
+            </form>
+        `;
+        corpo.appendChild(wrap);
+
+        wrap.querySelector('#formSenhaSsh').addEventListener('submit', function (e) {
+            e.preventDefault();
+            conectar(this.senha.value);
+        });
+    }
+
+    async function conectar(senhaDigitada) {
         if (location.protocol !== 'https:') {
             corpo.innerHTML = '<div class="text-white-50 text-center p-4"><p>Acesse este painel via <strong>HTTPS</strong> pra usar terminal pelo navegador -- agora você está em HTTP (' + location.protocol + '//' + location.host + ').</p></div>';
             return;
@@ -249,7 +295,7 @@ import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js'))
             const g = dadosStatus.gateway || {};
 
             if (!(g.guacd_ativo && g.bridge_ativo && g.proxy_configurado)) {
-                telaPreparo();
+                telaPreparo(senhaDigitada);
                 return;
             }
 
@@ -259,6 +305,9 @@ import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js'))
             dados.set('id', idAtual);
             dados.set('largura', corpo.clientWidth);
             dados.set('altura', corpo.clientHeight);
+            if (senhaDigitada) {
+                dados.set('senha_digitada', senhaDigitada);
+            }
 
             const res = await fetch(<?= json_encode(url('/ssh/conexoes/conectar')) ?>, { method: 'POST', body: dados });
             const resultado = await res.json();
@@ -358,10 +407,16 @@ import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js'))
     document.querySelectorAll('.botao-conectar').forEach(function (botao) {
         botao.addEventListener('click', function () {
             idAtual = botao.dataset.id;
+            tipoAtual = botao.dataset.tipo;
             titulo.innerHTML = '<i class="bi bi-terminal"></i> Terminal -- ' + botao.dataset.nome;
             corpo.innerHTML = statusInicial;
             bootstrap.Modal.getOrCreateInstance(modalEl).show();
-            conectar();
+
+            if (tipoAtual === 'perguntar') {
+                formularioSenha();
+            } else {
+                conectar();
+            }
         });
     });
 

@@ -200,9 +200,15 @@ class SshConexaoController extends Controller
             return;
         }
 
+        $senhaDigitada = trim($_POST['senha_digitada'] ?? '');
+        if ($conexao['tipo_autenticacao'] === 'perguntar' && $senhaDigitada === '') {
+            echo json_encode(['success' => false, 'message' => 'Informe a senha SSH pra conectar.']);
+            return;
+        }
+
         $largura = (int)($_POST['largura'] ?? 1024);
         $altura = (int)($_POST['altura'] ?? 768);
-        $token = $this->service->gerarToken($id, $largura, $altura);
+        $token = $this->service->gerarToken($id, $largura, $altura, $senhaDigitada !== '' ? $senhaDigitada : null);
 
         if ($token === null) {
             echo json_encode(['success' => false, 'message' => 'Nenhuma credencial válida configurada pra esta conexão.']);

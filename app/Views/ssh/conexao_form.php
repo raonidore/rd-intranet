@@ -73,6 +73,9 @@ $acao = $editando ? url('/ssh/conexoes/editar') : url('/ssh/conexoes/novo');
 
                         <input type="radio" class="btn-check" name="tipo_autenticacao" id="tipoChave" value="chave_privada">
                         <label class="btn btn-outline-primary" for="tipoChave"><i class="bi bi-file-earmark-lock"></i> Chave privada</label>
+
+                        <input type="radio" class="btn-check" name="tipo_autenticacao" id="tipoPerguntar" value="perguntar">
+                        <label class="btn btn-outline-primary" for="tipoPerguntar"><i class="bi bi-question-circle"></i> Perguntar na hora</label>
                     </div>
                 </div>
 
@@ -91,6 +94,13 @@ $acao = $editando ? url('/ssh/conexoes/editar') : url('/ssh/conexoes/novo');
                         <label class="form-label">Senha da chave (passphrase) -- se houver</label>
                         <input type="password" name="chave_privada_senha" class="form-control" autocomplete="new-password">
                     </div>
+                </div>
+
+                <div id="grupoPerguntar" class="d-none">
+                    <small class="text-muted d-block mb-3">
+                        Nenhuma credencial fica salva neste servidor. A cada vez que você clicar em
+                        "Conectar", vai aparecer um campo pra digitar a senha na hora.
+                    </small>
                 </div>
             <?php else: ?>
                 <small class="text-muted d-block mb-3">
@@ -116,11 +126,14 @@ $acao = $editando ? url('/ssh/conexoes/editar') : url('/ssh/conexoes/novo');
     var radios = document.querySelectorAll('input[name="tipo_autenticacao"]');
     var grupoSenha = document.getElementById('grupoSenha');
     var grupoChave = document.getElementById('grupoChave');
+    var grupoPerguntar = document.getElementById('grupoPerguntar');
 
     function atualizar() {
         var chave = document.getElementById('tipoChave').checked;
-        grupoSenha.classList.toggle('d-none', chave);
+        var perguntar = document.getElementById('tipoPerguntar').checked;
+        grupoSenha.classList.toggle('d-none', chave || perguntar);
         grupoChave.classList.toggle('d-none', !chave);
+        grupoPerguntar.classList.toggle('d-none', !perguntar);
     }
 
     radios.forEach(function (r) { r.addEventListener('change', atualizar); });
