@@ -353,6 +353,14 @@ $router->get('/backup/historico/arquivos', [BackupController::class, 'arquivosAl
 $router->post('/backup/historico/arquivos/restaurar', [BackupController::class, 'restaurarArquivo']);
 $router->get('/backup/historico/arquivos/baixar', [BackupController::class, 'baixarArquivo']);
 
+$router->get('/backup/explorador', [BackupController::class, 'explorador']);
+$router->get('/backup/explorador/compartilhamentos', [BackupController::class, 'exploradorCompartilhamentos']);
+$router->get('/backup/explorador/datas', [BackupController::class, 'exploradorDatas']);
+$router->get('/backup/explorador/itens', [BackupController::class, 'exploradorItens']);
+$router->get('/backup/explorador/itens-atuais', [BackupController::class, 'exploradorItensAtuais']);
+$router->post('/backup/explorador/restaurar', [BackupController::class, 'exploradorRestaurar']);
+$router->get('/backup/explorador/baixar', [BackupController::class, 'exploradorBaixar']);
+
 $router->get('/administracao/usuarios', [UserController::class, 'index']);
 $router->get('/administracao/usuarios/novo', [UserController::class, 'novoForm']);
 $router->post('/administracao/usuarios/novo', [UserController::class, 'novo']);

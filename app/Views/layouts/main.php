@@ -610,6 +610,9 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         <a href="<?= url('/backup/historico') ?>" class="<?= $uriAtual === '/backup/historico' ? 'active' : '' ?>">
             <i class="bi bi-clock-history me-2"></i> Histórico
         </a>
+        <a href="<?= url('/backup/explorador') ?>" class="<?= $uriAtual === '/backup/explorador' ? 'active' : '' ?>">
+            <i class="bi bi-search me-2"></i> Explorador de Versões
+        </a>
         <?php endif; ?>
     </div>
     <?php endif; ?>

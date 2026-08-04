@@ -43,7 +43,10 @@ if [[ ! "$COMPARTILHAMENTO" =~ ^[A-Za-z0-9_-]+$ ]]; then
   exit 1
 fi
 
-if [[ ! "$TIMESTAMP_VERSAO" =~ ^[0-9]{8}_[0-9]{6}$ ]]; then
+# "atual" = copia ATIVA na nuvem (fora de .versoes/), nao uma versao
+# arquivada -- usado quando o admin restaura direto da copia atual do
+# backup em vez de uma versao antiga (Explorador de Versoes, aba "Copia atual")
+if [[ "$TIMESTAMP_VERSAO" != "atual" ]] && [[ ! "$TIMESTAMP_VERSAO" =~ ^(restauracao_)?[0-9]{8}_[0-9]{6}$ ]]; then
   echo '{"success":false,"message":"Timestamp de versao invalido."}'
   exit 1
 fi
@@ -62,7 +65,11 @@ else
   ALVO_BASE="${REMOTE}:"
 fi
 
-CAMINHO_REMOTO_VERSAO="${ALVO_BASE%/}/.versoes/${COMPARTILHAMENTO}/${TIMESTAMP_VERSAO}/${CAMINHO_RELATIVO}"
+if [[ "$TIMESTAMP_VERSAO" == "atual" ]]; then
+  CAMINHO_REMOTO_VERSAO="${ALVO_BASE%/}/${COMPARTILHAMENTO}/${CAMINHO_RELATIVO}"
+else
+  CAMINHO_REMOTO_VERSAO="${ALVO_BASE%/}/.versoes/${COMPARTILHAMENTO}/${TIMESTAMP_VERSAO}/${CAMINHO_RELATIVO}"
+fi
 
 case "$MODO" in
   baixar)

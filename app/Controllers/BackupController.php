@@ -194,4 +194,101 @@ class BackupController extends Controller
         readfile($resultado['caminho']);
         @unlink($resultado['caminho']);
     }
+
+    // ── Explorador de Versões (navega .versoes/ direto no provedor, sem
+    // depender de nenhum histórico gravado no banco -- cobre qualquer
+    // arquivo já enviado, de qualquer época) ──────────────────────────────
+
+    public function explorador(): void
+    {
+        AuthMiddleware::checkModulo('backup_historico');
+
+        $this->view('backup/explorador', [
+            'destinos' => $this->service->listarDestinos(),
+        ]);
+    }
+
+    public function exploradorCompartilhamentos(): void
+    {
+        AuthMiddleware::checkModulo('backup_historico');
+        header('Content-Type: application/json');
+
+        $destinoId = (int)($_GET['destino_id'] ?? 0);
+
+        echo json_encode($this->service->listarCompartilhamentosVersionados($destinoId));
+    }
+
+    public function exploradorDatas(): void
+    {
+        AuthMiddleware::checkModulo('backup_historico');
+        header('Content-Type: application/json');
+
+        $destinoId = (int)($_GET['destino_id'] ?? 0);
+        $compartilhamento = trim($_GET['compartilhamento'] ?? '');
+
+        echo json_encode($this->service->listarDatasVersao($destinoId, $compartilhamento));
+    }
+
+    public function exploradorItens(): void
+    {
+        AuthMiddleware::checkModulo('backup_historico');
+        header('Content-Type: application/json');
+
+        $destinoId = (int)($_GET['destino_id'] ?? 0);
+        $compartilhamento = trim($_GET['compartilhamento'] ?? '');
+        $timestamp = trim($_GET['timestamp'] ?? '');
+        $subpath = trim($_GET['subpath'] ?? '');
+
+        echo json_encode($this->service->listarItensVersao($destinoId, $compartilhamento, $timestamp, $subpath));
+    }
+
+    /** Cópia ATUAL na nuvem (fora de .versoes/) -- o que está backupeado agora. */
+    public function exploradorItensAtuais(): void
+    {
+        AuthMiddleware::checkModulo('backup_historico');
+        header('Content-Type: application/json');
+
+        $destinoId = (int)($_GET['destino_id'] ?? 0);
+        $compartilhamento = trim($_GET['compartilhamento'] ?? '');
+        $subpath = trim($_GET['subpath'] ?? '');
+
+        echo json_encode($this->service->listarItensAtuais($destinoId, $compartilhamento, $subpath));
+    }
+
+    public function exploradorRestaurar(): void
+    {
+        AuthMiddleware::checkModulo('backup_historico');
+        header('Content-Type: application/json');
+
+        $destinoId = (int)($_POST['destino_id'] ?? 0);
+        $compartilhamento = trim($_POST['compartilhamento'] ?? '');
+        $timestamp = trim($_POST['timestamp'] ?? '');
+        $caminho = trim($_POST['caminho'] ?? '');
+
+        echo json_encode($this->service->restaurarArquivoPorCaminho($destinoId, $compartilhamento, $timestamp, $caminho));
+    }
+
+    public function exploradorBaixar(): void
+    {
+        AuthMiddleware::checkModulo('backup_historico');
+
+        $destinoId = (int)($_GET['destino_id'] ?? 0);
+        $compartilhamento = trim($_GET['compartilhamento'] ?? '');
+        $timestamp = trim($_GET['timestamp'] ?? '');
+        $caminho = trim($_GET['caminho'] ?? '');
+
+        $resultado = $this->service->prepararDownloadArquivoPorCaminho($destinoId, $compartilhamento, $timestamp, $caminho);
+
+        if (!$resultado['success']) {
+            http_response_code(404);
+            echo $resultado['message'];
+            return;
+        }
+
+        header('Content-Type: application/octet-stream');
+        header('Content-Disposition: attachment; filename="' . rawurlencode($resultado['nome']) . '"');
+        header('Content-Length: ' . filesize($resultado['caminho']));
+        readfile($resultado['caminho']);
+        @unlink($resultado['caminho']);
+    }
 }

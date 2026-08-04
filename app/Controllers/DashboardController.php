@@ -9,6 +9,7 @@ use App\Services\ApacheStatusService;
 use App\Services\ServerInfoService;
 use App\Services\SpeedtestService;
 use App\Services\AtivoService;
+use App\Services\BackupService;
 use App\Services\PermissionService;
 
 class DashboardController extends Controller
@@ -23,6 +24,7 @@ class DashboardController extends Controller
             'servidor' => null,
             'ativos' => null,
             'speedtest' => null,
+            'backup' => null,
         ];
 
         if (
@@ -51,6 +53,13 @@ class DashboardController extends Controller
 
         if (PermissionService::temAcesso('ativos_dashboard')) {
             $dados['ativos'] = (new AtivoService())->resumoDashboard();
+        }
+
+        if (
+            PermissionService::temAcesso('backup_configuracao')
+            || PermissionService::temAcesso('backup_historico')
+        ) {
+            $dados['backup'] = (new BackupService())->dashboard();
         }
 
         $this->view('dashboard/index', $dados);

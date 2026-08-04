@@ -53,6 +53,29 @@ class BackupService
         return $this->execucaoRepo->buscarEmAndamento();
     }
 
+    /** Resumo pro card do Dashboard principal -- mesmo idioma de SambaService::dashboard(). */
+    public function dashboard(): array
+    {
+        $destinos = $this->repo->listar();
+        $destinoAtivo = null;
+        foreach ($destinos as $destino) {
+            if (!empty($destino['ativo'])) {
+                $destinoAtivo = $destino;
+                break;
+            }
+        }
+
+        $emAndamento = $this->execucaoRepo->buscarEmAndamento();
+        $ultima = $emAndamento ?? ($this->execucaoRepo->listar(1)[0] ?? null);
+
+        return [
+            'total_destinos' => count($destinos),
+            'destino_ativo_nome' => $destinoAtivo['nome'] ?? null,
+            'em_andamento' => $emAndamento !== null,
+            'ultima_execucao' => $ultima,
+        ];
+    }
+
     public function historico(int $limite = 30): array
     {
         return $this->execucaoRepo->listar($limite);
@@ -355,24 +378,10 @@ class BackupService
             return ['success' => false, 'message' => $contexto['erro']];
         }
 
-        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/backup_restaurar_arquivo_web.sh', [
-            $contexto['remote'],
-            $contexto['destino_remoto'],
-            $contexto['arquivo']['compartilhamento'],
-            $contexto['arquivo']['timestamp_versao'],
-            $contexto['arquivo']['caminho_relativo'],
-            'restaurar',
-            $contexto['caminho_local_base'],
-        ]);
+        $arquivo = $contexto['arquivo'];
+        $final = $this->chamarScriptRestaurar($contexto, $arquivo['compartilhamento'], $arquivo['timestamp_versao'], $arquivo['caminho_relativo'], 'restaurar');
 
-        $dados = json_decode(trim($resultado['output']), true);
-        $final = is_array($dados) ? $dados : ['success' => false, 'message' => $resultado['output']];
-
-        AuditService::registrar(
-            'Backup',
-            'Restaurar arquivo',
-            $contexto['arquivo']['compartilhamento'] . '/' . $contexto['arquivo']['caminho_relativo'] . ' -- ' . ($final['message'] ?? '')
-        );
+        AuditService::registrar('Backup', 'Restaurar arquivo', $arquivo['compartilhamento'] . '/' . $arquivo['caminho_relativo'] . ' -- ' . ($final['message'] ?? ''));
 
         return $final;
     }
@@ -391,38 +400,186 @@ class BackupService
             return ['success' => false, 'message' => $contexto['erro']];
         }
 
-        $nomeArquivo = basename($contexto['arquivo']['caminho_relativo']);
-        $caminhoTemp = tempnam(sys_get_temp_dir(), 'rd_backup_versao_') . '_' . preg_replace('/[^A-Za-z0-9._-]/', '_', $nomeArquivo);
+        $arquivo = $contexto['arquivo'];
+        $resultado = $this->baixarParaTemp($contexto, $arquivo['compartilhamento'], $arquivo['timestamp_versao'], $arquivo['caminho_relativo']);
 
-        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/backup_restaurar_arquivo_web.sh', [
-            $contexto['remote'],
-            $contexto['destino_remoto'],
-            $contexto['arquivo']['compartilhamento'],
-            $contexto['arquivo']['timestamp_versao'],
-            $contexto['arquivo']['caminho_relativo'],
-            'baixar',
-            $contexto['caminho_local_base'],
-            $caminhoTemp,
-        ]);
-
-        $dados = json_decode(trim($resultado['output']), true);
-
-        if (!is_array($dados) || empty($dados['success']) || !is_file($caminhoTemp)) {
-            @unlink($caminhoTemp);
-            return ['success' => false, 'message' => is_array($dados) ? ($dados['message'] ?? 'Falha ao buscar a versão.') : $resultado['output']];
+        if ($resultado['success']) {
+            AuditService::registrar('Backup', 'Baixar versão de arquivo', $arquivo['compartilhamento'] . '/' . $arquivo['caminho_relativo']);
         }
 
-        AuditService::registrar('Backup', 'Baixar versão de arquivo', $contexto['arquivo']['compartilhamento'] . '/' . $contexto['arquivo']['caminho_relativo']);
+        return $resultado;
+    }
+
+    /**
+     * Mesma coisa que restaurarArquivo(), mas a partir de um caminho
+     * escolhido direto no Explorador de Versões (Backup > Explorador) --
+     * não depende de ter um registro em backup_execucao_arquivos, então
+     * funciona pra QUALQUER arquivo já enviado à nuvem em qualquer época,
+     * não só pras execuções rodadas depois dessa funcionalidade existir.
+     *
+     * @return array{success: bool, message: string}
+     */
+    public function restaurarArquivoPorCaminho(int $destinoId, string $compartilhamento, string $timestampVersao, string $caminhoRelativo): array
+    {
+        $contexto = $this->contextoDestino($destinoId, $compartilhamento);
+        if (isset($contexto['erro'])) {
+            return ['success' => false, 'message' => $contexto['erro']];
+        }
+
+        $final = $this->chamarScriptRestaurar($contexto, $compartilhamento, $timestampVersao, $caminhoRelativo, 'restaurar');
+
+        AuditService::registrar('Backup', 'Restaurar arquivo (explorador)', "{$compartilhamento}/{$caminhoRelativo} -- " . ($final['message'] ?? ''));
+
+        return $final;
+    }
+
+    /** Mesma coisa que prepararDownloadArquivo(), a partir de um caminho escolhido no Explorador de Versões. */
+    public function prepararDownloadArquivoPorCaminho(int $destinoId, string $compartilhamento, string $timestampVersao, string $caminhoRelativo): array
+    {
+        $contexto = $this->contextoDestino($destinoId, $compartilhamento);
+        if (isset($contexto['erro'])) {
+            return ['success' => false, 'message' => $contexto['erro']];
+        }
+
+        $resultado = $this->baixarParaTemp($contexto, $compartilhamento, $timestampVersao, $caminhoRelativo);
+
+        if ($resultado['success']) {
+            AuditService::registrar('Backup', 'Baixar versão de arquivo (explorador)', "{$compartilhamento}/{$caminhoRelativo}");
+        }
+
+        return $resultado;
+    }
+
+    /** Compartilhamentos que já têm pelo menos uma versão arquivada nesse destino (Explorador de Versões). */
+    public function listarCompartilhamentosVersionados(int $destinoId): array
+    {
+        return $this->listarVersoes($destinoId, 'compartilhamentos');
+    }
+
+    /** Pastas de data/execução dentro de .versoes/<compartilhamento>/, mais recente primeiro. */
+    public function listarDatasVersao(int $destinoId, string $compartilhamento): array
+    {
+        return $this->listarVersoes($destinoId, 'datas', $compartilhamento);
+    }
+
+    /** Arquivos/pastas dentro de .versoes/<compartilhamento>/<timestamp>/<subpath> (navegação um nível por vez). */
+    public function listarItensVersao(int $destinoId, string $compartilhamento, string $timestampVersao, string $subpath): array
+    {
+        return $this->listarVersoes($destinoId, 'itens', $compartilhamento, $timestampVersao, $subpath);
+    }
+
+    /** Arquivos/pastas na cópia ATUAL da nuvem (fora de .versoes/) -- o que está backupeado agora, não uma versão antiga. */
+    public function listarItensAtuais(int $destinoId, string $compartilhamento, string $subpath): array
+    {
+        return $this->listarVersoes($destinoId, 'atual', $compartilhamento, '', $subpath);
+    }
+
+    /**
+     * Cada nível do script espera os argumentos em posições fixas -- pular
+     * um argumento vazio no meio (ex: "atual" não usa timestamp, mas ainda
+     * assim precisa da posição 5 preenchida com algo) desalinharia os que
+     * vêm depois. Por isso a lista de argumentos é montada explicitamente
+     * por nível, nunca "só anexa se não for vazio".
+     */
+    private function listarVersoes(int $destinoId, string $nivel, string $compartilhamento = '', string $timestampVersao = '', string $subpath = ''): array
+    {
+        $destino = $this->repo->buscar($destinoId);
+        if (!$destino) {
+            return [];
+        }
+
+        $args = [self::nomeRemote($destinoId), $this->destinoRemoto($destino), $nivel];
+
+        switch ($nivel) {
+            case 'datas':
+                $args[] = $compartilhamento;
+                break;
+            case 'itens':
+                $args[] = $compartilhamento;
+                $args[] = $timestampVersao;
+                $args[] = $subpath;
+                break;
+            case 'atual':
+                $args[] = $compartilhamento;
+                $args[] = ''; // posicao do timestamp, nao usada nesse nivel
+                $args[] = $subpath;
+                break;
+        }
+
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/backup_listar_versoes_web.sh', $args);
+        $dados = json_decode(trim($resultado['output']), true);
+
+        return is_array($dados) ? $dados : [];
+    }
+
+    /** @return array{success: bool, message: string} */
+    private function chamarScriptRestaurar(array $contexto, string $compartilhamento, string $timestampVersao, string $caminhoRelativo, string $modo, ?string $caminhoSaida = null): array
+    {
+        $args = [
+            $contexto['remote'],
+            $contexto['destino_remoto'],
+            $compartilhamento,
+            $timestampVersao,
+            $caminhoRelativo,
+            $modo,
+            $contexto['caminho_local_base'],
+        ];
+        if ($caminhoSaida !== null) {
+            $args[] = $caminhoSaida;
+        }
+
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/backup_restaurar_arquivo_web.sh', $args);
+        $dados = json_decode(trim($resultado['output']), true);
+
+        return is_array($dados) ? $dados : ['success' => false, 'message' => $resultado['output']];
+    }
+
+    /** @return array{success: bool, message: string, caminho?: string, nome?: string} */
+    private function baixarParaTemp(array $contexto, string $compartilhamento, string $timestampVersao, string $caminhoRelativo): array
+    {
+        $nomeArquivo = basename($caminhoRelativo);
+        $caminhoTemp = tempnam(sys_get_temp_dir(), 'rd_backup_versao_') . '_' . preg_replace('/[^A-Za-z0-9._-]/', '_', $nomeArquivo);
+
+        $dados = $this->chamarScriptRestaurar($contexto, $compartilhamento, $timestampVersao, $caminhoRelativo, 'baixar', $caminhoTemp);
+
+        if (empty($dados['success']) || !is_file($caminhoTemp)) {
+            @unlink($caminhoTemp);
+            return ['success' => false, 'message' => $dados['message'] ?? 'Falha ao buscar a versão.'];
+        }
 
         return ['success' => true, 'message' => 'OK', 'caminho' => $caminhoTemp, 'nome' => $nomeArquivo];
     }
 
     /**
-     * Resolve tudo que os dois métodos acima precisam a partir só do id
-     * da linha em backup_execucao_arquivos: o destino de nuvem usado
-     * naquela execução (remote/destino_remoto) e o caminho local real do
-     * compartilhamento (nunca confia em nome de compartilhamento vindo do
-     * cliente -- sempre resolve pelo cadastro).
+     * Resolve o destino de nuvem + caminho local real de um compartilhamento
+     * pra montar a chamada dos scripts de restauração/download -- nunca
+     * confia em nome de compartilhamento vindo do cliente, sempre resolve
+     * pelo cadastro do Samba.
+     *
+     * @return array{erro: string}|array{remote: string, destino_remoto: string, caminho_local_base: string}
+     */
+    private function contextoDestino(int $destinoId, string $compartilhamentoNome): array
+    {
+        $destino = $this->repo->buscar($destinoId);
+        if (!$destino) {
+            return ['erro' => 'Destino de backup não encontrado.'];
+        }
+
+        $compartilhamento = $this->compartilhamentoRepo->buscarPorNome($compartilhamentoNome);
+        if (!$compartilhamento) {
+            return ['erro' => 'Compartilhamento "' . $compartilhamentoNome . '" não existe mais no cadastro do Samba.'];
+        }
+
+        return [
+            'remote' => self::nomeRemote((int)$destino['id']),
+            'destino_remoto' => $this->destinoRemoto($destino),
+            'caminho_local_base' => $compartilhamento['caminho'],
+        ];
+    }
+
+    /**
+     * Resolve tudo que restaurarArquivo()/prepararDownloadArquivo()
+     * precisam a partir só do id da linha em backup_execucao_arquivos.
      *
      * @return array{erro: string}|array{arquivo: array, remote: string, destino_remoto: string, caminho_local_base: string}
      */
@@ -442,22 +599,14 @@ class BackupService
             return ['erro' => 'Execução de backup não encontrada.'];
         }
 
-        $destino = $this->repo->buscar((int)$execucao['destino_id']);
-        if (!$destino) {
-            return ['erro' => 'Destino de backup dessa execução não existe mais.'];
+        $contexto = $this->contextoDestino((int)$execucao['destino_id'], $arquivo['compartilhamento']);
+        if (isset($contexto['erro'])) {
+            return $contexto;
         }
 
-        $compartilhamento = $this->compartilhamentoRepo->buscarPorNome($arquivo['compartilhamento']);
-        if (!$compartilhamento) {
-            return ['erro' => 'Compartilhamento "' . $arquivo['compartilhamento'] . '" não existe mais no cadastro do Samba.'];
-        }
+        $contexto['arquivo'] = $arquivo;
 
-        return [
-            'arquivo' => $arquivo,
-            'remote' => self::nomeRemote((int)$destino['id']),
-            'destino_remoto' => $this->destinoRemoto($destino),
-            'caminho_local_base' => $compartilhamento['caminho'],
-        ];
+        return $contexto;
     }
 
     /**

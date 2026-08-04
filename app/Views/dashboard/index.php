@@ -6,7 +6,7 @@ use App\Services\PermissionService;
 $hora = date('H:i');
 $dataExtenso = date('d/m/Y');
 
-$temAlgumModulo = $samba !== null || $apache !== null || $servidor !== null || $ativos !== null;
+$temAlgumModulo = $samba !== null || $apache !== null || $servidor !== null || $ativos !== null || $backup !== null;
 
 function techCorPercentual(float $p): string {
     if ($p >= 90) return '#ef4444';
@@ -35,6 +35,7 @@ $cardsDisponiveis = [
     'apache' => ['label' => 'Módulo Apache', 'padrao' => true],
     'servidor' => ['label' => 'Servidor', 'padrao' => true],
     'ativos' => ['label' => 'Ativos', 'padrao' => true],
+    'backup' => ['label' => 'Backup em Nuvem', 'padrao' => true],
     'hardware' => ['label' => 'Hardware', 'padrao' => false],
     'rede' => ['label' => 'Network', 'padrao' => false],
     'servicos' => ['label' => 'Serviços', 'padrao' => false],
@@ -313,6 +314,53 @@ if ($servidor) {
                 <div class="stat-mini-row">
                     <span class="tech-label mb-0">Ligados agora</span>
                     <span class="tech-num" style="font-size:18px; color:#22c55e"><?= (int)$ativos['ligados'] ?></span>
+                </div>
+            </div>
+        </a>
+    </div>
+    <?php endif; ?>
+
+    <?php if ($backup): ?>
+    <?php
+        $ultimaBackup = $backup['ultima_execucao'];
+        $statusBackup = $ultimaBackup['status'] ?? null;
+        $corStatusBackup = match ($statusBackup) {
+            'concluida' => '#22c55e',
+            'erro' => '#ef4444',
+            'executando' => '#06b6d4',
+            default => '#94a3b8',
+        };
+        $textoStatusBackup = $backup['em_andamento']
+            ? 'Executando...'
+            : match ($statusBackup) {
+                'concluida' => 'Concluído',
+                'erro' => 'Erro',
+                default => 'Nunca rodou',
+            };
+    ?>
+    <div class="col-md-4" data-card="backup">
+        <a href="<?= url('/backup/historico') ?>" class="tech-card">
+            <div class="accent" style="background:#0d6efd"></div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <div>
+                        <div class="tech-label">Módulo</div>
+                        <h5 class="mb-0"><i class="bi bi-cloud-arrow-up-fill me-1"></i> Backup em Nuvem</h5>
+                    </div>
+                    <span class="pulse-dot <?= $statusBackup === 'erro' ? 'offline' : 'online' ?>"></span>
+                </div>
+
+                <div class="stat-mini-row">
+                    <span class="tech-label mb-0">Último backup</span>
+                    <span class="tech-mini"><?= $ultimaBackup ? htmlspecialchars(date('d/m H:i', strtotime($ultimaBackup['iniciado_em']))) : 'Nunca' ?></span>
+                </div>
+                <div class="stat-mini-row">
+                    <span class="tech-label mb-0">Status</span>
+                    <span class="tech-mini" style="color:<?= $corStatusBackup ?>"><?= htmlspecialchars($textoStatusBackup) ?></span>
+                </div>
+                <div class="stat-mini-row">
+                    <span class="tech-label mb-0">Destino</span>
+                    <span class="tech-mini"><?= $backup['destino_ativo_nome'] ? htmlspecialchars($backup['destino_ativo_nome']) : 'Nenhum' ?></span>
                 </div>
             </div>
         </a>
