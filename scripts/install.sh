@@ -265,14 +265,22 @@ cat > "/etc/apache2/sites-available/rd-intranet.conf" <<EOF
 EOF
 a2ensite rd-intranet >/dev/null
 
+# Tira o site padrao do Apache do caminho sempre, nao so quando a porta e
+# nao-padrao: com "000-default" ainda habilitado, qualquer Host header que
+# nao bata com o ServerName configurado acima (ex: emitir certificado
+# depois pra um dominio diferente do usado na instalacao) cai nele em vez
+# de cair no vhost da aplicacao -- DocumentRoot e /var/www/html, sem o
+# .well-known/acme-challenge que o certbot cria, entao a validacao do
+# Let's Encrypt falha com 404 mesmo com tudo mais certo (visto na pratica:
+# instalacao com ServerName X, emissao de certificado depois pro dominio Y).
+a2dissite 000-default >/dev/null 2>&1 || true
+
 if [ "$APACHE_PORT" != "80" ]; then
   # porta nao-padrao (Apache convivendo com outro web server, ex: nginx,
-  # que ja segura a 80/443) -- garante que o Apache escute nela e tira o
-  # site padrao do caminho (ele so responde na 80).
+  # que ja segura a 80/443) -- garante que o Apache escute nela.
   if ! grep -q "^Listen ${APACHE_PORT}\$" /etc/apache2/ports.conf; then
     echo "Listen ${APACHE_PORT}" >> /etc/apache2/ports.conf
   fi
-  a2dissite 000-default >/dev/null 2>&1 || true
 fi
 
 # A aplicacao roda com base_url=/rd.intranet por padrao (ver 'configuracoes'
