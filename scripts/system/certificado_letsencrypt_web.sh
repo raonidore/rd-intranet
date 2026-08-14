@@ -40,13 +40,13 @@ if [ -f /etc/ssl/rd-intranet/atual.crt ]; then
 fi
 
 if ! certbot certonly --webroot -w /var/www/rd.intranet/public -d "$DOMINIO" \
-    --non-interactive --agree-tos -m "$EMAIL" --no-eff-email 2>/tmp/rd_le_err_$$; then
-  ERRO="$(tail -20 /tmp/rd_le_err_$$ | tr '\n' ' ' | sed 's/"/\\"/g')"
-  rm -f /tmp/rd_le_err_$$
+    --non-interactive --agree-tos -m "$EMAIL" --no-eff-email >/tmp/rd_le_out_$$ 2>&1; then
+  ERRO="$(tail -20 /tmp/rd_le_out_$$ | tr '\n' ' ' | sed 's/"/\\"/g')"
+  rm -f /tmp/rd_le_out_$$
   echo "{\"success\":false,\"message\":\"Erro ao obter certificado Let's Encrypt: ${ERRO}\"}"
   exit 1
 fi
-rm -f /tmp/rd_le_err_$$
+rm -f /tmp/rd_le_out_$$
 
 LIVE="/etc/letsencrypt/live/${DOMINIO}"
 if [ ! -f "$LIVE/fullchain.pem" ] || [ ! -f "$LIVE/privkey.pem" ]; then
