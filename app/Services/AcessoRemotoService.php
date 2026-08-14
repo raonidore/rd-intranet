@@ -182,6 +182,43 @@ class AcessoRemotoService
         return $dados;
     }
 
+    /**
+     * "rede" (CommonName do cert do MeshCentral tem ponto) alcança qualquer
+     * VLAN roteada até o servidor; "lan" (sem ponto) faz o MeshCentral
+     * entrar sozinho em modo LAN-only, e os agentes só se registram por
+     * broadcast/multicast local -- nunca atravessam VLAN roteada, mesmo com
+     * a porta acessível. Ver scripts/system/meshcentral_configurar_rede_web.sh.
+     */
+    public function modoRedeAtual(): string
+    {
+        $config = @file_get_contents('/opt/meshcentral/meshcentral-data/config.json');
+        $dados = $config !== false ? json_decode($config, true) : null;
+        $cert = (string)($dados['settings']['cert'] ?? '');
+
+        return str_contains($cert, '.') ? 'rede' : 'lan';
+    }
+
+    public function configurarModoRede(string $modo): array
+    {
+        if ($modo !== 'lan' && $modo !== 'rede') {
+            return ['success' => false, 'message' => 'Modo inválido.'];
+        }
+
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/meshcentral_configurar_rede_web.sh', [$modo]);
+        $dados = json_decode($resultado['output'], true);
+
+        if (!is_array($dados)) {
+            return ['success' => false, 'message' => 'Resposta inesperada ao trocar o modo de rede: ' . $resultado['output']];
+        }
+
+        if (!empty($dados['success'])) {
+            $label = $modo === 'rede' ? 'Toda a rede (inclusive VLANs)' : 'Somente rede local';
+            AuditService::registrar('Ativos', 'Acesso Remoto', "Modo de alcance do MeshCentral alterado para: {$label}.");
+        }
+
+        return $dados;
+    }
+
     public function urlConsole(): string
     {
         $host = $_SERVER['HTTP_HOST'] ?? 'localhost';

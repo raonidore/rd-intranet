@@ -558,6 +558,7 @@ $router->post('/ativos/acesso-remoto/credenciais', [AcessoRemotoController::clas
 $router->post('/ativos/acesso-remoto/vincular', [AcessoRemotoController::class, 'vincular']);
 $router->post('/ativos/acesso-remoto/compartilhar', [AcessoRemotoController::class, 'compartilhar']);
 $router->post('/ativos/acesso-remoto/liberar-porta', [AcessoRemotoController::class, 'liberarPorta']);
+$router->post('/ativos/acesso-remoto/modo-rede', [AcessoRemotoController::class, 'configurarModoRede']);
 $router->get('/ativos/acesso-remoto/mesh-agente', [AcessoRemotoController::class, 'baixarMeshAgente']);
 $router->post('/ativos/acesso-remoto/mesh-agente/upload', [AcessoRemotoController::class, 'uploadMeshAgente']);
 

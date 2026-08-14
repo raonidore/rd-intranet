@@ -75,6 +75,57 @@ use App\Components\Badge;
     </div>
 </div>
 
+<?php if ($instalado && $rodando): ?>
+<div class="card border-0 shadow-sm mt-3" style="max-width:720px">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <strong>Alcance da rede</strong>
+            <?= $modoRedeAtual === 'rede' ? Badge::make('Toda a rede', 'success') : Badge::make('Somente rede local', 'secondary') ?>
+        </div>
+        <p class="text-muted small mb-3">
+            Controla como o MeshAgent, instalado nas máquinas Windows, encontra este servidor.
+            Isso é <em>separado</em> do Firewall acima -- mesmo com a porta liberada, o modo abaixo decide
+            se o agente sabe pra onde conectar.
+        </p>
+        <div class="d-flex flex-column gap-2">
+            <label class="border rounded p-2 d-flex gap-2 <?= $modoRedeAtual === 'lan' ? 'border-primary' : '' ?>" style="cursor:pointer">
+                <input type="radio" name="modoRede" value="lan" class="form-check-input mt-1" <?= $modoRedeAtual === 'lan' ? 'checked' : '' ?>>
+                <span>
+                    <strong>Somente rede local</strong>
+                    <p class="text-muted small mb-0">
+                        O agente descobre o servidor por broadcast/multicast na rede local. Mais simples e mais
+                        fechado (nada sai da rede física onde o servidor está), mas <strong>não funciona</strong>
+                        pra máquinas em outra VLAN/sub-rede roteada -- mesmo com a porta acessível, elas nunca
+                        aparecem na lista de dispositivos. Use se o cliente quiser acesso remoto restrito só à
+                        rede local.
+                    </p>
+                </span>
+            </label>
+            <label class="border rounded p-2 d-flex gap-2 <?= $modoRedeAtual === 'rede' ? 'border-primary' : '' ?>" style="cursor:pointer">
+                <input type="radio" name="modoRede" value="rede" class="form-check-input mt-1" <?= $modoRedeAtual === 'rede' ? 'checked' : '' ?>>
+                <span>
+                    <strong>Toda a rede (inclusive VLANs)</strong>
+                    <p class="text-muted small mb-0">
+                        O agente recebe o endereço fixo deste servidor e conecta direto por IP, alcançando
+                        qualquer sub-rede/VLAN que tenha rota até aqui (roteamento entre VLANs, quando existe,
+                        continua sendo decidido pelo roteador/gateway da rede -- isso só remove a dependência de
+                        broadcast local).
+                    </p>
+                </span>
+            </label>
+        </div>
+        <button type="button" class="btn btn-sm btn-primary mt-3" id="botaoAplicarModoRede">
+            <i class="bi bi-arrow-repeat"></i> Aplicar
+        </button>
+        <p class="text-muted small mt-2 mb-0">
+            Reinicia o serviço do MeshCentral e regenera os instaladores já enviados abaixo. Máquinas que já
+            têm o MeshAgent instalado precisam <strong>reinstalar</strong> com o instalador atualizado pra
+            passar a valer -- a troca de modo não afeta agentes já conectados.
+        </p>
+    </div>
+</div>
+<?php endif; ?>
+
 <?php if ($instalado): ?>
 <div class="card border-0 shadow-sm mt-3" style="max-width:720px">
     <div class="card-body">
@@ -261,6 +312,40 @@ use App\Components\Badge;
         } finally {
             botao.disabled = false;
             botao.innerHTML = '<i class="bi bi-unlock"></i> Liberar no Firewall';
+        }
+    });
+})();
+
+(function () {
+    const botao = document.getElementById('botaoAplicarModoRede');
+    if (!botao) return;
+
+    botao.addEventListener('click', async function () {
+        const modo = document.querySelector('input[name="modoRede"]:checked');
+        if (!modo) return;
+
+        const confirmado = confirm(
+            'Trocar o alcance da rede do MeshCentral?\n\n' +
+            'Isso reinicia o serviço (alguns segundos fora do ar) e regenera os instaladores já enviados. ' +
+            'Máquinas com o MeshAgent já instalado só passam a valer depois de reinstalar.'
+        );
+
+        if (!confirmado) return;
+
+        botao.disabled = true;
+        botao.innerHTML = '<i class="bi bi-hourglass-split"></i> Aplicando (pode levar alguns segundos)...';
+
+        try {
+            const body = new URLSearchParams({ modo: modo.value });
+            const res = await fetch(<?= json_encode(url('/ativos/acesso-remoto/modo-rede')) ?>, { method: 'POST', body });
+            const resultado = await res.json();
+            alert(resultado.message || (resultado.success ? 'Modo alterado.' : 'Falha ao trocar o modo de rede.'));
+            if (resultado.success) location.reload();
+        } catch (e) {
+            alert('Erro ao comunicar com o servidor.');
+        } finally {
+            botao.disabled = false;
+            botao.innerHTML = '<i class="bi bi-arrow-repeat"></i> Aplicar';
         }
     });
 })();

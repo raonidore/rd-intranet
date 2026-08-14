@@ -42,6 +42,7 @@ class AcessoRemotoController extends Controller
             'dispositivos' => ($rodando && $credenciaisConfiguradas) ? $this->service->listarDispositivos() : [],
             'ativos' => $this->ativoService->listar(),
             'portaLiberada' => $this->service->portaLiberadaNoFirewall(),
+            'modoRedeAtual' => $this->service->modoRedeAtual(),
             'arquiteturasMeshAgente' => AcessoRemotoService::ARQUITETURAS_MESH_AGENTE,
             'meshAgentesDisponiveis' => $meshAgentesDisponiveis,
         ]);
@@ -89,6 +90,14 @@ class AcessoRemotoController extends Controller
         header('Content-Type: application/json');
 
         echo json_encode($this->service->liberarPortaNoFirewall());
+    }
+
+    public function configurarModoRede(): void
+    {
+        AuthMiddleware::checkModulo('ativos_acesso_remoto');
+        header('Content-Type: application/json');
+
+        echo json_encode($this->service->configurarModoRede($_POST['modo'] ?? ''));
     }
 
     public function vincular(): void
