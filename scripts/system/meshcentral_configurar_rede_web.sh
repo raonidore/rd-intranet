@@ -70,9 +70,23 @@ if [ "$OK" -ne 1 ]; then
   exit 1
 fi
 
-# Da tempo do servidor HTTPS comecar a aceitar conexao antes de tentar
-# baixar os instaladores.
-sleep 2
+# Espera o servidor HTTPS realmente aceitar conexao antes de tentar baixar
+# os instaladores. Quando o CommonName do certificado muda (troca de modo),
+# o MeshCentral regenera na hora os certificados (HTTPS, assinatura de
+# codigo, AMT) e reassina os proprios executaveis do agente -- leva mais que
+# alguns segundos, e systemd ja reporta o servico "active" bem antes disso
+# terminar (o processo Node subiu, so ainda nao esta pronto).
+HTTPS_PRONTO=0
+for i in $(seq 1 60); do
+  CODE="$(curl -k -s -o /dev/null -w '%{http_code}' "https://127.0.0.1:${PORTA}/meshagents?id=4" 2>/dev/null)"
+  if [ "$CODE" != "000" ]; then HTTPS_PRONTO=1; break; fi
+  sleep 1
+done
+
+if [ "$HTTPS_PRONTO" -ne 1 ]; then
+  echo "{\"success\":true,\"message\":\"Modo de rede trocado, mas o servidor HTTPS nao respondeu a tempo pra regenerar os instaladores automaticamente. Tente novamente em um minuto ou baixe manualmente pelo console do MeshCentral.\",\"modo\":\"$MODO\",\"cert\":\"$CERT_ALVO\"}"
+  exit 0
+fi
 
 declare -A ARCH_ID=( ["x86"]=3 ["x64"]=4 ["arm64"]=43 )
 REGERADOS=""
