@@ -3,7 +3,7 @@
 -- cria todas as tabelas ja no estado final, sem precisar repetir o
 -- historico incremental de database/migrations/ (algumas dessas
 -- migrations usam ALTER TABLE, que nao e seguro reaplicar aqui).
--- Gerado em 2026-07-16 17:50:30.
+-- Gerado em 2026-08-14 22:09:18.
 
 -- Import nao respeita ordem de dependencia entre tabelas (algumas tem FK
 -- pra tabelas que so aparecem depois neste arquivo) -- desliga a checagem
@@ -67,6 +67,8 @@ CREATE TABLE IF NOT EXISTS `ativos` (
   `chave_api_atual` varchar(64) DEFAULT NULL,
   `elevacao_usuario` varchar(150) DEFAULT NULL,
   `elevacao_senha_cifrada` text DEFAULT NULL,
+  `rede_usuario` varchar(150) DEFAULT NULL,
+  `rede_senha_cifrada` text DEFAULT NULL,
   `machine_guid` varchar(64) DEFAULT NULL,
   `mesh_device_id` varchar(160) DEFAULT NULL,
   `ultimo_checkin` timestamp NULL DEFAULT NULL,
@@ -114,6 +116,23 @@ CREATE TABLE IF NOT EXISTS `ativos_atualizacoes_windows` (
   PRIMARY KEY (`id`),
   KEY `idx_ativos_atualizacoes_ativo` (`ativo_id`),
   CONSTRAINT `fk_ativos_atualizacoes_ativo` FOREIGN KEY (`ativo_id`) REFERENCES `ativos` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
+-- ativos_bateria
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `ativos_bateria` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `ativo_id` int(11) NOT NULL,
+  `nome` varchar(150) DEFAULT NULL,
+  `fabricante` varchar(150) DEFAULT NULL,
+  `numero_serie` varchar(100) DEFAULT NULL,
+  `capacidade_projeto_mwh` int(11) DEFAULT NULL,
+  `capacidade_atual_mwh` int(11) DEFAULT NULL,
+  `coletado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_ativos_bateria_ativo` (`ativo_id`),
+  CONSTRAINT `fk_ativos_bateria_ativo` FOREIGN KEY (`ativo_id`) REFERENCES `ativos` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ----------------------------------------------------------------
@@ -165,6 +184,22 @@ CREATE TABLE IF NOT EXISTS `ativos_comandos` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ----------------------------------------------------------------
+-- ativos_controladoras
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `ativos_controladoras` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `ativo_id` int(11) NOT NULL,
+  `nome` varchar(200) DEFAULT NULL,
+  `fabricante` varchar(150) DEFAULT NULL,
+  `interface` varchar(100) DEFAULT NULL,
+  `classe` varchar(50) DEFAULT NULL,
+  `coletado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_ativos_controladoras_ativo` (`ativo_id`),
+  CONSTRAINT `fk_ativos_controladoras_ativo` FOREIGN KEY (`ativo_id`) REFERENCES `ativos` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
 -- ativos_memoria
 -- ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `ativos_memoria` (
@@ -179,6 +214,55 @@ CREATE TABLE IF NOT EXISTS `ativos_memoria` (
   PRIMARY KEY (`id`),
   KEY `idx_ativos_memoria_ativo` (`ativo_id`),
   CONSTRAINT `fk_ativos_memoria_ativo` FOREIGN KEY (`ativo_id`) REFERENCES `ativos` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
+-- ativos_pacotes_software
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `ativos_pacotes_software` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nome` varchar(150) NOT NULL,
+  `arquivo_nome_original` varchar(255) NOT NULL,
+  `arquivo_caminho` varchar(500) NOT NULL,
+  `argumentos_silenciosos` varchar(255) DEFAULT NULL,
+  `criado_por` varchar(150) DEFAULT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
+-- ativos_placas_video
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `ativos_placas_video` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `ativo_id` int(11) NOT NULL,
+  `nome` varchar(200) DEFAULT NULL,
+  `vram_mb` int(11) DEFAULT NULL,
+  `driver_versao` varchar(50) DEFAULT NULL,
+  `processador_grafico` varchar(150) DEFAULT NULL,
+  `coletado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_ativos_placas_video_ativo` (`ativo_id`),
+  CONSTRAINT `fk_ativos_placas_video_ativo` FOREIGN KEY (`ativo_id`) REFERENCES `ativos` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
+-- ativos_politicas_estado
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `ativos_politicas_estado` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `ativo_id` int(11) NOT NULL,
+  `regra_id` varchar(60) NOT NULL,
+  `desejado` tinyint(1) NOT NULL DEFAULT 0,
+  `status` enum('pendente','aplicado','erro') NOT NULL DEFAULT 'pendente',
+  `mensagem` varchar(500) DEFAULT NULL,
+  `solicitacao_id` int(11) DEFAULT NULL,
+  `atualizado_em` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_ativos_politicas_ativo_regra` (`ativo_id`,`regra_id`),
+  KEY `idx_ativos_politicas_solicitacao` (`solicitacao_id`),
+  CONSTRAINT `fk_ativos_politicas_ativo` FOREIGN KEY (`ativo_id`) REFERENCES `ativos` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_ativos_politicas_solicitacao` FOREIGN KEY (`solicitacao_id`) REFERENCES `ativos_solicitacoes` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ----------------------------------------------------------------
@@ -229,6 +313,23 @@ CREATE TABLE IF NOT EXISTS `ativos_programas` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ----------------------------------------------------------------
+-- ativos_rdp_credenciais
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `ativos_rdp_credenciais` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `ativo_id` int(11) NOT NULL,
+  `host` varchar(255) NOT NULL,
+  `porta` int(11) NOT NULL DEFAULT 3389,
+  `usuario` varchar(150) NOT NULL,
+  `senha_cifrada` text NOT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  `atualizado_em` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_ativos_rdp_ativo` (`ativo_id`),
+  CONSTRAINT `fk_ativos_rdp_ativo` FOREIGN KEY (`ativo_id`) REFERENCES `ativos` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
 -- ativos_redes
 -- ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `ativos_redes` (
@@ -244,13 +345,29 @@ CREATE TABLE IF NOT EXISTS `ativos_redes` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ----------------------------------------------------------------
+-- ativos_setor_recursos
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `ativos_setor_recursos` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `setor_id` int(11) NOT NULL,
+  `tipo` enum('impressora','unidade_rede') NOT NULL,
+  `nome_exibicao` varchar(150) NOT NULL,
+  `letra_unidade` char(1) DEFAULT NULL,
+  `caminho_unc` varchar(255) NOT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_ativos_setor_recursos_setor` (`setor_id`),
+  CONSTRAINT `fk_ativos_setor_recursos_setor` FOREIGN KEY (`setor_id`) REFERENCES `ativos_catalogos` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
 -- ativos_solicitacoes
 -- ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `ativos_solicitacoes` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `ativo_id` int(11) NOT NULL,
   `tipo` enum('listar_arquivos','listar_processos','baixar_arquivo','executar_cmd','executar_powershell') NOT NULL,
-  `parametro` varchar(500) DEFAULT NULL,
+  `parametro` text DEFAULT NULL,
   `solicitado_por` varchar(150) DEFAULT NULL,
   `elevado` tinyint(1) NOT NULL DEFAULT 0,
   `status` enum('pendente','concluido','erro') NOT NULL DEFAULT 'pendente',
@@ -276,6 +393,7 @@ CREATE TABLE IF NOT EXISTS `ativos_volumes` (
   `modelo_disco` varchar(150) DEFAULT NULL,
   `fabricante_disco` varchar(100) DEFAULT NULL,
   `serial_disco` varchar(100) DEFAULT NULL,
+  `tipo_disco` varchar(20) DEFAULT NULL,
   `rede` tinyint(1) NOT NULL DEFAULT 0,
   `caminho_rede` varchar(260) DEFAULT NULL,
   `coletado_em` timestamp NOT NULL DEFAULT current_timestamp(),
@@ -314,6 +432,89 @@ CREATE TABLE IF NOT EXISTS `auditoria` (
   `criado_em` timestamp NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- backup_destinos
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `backup_destinos` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `provider` enum('b2','s3','drive') NOT NULL,
+  `nome` varchar(100) NOT NULL,
+  `ativo` tinyint(1) NOT NULL DEFAULT 0,
+  `retencao_dias` int(11) NOT NULL DEFAULT 30,
+  `b2_key_id` varchar(255) DEFAULT NULL,
+  `b2_application_key_cifrada` text DEFAULT NULL,
+  `b2_bucket` varchar(255) DEFAULT NULL,
+  `b2_prefixo` varchar(255) DEFAULT NULL,
+  `s3_access_key_id` varchar(255) DEFAULT NULL,
+  `s3_secret_access_key_cifrada` text DEFAULT NULL,
+  `s3_bucket` varchar(255) DEFAULT NULL,
+  `s3_regiao` varchar(64) DEFAULT NULL,
+  `s3_endpoint` varchar(255) DEFAULT NULL,
+  `s3_prefixo` varchar(255) DEFAULT NULL,
+  `drive_token_cifrado` text DEFAULT NULL,
+  `drive_client_id` varchar(255) DEFAULT NULL,
+  `drive_client_secret_cifrada` text DEFAULT NULL,
+  `drive_pasta_id` varchar(255) DEFAULT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  `atualizado_em` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `relatorio_diario_ativo` tinyint(1) NOT NULL DEFAULT 0,
+  `alerta_falha_ativo` tinyint(1) NOT NULL DEFAULT 0,
+  `email_notificacao` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
+-- backup_execucao_arquivos
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `backup_execucao_arquivos` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `execucao_id` int(11) NOT NULL,
+  `compartilhamento` varchar(100) NOT NULL,
+  `caminho_relativo` varchar(1024) NOT NULL,
+  `tipo` enum('novo','atualizado','excluido') NOT NULL,
+  `timestamp_versao` varchar(20) DEFAULT NULL,
+  `tamanho_anterior` bigint(20) DEFAULT NULL,
+  `tamanho_novo` bigint(20) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_backup_execucao_arquivos_execucao` (`execucao_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
+-- backup_execucoes
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `backup_execucoes` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `destino_id` int(11) NOT NULL,
+  `tipo` enum('manual','agendada') NOT NULL DEFAULT 'manual',
+  `status` enum('executando','concluida','erro') NOT NULL DEFAULT 'executando',
+  `arquivos_enviados` int(11) NOT NULL DEFAULT 0,
+  `bytes_enviados` bigint(20) NOT NULL DEFAULT 0,
+  `versoes_criadas` int(11) NOT NULL DEFAULT 0,
+  `mensagem_erro` text DEFAULT NULL,
+  `iniciado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  `finalizado_em` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_backup_execucoes_destino` (`destino_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
+-- config_backups
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `config_backups` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `tipo` enum('manual','agendado') NOT NULL DEFAULT 'manual',
+  `status` enum('executando','concluido','erro') NOT NULL DEFAULT 'executando',
+  `arquivo` varchar(255) DEFAULT NULL,
+  `tamanho_bytes` bigint(20) NOT NULL DEFAULT 0,
+  `enviado_nuvem` tinyint(1) NOT NULL DEFAULT 0,
+  `mensagem_erro` text DEFAULT NULL,
+  `usuario_id` int(11) DEFAULT NULL,
+  `iniciado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  `finalizado_em` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_config_backups_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ----------------------------------------------------------------
 -- configuracao_deploy
@@ -547,6 +748,7 @@ CREATE TABLE IF NOT EXISTS `samba_compartilhamentos` (
   `somente_leitura` tinyint(1) NOT NULL DEFAULT 0,
   `lixeira` tinyint(1) NOT NULL DEFAULT 1,
   `bloqueio_extensoes` tinyint(1) NOT NULL DEFAULT 1,
+  `backup_nuvem_ativo` tinyint(1) NOT NULL DEFAULT 0,
   `status` enum('ativo','desativado') NOT NULL DEFAULT 'ativo',
   `criado_em` timestamp NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
@@ -583,6 +785,26 @@ CREATE TABLE IF NOT EXISTS `speedtest_historico` (
   `isp` varchar(255) DEFAULT NULL,
   `mensagem_erro` varchar(500) DEFAULT NULL,
   `executado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
+-- ssh_conexoes
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `ssh_conexoes` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nome` varchar(150) NOT NULL,
+  `host` varchar(255) NOT NULL,
+  `porta` int(11) NOT NULL DEFAULT 22,
+  `usuario` varchar(100) NOT NULL,
+  `tipo_autenticacao` enum('senha','chave_privada','perguntar') NOT NULL DEFAULT 'senha',
+  `senha_cifrada` text DEFAULT NULL,
+  `chave_privada_cifrada` text DEFAULT NULL,
+  `chave_privada_senha_cifrada` text DEFAULT NULL,
+  `observacoes` varchar(255) DEFAULT NULL,
+  `ativo` tinyint(1) NOT NULL DEFAULT 1,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  `atualizado_em` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
