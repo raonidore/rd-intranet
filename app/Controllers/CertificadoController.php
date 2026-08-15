@@ -24,7 +24,20 @@ class CertificadoController extends Controller
         $this->view('infrastructure/certificado', [
             'status' => $this->service->status(),
             'ips' => $this->service->interfacesEIps(),
+            'alertaEmail' => $this->service->alertaEmailAtual(),
         ]);
+    }
+
+    public function alertaEmailSalvar(): void
+    {
+        AuthMiddleware::checkModulo('infra_certificado');
+
+        $resultado = $this->service->salvarAlertaEmail($_POST['email'] ?? '');
+
+        if ($resultado['success']) {
+            AuditService::registrar('Certificado', 'Alerta de vencimento', $resultado['message']);
+        }
+        $this->notificarEVoltar($resultado);
     }
 
     public function autoassinadoForm(): void

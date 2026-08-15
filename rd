@@ -18,6 +18,7 @@ if (!$comando) {
     echo "  atualizacao:verificar   Busca origin/main e atualiza o cache de 'há atualização?'\n";
     echo "  antivirus:verificar     Escaneia os compartilhamentos do Samba em busca de ameaças\n";
     echo "  backup:executar <id>    Roda o backup em nuvem do destino <id> (Backup > Configuração)\n";
+    echo "  certificado:verificar   Manda e-mail se o certificado HTTPS estiver perto de vencer/vencido\n";
     exit;
 }
 
@@ -239,6 +240,17 @@ switch ($comando) {
 
         echo "ERRO: " . ($status['mensagem'] ?: 'falha desconhecida ao gerar o backup de configuracao') . "\n";
         exit(1);
+
+    case 'certificado:verificar':
+        $resultado = (new \App\Services\CertificadoService())->verificarVencimento();
+
+        echo ($resultado['success'] ? 'OK: ' : 'ERRO: ') . $resultado['message'] . "\n";
+
+        if (!$resultado['success']) {
+            exit(1);
+        }
+
+        break;
 
     case 'ativos:coletar-snmp':
         $resultado = (new \App\Services\AtivoService())->coletarSnmpTodos();

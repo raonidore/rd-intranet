@@ -79,6 +79,30 @@ $tipoLabel = [
     </div>
 </div>
 
+<div class="card fw-card">
+    <div class="card-header"><i class="bi bi-envelope-exclamation me-1"></i> Alerta de vencimento por e-mail</div>
+    <div class="card-body">
+        <p class="text-muted small mb-3">
+            Verificação diária automática (cron nativo, sem precisar cadastrar nada em Infraestrutura > Cron):
+            se o certificado estiver a 15 dias ou menos de vencer (ou já vencido), manda um e-mail pro endereço
+            abaixo. Usa o SMTP configurado em <a href="<?= url('/administracao/email') ?>">Administração > E-mail</a>.
+            Deixe em branco pra desativar.
+        </p>
+        <form method="post" action="<?= url('/infraestrutura/certificado/alerta-email') ?>" class="row g-2 align-items-end">
+            <div class="col-sm-8">
+                <label class="form-label small mb-1">E-mail pra receber o alerta</label>
+                <input type="email" name="email" class="form-control form-control-sm" value="<?= htmlspecialchars($alertaEmail) ?>" placeholder="ti@suaempresa.com.br">
+            </div>
+            <div class="col-sm-4">
+                <button type="submit" class="btn btn-sm btn-primary w-100">Salvar</button>
+            </div>
+        </form>
+        <?php if ($alertaEmail !== ''): ?>
+            <div class="mt-2"><?= Badge::make('Alerta ativo', 'success') ?></div>
+        <?php endif; ?>
+    </div>
+</div>
+
 <div class="row g-3">
     <div class="col-md-4">
         <a href="<?= url('/infraestrutura/certificado/autoassinado') ?>" class="metodo-card">

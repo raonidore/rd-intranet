@@ -43,6 +43,107 @@ class CertificadoService
         ];
     }
 
+    public function alertaEmailAtual(): string
+    {
+        return trim((string)(ConfigService::get('certificado_alerta_email', '') ?: ''));
+    }
+
+    public function salvarAlertaEmail(string $email): array
+    {
+        $email = trim($email);
+
+        if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return ['success' => false, 'message' => 'E-mail inválido.'];
+        }
+
+        ConfigService::set('certificado_alerta_email', $email);
+
+        return [
+            'success' => true,
+            'message' => $email === ''
+                ? 'Alerta por e-mail desativado.'
+                : "Alerta por e-mail configurado para {$email}.",
+        ];
+    }
+
+    /**
+     * Chamado pelo cron nativo "Verificar vencimento do certificado"
+     * (ver AtualizacaoService::garantirCronCertificado()), uma vez por dia.
+     * So manda e-mail quando ha alguem configurado pra receber E o
+     * certificado esta a 15 dias ou menos de vencer (ou ja vencido) --
+     * mesmo limiar do aviso visual desta tela. Reenvia todo dia enquanto
+     * a situacao nao mudar (o alerta e' o sinal de que a renovacao
+     * automatica do Let's Encrypt, que roda ~30 dias antes, nao
+     * aconteceu -- silenciar isso seria esconder um problema real).
+     */
+    public function verificarVencimento(): array
+    {
+        $emailAlerta = $this->alertaEmailAtual();
+        if ($emailAlerta === '') {
+            return ['success' => true, 'message' => 'Nenhum e-mail de alerta configurado, nada a fazer.'];
+        }
+
+        $status = $this->status();
+        $cert = $status['certificado'];
+
+        if ($cert === null) {
+            return ['success' => true, 'message' => 'Nenhum certificado instalado, nada a verificar.'];
+        }
+
+        if (!$cert['expirado'] && !$cert['expirando']) {
+            return ['success' => true, 'message' => "Certificado ok, faltam {$cert['dias_restantes']} dia(s)."];
+        }
+
+        $email = new EmailService();
+        if (!$email->configurado()) {
+            return ['success' => false, 'message' => 'Certificado perto de vencer, mas o SMTP (Sistema > E-mail) não está configurado -- alerta não pôde ser enviado.'];
+        }
+
+        $dominio = $status['dominio'] ?: ($cert['subject'] ?? 'este servidor');
+        $dias = $cert['dias_restantes'];
+
+        if ($cert['expirado']) {
+            $titulo = 'Certificado expirado';
+            $cor = '#dc3545';
+            $corpo = "O certificado HTTPS de <strong>" . htmlspecialchars($dominio) . "</strong> está <strong>expirado há " . abs($dias) . " dia(s)</strong> (venceu em " . htmlspecialchars((string)$cert['nao_depois']) . ").";
+        } else {
+            $titulo = 'Certificado expirando em breve';
+            $cor = '#f59f00';
+            $corpo = "O certificado HTTPS de <strong>" . htmlspecialchars($dominio) . "</strong> vence em <strong>{$dias} dia(s)</strong> (" . htmlspecialchars((string)$cert['nao_depois']) . ").";
+        }
+
+        if ($status['tipo'] === 'letsencrypt') {
+            $corpo .= '<br><br>Certificados Let\'s Encrypt renovam sozinhos, normalmente uns 30 dias antes de vencer -- '
+                . 'como chegou até aqui, vale conferir se a porta 80 continua acessível de fora e se o '
+                . '<code>certbot renew --dry-run</code> roda sem erro no servidor.';
+        }
+
+        $envio = $email->enviar($emailAlerta, "[RD Intranet] {$titulo}: {$dominio}", $this->montarEmailAlerta($titulo, $cor, $corpo));
+
+        return [
+            'success' => $envio['success'],
+            'message' => $envio['success']
+                ? "Alerta enviado para {$emailAlerta} ({$titulo}, {$dias} dia(s))."
+                : "Falha ao enviar alerta por e-mail: {$envio['message']}",
+        ];
+    }
+
+    private function montarEmailAlerta(string $titulo, string $cor, string $conteudoHtml): string
+    {
+        return '<div style="background:#f1f3f5;padding:32px 16px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">'
+            . '<div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.08);">'
+            . '<div style="background:' . $cor . ';padding:28px 32px;">'
+            . '<div style="color:rgba(255,255,255,.85);font-size:12px;font-weight:600;letter-spacing:.8px;">CERTIFICADO DIGITAL</div>'
+            . '<div style="color:#ffffff;font-size:22px;font-weight:700;margin-top:6px;">' . htmlspecialchars($titulo) . '</div>'
+            . '</div>'
+            . '<div style="padding:32px;font-size:14px;color:#212529;line-height:1.6;">' . $conteudoHtml . '</div>'
+            . '<div style="padding:16px 32px;background:#f8f9fa;border-top:1px solid #eee;font-size:11.5px;color:#adb5bd;">'
+            . 'Enviado automaticamente pela verificação diária de certificado da RD Intranet. Não responda este e-mail.'
+            . '</div>'
+            . '</div>'
+            . '</div>';
+    }
+
     public function interfacesEIps(): array
     {
         $saida = shell_exec("ip -o -4 addr show 2>/dev/null | awk '{print $4}' | cut -d/ -f1") ?? '';

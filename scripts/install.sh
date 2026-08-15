@@ -204,6 +204,12 @@ if ($existeAdmin === 0) {
 # ---------------------------------------------------------------------
 php -r 'require $argv[1] . "/vendor/autoload.php"; (new App\Services\AtualizacaoService())->garantirCronsColeta();' "$REPO_DIR"
 
+# Mesma logica -- cron diario que avisa por e-mail se o certificado HTTPS
+# estiver perto de vencer (so manda de verdade se alguem configurar o
+# e-mail em Infraestrutura > Certificado Digital; sem isso, o comando
+# roda e nao faz nada).
+php -r 'require $argv[1] . "/vendor/autoload.php"; (new App\Services\AtualizacaoService())->garantirCronCertificado();' "$REPO_DIR"
+
 # ---------------------------------------------------------------------
 # 7) sudoers: www-data pode rodar, sem senha, qualquer script ja aprovado
 #    dentro de /opt/rdtecnologia/scripts (diretorio root-only -- www-data

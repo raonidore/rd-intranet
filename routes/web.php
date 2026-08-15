@@ -213,6 +213,7 @@ $router->get('/infraestrutura/certificado/letsencrypt', [CertificadoController::
 $router->post('/infraestrutura/certificado/letsencrypt', [CertificadoController::class, 'letsencryptAplicar']);
 $router->get('/infraestrutura/certificado/importar', [CertificadoController::class, 'importarForm']);
 $router->post('/infraestrutura/certificado/importar', [CertificadoController::class, 'importarSalvar']);
+$router->post('/infraestrutura/certificado/alerta-email', [CertificadoController::class, 'alertaEmailSalvar']);
 
 $router->get('/infraestrutura/dependencias', [DependenciaController::class, 'index']);
 $router->post('/infraestrutura/dependencias/instalar', [DependenciaController::class, 'instalar']);

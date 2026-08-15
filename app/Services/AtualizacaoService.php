@@ -181,6 +181,7 @@ class AtualizacaoService
 
         if ($sucesso) {
             $this->garantirCronsColeta();
+            $this->garantirCronCertificado();
         }
 
         $commitDepois = $this->commitAtual();
@@ -258,6 +259,23 @@ class AtualizacaoService
             'Grava os IPs bloqueados/liberados registrados pelas regras do firewall, para o ranking de IPs (Infraestrutura > Firewall > Ao Vivo).',
             '*/2 * * * *',
             '/usr/bin/php ' . $this->repoDir() . '/scripts/system/coletar_logs_iptables.php'
+        );
+    }
+
+    /**
+     * Cron nativo que confere diariamente se o certificado HTTPS esta perto
+     * de vencer (ou ja vencido) e manda e-mail se estiver -- mesma logica
+     * idempotente de garantirCronsColeta() (nao duplica se o comando ja
+     * existir), pra rodar automaticamente em qualquer servidor que passe
+     * por "Aplicar", sem precisar de nenhuma acao manual por cliente.
+     */
+    public function garantirCronCertificado(): void
+    {
+        $this->garantirCronJob(
+            'Verificar vencimento do certificado',
+            'Manda e-mail (se configurado em Infraestrutura > Certificado Digital) quando o certificado HTTPS estiver a 15 dias ou menos de vencer, ou ja vencido.',
+            '@daily',
+            'php ' . $this->repoDir() . '/rd certificado:verificar'
         );
     }
 
