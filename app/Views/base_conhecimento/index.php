@@ -295,7 +295,19 @@ $abaAtiva = in_array($_GET['aba'] ?? '', $abasValidas, true) ? $_GET['aba'] : ($
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-core.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/prismjs@1/plugins/autoloader/prism-autoloader.min.js"></script>
+<?php
+// Carrega cada linguagem direto (sem o plugin "autoloader") -- ele busca a
+// gramática por rede DE FORMA ASSÍNCRONA e depois re-executa o highlight
+// sozinho, por fora do código desta tela; isso corrompia o bloco de
+// comando (o <code> chegava a sumir do HTML salvo). Ordem importa: cada
+// linguagem carrega DEPOIS da(s) que ela depende (ver mapa de dependências
+// oficial do Prism -- javascript/csharp/java precisam de clike, php
+// precisa de markup-templating que precisa de markup, aspnet precisa de
+// markup + csharp).
+foreach (['markup', 'clike', 'css', 'javascript', 'bash', 'markup-templating', 'php', 'python', 'sql', 'powershell', 'perl', 'json', 'csharp', 'java', 'aspnet'] as $componentePrism):
+?>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-<?= $componentePrism ?>.min.js"></script>
+<?php endforeach; ?>
 <script src="https://cdn.jsdelivr.net/npm/prismjs@1/plugins/toolbar/prism-toolbar.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/prismjs@1/plugins/copy-to-clipboard/prism-copy-to-clipboard.min.js"></script>
 <script>
@@ -370,24 +382,6 @@ document.querySelectorAll('#abasKb button[data-bs-toggle="tab"]').forEach(functi
 
     const campoOculto = document.getElementById('kbCampoSolucaoOculto');
     const form = editor.closest('form');
-
-    // O plugin de toolbar/copiar do Prism as vezes resolve de forma
-    // assiassincrona (o proprio Prism agenda parte do trabalho pro
-    // proximo tick) -- uma checagem logo depois de chamar
-    // highlightElement() podia rodar CEDO DEMAIS, antes do toolbar
-    // aparecer, e nao pegar nada pra desfazer. MutationObserver cobre
-    // qualquer timing: pega a insercao do wrapper ".code-toolbar" assim
-    // que ela acontecer de verdade, nao importa quando.
-    new MutationObserver(function (mutacoes) {
-        mutacoes.forEach(function (m) {
-            m.addedNodes.forEach(function (no) {
-                if (no.nodeType === Node.ELEMENT_NODE && no.classList && no.classList.contains('code-toolbar')) {
-                    const pre = no.querySelector('pre');
-                    if (pre) { no.replaceWith(pre); }
-                }
-            });
-        });
-    }).observe(editor, { childList: true, subtree: true });
 
     // document.execCommand(...) e' API antiga e inconsistente entre
     // navegadores especificamente pra preservar quebra de linha em texto
@@ -479,25 +473,22 @@ document.querySelectorAll('#abasKb button[data-bs-toggle="tab"]').forEach(functi
 
     function kbRealcarCodigo(elementoCode, manterCursor) {
         if (!window.Prism) return;
+
+        const m = elementoCode.className.match(/language-([\w-]+)/);
+        const lang = m ? m[1] : null;
+        const gramatica = lang ? Prism.languages[lang] : null;
+        if (!gramatica) return; // linguagem nao carregada -- nao mexe, deixa como texto puro mesmo
+
+        // Prism.highlight() e' uma funcao "pura": recebe o texto e devolve
+        // uma STRING com o HTML colorido, sem tocar em nada do DOM sozinha
+        // (diferente de Prism.highlightElement(), que dispara os hooks
+        // globais de plugins -- foi isso que corrompia o bloco de comando
+        // aqui dentro do editor: o plugin "autoloader" refaz o highlight
+        // sozinho, de forma assincrona, brigando com o cursor/conteudo
+        // que o usuario ainda estava digitando). So o innerHTML e' meu,
+        // ninguem mais mexe.
         const offset = manterCursor ? kbOffsetDoCursor(elementoCode) : null;
-        elementoCode.textContent = elementoCode.textContent; // normaliza (remove spans antigos do Prism)
-        Prism.highlightElement(elementoCode);
-
-        // O plugin de toolbar/copiar do Prism (carregado global, pra
-        // funcionar na exibicao dos artigos salvos) reage a QUALQUER
-        // highlight, inclusive estes daqui de dentro do editor -- ele
-        // embrulha o <pre> num <div class="code-toolbar"> e pendura um
-        // botao "Copy" do lado, DENTRO da area editavel. Sem desfazer
-        // isso na hora, esse HTML do botao vira parte do que e' salvo
-        // (o "Copy" aparecia como texto de verdade dentro do artigo).
-        // So o highlight() final na exibicao (fora do editor) deve manter
-        // o toolbar de verdade.
-        const pre = elementoCode.closest('pre');
-        const wrapper = pre ? pre.parentElement : null;
-        if (wrapper && wrapper.classList.contains('code-toolbar')) {
-            wrapper.replaceWith(pre);
-        }
-
+        elementoCode.innerHTML = Prism.highlight(elementoCode.textContent, gramatica, lang);
         if (manterCursor) {
             kbRestaurarCursor(elementoCode, offset);
         }
