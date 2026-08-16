@@ -368,6 +368,24 @@ document.querySelectorAll('#abasKb button[data-bs-toggle="tab"]').forEach(functi
     const campoOculto = document.getElementById('kbCampoSolucaoOculto');
     const form = editor.closest('form');
 
+    // O plugin de toolbar/copiar do Prism as vezes resolve de forma
+    // assiassincrona (o proprio Prism agenda parte do trabalho pro
+    // proximo tick) -- uma checagem logo depois de chamar
+    // highlightElement() podia rodar CEDO DEMAIS, antes do toolbar
+    // aparecer, e nao pegar nada pra desfazer. MutationObserver cobre
+    // qualquer timing: pega a insercao do wrapper ".code-toolbar" assim
+    // que ela acontecer de verdade, nao importa quando.
+    new MutationObserver(function (mutacoes) {
+        mutacoes.forEach(function (m) {
+            m.addedNodes.forEach(function (no) {
+                if (no.nodeType === Node.ELEMENT_NODE && no.classList && no.classList.contains('code-toolbar')) {
+                    const pre = no.querySelector('pre');
+                    if (pre) { no.replaceWith(pre); }
+                }
+            });
+        });
+    }).observe(editor, { childList: true, subtree: true });
+
     // Cola sempre como texto puro -- sem isso, colar algo com marcacao
     // (copiado de um site, de um editor de codigo, ate de outro programa)
     // faz o navegador inserir como ELEMENTOS DE VERDADE dentro do editor
@@ -377,7 +395,26 @@ document.querySelectorAll('#abasKb button[data-bs-toggle="tab"]').forEach(functi
     editor.addEventListener('paste', function (e) {
         e.preventDefault();
         const texto = (e.clipboardData || window.clipboardData).getData('text/plain');
-        document.execCommand('insertText', false, texto);
+
+        // document.execCommand('insertText', ...) e' API antiga e
+        // inconsistente entre navegadores especificamente pra preservar
+        // quebra de linha em texto colado (alguns "achatam" tudo numa
+        // linha so) -- insere o texto como UM UNICO no de texto direto
+        // via Range, sem depender do execCommand pra nada. As quebras
+        // de linha (\n) dentro desse texto ficam como caracteres reais;
+        // dentro de um bloco de comando (<pre>, white-space:pre) isso ja
+        // e suficiente pra aparecer como linhas separadas de verdade.
+        const sel = window.getSelection();
+        if (!sel.rangeCount) return;
+        const range = sel.getRangeAt(0);
+        range.deleteContents();
+        const noTexto = document.createTextNode(texto);
+        range.insertNode(noTexto);
+        range.setStartAfter(noTexto);
+        range.setEndAfter(noTexto);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
     });
 
     // -- Colorir ao vivo enquanto digita dentro de um bloco de comando --
