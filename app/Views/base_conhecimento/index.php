@@ -389,24 +389,20 @@ document.querySelectorAll('#abasKb button[data-bs-toggle="tab"]').forEach(functi
         });
     }).observe(editor, { childList: true, subtree: true });
 
-    // Cola sempre como texto puro -- sem isso, colar algo com marcacao
-    // (copiado de um site, de um editor de codigo, ate de outro programa)
-    // faz o navegador inserir como ELEMENTOS DE VERDADE dentro do editor
-    // (ex: <html>, <head>, <title> viram nos reais, nao texto), e o
-    // sanitizador do servidor entao remove essas tags (nao sao permitidas)
-    // mantendo so o texto de dentro -- perde a formatacao/estrutura toda.
-    editor.addEventListener('paste', function (e) {
-        e.preventDefault();
-        const texto = (e.clipboardData || window.clipboardData).getData('text/plain');
-
-        // document.execCommand('insertText', ...) e' API antiga e
-        // inconsistente entre navegadores especificamente pra preservar
-        // quebra de linha em texto colado (alguns "achatam" tudo numa
-        // linha so) -- insere o texto como UM UNICO no de texto direto
-        // via Range, sem depender do execCommand pra nada. As quebras
-        // de linha (\n) dentro desse texto ficam como caracteres reais;
-        // dentro de um bloco de comando (<pre>, white-space:pre) isso ja
-        // e suficiente pra aparecer como linhas separadas de verdade.
+    // document.execCommand(...) e' API antiga e inconsistente entre
+    // navegadores especificamente pra preservar quebra de linha em texto
+    // inserido programaticamente (colar, ou o Enter dentro de um bloco de
+    // comando) -- as vezes "achata" tudo numa linha so. Insere sempre como
+    // UM UNICO no de texto direto via Range, sem depender do execCommand
+    // pra nada. As quebras de linha (\n) ficam como caracteres reais;
+    // dentro de um bloco de comando (<pre>, white-space:pre) isso ja e
+    // suficiente pra aparecer como linhas separadas de verdade.
+    //
+    // insertNode() e' manipulacao direta do DOM -- ao contrario de digitar
+    // ou colar de verdade, NAO dispara o evento "input" sozinho. Sem
+    // disparar isso manualmente, o realce ao vivo (que escuta "input" pra
+    // saber quando colorir) nunca roda pro texto colado/inserido assim.
+    function kbInserirTextoNoCursor(texto) {
         const sel = window.getSelection();
         if (!sel.rangeCount) return;
         const range = sel.getRangeAt(0);
@@ -418,6 +414,20 @@ document.querySelectorAll('#abasKb button[data-bs-toggle="tab"]').forEach(functi
         range.collapse(true);
         sel.removeAllRanges();
         sel.addRange(range);
+
+        editor.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    // Cola sempre como texto puro -- sem isso, colar algo com marcacao
+    // (copiado de um site, de um editor de codigo, ate de outro programa)
+    // faz o navegador inserir como ELEMENTOS DE VERDADE dentro do editor
+    // (ex: <html>, <head>, <title> viram nos reais, nao texto), e o
+    // sanitizador do servidor entao remove essas tags (nao sao permitidas)
+    // mantendo so o texto de dentro -- perde a formatacao/estrutura toda.
+    editor.addEventListener('paste', function (e) {
+        e.preventDefault();
+        const texto = (e.clipboardData || window.clipboardData).getData('text/plain');
+        kbInserirTextoNoCursor(texto);
     });
 
     // -- Colorir ao vivo enquanto digita dentro de um bloco de comando --
@@ -518,7 +528,7 @@ document.querySelectorAll('#abasKb button[data-bs-toggle="tab"]').forEach(functi
         if (!kbBlocoDeCodigoAtual()) return;
 
         e.preventDefault();
-        document.execCommand('insertText', false, '\n');
+        kbInserirTextoNoCursor('\n');
     });
 
     document.getElementById('kbNegrito').addEventListener('click', function () {
