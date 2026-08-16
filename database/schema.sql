@@ -1018,4 +1018,75 @@ CREATE TABLE IF NOT EXISTS `vpn_wireguard_trafego_historico` (
   KEY `idx_vpn_wg_trafego_peer` (`peer_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+-- ----------------------------------------------------------------
+-- base_conhecimento
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `base_conhecimento` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `titulo` varchar(255) NOT NULL,
+  `problema` text DEFAULT NULL,
+  `solucao` text NOT NULL,
+  `visibilidade` enum('privado','publico') NOT NULL DEFAULT 'privado',
+  `categoria_id` int(11) DEFAULT NULL,
+  `subcategoria_id` int(11) DEFAULT NULL,
+  `central_id` int(11) DEFAULT NULL,
+  `status_central` enum('nao_enviado','proposto','aprovado','rejeitado') NOT NULL DEFAULT 'nao_enviado',
+  `usuario_id` int(11) DEFAULT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  `atualizado_em` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_bc_visibilidade` (`visibilidade`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- base_conhecimento_categorias
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `base_conhecimento_categorias` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nome` varchar(100) NOT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_bc_categoria_nome` (`nome`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- base_conhecimento_subcategorias
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `base_conhecimento_subcategorias` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `categoria_id` int(11) NOT NULL,
+  `nome` varchar(100) NOT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_bc_subcategoria_categoria` (`categoria_id`),
+  UNIQUE KEY `uq_bc_subcategoria_nome` (`categoria_id`, `nome`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- base_conhecimento_imagens
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `base_conhecimento_imagens` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `artigo_id` int(11) NOT NULL,
+  `arquivo` varchar(255) NOT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_bc_imagem_artigo` (`artigo_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- base_conhecimento_publica
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `base_conhecimento_publica` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `central_id` int(11) NOT NULL,
+  `titulo` varchar(255) NOT NULL,
+  `categoria` varchar(100) DEFAULT NULL,
+  `problema` text DEFAULT NULL,
+  `solucao` text NOT NULL,
+  `sincronizado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_bc_publica_central_id` (`central_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET FOREIGN_KEY_CHECKS=1;

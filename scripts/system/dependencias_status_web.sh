@@ -34,3 +34,11 @@ for CHAVE in "${!COMANDOS[@]}"; do
     echo "${CHAVE}|0"
   fi
 done
+
+# php-xml e' extensao do PHP, nao comando de linha -- checagem diferente
+# de tudo no array COMANDOS acima (nao tem "php-xml" executavel).
+if php -m 2>/dev/null | grep -qi '^dom$'; then
+  echo "php-xml|1"
+else
+  echo "php-xml|0"
+fi

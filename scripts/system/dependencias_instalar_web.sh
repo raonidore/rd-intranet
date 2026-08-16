@@ -33,6 +33,7 @@ declare -A PACOTES=(
   [qrencode]="qrencode"
   [snmp]="snmp"
   [rclone]="rclone"
+  [php-xml]="php-xml"
 )
 
 PACOTE="${PACOTES[$CHAVE]:-}"
@@ -64,5 +65,12 @@ if ! apt-get install -y -qq "$PACOTE" >/tmp/rd_dep_out_$$ 2>/tmp/rd_dep_err_$$; 
   exit 1
 fi
 rm -f /tmp/rd_dep_out_$$ /tmp/rd_dep_err_$$
+
+# Extensao do PHP (php-xml) so passa a existir de verdade pro Apache depois
+# de reiniciar o processo -- diferente dos outros itens desta lista
+# (binarios de linha de comando), que ja funcionam na hora.
+if [ "$CHAVE" = "php-xml" ]; then
+  systemctl restart apache2 >/dev/null 2>&1
+fi
 
 echo "{\"success\":true,\"message\":\"${PACOTE} instalado com sucesso.\"}"

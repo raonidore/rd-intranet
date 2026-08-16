@@ -670,8 +670,100 @@ class AtivoService
         NotificationService::success('Logo removida.');
     }
 
+    /*
+     |---------------------------------------------------------
+     | Logo DO SISTEMA (o "RD Intranet" no topo do menu -- imagem própria
+     | da instalação, não do cliente que fica logo abaixo). Padrão embutido
+     | no repo (public/assets/img/logord.png, versionado no git) -- fica
+     | de propósito FORA dele, em storage/uploads (gitignored): se o
+     | upload sobrescrevesse o arquivo versionado direto, o próximo "git
+     | pull" (Administração > Atualizações) travaria por causa da mudança
+     | local não commitada. Sem upload próprio, cai no arquivo padrão.
+     |---------------------------------------------------------
+     */
+
+    private const LOGO_SISTEMA_LARGURA_MAX = 480;
+    private const LOGO_SISTEMA_ALTURA_MAX = 480;
+
+    public static function caminhoLogoSistema(): string
+    {
+        return __DIR__ . '/../../storage/uploads/sistema/logo';
+    }
+
+    public static function caminhoLogoSistemaPadrao(): string
+    {
+        return __DIR__ . '/../../public/assets/img/logord.png';
+    }
+
+    public function logoSistemaConfigurada(): bool
+    {
+        return is_file(self::caminhoLogoSistema());
+    }
+
+    public function logoSistemaMime(): string
+    {
+        $extensao = ConfigService::get('sistema_logo_ext', 'png') ?: 'png';
+
+        return self::MIME_LOGO[$extensao] ?? 'image/png';
+    }
+
+    public function salvarLogoSistema(string $caminhoTemporario, string $nomeOriginal): bool
+    {
+        $extensao = strtolower(pathinfo($nomeOriginal, PATHINFO_EXTENSION));
+        if (!in_array($extensao, self::EXTENSOES_LOGO_VALIDAS, true)) {
+            NotificationService::error('A logo precisa ser .jpg, .jpeg ou .png.');
+            return false;
+        }
+
+        if (filesize($caminhoTemporario) > 3 * 1024 * 1024) {
+            NotificationService::error('Arquivo muito grande (máximo 3MB).');
+            return false;
+        }
+
+        $destino = self::caminhoLogoSistema();
+        $pasta = dirname($destino);
+        if (!is_dir($pasta) && !@mkdir($pasta, 0777, true) && !is_dir($pasta)) {
+            NotificationService::error('Não foi possível preparar a pasta de armazenamento no servidor.');
+            return false;
+        }
+
+        $extensaoFinal = $extensao;
+
+        if (extension_loaded('gd')) {
+            if (!$this->redimensionarImagemLogo($caminhoTemporario, $destino, self::LOGO_SISTEMA_LARGURA_MAX, self::LOGO_SISTEMA_ALTURA_MAX)) {
+                NotificationService::error('Arquivo não é uma imagem válida.');
+                return false;
+            }
+            $extensaoFinal = 'png';
+        } elseif (!@copy($caminhoTemporario, $destino)) {
+            NotificationService::error('Não foi possível salvar a logo no servidor.');
+            return false;
+        }
+
+        ConfigService::set('sistema_logo_ext', $extensaoFinal);
+
+        AuditService::registrar('Administração', 'Dados da Empresa', 'Logo do sistema (RD Intranet) enviada/atualizada.');
+        NotificationService::success('Logo do sistema salva.');
+
+        return true;
+    }
+
+    public function removerLogoSistema(): void
+    {
+        @unlink(self::caminhoLogoSistema());
+        ConfigService::set('sistema_logo_ext', '');
+
+        AuditService::registrar('Administração', 'Dados da Empresa', 'Logo do sistema removida -- voltou ao padrão.');
+        NotificationService::success('Logo do sistema removida, voltou ao padrão.');
+    }
+
     /** Mesmo padrão 320x120 do canvas do navegador (não amplia, mantém proporção), sempre gravando PNG com transparência preservada. */
     private function redimensionarLogoEmpresa(string $origem, string $destino): bool
+    {
+        return $this->redimensionarImagemLogo($origem, $destino, self::LOGO_LARGURA_MAX, self::LOGO_ALTURA_MAX);
+    }
+
+    private function redimensionarImagemLogo(string $origem, string $destino, int $larguraMax, int $alturaMax): bool
     {
         $info = @getimagesize($origem);
         if ($info === false) {
@@ -690,7 +782,7 @@ class AtivoService
             return false;
         }
 
-        $escala = min(1, self::LOGO_LARGURA_MAX / $largura, self::LOGO_ALTURA_MAX / $altura);
+        $escala = min(1, $larguraMax / $largura, $alturaMax / $altura);
         $larguraFinal = max(1, (int)round($largura * $escala));
         $alturaFinal = max(1, (int)round($altura * $escala));
 

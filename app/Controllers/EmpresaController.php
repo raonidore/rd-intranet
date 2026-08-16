@@ -24,6 +24,7 @@ class EmpresaController extends Controller
             'nome' => $this->ativoService->nomeEmpresa(),
             'sigla' => $this->ativoService->siglaEmpresa(),
             'logoConfigurada' => $this->ativoService->logoEmpresaConfigurada(),
+            'logoSistemaConfigurada' => $this->ativoService->logoSistemaConfigurada(),
         ]);
     }
 
@@ -78,6 +79,49 @@ class EmpresaController extends Controller
 
         $caminho = AtivoService::caminhoLogoEmpresa();
         header('Content-Type: ' . $this->ativoService->logoEmpresaMime());
+        header('Content-Length: ' . filesize($caminho));
+        header('Cache-Control: private, max-age=300');
+        readfile($caminho);
+    }
+
+    public function logoSistemaUpload(): void
+    {
+        AuthMiddleware::checkAdmin();
+
+        $arquivo = $_FILES['logo'] ?? null;
+
+        if (!$arquivo || $arquivo['error'] !== UPLOAD_ERR_OK) {
+            NotificationService::error('Falha no upload do arquivo.');
+        } else {
+            $this->ativoService->salvarLogoSistema($arquivo['tmp_name'], $arquivo['name']);
+        }
+
+        header('Location: ' . url('/administracao/empresa'));
+        exit;
+    }
+
+    public function logoSistemaRemover(): void
+    {
+        AuthMiddleware::checkAdmin();
+
+        $this->ativoService->removerLogoSistema();
+
+        header('Location: ' . url('/administracao/empresa'));
+        exit;
+    }
+
+    /** Servida no <img> do topo do menu lateral -- mesma lógica de acesso da logo da empresa. */
+    public function logoSistema(): void
+    {
+        AuthMiddleware::check();
+
+        if (!$this->ativoService->logoSistemaConfigurada()) {
+            http_response_code(404);
+            return;
+        }
+
+        $caminho = AtivoService::caminhoLogoSistema();
+        header('Content-Type: ' . $this->ativoService->logoSistemaMime());
         header('Content-Length: ' . filesize($caminho));
         header('Cache-Control: private, max-age=300');
         readfile($caminho);

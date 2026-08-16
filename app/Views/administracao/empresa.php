@@ -33,6 +33,32 @@ use App\Components\Alert;
 
 <div class="card border-0 shadow-sm mt-3" style="max-width:560px">
     <div class="card-body">
+        <label class="form-label">Logo do sistema</label>
+        <div class="form-text mb-2">
+            A imagem grande no topo do menu, acima de "Painel Administrativo" -- é a identidade visual do próprio RD Intranet
+            (diferente da logo da empresa abaixo, que é do cliente). Opcional; sem enviar nada, fica a padrão.
+            Redimensionada automaticamente pro padrão <strong>480&times;480px</strong> (mantendo a proporção, sem cortar).
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center border rounded p-2 mb-2">
+            <img src="<?= $logoSistemaConfigurada ? url('/administracao/empresa/logo-sistema') : url('/assets/img/logord.png') ?>" alt="Logo do sistema" style="max-height:60px;max-width:220px">
+            <?php if ($logoSistemaConfigurada): ?>
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="document.getElementById('formRemoverLogoSistema').submit()" title="Voltar pra padrão"><i class="bi bi-trash"></i></button>
+            <?php endif; ?>
+        </div>
+        <?php if ($logoSistemaConfigurada): ?>
+            <form method="post" action="<?= url('/administracao/empresa/logo-sistema/remover') ?>" id="formRemoverLogoSistema" class="d-none"></form>
+        <?php endif; ?>
+
+        <form method="post" action="<?= url('/administracao/empresa/logo-sistema/upload') ?>" enctype="multipart/form-data" class="d-flex gap-2" id="formUploadLogoSistema">
+            <input type="file" name="logo" id="inputLogoSistema" accept=".jpg,.jpeg,.png" class="form-control form-control-sm" required>
+            <button type="submit" class="btn btn-sm btn-outline-secondary text-nowrap"><i class="bi bi-upload"></i> <?= $logoSistemaConfigurada ? 'Trocar' : 'Enviar' ?></button>
+        </form>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mt-3" style="max-width:560px">
+    <div class="card-body">
         <label class="form-label">Logo da empresa</label>
         <div class="form-text mb-2">
             Aparece pequena, abaixo de "RD Intranet / Painel Administrativo" no menu lateral. Opcional.
@@ -55,11 +81,8 @@ use App\Components\Alert;
 </div>
 
 <script>
-(function () {
-    var LARGURA_MAX = 320;
-    var ALTURA_MAX = 120;
-
-    var input = document.getElementById('inputLogoEmpresa');
+function kbConfigurarRedimensionamentoLogo(idInput, larguraMax, alturaMax) {
+    var input = document.getElementById(idInput);
     if (!input || typeof HTMLCanvasElement === 'undefined') return;
 
     input.addEventListener('change', function () {
@@ -70,7 +93,7 @@ use App\Components\Alert;
         leitor.onload = function (eLeitor) {
             var imagem = new Image();
             imagem.onload = function () {
-                var escala = Math.min(1, LARGURA_MAX / imagem.width, ALTURA_MAX / imagem.height);
+                var escala = Math.min(1, larguraMax / imagem.width, alturaMax / imagem.height);
                 var largura = Math.max(1, Math.round(imagem.width * escala));
                 var altura = Math.max(1, Math.round(imagem.height * escala));
 
@@ -92,7 +115,10 @@ use App\Components\Alert;
         };
         leitor.readAsDataURL(arquivo);
     });
-})();
+}
+
+kbConfigurarRedimensionamentoLogo('inputLogoSistema', 480, 480);
+kbConfigurarRedimensionamentoLogo('inputLogoEmpresa', 320, 120);
 </script>
 
 <?php

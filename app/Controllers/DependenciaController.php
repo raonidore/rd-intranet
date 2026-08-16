@@ -18,7 +18,7 @@ class DependenciaController extends Controller
 
     public function index(): void
     {
-        AuthMiddleware::checkModulo('infra_dependencias');
+        AuthMiddleware::checkAdmin();
 
         $this->view('infrastructure/dependencias', [
             'itens' => $this->service->checklist(),
@@ -27,7 +27,7 @@ class DependenciaController extends Controller
 
     public function instalar(): void
     {
-        AuthMiddleware::checkModulo('infra_dependencias');
+        AuthMiddleware::checkAdmin();
         header('Content-Type: application/json');
 
         $chave = trim($_POST['chave'] ?? '');

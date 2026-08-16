@@ -31,6 +31,8 @@ use App\Controllers\DbConsoleController;
 use App\Controllers\CronController;
 use App\Controllers\IptablesController;
 use App\Controllers\CertificadoController;
+use App\Controllers\KbController;
+use App\Controllers\IntegracoesController;
 use App\Controllers\DependenciaController;
 use App\Controllers\SpeedtestController;
 use App\Controllers\DdnsController;
@@ -215,6 +217,21 @@ $router->get('/infraestrutura/certificado/importar', [CertificadoController::cla
 $router->post('/infraestrutura/certificado/importar', [CertificadoController::class, 'importarSalvar']);
 $router->post('/infraestrutura/certificado/alerta-email', [CertificadoController::class, 'alertaEmailSalvar']);
 
+$router->get('/base-conhecimento', [KbController::class, 'index']);
+$router->post('/base-conhecimento/criar', [KbController::class, 'criar']);
+$router->post('/base-conhecimento/atualizar', [KbController::class, 'atualizar']);
+$router->post('/base-conhecimento/excluir', [KbController::class, 'excluir']);
+$router->get('/base-conhecimento/imagem', [KbController::class, 'imagem']);
+$router->post('/base-conhecimento/categoria/criar', [KbController::class, 'categoriaCriar']);
+$router->post('/base-conhecimento/categoria/excluir', [KbController::class, 'categoriaExcluir']);
+$router->post('/base-conhecimento/subcategoria/criar', [KbController::class, 'subcategoriaCriar']);
+$router->post('/base-conhecimento/subcategoria/excluir', [KbController::class, 'subcategoriaExcluir']);
+$router->post('/base-conhecimento/sincronizar', [KbController::class, 'sincronizar']);
+
+$router->get('/administracao/integracoes', [IntegracoesController::class, 'index']);
+$router->get('/administracao/integracoes/base-conhecimento', [IntegracoesController::class, 'baseConhecimentoForm']);
+$router->post('/administracao/integracoes/base-conhecimento', [IntegracoesController::class, 'baseConhecimentoSalvar']);
+
 $router->get('/infraestrutura/dependencias', [DependenciaController::class, 'index']);
 $router->post('/infraestrutura/dependencias/instalar', [DependenciaController::class, 'instalar']);
 
@@ -389,6 +406,9 @@ $router->post('/administracao/empresa/salvar', [EmpresaController::class, 'salva
 $router->post('/administracao/empresa/logo/upload', [EmpresaController::class, 'logoUpload']);
 $router->post('/administracao/empresa/logo/remover', [EmpresaController::class, 'logoRemover']);
 $router->get('/administracao/empresa/logo', [EmpresaController::class, 'logo']);
+$router->post('/administracao/empresa/logo-sistema/upload', [EmpresaController::class, 'logoSistemaUpload']);
+$router->post('/administracao/empresa/logo-sistema/remover', [EmpresaController::class, 'logoSistemaRemover']);
+$router->get('/administracao/empresa/logo-sistema', [EmpresaController::class, 'logoSistema']);
 
 $router->get('/administracao/email', [EmailConfigController::class, 'index']);
 $router->post('/administracao/email/salvar', [EmailConfigController::class, 'salvar']);

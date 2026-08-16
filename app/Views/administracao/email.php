@@ -8,6 +8,9 @@ use App\Components\Alert;
 
 <div class="mb-4">
     <h4 class="mb-1"><i class="bi bi-envelope me-1"></i> E-mail (SMTP)</h4>
+    <small class="text-muted d-block mb-1">
+        <a href="<?= url('/administracao/integracoes') ?>"><i class="bi bi-arrow-left"></i> Integrações</a>
+    </small>
     <small class="text-muted">
         Usado pelo módulo Backup em Nuvem para enviar relatório diário e alerta de falha
         (ativados por destino em <a href="<?= url('/backup/configuracao') ?>">Backup &gt; Configuração</a>).

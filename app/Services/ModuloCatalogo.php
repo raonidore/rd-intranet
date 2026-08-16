@@ -22,7 +22,6 @@ class ModuloCatalogo
         'infra_cron' => ['label' => 'Cron', 'grupo' => 'Infraestrutura'],
         'infra_iptables' => ['label' => 'Firewall (iptables)', 'grupo' => 'Infraestrutura'],
         'infra_certificado' => ['label' => 'Certificado Digital', 'grupo' => 'Infraestrutura'],
-        'infra_dependencias' => ['label' => 'Checklist de Dependências', 'grupo' => 'Infraestrutura'],
         'infra_speedtest' => ['label' => 'Teste de Velocidade', 'grupo' => 'Infraestrutura'],
         'infra_ddns' => ['label' => 'DNS Dinâmico', 'grupo' => 'Infraestrutura'],
         'infra_tuneis' => ['label' => 'Túneis', 'grupo' => 'Infraestrutura'],
@@ -62,6 +61,8 @@ class ModuloCatalogo
         'entra_perfis_configuracao' => ['label' => 'Entra - Perfis de Configuração (Intune)', 'grupo' => 'Microsoft Entra'],
         'backup_configuracao' => ['label' => 'Configuração', 'grupo' => 'Backup'],
         'backup_historico' => ['label' => 'Histórico', 'grupo' => 'Backup'],
+        'base_conhecimento_visualizar' => ['label' => 'Base de Conhecimento - Visualizar', 'grupo' => 'Base de Conhecimento'],
+        'base_conhecimento_criar' => ['label' => 'Base de Conhecimento - Criar/Gerenciar', 'grupo' => 'Base de Conhecimento'],
     ];
 
     public static function chaves(): array
@@ -82,7 +83,29 @@ class ModuloCatalogo
             $grupos[$info['grupo']][$chave] = $info['label'];
         }
 
+        ksort($grupos, SORT_FLAG_CASE | SORT_STRING);
+
         return $grupos;
+    }
+
+    /** Mesmo ícone usado pelo grupo no menu lateral (app/Views/layouts/main.php) -- só pra dar identidade visual em telas que listam os grupos (Novo Usuário, Módulos). */
+    private const ICONES_GRUPO = [
+        'Apache' => 'bi-server',
+        'Ativos' => 'bi-boxes',
+        'Backup' => 'bi-cloud-arrow-up',
+        'Banco de Dados' => 'bi-database',
+        'Base de Conhecimento' => 'bi-journal-text',
+        'Infraestrutura' => 'bi-diagram-3',
+        'Microsoft Entra' => 'bi-microsoft',
+        'Samba' => 'bi-hdd-network-fill',
+        'Segurança' => 'bi-shield-lock',
+        'SSH' => 'bi-hdd-network',
+        'VPN' => 'bi-shield-shaded',
+    ];
+
+    public static function iconeDoGrupo(string $grupo): string
+    {
+        return self::ICONES_GRUPO[$grupo] ?? 'bi-grid-3x3-gap';
     }
 
     /*
@@ -97,7 +120,7 @@ class ModuloCatalogo
      */
 
     public const GRUPOS_TOGGLEAVEIS = [
-        'Apache', 'Banco de Dados', 'Ativos', 'Infraestrutura', 'VPN', 'Samba', 'Segurança', 'Microsoft Entra', 'Backup', 'SSH',
+        'Apache', 'Banco de Dados', 'Ativos', 'Infraestrutura', 'VPN', 'Samba', 'Segurança', 'Microsoft Entra', 'Backup', 'SSH', 'Base de Conhecimento',
     ];
 
     /** Grupos que nascem desligados em instalações novas -- opt-in, não fazem parte do uso típico. */

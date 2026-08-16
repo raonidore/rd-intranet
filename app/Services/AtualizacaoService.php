@@ -182,6 +182,7 @@ class AtualizacaoService
         if ($sucesso) {
             $this->garantirCronsColeta();
             $this->garantirCronCertificado();
+            $this->garantirCronBaseConhecimento();
         }
 
         $commitDepois = $this->commitAtual();
@@ -276,6 +277,24 @@ class AtualizacaoService
             'Manda e-mail (se configurado em Infraestrutura > Certificado Digital) quando o certificado HTTPS estiver a 15 dias ou menos de vencer, ou ja vencido.',
             '@daily',
             'php ' . $this->repoDir() . '/rd certificado:verificar'
+        );
+    }
+
+    /**
+     * Cron nativo que mantem o cache local da Base de Conhecimento publica
+     * em dia (todos os artigos aprovados de qualquer cliente) e confere o
+     * status dos artigos que esta instalacao propos e ainda estao
+     * pendentes de moderacao. So faz alguma coisa se a base central
+     * estiver configurada (Base de Conhecimento > Base central) --
+     * roda e nao faz nada, sem erro, se nao estiver.
+     */
+    public function garantirCronBaseConhecimento(): void
+    {
+        $this->garantirCronJob(
+            'Sincronizar Base de Conhecimento',
+            'Atualiza o cache local dos artigos publicos aprovados e confere o status dos artigos propostos por esta instalacao.',
+            '@daily',
+            'php ' . $this->repoDir() . '/rd kb:sincronizar'
         );
     }
 

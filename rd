@@ -19,6 +19,7 @@ if (!$comando) {
     echo "  antivirus:verificar     Escaneia os compartilhamentos do Samba em busca de ameaças\n";
     echo "  backup:executar <id>    Roda o backup em nuvem do destino <id> (Backup > Configuração)\n";
     echo "  certificado:verificar   Manda e-mail se o certificado HTTPS estiver perto de vencer/vencido\n";
+    echo "  kb:sincronizar          Atualiza o cache local da Base de Conhecimento pública e confere status dos artigos propostos\n";
     exit;
 }
 
@@ -243,6 +244,17 @@ switch ($comando) {
 
     case 'certificado:verificar':
         $resultado = (new \App\Services\CertificadoService())->verificarVencimento();
+
+        echo ($resultado['success'] ? 'OK: ' : 'ERRO: ') . $resultado['message'] . "\n";
+
+        if (!$resultado['success']) {
+            exit(1);
+        }
+
+        break;
+
+    case 'kb:sincronizar':
+        $resultado = (new \App\Services\KbService())->sincronizar();
 
         echo ($resultado['success'] ? 'OK: ' : 'ERRO: ') . $resultado['message'] . "\n";
 

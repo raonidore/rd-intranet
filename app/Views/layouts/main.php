@@ -4,7 +4,9 @@ use App\Services\AtivoService;
 use App\Services\PermissionService;
 
 $usuarioLogado = $_SESSION['usuario'] ?? ['nome' => 'Usuário'];
-$logoEmpresaConfigurada = (new AtivoService())->logoEmpresaConfigurada();
+$ativoServiceMenu = new AtivoService();
+$logoEmpresaConfigurada = $ativoServiceMenu->logoEmpresaConfigurada();
+$logoSistemaConfigurada = $ativoServiceMenu->logoSistemaConfigurada();
 $titulo = $titulo ?? 'RD Intranet';
 
 $uriAtual = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?? '/';
@@ -32,6 +34,7 @@ $abrirBackup = $rdSecaoAtiva(['/backup']);
 $abrirVpn = $rdSecaoAtiva(['/vpn']);
 $abrirSistema = $rdSecaoAtiva(['/administracao', '/auditoria']);
 $abrirEntra = $rdSecaoAtiva(['/entra']);
+$abrirBaseConhecimento = $rdSecaoAtiva(['/base-conhecimento']);
 
 $abrirHardware = $rdSecaoAtiva(['/infraestrutura/hardware']);
 $abrirRede = $rdSecaoAtiva(['/infraestrutura/rede', '/infraestrutura/servidor/rede']);
@@ -135,7 +138,7 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
 
 <div class="sidebar">
     <div class="p-4 text-center">
-        <img src="<?= url('/assets/img/logord.png') ?>" alt="RD Intranet" style="width:100%; max-width:220px; display:block; margin:0 auto; border-radius:14px;">
+        <img src="<?= $logoSistemaConfigurada ? url('/administracao/empresa/logo-sistema') : url('/assets/img/logord.png') ?>" alt="RD Intranet" style="width:100%; max-width:220px; display:block; margin:0 auto; border-radius:14px;">
         <small class="d-block mt-2" style="color:#cbd5e1;">Painel Administrativo</small>
         <?php if ($logoEmpresaConfigurada): ?>
             <div class="mt-3" style="background:#fff; border-radius:12px; padding:10px 14px; display:inline-block; box-shadow:0 2px 6px rgba(0,0,0,.25);">
@@ -184,32 +187,6 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
             <i class="bi bi-globe me-2"></i> Sites
         </a>
         <?php endif; ?>
-    </div>
-    <?php endif; ?>
-
-    <?php if (PermissionService::temAcesso('bd_mysql')): ?>
-    <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuBancoDados"
-            aria-expanded="<?= $abrirBancoDados ? 'true' : 'false' ?>">
-        <span><i class="bi bi-database me-2"></i>Banco de Dados</span>
-        <i class="bi bi-chevron-right chevron"></i>
-    </button>
-    <div class="collapse <?= $abrirBancoDados ? 'show' : '' ?>" id="menuBancoDados">
-        <a href="<?= url('/banco-dados/conexoes') ?>" class="<?= $uriAtual === '/banco-dados/conexoes' || str_starts_with($uriAtual, '/banco-dados/console') ? 'active' : '' ?>">
-            <i class="bi bi-hdd-stack me-2"></i> Conexões / Console
-        </a>
-    </div>
-    <?php endif; ?>
-
-    <?php if (PermissionService::temAcesso('ssh_conexoes')): ?>
-    <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuSsh"
-            aria-expanded="<?= $abrirSsh ? 'true' : 'false' ?>">
-        <span><i class="bi bi-hdd-network me-2"></i>SSH</span>
-        <i class="bi bi-chevron-right chevron"></i>
-    </button>
-    <div class="collapse <?= $abrirSsh ? 'show' : '' ?>" id="menuSsh">
-        <a href="<?= url('/ssh/conexoes') ?>" class="<?= str_starts_with($uriAtual, '/ssh') ? 'active' : '' ?>">
-            <i class="bi bi-terminal me-2"></i> Conexões
-        </a>
     </div>
     <?php endif; ?>
 
@@ -274,6 +251,58 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
     <?php endif; ?>
 
     <?php
+    $temBackup = PermissionService::temAcesso('backup_configuracao') || PermissionService::temAcesso('backup_historico');
+    ?>
+    <?php if ($temBackup): ?>
+    <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuBackup"
+            aria-expanded="<?= $abrirBackup ? 'true' : 'false' ?>">
+        <span><i class="bi bi-cloud-arrow-up me-2"></i>Backup</span>
+        <i class="bi bi-chevron-right chevron"></i>
+    </button>
+    <div class="collapse <?= $abrirBackup ? 'show' : '' ?>" id="menuBackup">
+        <?php if (PermissionService::temAcesso('backup_configuracao')): ?>
+        <a href="<?= url('/backup/configuracao') ?>" class="<?= $uriAtual === '/backup/configuracao' ? 'active' : '' ?>">
+            <i class="bi bi-gear me-2"></i> Configuração
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('backup_historico')): ?>
+        <a href="<?= url('/backup/historico') ?>" class="<?= $uriAtual === '/backup/historico' ? 'active' : '' ?>">
+            <i class="bi bi-clock-history me-2"></i> Histórico
+        </a>
+        <a href="<?= url('/backup/explorador') ?>" class="<?= $uriAtual === '/backup/explorador' ? 'active' : '' ?>">
+            <i class="bi bi-search me-2"></i> Explorador de Versões
+        </a>
+        <?php endif; ?>
+    </div>
+    <?php endif; ?>
+
+    <?php if (PermissionService::temAcesso('bd_mysql')): ?>
+    <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuBancoDados"
+            aria-expanded="<?= $abrirBancoDados ? 'true' : 'false' ?>">
+        <span><i class="bi bi-database me-2"></i>Banco de Dados</span>
+        <i class="bi bi-chevron-right chevron"></i>
+    </button>
+    <div class="collapse <?= $abrirBancoDados ? 'show' : '' ?>" id="menuBancoDados">
+        <a href="<?= url('/banco-dados/conexoes') ?>" class="<?= $uriAtual === '/banco-dados/conexoes' || str_starts_with($uriAtual, '/banco-dados/console') ? 'active' : '' ?>">
+            <i class="bi bi-hdd-stack me-2"></i> Conexões / Console
+        </a>
+    </div>
+    <?php endif; ?>
+
+    <?php if (PermissionService::temAcesso('base_conhecimento_visualizar')): ?>
+    <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuBaseConhecimento"
+            aria-expanded="<?= $abrirBaseConhecimento ? 'true' : 'false' ?>">
+        <span><i class="bi bi-journal-text me-2"></i>Base de Conhecimento</span>
+        <i class="bi bi-chevron-right chevron"></i>
+    </button>
+    <div class="collapse <?= $abrirBaseConhecimento ? 'show' : '' ?>" id="menuBaseConhecimento">
+        <a href="<?= url('/base-conhecimento') ?>" class="<?= str_starts_with($uriAtual, '/base-conhecimento') ? 'active' : '' ?>">
+            <i class="bi bi-journal-text me-2"></i> Artigos
+        </a>
+    </div>
+    <?php endif; ?>
+
+    <?php
     $temInfra = PermissionService::temAcesso('infra_servidor')
         || PermissionService::temAcesso('infra_hardware')
         || PermissionService::temAcesso('infra_rede')
@@ -281,7 +310,6 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         || PermissionService::temAcesso('infra_cron')
         || PermissionService::temAcesso('infra_iptables')
         || PermissionService::temAcesso('infra_certificado')
-        || PermissionService::temAcesso('infra_dependencias')
         || PermissionService::temAcesso('infra_speedtest')
         || PermissionService::temAcesso('infra_ddns')
         || PermissionService::temAcesso('infra_tuneis');
@@ -374,12 +402,6 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         </a>
         <?php endif; ?>
 
-        <?php if (PermissionService::temAcesso('infra_dependencias')): ?>
-        <a href="<?= url('/infraestrutura/dependencias') ?>" class="<?= str_starts_with($uriAtual, '/infraestrutura/dependencias') ? 'active' : '' ?>">
-            <i class="bi bi-clipboard2-check me-2"></i> Dependências
-        </a>
-        <?php endif; ?>
-
         <?php if (PermissionService::temAcesso('infra_speedtest')): ?>
         <a href="<?= url('/infraestrutura/velocidade') ?>" class="<?= str_starts_with($uriAtual, '/infraestrutura/velocidade') ? 'active' : '' ?>">
             <i class="bi bi-speedometer2 me-2"></i> Teste de Velocidade
@@ -397,6 +419,187 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
             <i class="bi bi-signpost-split me-2"></i> Túneis
         </a>
         <?php endif; ?>
+    </div>
+    <?php endif; ?>
+
+    <?php if (PermissionService::temAcesso('entra_dashboard') || PermissionService::temAcesso('entra_usuarios') || PermissionService::temAcesso('entra_configuracao')): ?>
+    <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuEntra"
+            aria-expanded="<?= $abrirEntra ? 'true' : 'false' ?>">
+        <span><i class="bi bi-microsoft me-2"></i>Microsoft Entra</span>
+        <i class="bi bi-chevron-right chevron"></i>
+    </button>
+    <div class="collapse <?= $abrirEntra ? 'show' : '' ?>" id="menuEntra">
+        <?php if (PermissionService::temAcesso('entra_dashboard')): ?>
+        <a href="<?= url('/entra/dashboard') ?>" class="<?= $uriAtual === '/entra/dashboard' ? 'active' : '' ?>">
+            <i class="bi bi-speedometer2 me-2"></i> Dashboard
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('entra_usuarios')): ?>
+        <a href="<?= url('/entra/usuarios') ?>" class="<?= str_starts_with($uriAtual, '/entra/usuarios') ? 'active' : '' ?>">
+            <i class="bi bi-people me-2"></i> Usuários
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('entra_usuarios') && PermissionService::temAcesso('ativos_novo')): ?>
+        <a href="<?= url('/entra/acesso-maquinas') ?>" class="<?= str_starts_with($uriAtual, '/entra/acesso-maquinas') ? 'active' : '' ?>">
+            <i class="bi bi-shield-lock me-2"></i> Acesso às Máquinas
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('entra_dispositivos')): ?>
+        <a href="<?= url('/entra/dispositivos') ?>" class="<?= str_starts_with($uriAtual, '/entra/dispositivos') ? 'active' : '' ?>">
+            <i class="bi bi-laptop me-2"></i> Dispositivos (Intune)
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('entra_perfis_configuracao')): ?>
+        <a href="<?= url('/entra/perfis-configuracao') ?>" class="<?= str_starts_with($uriAtual, '/entra/perfis-configuracao') ? 'active' : '' ?>">
+            <i class="bi bi-sliders me-2"></i> Perfis de Configuração
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('entra_configuracao')): ?>
+        <a href="<?= url('/entra/configuracao') ?>" class="<?= str_starts_with($uriAtual, '/entra/configuracao') ? 'active' : '' ?>">
+            <i class="bi bi-gear me-2"></i> Configuração
+        </a>
+        <?php endif; ?>
+    </div>
+    <?php endif; ?>
+
+    <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuSamba"
+            aria-expanded="<?= $abrirSamba ? 'true' : 'false' ?>">
+        <span><i class="bi bi-hdd-network-fill me-2"></i>Samba</span>
+        <i class="bi bi-chevron-right chevron"></i>
+    </button>
+    <div class="collapse <?= $abrirSamba ? 'show' : '' ?>" id="menuSamba">
+        <?php if (PermissionService::temAcesso('samba_dashboard')): ?>
+        <a href="<?= url('/samba/dashboard') ?>" class="<?= $uriAtual === '/samba/dashboard' ? 'active' : '' ?>">
+            <i class="bi bi-speedometer2 me-2"></i> Dashboard Samba
+        </a>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('samba_arquivos')): ?>
+        <a href="<?= url('/samba/arquivos') ?>" class="<?= $uriAtual === '/samba/arquivos' ? 'active' : '' ?>">
+            <i class="bi bi-folder2-open me-2"></i> Arquivos
+        </a>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('deploy')): ?>
+        <a href="<?= url('/deploy') ?>" class="<?= $uriAtual === '/deploy' ? 'active' : '' ?>">
+            <i class="bi bi-rocket-takeoff me-2"></i> Central de Configurações
+        </a>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('samba_compartilhamentos')): ?>
+        <a href="<?= url('/samba/compartilhamentos') ?>" class="<?= $uriAtual === '/samba/compartilhamentos' ? 'active' : '' ?>">
+            <i class="bi bi-folder2-open me-2"></i> Compartilhamentos
+        </a>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('samba_config')): ?>
+        <a href="<?= url('/samba/configuracao') ?>" class="<?= $uriAtual === '/samba/configuracao' ? 'active' : '' ?>">
+            <i class="bi bi-sliders me-2"></i> Config. Global
+        </a>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('samba_diagnostico')): ?>
+        <a href="<?= url('/samba/diagnostico') ?>" class="<?= $uriAtual === '/samba/diagnostico' ? 'active' : '' ?>">
+            <i class="bi bi-activity me-2"></i> Diagnóstico
+        </a>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('samba_grupos')): ?>
+        <a href="<?= url('/samba/grupos') ?>" class="<?= $uriAtual === '/samba/grupos' ? 'active' : '' ?>">
+            <i class="bi bi-collection me-2"></i> Grupos
+        </a>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('samba_lixeira')): ?>
+        <a href="<?= url('/samba/lixeira') ?>" class="<?= $uriAtual === '/samba/lixeira' ? 'active' : '' ?>">
+            <i class="bi bi-trash3 me-2"></i> Lixeira Administrativa
+        </a>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('samba_monitor')): ?>
+        <a href="<?= url('/samba/monitor') ?>" class="<?= $uriAtual === '/samba/monitor' ? 'active' : '' ?>">
+            <i class="bi bi-display me-2"></i> Monitor
+        </a>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('samba_usuarios')): ?>
+        <a href="<?= url('/samba/usuarios') ?>" class="<?= $uriAtual === '/samba/usuarios' ? 'active' : '' ?>">
+            <i class="bi bi-people me-2"></i> Usuários
+        </a>
+        <?php endif; ?>
+    </div>
+
+    <?php
+    $temSeguranca = PermissionService::temAcesso('seguranca_antivirus');
+    ?>
+    <?php if ($temSeguranca): ?>
+    <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuSeguranca"
+            aria-expanded="<?= $abrirSeguranca ? 'true' : 'false' ?>">
+        <span><i class="bi bi-shield-lock me-2"></i>Segurança</span>
+        <i class="bi bi-chevron-right chevron"></i>
+    </button>
+    <div class="collapse <?= $abrirSeguranca ? 'show' : '' ?>" id="menuSeguranca">
+        <?php if (PermissionService::temAcesso('seguranca_antivirus')): ?>
+        <a href="<?= url('/seguranca/antivirus') ?>" class="<?= str_starts_with($uriAtual, '/seguranca/antivirus') ? 'active' : '' ?>">
+            <i class="bi bi-virus me-2"></i> Antivírus
+        </a>
+        <?php endif; ?>
+    </div>
+    <?php endif; ?>
+
+    <?php if (PermissionService::ehAdmin()): ?>
+    <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuSistema"
+            aria-expanded="<?= $abrirSistema ? 'true' : 'false' ?>">
+        <span><i class="bi bi-gear-wide-connected me-2"></i>Sistema</span>
+        <i class="bi bi-chevron-right chevron"></i>
+    </button>
+    <div class="collapse <?= $abrirSistema ? 'show' : '' ?>" id="menuSistema">
+        <a href="<?= url('/administracao/atualizacoes') ?>" class="<?= str_starts_with($uriAtual, '/administracao/atualizacoes') ? 'active' : '' ?>">
+            <i class="bi bi-cloud-arrow-down me-2"></i> Atualizações do Sistema
+        </a>
+        <a href="<?= url('/auditoria') ?>" class="<?= $uriAtual === '/auditoria' ? 'active' : '' ?>">
+            <i class="bi bi-journal-text me-2"></i> Auditoria
+        </a>
+        <a href="<?= url('/administracao/configuracoes') ?>" class="<?= str_starts_with($uriAtual, '/administracao/configuracoes') ? 'active' : '' ?>">
+            <i class="bi bi-shield-lock me-2"></i> Configurações (Backup/Restauração)
+        </a>
+        <a href="<?= url('/administracao/empresa') ?>" class="<?= str_starts_with($uriAtual, '/administracao/empresa') ? 'active' : '' ?>">
+            <i class="bi bi-building me-2"></i> Dados da Empresa
+        </a>
+        <a href="<?= url('/infraestrutura/dependencias') ?>" class="<?= str_starts_with($uriAtual, '/infraestrutura/dependencias') ? 'active' : '' ?>">
+            <i class="bi bi-clipboard2-check me-2"></i> Dependências
+        </a>
+        <a href="<?= url('/administracao/integracoes') ?>" class="<?= str_starts_with($uriAtual, '/administracao/integracoes') ? 'active' : '' ?>">
+            <i class="bi bi-plug me-2"></i> Integrações
+        </a>
+
+        <button class="menu-toggle menu-toggle-sub" type="button" data-bs-toggle="collapse" data-bs-target="#menuSistemaModulos"
+                aria-expanded="<?= $abrirSistemaModulos ? 'true' : 'false' ?>">
+            <span><i class="bi bi-grid-3x3-gap-fill me-2"></i>Módulos</span>
+            <i class="bi bi-chevron-right chevron"></i>
+        </button>
+        <div class="collapse menu-sub <?= $abrirSistemaModulos ? 'show' : '' ?>" id="menuSistemaModulos">
+            <a href="<?= url('/administracao/modulos') ?>" class="<?= str_starts_with($uriAtual, '/administracao/modulos') ? 'active' : '' ?>">
+                Habilitar/Desabilitar
+            </a>
+        </div>
+
+        <a href="<?= url('/administracao/usuarios') ?>" class="<?= str_starts_with($uriAtual, '/administracao/usuarios') ? 'active' : '' ?>">
+            <i class="bi bi-person-gear me-2"></i> Usuários do Sistema
+        </a>
+    </div>
+    <?php endif; ?>
+
+    <?php if (PermissionService::temAcesso('ssh_conexoes')): ?>
+    <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuSsh"
+            aria-expanded="<?= $abrirSsh ? 'true' : 'false' ?>">
+        <span><i class="bi bi-hdd-network me-2"></i>SSH</span>
+        <i class="bi bi-chevron-right chevron"></i>
+    </button>
+    <div class="collapse <?= $abrirSsh ? 'show' : '' ?>" id="menuSsh">
+        <a href="<?= url('/ssh/conexoes') ?>" class="<?= str_starts_with($uriAtual, '/ssh') ? 'active' : '' ?>">
+            <i class="bi bi-terminal me-2"></i> Conexões
+        </a>
     </div>
     <?php endif; ?>
 
@@ -517,196 +720,6 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
             <?php endif; ?>
         </div>
         <?php endif; ?>
-    </div>
-    <?php endif; ?>
-
-    <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuSamba"
-            aria-expanded="<?= $abrirSamba ? 'true' : 'false' ?>">
-        <span><i class="bi bi-hdd-network-fill me-2"></i>Samba</span>
-        <i class="bi bi-chevron-right chevron"></i>
-    </button>
-    <div class="collapse <?= $abrirSamba ? 'show' : '' ?>" id="menuSamba">
-        <?php if (PermissionService::temAcesso('samba_dashboard')): ?>
-        <a href="<?= url('/samba/dashboard') ?>" class="<?= $uriAtual === '/samba/dashboard' ? 'active' : '' ?>">
-            <i class="bi bi-speedometer2 me-2"></i> Dashboard Samba
-        </a>
-        <?php endif; ?>
-
-        <?php if (PermissionService::temAcesso('samba_arquivos')): ?>
-        <a href="<?= url('/samba/arquivos') ?>" class="<?= $uriAtual === '/samba/arquivos' ? 'active' : '' ?>">
-            <i class="bi bi-folder2-open me-2"></i> Arquivos
-        </a>
-        <?php endif; ?>
-
-        <?php if (PermissionService::temAcesso('deploy')): ?>
-        <a href="<?= url('/deploy') ?>" class="<?= $uriAtual === '/deploy' ? 'active' : '' ?>">
-            <i class="bi bi-rocket-takeoff me-2"></i> Central de Configurações
-        </a>
-        <?php endif; ?>
-
-        <?php if (PermissionService::temAcesso('samba_compartilhamentos')): ?>
-        <a href="<?= url('/samba/compartilhamentos') ?>" class="<?= $uriAtual === '/samba/compartilhamentos' ? 'active' : '' ?>">
-            <i class="bi bi-folder2-open me-2"></i> Compartilhamentos
-        </a>
-        <?php endif; ?>
-
-        <?php if (PermissionService::temAcesso('samba_config')): ?>
-        <a href="<?= url('/samba/configuracao') ?>" class="<?= $uriAtual === '/samba/configuracao' ? 'active' : '' ?>">
-            <i class="bi bi-sliders me-2"></i> Config. Global
-        </a>
-        <?php endif; ?>
-
-        <?php if (PermissionService::temAcesso('samba_diagnostico')): ?>
-        <a href="<?= url('/samba/diagnostico') ?>" class="<?= $uriAtual === '/samba/diagnostico' ? 'active' : '' ?>">
-            <i class="bi bi-activity me-2"></i> Diagnóstico
-        </a>
-        <?php endif; ?>
-
-        <?php if (PermissionService::temAcesso('samba_grupos')): ?>
-        <a href="<?= url('/samba/grupos') ?>" class="<?= $uriAtual === '/samba/grupos' ? 'active' : '' ?>">
-            <i class="bi bi-collection me-2"></i> Grupos
-        </a>
-        <?php endif; ?>
-
-        <?php if (PermissionService::temAcesso('samba_lixeira')): ?>
-        <a href="<?= url('/samba/lixeira') ?>" class="<?= $uriAtual === '/samba/lixeira' ? 'active' : '' ?>">
-            <i class="bi bi-trash3 me-2"></i> Lixeira Administrativa
-        </a>
-        <?php endif; ?>
-
-        <?php if (PermissionService::temAcesso('samba_monitor')): ?>
-        <a href="<?= url('/samba/monitor') ?>" class="<?= $uriAtual === '/samba/monitor' ? 'active' : '' ?>">
-            <i class="bi bi-display me-2"></i> Monitor
-        </a>
-        <?php endif; ?>
-
-        <?php if (PermissionService::temAcesso('samba_usuarios')): ?>
-        <a href="<?= url('/samba/usuarios') ?>" class="<?= $uriAtual === '/samba/usuarios' ? 'active' : '' ?>">
-            <i class="bi bi-people me-2"></i> Usuários
-        </a>
-        <?php endif; ?>
-    </div>
-
-    <?php
-    $temSeguranca = PermissionService::temAcesso('seguranca_antivirus');
-    ?>
-    <?php if ($temSeguranca): ?>
-    <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuSeguranca"
-            aria-expanded="<?= $abrirSeguranca ? 'true' : 'false' ?>">
-        <span><i class="bi bi-shield-lock me-2"></i>Segurança</span>
-        <i class="bi bi-chevron-right chevron"></i>
-    </button>
-    <div class="collapse <?= $abrirSeguranca ? 'show' : '' ?>" id="menuSeguranca">
-        <?php if (PermissionService::temAcesso('seguranca_antivirus')): ?>
-        <a href="<?= url('/seguranca/antivirus') ?>" class="<?= str_starts_with($uriAtual, '/seguranca/antivirus') ? 'active' : '' ?>">
-            <i class="bi bi-virus me-2"></i> Antivírus
-        </a>
-        <?php endif; ?>
-    </div>
-    <?php endif; ?>
-
-    <?php
-    $temBackup = PermissionService::temAcesso('backup_configuracao') || PermissionService::temAcesso('backup_historico');
-    ?>
-    <?php if ($temBackup): ?>
-    <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuBackup"
-            aria-expanded="<?= $abrirBackup ? 'true' : 'false' ?>">
-        <span><i class="bi bi-cloud-arrow-up me-2"></i>Backup</span>
-        <i class="bi bi-chevron-right chevron"></i>
-    </button>
-    <div class="collapse <?= $abrirBackup ? 'show' : '' ?>" id="menuBackup">
-        <?php if (PermissionService::temAcesso('backup_configuracao')): ?>
-        <a href="<?= url('/backup/configuracao') ?>" class="<?= $uriAtual === '/backup/configuracao' ? 'active' : '' ?>">
-            <i class="bi bi-gear me-2"></i> Configuração
-        </a>
-        <?php endif; ?>
-        <?php if (PermissionService::temAcesso('backup_historico')): ?>
-        <a href="<?= url('/backup/historico') ?>" class="<?= $uriAtual === '/backup/historico' ? 'active' : '' ?>">
-            <i class="bi bi-clock-history me-2"></i> Histórico
-        </a>
-        <a href="<?= url('/backup/explorador') ?>" class="<?= $uriAtual === '/backup/explorador' ? 'active' : '' ?>">
-            <i class="bi bi-search me-2"></i> Explorador de Versões
-        </a>
-        <?php endif; ?>
-    </div>
-    <?php endif; ?>
-
-    <?php if (PermissionService::temAcesso('entra_dashboard') || PermissionService::temAcesso('entra_usuarios') || PermissionService::temAcesso('entra_configuracao')): ?>
-    <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuEntra"
-            aria-expanded="<?= $abrirEntra ? 'true' : 'false' ?>">
-        <span><i class="bi bi-microsoft me-2"></i>Microsoft Entra</span>
-        <i class="bi bi-chevron-right chevron"></i>
-    </button>
-    <div class="collapse <?= $abrirEntra ? 'show' : '' ?>" id="menuEntra">
-        <?php if (PermissionService::temAcesso('entra_dashboard')): ?>
-        <a href="<?= url('/entra/dashboard') ?>" class="<?= $uriAtual === '/entra/dashboard' ? 'active' : '' ?>">
-            <i class="bi bi-speedometer2 me-2"></i> Dashboard
-        </a>
-        <?php endif; ?>
-        <?php if (PermissionService::temAcesso('entra_usuarios')): ?>
-        <a href="<?= url('/entra/usuarios') ?>" class="<?= str_starts_with($uriAtual, '/entra/usuarios') ? 'active' : '' ?>">
-            <i class="bi bi-people me-2"></i> Usuários
-        </a>
-        <?php endif; ?>
-        <?php if (PermissionService::temAcesso('entra_usuarios') && PermissionService::temAcesso('ativos_novo')): ?>
-        <a href="<?= url('/entra/acesso-maquinas') ?>" class="<?= str_starts_with($uriAtual, '/entra/acesso-maquinas') ? 'active' : '' ?>">
-            <i class="bi bi-shield-lock me-2"></i> Acesso às Máquinas
-        </a>
-        <?php endif; ?>
-        <?php if (PermissionService::temAcesso('entra_dispositivos')): ?>
-        <a href="<?= url('/entra/dispositivos') ?>" class="<?= str_starts_with($uriAtual, '/entra/dispositivos') ? 'active' : '' ?>">
-            <i class="bi bi-laptop me-2"></i> Dispositivos (Intune)
-        </a>
-        <?php endif; ?>
-        <?php if (PermissionService::temAcesso('entra_perfis_configuracao')): ?>
-        <a href="<?= url('/entra/perfis-configuracao') ?>" class="<?= str_starts_with($uriAtual, '/entra/perfis-configuracao') ? 'active' : '' ?>">
-            <i class="bi bi-sliders me-2"></i> Perfis de Configuração
-        </a>
-        <?php endif; ?>
-        <?php if (PermissionService::temAcesso('entra_configuracao')): ?>
-        <a href="<?= url('/entra/configuracao') ?>" class="<?= str_starts_with($uriAtual, '/entra/configuracao') ? 'active' : '' ?>">
-            <i class="bi bi-gear me-2"></i> Configuração
-        </a>
-        <?php endif; ?>
-    </div>
-    <?php endif; ?>
-
-    <?php if (PermissionService::ehAdmin()): ?>
-    <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuSistema"
-            aria-expanded="<?= $abrirSistema ? 'true' : 'false' ?>">
-        <span><i class="bi bi-gear-wide-connected me-2"></i>Sistema</span>
-        <i class="bi bi-chevron-right chevron"></i>
-    </button>
-    <div class="collapse <?= $abrirSistema ? 'show' : '' ?>" id="menuSistema">
-        <a href="<?= url('/auditoria') ?>" class="<?= $uriAtual === '/auditoria' ? 'active' : '' ?>">
-            <i class="bi bi-journal-text me-2"></i> Auditoria
-        </a>
-        <a href="<?= url('/administracao/usuarios') ?>" class="<?= str_starts_with($uriAtual, '/administracao/usuarios') ? 'active' : '' ?>">
-            <i class="bi bi-person-gear me-2"></i> Usuários do Sistema
-        </a>
-        <a href="<?= url('/administracao/atualizacoes') ?>" class="<?= str_starts_with($uriAtual, '/administracao/atualizacoes') ? 'active' : '' ?>">
-            <i class="bi bi-cloud-arrow-down me-2"></i> Atualizações do Sistema
-        </a>
-        <a href="<?= url('/administracao/empresa') ?>" class="<?= str_starts_with($uriAtual, '/administracao/empresa') ? 'active' : '' ?>">
-            <i class="bi bi-building me-2"></i> Dados da Empresa
-        </a>
-        <a href="<?= url('/administracao/email') ?>" class="<?= str_starts_with($uriAtual, '/administracao/email') ? 'active' : '' ?>">
-            <i class="bi bi-envelope me-2"></i> E-mail
-        </a>
-        <a href="<?= url('/administracao/configuracoes') ?>" class="<?= str_starts_with($uriAtual, '/administracao/configuracoes') ? 'active' : '' ?>">
-            <i class="bi bi-shield-lock me-2"></i> Configurações (Backup/Restauração)
-        </a>
-
-        <button class="menu-toggle menu-toggle-sub" type="button" data-bs-toggle="collapse" data-bs-target="#menuSistemaModulos"
-                aria-expanded="<?= $abrirSistemaModulos ? 'true' : 'false' ?>">
-            <span><i class="bi bi-grid-3x3-gap-fill me-2"></i>Módulos</span>
-            <i class="bi bi-chevron-right chevron"></i>
-        </button>
-        <div class="collapse menu-sub <?= $abrirSistemaModulos ? 'show' : '' ?>" id="menuSistemaModulos">
-            <a href="<?= url('/administracao/modulos') ?>" class="<?= str_starts_with($uriAtual, '/administracao/modulos') ? 'active' : '' ?>">
-                Habilitar/Desabilitar
-            </a>
-        </div>
     </div>
     <?php endif; ?>
 

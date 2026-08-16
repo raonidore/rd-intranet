@@ -182,6 +182,14 @@ class DependenciaCatalogo
                 'usado_em' => 'Backup em Nuvem',
                 'obrigatorio' => false,
             ],
+            [
+                'chave' => 'php-xml',
+                'nome' => 'php-xml (extensão DOM)',
+                'pacote' => 'php-xml',
+                'descricao' => 'Sanitiza com segurança o HTML do editor rico de artigos (negrito/itálico/blocos de comando) -- sem essa extensão, a Base de Conhecimento não consegue salvar artigos com formatação.',
+                'usado_em' => 'Base de Conhecimento',
+                'obrigatorio' => false,
+            ],
         ];
     }
 
