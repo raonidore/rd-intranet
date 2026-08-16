@@ -42,6 +42,9 @@ $abaAtiva = in_array($_GET['aba'] ?? '', $abasValidas, true) ? $_GET['aba'] : ($
 .kb-editor pre { background: #212529; color: #e9ecef; padding: 10px 12px; border-radius: 6px; margin: 6px 0; }
 .kb-editor pre code { font-size: 13px; outline: none; }
 .kb-solucao-render pre { margin: 8px 0; border-radius: 8px; }
+/* Prism só mostra o botão de copiar ao passar o mouse por padrão -- fica
+   escondido demais aqui, deixa sempre visível. */
+.kb-solucao-render .code-toolbar > .toolbar { opacity: 1 !important; }
 .kb-solucao-render :is(p, div) { margin-bottom: 6px; }
 </style>
 
