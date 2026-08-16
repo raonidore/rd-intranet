@@ -46,6 +46,11 @@ $abaAtiva = in_array($_GET['aba'] ?? '', $abasValidas, true) ? $_GET['aba'] : ($
    escondido demais aqui, deixa sempre visível. */
 .kb-solucao-render .code-toolbar > .toolbar { opacity: 1 !important; }
 .kb-solucao-render :is(p, div) { margin-bottom: 6px; }
+
+.kb-cabecalho-artigo { cursor: pointer; }
+.kb-cabecalho-artigo:hover { background: #f8f9fa; }
+.kb-chevron { transition: transform .15s; display: inline-block; }
+.kb-cabecalho-artigo[aria-expanded="true"] .kb-chevron { transform: rotate(90deg); }
 </style>
 
 <div class="mb-3 d-flex justify-content-between align-items-end flex-wrap gap-2">
@@ -91,37 +96,43 @@ $abaAtiva = in_array($_GET['aba'] ?? '', $abasValidas, true) ? $_GET['aba'] : ($
                 <p class="text-muted small mb-0">Nenhum artigo encontrado<?= $busca !== '' ? ' pra "' . htmlspecialchars($busca) . '"' : '' ?>.</p>
             <?php endif; ?>
             <?php foreach ($meus as $a): ?>
-                <div class="border rounded p-2 mt-2">
-                    <div class="d-flex justify-content-between align-items-start">
+                <?php $idColapso = 'colapsoMeus' . (int)$a['id']; ?>
+                <div class="border rounded mt-2">
+                    <div class="p-2 d-flex justify-content-between align-items-start kb-cabecalho-artigo" data-bs-toggle="collapse" data-bs-target="#<?= $idColapso ?>" aria-expanded="false" aria-controls="<?= $idColapso ?>">
                         <div>
+                            <i class="bi bi-chevron-right kb-chevron me-1"></i>
                             <strong><?= htmlspecialchars($a['titulo']) ?></strong>
                             <?php if ($a['categoria_nome']): ?><span class="badge bg-light text-dark border ms-1"><?= htmlspecialchars($a['categoria_nome']) ?><?= $a['subcategoria_nome'] ? ' / ' . htmlspecialchars($a['subcategoria_nome']) : '' ?></span><?php endif; ?>
+                            <?php if ($a['problema']): ?><div class="small text-muted mt-1"><?= kbRenderizarTexto($a['problema']) ?></div><?php endif; ?>
                         </div>
                         <?= $statusLabel[$a['status_central']] ?? '' ?>
                     </div>
-                    <?php if ($a['problema']): ?><div class="small text-muted mt-1"><strong>Problema:</strong> <?= kbRenderizarTexto($a['problema']) ?></div><?php endif; ?>
-                    <div class="small"><strong>Solução:</strong></div>
-                    <div class="small kb-solucao-render"><?= $a['solucao'] ?></div>
-                    <?php if (!empty($a['imagens'])): ?>
-                        <div class="mt-2">
-                            <?php foreach ($a['imagens'] as $img): ?>
-                                <a href="<?= url('/base-conhecimento/imagem?id=' . (int)$img['id']) ?>" target="_blank">
-                                    <img src="<?= url('/base-conhecimento/imagem?id=' . (int)$img['id']) ?>" class="kb-imagem-thumb" alt="">
-                                </a>
-                            <?php endforeach; ?>
+                    <div class="collapse" id="<?= $idColapso ?>">
+                        <div class="border-top p-2">
+                            <div class="small"><strong>Solução:</strong></div>
+                            <div class="small kb-solucao-render"><?= $a['solucao'] ?></div>
+                            <?php if (!empty($a['imagens'])): ?>
+                                <div class="mt-2">
+                                    <?php foreach ($a['imagens'] as $img): ?>
+                                        <a href="<?= url('/base-conhecimento/imagem?id=' . (int)$img['id']) ?>" target="_blank">
+                                            <img src="<?= url('/base-conhecimento/imagem?id=' . (int)$img['id']) ?>" class="kb-imagem-thumb" alt="">
+                                        </a>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php endif; ?>
+                            <?php if ($podeCriar): ?>
+                                <div class="d-flex gap-2 mt-2">
+                                    <a href="<?= url('/base-conhecimento?aba=novo&editar=' . (int)$a['id']) ?>" class="btn btn-sm btn-outline-secondary">
+                                        <i class="bi bi-pencil"></i> Editar
+                                    </a>
+                                    <form method="post" action="<?= url('/base-conhecimento/excluir') ?>" onsubmit="return confirm('Excluir este artigo?');">
+                                        <input type="hidden" name="id" value="<?= (int)$a['id'] ?>">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Excluir</button>
+                                    </form>
+                                </div>
+                            <?php endif; ?>
                         </div>
-                    <?php endif; ?>
-                    <?php if ($podeCriar): ?>
-                        <div class="d-flex gap-2 mt-2">
-                            <a href="<?= url('/base-conhecimento?aba=novo&editar=' . (int)$a['id']) ?>" class="btn btn-sm btn-outline-secondary">
-                                <i class="bi bi-pencil"></i> Editar
-                            </a>
-                            <form method="post" action="<?= url('/base-conhecimento/excluir') ?>" onsubmit="return confirm('Excluir este artigo?');">
-                                <input type="hidden" name="id" value="<?= (int)$a['id'] ?>">
-                                <button type="submit" class="btn btn-sm btn-outline-danger">Excluir</button>
-                            </form>
-                        </div>
-                    <?php endif; ?>
+                    </div>
                 </div>
             <?php endforeach; ?>
         </div>
@@ -143,12 +154,20 @@ $abaAtiva = in_array($_GET['aba'] ?? '', $abasValidas, true) ? $_GET['aba'] : ($
                 <p class="text-muted small mt-2 mb-0">Nenhum artigo público encontrado<?= $busca !== '' ? ' pra "' . htmlspecialchars($busca) . '"' : '' ?>.</p>
             <?php endif; ?>
             <?php foreach ($publicos as $a): ?>
-                <div class="border rounded p-2 mt-2">
-                    <strong><?= htmlspecialchars($a['titulo']) ?></strong>
-                    <?php if ($a['categoria']): ?><span class="badge bg-light text-dark border ms-1"><?= htmlspecialchars($a['categoria']) ?></span><?php endif; ?>
-                    <?php if ($a['problema']): ?><div class="small text-muted mt-1"><strong>Problema:</strong> <?= kbRenderizarTexto($a['problema']) ?></div><?php endif; ?>
-                    <div class="small"><strong>Solução:</strong></div>
-                    <div class="small kb-solucao-render"><?= $a['solucao'] ?></div>
+                <?php $idColapso = 'colapsoPub' . (int)$a['id']; ?>
+                <div class="border rounded mt-2">
+                    <div class="p-2 kb-cabecalho-artigo" data-bs-toggle="collapse" data-bs-target="#<?= $idColapso ?>" aria-expanded="false" aria-controls="<?= $idColapso ?>">
+                        <i class="bi bi-chevron-right kb-chevron me-1"></i>
+                        <strong><?= htmlspecialchars($a['titulo']) ?></strong>
+                        <?php if ($a['categoria']): ?><span class="badge bg-light text-dark border ms-1"><?= htmlspecialchars($a['categoria']) ?></span><?php endif; ?>
+                        <?php if ($a['problema']): ?><div class="small text-muted mt-1"><?= kbRenderizarTexto($a['problema']) ?></div><?php endif; ?>
+                    </div>
+                    <div class="collapse" id="<?= $idColapso ?>">
+                        <div class="border-top p-2">
+                            <div class="small"><strong>Solução:</strong></div>
+                            <div class="small kb-solucao-render"><?= $a['solucao'] ?></div>
+                        </div>
+                    </div>
                 </div>
             <?php endforeach; ?>
         </div>
