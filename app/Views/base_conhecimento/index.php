@@ -209,7 +209,7 @@ $abaAtiva = in_array($_GET['aba'] ?? '', $abasValidas, true) ? $_GET['aba'] : ($
                                 <button type="button" class="btn btn-outline-secondary" id="kbSublinhado" title="Sublinhado"><i class="bi bi-type-underline"></i></button>
                             </div>
                             <div class="dropdown">
-                                <button type="button" class="btn btn-sm btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown">
+                                <button type="button" class="btn btn-sm btn-outline-primary dropdown-toggle" id="kbBotaoInserirComando" data-bs-toggle="dropdown">
                                     <i class="bi bi-terminal"></i> Inserir comando
                                 </button>
                                 <ul class="dropdown-menu" id="kbListaLinguagens">
@@ -535,40 +535,51 @@ document.querySelectorAll('#abasKb button[data-bs-toggle="tab"]').forEach(functi
         document.execCommand('underline');
     });
 
-    document.getElementById('kbFonte').addEventListener('change', function () {
-        editor.focus();
+    // Clicar em QUALQUER controle fora do editor (um <select>, um botao de
+    // dropdown) tira o foco/selecao de dentro dele -- por isso essas duas
+    // acoes so funcionavam na primeira vez, ou nao funcionavam depois de
+    // colar: quando o "change"/"click" do controle rodava, a selecao de
+    // texto do editor ja tinha sumido. Captura a selecao no "mousedown" do
+    // controle (dispara ANTES dele roubar o foco) e guarda pra usar depois.
+    let kbRangeSalva = null;
+    function kbCapturarSelecaoAtual() {
         const sel = window.getSelection();
-        if (!sel.rangeCount || sel.isCollapsed) {
+        if (sel.rangeCount && editor.contains(sel.anchorNode)) {
+            kbRangeSalva = sel.getRangeAt(0).cloneRange();
+        }
+    }
+
+    document.getElementById('kbFonte').addEventListener('mousedown', kbCapturarSelecaoAtual);
+    document.getElementById('kbFonte').addEventListener('change', function () {
+        if (!kbRangeSalva || kbRangeSalva.collapsed) {
             alert('Selecione o texto que quer aumentar/diminuir antes de escolher o tamanho.');
             return;
         }
-        const range = sel.getRangeAt(0);
         const span = document.createElement('span');
         span.style.fontSize = this.value + 'px';
         try {
-            range.surroundContents(span);
+            kbRangeSalva.surroundContents(span);
         } catch (e) {
-            const conteudo = range.extractContents();
+            const conteudo = kbRangeSalva.extractContents();
             span.appendChild(conteudo);
-            range.insertNode(span);
+            kbRangeSalva.insertNode(span);
         }
-        sel.removeAllRanges();
+        kbRangeSalva = null;
+        editor.focus();
     });
 
+    document.getElementById('kbBotaoInserirComando').addEventListener('mousedown', kbCapturarSelecaoAtual);
     document.querySelectorAll('#kbListaLinguagens [data-lang]').forEach(function (item) {
         item.addEventListener('click', function (e) {
             e.preventDefault();
-            editor.focus();
 
-            const sel = window.getSelection();
-            let range;
-            if (sel.rangeCount && editor.contains(sel.anchorNode)) {
-                range = sel.getRangeAt(0);
-            } else {
-                range = document.createRange();
-                range.selectNodeContents(editor);
-                range.collapse(false);
-            }
+            const range = (kbRangeSalva && editor.contains(kbRangeSalva.startContainer)) ? kbRangeSalva : (function () {
+                const r = document.createRange();
+                r.selectNodeContents(editor);
+                r.collapse(false);
+                return r;
+            })();
+            kbRangeSalva = null;
 
             const textoSelecionado = range.toString();
             const pre = document.createElement('pre');
@@ -582,10 +593,19 @@ document.querySelectorAll('#abasKb button[data-bs-toggle="tab"]').forEach(functi
             pre.after(document.createElement('br'));
             kbRealcarCodigo(code, false);
 
-            const novoRange = document.createRange();
-            novoRange.selectNodeContents(code);
-            sel.removeAllRanges();
-            sel.addRange(novoRange);
+            // Bootstrap ainda esta fechando o dropdown/devolvendo o foco
+            // neste exato instante -- espera o resto da fila de eventos
+            // terminar antes de focar e selecionar de novo, senao o
+            // dropdown "ganha" a ultima palavra e o cursor nao fica onde
+            // deveria (foi isso que fazia colar logo em seguida falhar).
+            setTimeout(function () {
+                editor.focus();
+                const sel = window.getSelection();
+                const novoRange = document.createRange();
+                novoRange.selectNodeContents(code);
+                sel.removeAllRanges();
+                sel.addRange(novoRange);
+            }, 0);
         });
     });
 
