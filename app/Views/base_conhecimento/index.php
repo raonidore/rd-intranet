@@ -432,6 +432,22 @@ document.querySelectorAll('#abasKb button[data-bs-toggle="tab"]').forEach(functi
         const offset = manterCursor ? kbOffsetDoCursor(elementoCode) : null;
         elementoCode.textContent = elementoCode.textContent; // normaliza (remove spans antigos do Prism)
         Prism.highlightElement(elementoCode);
+
+        // O plugin de toolbar/copiar do Prism (carregado global, pra
+        // funcionar na exibicao dos artigos salvos) reage a QUALQUER
+        // highlight, inclusive estes daqui de dentro do editor -- ele
+        // embrulha o <pre> num <div class="code-toolbar"> e pendura um
+        // botao "Copy" do lado, DENTRO da area editavel. Sem desfazer
+        // isso na hora, esse HTML do botao vira parte do que e' salvo
+        // (o "Copy" aparecia como texto de verdade dentro do artigo).
+        // So o highlight() final na exibicao (fora do editor) deve manter
+        // o toolbar de verdade.
+        const pre = elementoCode.closest('pre');
+        const wrapper = pre ? pre.parentElement : null;
+        if (wrapper && wrapper.classList.contains('code-toolbar')) {
+            wrapper.replaceWith(pre);
+        }
+
         if (manterCursor) {
             kbRestaurarCursor(elementoCode, offset);
         }
