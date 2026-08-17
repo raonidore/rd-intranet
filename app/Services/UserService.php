@@ -34,6 +34,7 @@ class UserService
     {
         $nome = trim($dados['nome'] ?? '');
         $login = trim($dados['login'] ?? '');
+        $email = trim($dados['email'] ?? '');
         $senha = $dados['senha'] ?? '';
         $perfil = $dados['perfil'] ?? '';
 
@@ -42,8 +43,14 @@ class UserService
             return false;
         }
 
-        if (strlen($senha) < 8) {
-            NotificationService::error('A senha deve ter pelo menos 8 caracteres.');
+        if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            NotificationService::error('E-mail inválido.');
+            return false;
+        }
+
+        $errosSenha = PasswordPolicyService::validar($senha, ['nome' => $nome, 'login' => $login, 'email' => $email]);
+        if ($errosSenha) {
+            NotificationService::error($errosSenha[0]);
             return false;
         }
 
@@ -61,7 +68,8 @@ class UserService
             $nome,
             $login,
             password_hash($senha, PASSWORD_DEFAULT),
-            $perfil
+            $perfil,
+            $email !== '' ? $email : null
         );
 
         $this->repository->salvarModulos($id, $this->modulosValidos($dados['modulos'] ?? []));
@@ -72,10 +80,16 @@ class UserService
     public function atualizar(int $id, array $dados): bool
     {
         $nome = trim($dados['nome'] ?? '');
+        $email = trim($dados['email'] ?? '');
         $perfil = $dados['perfil'] ?? '';
 
         if ($nome === '') {
             NotificationService::error('Informe o nome do usuário.');
+            return false;
+        }
+
+        if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            NotificationService::error('E-mail inválido.');
             return false;
         }
 
@@ -96,7 +110,7 @@ class UserService
             return false;
         }
 
-        $this->repository->atualizar($id, $nome, $perfil);
+        $this->repository->atualizar($id, $nome, $perfil, $email !== '' ? $email : null);
         $this->repository->salvarModulos($id, $this->modulosValidos($dados['modulos'] ?? []));
 
         return true;
@@ -104,8 +118,15 @@ class UserService
 
     public function redefinirSenha(int $id, string $senha, string $confirmacao): bool
     {
-        if (strlen($senha) < 8) {
-            NotificationService::error('A senha deve ter pelo menos 8 caracteres.');
+        $usuario = $this->repository->buscarPorId($id);
+
+        $errosSenha = PasswordPolicyService::validar($senha, [
+            'nome' => $usuario['nome'] ?? '',
+            'login' => $usuario['login'] ?? '',
+            'email' => $usuario['email'] ?? '',
+        ]);
+        if ($errosSenha) {
+            NotificationService::error($errosSenha[0]);
             return false;
         }
 
@@ -186,8 +207,15 @@ class UserService
             return false;
         }
 
-        if (strlen($nova) < 8) {
-            NotificationService::error('A nova senha deve ter pelo menos 8 caracteres.');
+        $usuario = $this->repository->buscarPorId($id);
+
+        $errosSenha = PasswordPolicyService::validar($nova, [
+            'nome' => $usuario['nome'] ?? '',
+            'login' => $usuario['login'] ?? '',
+            'email' => $usuario['email'] ?? '',
+        ]);
+        if ($errosSenha) {
+            NotificationService::error($errosSenha[0]);
             return false;
         }
 

@@ -1,9 +1,14 @@
 <?php
 
 use App\Components\Alert;
+use App\Services\PasswordPolicyService;
 
 ob_start();
 ?>
+
+<style>
+.senha-ui-requisito { display: flex; align-items: center; gap: 6px; font-size: 12.5px; }
+</style>
 
 <div class="mb-4">
     <h4 class="mb-1"><i class="bi bi-person-circle me-1"></i> Meu Perfil</h4>
@@ -45,21 +50,22 @@ ob_start();
                 <h5 class="mb-0"><i class="bi bi-key"></i> Alterar senha</h5>
             </div>
             <div class="card-body">
-                <form method="post" action="<?= url('/perfil/senha') ?>">
+                <form method="post" action="<?= url('/perfil/senha') ?>" id="formAlterarSenha">
                     <div class="mb-3">
                         <label class="form-label">Senha atual</label>
-                        <input type="password" name="senha_atual" class="form-control" required>
+                        <input type="password" name="senha_atual" id="perfilSenhaAtual" class="form-control" required>
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label">Nova senha</label>
-                        <input type="password" name="senha" class="form-control" minlength="8" required>
-                        <small class="text-muted">Mínimo de 8 caracteres.</small>
+                        <input type="password" name="senha" id="perfilNovaSenha" class="form-control" required>
+                        <div id="perfilSenhaChecklist" class="mt-2"></div>
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label">Confirmar nova senha</label>
-                        <input type="password" name="confirmacao" class="form-control" minlength="8" required>
+                        <input type="password" name="confirmacao" id="perfilConfirmarSenha" class="form-control" required>
+                        <div id="perfilSenhaMatch"></div>
                     </div>
 
                     <div class="text-end">
@@ -72,6 +78,19 @@ ob_start();
         </div>
     </div>
 </div>
+
+<script src="<?= url('/assets/js/senha-ui.js') ?>"></script>
+<script>
+RdSenhaUI.aplicar({
+    campoAtual: 'perfilSenhaAtual',
+    campoSenha: 'perfilNovaSenha',
+    campoConfirmacao: 'perfilConfirmarSenha',
+    checklistContainer: 'perfilSenhaChecklist',
+    matchContainer: 'perfilSenhaMatch',
+    politica: <?= json_encode(PasswordPolicyService::politicaParaJs()) ?>,
+    dadosObvios: <?= json_encode(['nome' => $usuario['nome'], 'login' => $usuario['login'], 'email' => $usuario['email'] ?? '']) ?>
+});
+</script>
 
 <?php
 $conteudo = ob_get_clean();

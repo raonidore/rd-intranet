@@ -4,13 +4,20 @@ namespace App\Controllers;
 
 use App\Core\Controller;
 use App\Core\Database;
+use App\Services\AtivoService;
 use App\Services\AuditService;
+use App\Services\EmailService;
 
 class AuthController extends Controller
 {
     public function loginForm(): void
     {
-        $this->view('auth/login');
+        $ativoService = new AtivoService();
+
+        $this->view('auth/login', [
+            'logoSistemaConfigurada' => $ativoService->logoSistemaConfigurada(),
+            'recuperacaoDisponivel' => (new EmailService())->configurado(),
+        ]);
     }
 
     public function login(): void

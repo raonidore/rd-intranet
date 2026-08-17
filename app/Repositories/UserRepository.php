@@ -17,7 +17,7 @@ class UserRepository
     public function listar(): array
     {
         $stmt = $this->pdo->query("
-            SELECT id, nome, login, perfil, ativo, criado_em
+            SELECT id, nome, login, email, perfil, ativo, criado_em
             FROM usuarios
             ORDER BY nome
         ");
@@ -28,7 +28,7 @@ class UserRepository
     public function buscarPorId(int $id): ?array
     {
         $stmt = $this->pdo->prepare("
-            SELECT id, nome, login, perfil, ativo, criado_em
+            SELECT id, nome, login, email, perfil, ativo, criado_em
             FROM usuarios
             WHERE id = ?
             LIMIT 1
@@ -51,27 +51,43 @@ class UserRepository
         return $item ?: null;
     }
 
-    public function criar(string $nome, string $login, string $senhaHash, string $perfil): int
+    public function buscarPorLoginOuEmail(string $valor): ?array
     {
         $stmt = $this->pdo->prepare("
-            INSERT INTO usuarios (nome, login, senha_hash, perfil, ativo)
-            VALUES (?, ?, ?, ?, 1)
+            SELECT id, nome, login, email, ativo
+            FROM usuarios
+            WHERE (login = ? OR email = ?) AND ativo = 1
+            LIMIT 1
         ");
 
-        $stmt->execute([$nome, $login, $senhaHash, $perfil]);
+        $stmt->execute([$valor, $valor]);
+
+        $item = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $item ?: null;
+    }
+
+    public function criar(string $nome, string $login, string $senhaHash, string $perfil, ?string $email = null): int
+    {
+        $stmt = $this->pdo->prepare("
+            INSERT INTO usuarios (nome, login, email, senha_hash, perfil, ativo)
+            VALUES (?, ?, ?, ?, ?, 1)
+        ");
+
+        $stmt->execute([$nome, $login, $email, $senhaHash, $perfil]);
 
         return (int)$this->pdo->lastInsertId();
     }
 
-    public function atualizar(int $id, string $nome, string $perfil): bool
+    public function atualizar(int $id, string $nome, string $perfil, ?string $email = null): bool
     {
         $stmt = $this->pdo->prepare("
             UPDATE usuarios
-               SET nome = ?, perfil = ?
+               SET nome = ?, perfil = ?, email = ?
              WHERE id = ?
         ");
 
-        return $stmt->execute([$nome, $perfil, $id]);
+        return $stmt->execute([$nome, $perfil, $email, $id]);
     }
 
     public function atualizarSenha(int $id, string $senhaHash): bool

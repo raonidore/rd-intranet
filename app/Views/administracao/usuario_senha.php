@@ -1,9 +1,14 @@
 <?php
 
 use App\Components\Alert;
+use App\Services\PasswordPolicyService;
 
 ob_start();
 ?>
+
+<style>
+.senha-ui-requisito { display: flex; align-items: center; gap: 6px; font-size: 12.5px; }
+</style>
 
 <?= Alert::flash() ?>
 
@@ -21,13 +26,14 @@ ob_start();
 
                     <div class="mb-3">
                         <label class="form-label">Nova senha</label>
-                        <input type="password" name="senha" class="form-control" minlength="8" required>
-                        <small class="text-muted">Mínimo de 8 caracteres.</small>
+                        <input type="password" name="senha" id="usSenha" class="form-control" required>
+                        <div id="usSenhaChecklist" class="mt-2"></div>
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label">Confirmar senha</label>
-                        <input type="password" name="confirmacao" class="form-control" minlength="8" required>
+                        <input type="password" name="confirmacao" id="usConfirmacao" class="form-control" required>
+                        <div id="usSenhaMatch"></div>
                     </div>
 
                     <div class="d-flex justify-content-between">
@@ -41,6 +47,18 @@ ob_start();
         </div>
     </div>
 </div>
+
+<script src="<?= url('/assets/js/senha-ui.js') ?>"></script>
+<script>
+RdSenhaUI.aplicar({
+    campoSenha: 'usSenha',
+    campoConfirmacao: 'usConfirmacao',
+    checklistContainer: 'usSenhaChecklist',
+    matchContainer: 'usSenhaMatch',
+    politica: <?= json_encode(PasswordPolicyService::politicaParaJs()) ?>,
+    dadosObvios: <?= json_encode(['nome' => $usuario['nome'], 'login' => $usuario['login'], 'email' => $usuario['email'] ?? '']) ?>
+});
+</script>
 
 <?php
 $conteudo = ob_get_clean();

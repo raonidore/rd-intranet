@@ -113,8 +113,9 @@ class EmpresaController extends Controller
     /** Servida no <img> do topo do menu lateral -- mesma lógica de acesso da logo da empresa. */
     public function logoSistema(): void
     {
-        AuthMiddleware::check();
-
+        // Sem AuthMiddleware de proposito -- essa imagem tambem aparece na
+        // tela de /login, antes de qualquer sessao existir. E' so a
+        // identidade visual do sistema, nao e' dado sensivel.
         if (!$this->ativoService->logoSistemaConfigurada()) {
             http_response_code(404);
             return;

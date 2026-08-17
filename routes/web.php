@@ -18,6 +18,8 @@ use App\Controllers\SambaMonitorController;
 use App\Controllers\SambaArquivosController;
 use App\Controllers\UserController;
 use App\Controllers\PerfilController;
+use App\Controllers\PasswordResetController;
+use App\Controllers\PoliticaSenhaController;
 use App\Controllers\SambaGrupoController;
 use App\Controllers\ApacheController;
 use App\Controllers\ApacheSiteController;
@@ -70,6 +72,11 @@ $router->get('/logout', [AuthController::class, 'logout']);
 $router->get('/perfil', [PerfilController::class, 'index']);
 $router->post('/perfil/atualizar', [PerfilController::class, 'atualizar']);
 $router->post('/perfil/senha', [PerfilController::class, 'senha']);
+
+$router->get('/login/esqueci', [PasswordResetController::class, 'esqueciForm']);
+$router->post('/login/esqueci', [PasswordResetController::class, 'esqueciEnviar']);
+$router->get('/login/redefinir', [PasswordResetController::class, 'redefinirForm']);
+$router->post('/login/redefinir', [PasswordResetController::class, 'redefinir']);
 
 $router->get('/samba/usuarios', [SambaController::class, 'usuarios']);
 $router->get('/samba/usuarios/novo', [SambaController::class, 'novoForm']);
@@ -396,6 +403,8 @@ $router->get('/administracao/usuarios/ativar', [UserController::class, 'ativar']
 $router->get('/administracao/usuarios/desativar', [UserController::class, 'desativar']);
 $router->get('/administracao/usuarios/excluir', [UserController::class, 'excluirForm']);
 $router->post('/administracao/usuarios/excluir', [UserController::class, 'excluir']);
+$router->get('/administracao/usuarios/politica-senha', [PoliticaSenhaController::class, 'index']);
+$router->post('/administracao/usuarios/politica-senha', [PoliticaSenhaController::class, 'salvar']);
 
 $router->get('/administracao/atualizacoes', [AtualizacaoController::class, 'index']);
 $router->get('/administracao/atualizacoes/descricao', [AtualizacaoController::class, 'descricao']);

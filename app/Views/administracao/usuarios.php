@@ -26,9 +26,14 @@ $rotulosPerfil = [
             </small>
         </div>
 
-        <a href="<?= url('/administracao/usuarios/novo') ?>" class="btn btn-primary">
-            <i class="bi bi-plus-lg"></i> Novo usuário
-        </a>
+        <div class="d-flex gap-2">
+            <a href="<?= url('/administracao/usuarios/politica-senha') ?>" class="btn btn-outline-secondary">
+                <i class="bi bi-shield-lock"></i> Política de senha
+            </a>
+            <a href="<?= url('/administracao/usuarios/novo') ?>" class="btn btn-primary">
+                <i class="bi bi-plus-lg"></i> Novo usuário
+            </a>
+        </div>
     </div>
 </div>
 
@@ -39,6 +44,7 @@ $rotulosPerfil = [
                 <tr>
                     <th>Usuário</th>
                     <th>Login</th>
+                    <th>E-mail</th>
                     <th>Perfil</th>
                     <th>Status</th>
                     <th class="text-end">Ações</th>
@@ -53,6 +59,7 @@ $rotulosPerfil = [
                             <?= htmlspecialchars($u['nome']) ?>
                         </td>
                         <td><?= htmlspecialchars($u['login']) ?></td>
+                        <td><?= $u['email'] ? htmlspecialchars($u['email']) : '<span class="text-muted">--</span>' ?></td>
                         <td><?= Badge::make($rotulo, $cor) ?></td>
                         <td><?= (int)$u['ativo'] === 1 ? Badge::make('Ativo', 'success') : Badge::make('Desativado', 'danger') ?></td>
                         <td class="text-end">

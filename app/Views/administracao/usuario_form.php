@@ -2,6 +2,7 @@
 
 use App\Components\Alert;
 use App\Services\ModuloCatalogo;
+use App\Services\PasswordPolicyService;
 
 ob_start();
 
@@ -45,6 +46,7 @@ $perfilAtual = $usuario['perfil'] ?? 'ti';
 }
 .uf-perfil-opcao .bi { font-size: 22px; display: block; margin-bottom: 4px; color: #64748b; }
 .uf-perfil-opcao input:checked + .uf-perfil-caixa .bi { color: #2563eb; }
+.senha-ui-requisito { display: flex; align-items: center; gap: 6px; font-size: 12.5px; }
 </style>
 
 <?= Alert::flash() ?>
@@ -66,22 +68,31 @@ $perfilAtual = $usuario['perfil'] ?? 'ti';
         <div class="card-header"><i class="bi bi-person-vcard me-1"></i> Dados básicos</div>
         <div class="card-body">
             <div class="row g-3 mb-3">
-                <div class="col-md-6">
+                <div class="col-md-5">
                     <label class="form-label small text-muted">Nome</label>
-                    <input type="text" name="nome" class="form-control" required
+                    <input type="text" name="nome" id="ufNome" class="form-control" required
                            value="<?= htmlspecialchars($usuario['nome'] ?? '') ?>">
                 </div>
 
                 <div class="col-md-3">
                     <label class="form-label small text-muted">Login</label>
-                    <input type="text" name="login" class="form-control" required
+                    <input type="text" name="login" id="ufLogin" class="form-control" required
                            <?= $editando ? 'value="' . htmlspecialchars($usuario['login']) . '" disabled' : '' ?>>
                 </div>
 
+                <div class="col-md-4">
+                    <label class="form-label small text-muted">E-mail <span class="fw-normal">(opcional)</span></label>
+                    <input type="email" name="email" id="ufEmail" class="form-control"
+                           placeholder="usado pra 'esqueci minha senha'"
+                           value="<?= htmlspecialchars($usuario['email'] ?? '') ?>">
+                    <div id="ufEmailFeedback" class="small mt-1"></div>
+                </div>
+
                 <?php if (!$editando): ?>
-                    <div class="col-md-3">
+                    <div class="col-md-5">
                         <label class="form-label small text-muted">Senha</label>
-                        <input type="password" name="senha" class="form-control" minlength="8" required>
+                        <input type="password" name="senha" id="ufSenha" class="form-control" required>
+                        <div id="ufSenhaChecklist" class="mt-2"></div>
                     </div>
                 <?php endif; ?>
             </div>
@@ -166,7 +177,48 @@ document.querySelectorAll('.uf-grupo-marcar-todos').forEach(function (link) {
         this.textContent = marcarTudo ? 'desmarcar todos' : 'marcar todos';
     });
 });
+
+(function () {
+    const campoEmail = document.getElementById('ufEmail');
+    const feedback = document.getElementById('ufEmailFeedback');
+    if (!campoEmail || !feedback) return;
+
+    campoEmail.addEventListener('input', function () {
+        if (campoEmail.value.trim() === '') {
+            feedback.innerHTML = '';
+            return;
+        }
+        const valido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(campoEmail.value.trim());
+        feedback.innerHTML = valido
+            ? '<span class="text-success"><i class="bi bi-check-circle-fill"></i> E-mail válido.</span>'
+            : '<span class="text-danger"><i class="bi bi-x-circle-fill"></i> Isso não parece um e-mail válido.</span>';
+    });
+})();
 </script>
+
+<?php if (!$editando): ?>
+<script src="<?= url('/assets/js/senha-ui.js') ?>"></script>
+<script>
+function ufDadosObvios() {
+    return {
+        nome: document.getElementById('ufNome').value,
+        login: document.getElementById('ufLogin').value,
+        email: document.getElementById('ufEmail').value,
+    };
+}
+RdSenhaUI.aplicar({
+    campoSenha: 'ufSenha',
+    checklistContainer: 'ufSenhaChecklist',
+    politica: <?= json_encode(PasswordPolicyService::politicaParaJs()) ?>,
+    dadosObvios: ufDadosObvios,
+});
+['ufNome', 'ufLogin', 'ufEmail'].forEach(function (id) {
+    document.getElementById(id).addEventListener('input', function () {
+        document.getElementById('ufSenha').dispatchEvent(new Event('input'));
+    });
+});
+</script>
+<?php endif; ?>
 
 <?php
 $conteudo = ob_get_clean();
