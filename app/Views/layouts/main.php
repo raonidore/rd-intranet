@@ -462,6 +462,19 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
     </div>
     <?php endif; ?>
 
+    <?php
+    $temSamba = PermissionService::temAcesso('samba_dashboard')
+        || PermissionService::temAcesso('samba_arquivos')
+        || PermissionService::temAcesso('deploy')
+        || PermissionService::temAcesso('samba_compartilhamentos')
+        || PermissionService::temAcesso('samba_config')
+        || PermissionService::temAcesso('samba_diagnostico')
+        || PermissionService::temAcesso('samba_grupos')
+        || PermissionService::temAcesso('samba_lixeira')
+        || PermissionService::temAcesso('samba_monitor')
+        || PermissionService::temAcesso('samba_usuarios');
+    ?>
+    <?php if ($temSamba): ?>
     <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuSamba"
             aria-expanded="<?= $abrirSamba ? 'true' : 'false' ?>">
         <span><i class="bi bi-hdd-network-fill me-2"></i>Samba</span>
@@ -528,6 +541,7 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         </a>
         <?php endif; ?>
     </div>
+    <?php endif; ?>
 
     <?php
     $temSeguranca = PermissionService::temAcesso('seguranca_antivirus');
