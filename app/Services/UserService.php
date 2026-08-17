@@ -162,6 +162,45 @@ class UserService
         return true;
     }
 
+    public function atualizarNomeProprio(int $id, string $nome): bool
+    {
+        $nome = trim($nome);
+
+        if ($nome === '') {
+            NotificationService::error('Informe o nome.');
+            return false;
+        }
+
+        $this->repository->atualizarNome($id, $nome);
+        $_SESSION['usuario']['nome'] = $nome;
+
+        return true;
+    }
+
+    public function alterarSenhaProprio(int $id, string $atual, string $nova, string $confirmacao): bool
+    {
+        $hashAtual = $this->repository->buscarHashSenha($id);
+
+        if (!$hashAtual || !password_verify($atual, $hashAtual)) {
+            NotificationService::error('Senha atual incorreta.');
+            return false;
+        }
+
+        if (strlen($nova) < 8) {
+            NotificationService::error('A nova senha deve ter pelo menos 8 caracteres.');
+            return false;
+        }
+
+        if ($nova !== $confirmacao) {
+            NotificationService::error('As senhas não conferem.');
+            return false;
+        }
+
+        $this->repository->atualizarSenha($id, password_hash($nova, PASSWORD_DEFAULT));
+
+        return true;
+    }
+
     private function ehUsuarioLogado(int $id): bool
     {
         return $id === (int)($_SESSION['usuario']['id'] ?? 0);

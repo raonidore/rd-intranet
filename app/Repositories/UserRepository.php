@@ -81,6 +81,23 @@ class UserRepository
         return $stmt->execute([$senhaHash, $id]);
     }
 
+    public function atualizarNome(int $id, string $nome): bool
+    {
+        $stmt = $this->pdo->prepare("UPDATE usuarios SET nome = ? WHERE id = ?");
+
+        return $stmt->execute([$nome, $id]);
+    }
+
+    public function buscarHashSenha(int $id): ?string
+    {
+        $stmt = $this->pdo->prepare("SELECT senha_hash FROM usuarios WHERE id = ? LIMIT 1");
+        $stmt->execute([$id]);
+
+        $hash = $stmt->fetchColumn();
+
+        return $hash !== false ? $hash : null;
+    }
+
     public function definirAtivo(int $id, bool $ativo): bool
     {
         $stmt = $this->pdo->prepare("UPDATE usuarios SET ativo = ? WHERE id = ?");

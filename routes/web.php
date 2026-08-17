@@ -17,6 +17,7 @@ use App\Controllers\SambaDashboardController;
 use App\Controllers\SambaMonitorController;
 use App\Controllers\SambaArquivosController;
 use App\Controllers\UserController;
+use App\Controllers\PerfilController;
 use App\Controllers\SambaGrupoController;
 use App\Controllers\ApacheController;
 use App\Controllers\ApacheSiteController;
@@ -65,6 +66,10 @@ $router->get('/dashboard', [DashboardController::class, 'index']);
 $router->get('/login', [AuthController::class, 'loginForm']);
 $router->post('/login', [AuthController::class, 'login']);
 $router->get('/logout', [AuthController::class, 'logout']);
+
+$router->get('/perfil', [PerfilController::class, 'index']);
+$router->post('/perfil/atualizar', [PerfilController::class, 'atualizar']);
+$router->post('/perfil/senha', [PerfilController::class, 'senha']);
 
 $router->get('/samba/usuarios', [SambaController::class, 'usuarios']);
 $router->get('/samba/usuarios/novo', [SambaController::class, 'novoForm']);

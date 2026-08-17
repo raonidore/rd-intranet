@@ -735,9 +735,14 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
             <small class="text-muted">RD Tecnologia</small>
         </div>
 
-        <div class="text-end">
-            <strong><?= htmlspecialchars($usuarioLogado['nome']) ?></strong><br>
-            <small class="text-muted">Usuário logado</small>
+        <div class="d-flex align-items-center gap-2">
+            <div class="text-end">
+                <strong><?= htmlspecialchars($usuarioLogado['nome']) ?></strong><br>
+                <small class="text-muted">Usuário logado</small>
+            </div>
+            <a href="<?= url('/perfil') ?>" class="btn btn-sm btn-outline-secondary" title="Meu perfil">
+                <i class="bi bi-person-gear"></i>
+            </a>
         </div>
     </div>
 
