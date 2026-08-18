@@ -47,6 +47,7 @@ class UserController extends Controller
         $ok = $this->service->criar([
             'nome' => $_POST['nome'] ?? '',
             'login' => $login,
+            'email' => $_POST['email'] ?? '',
             'senha' => $_POST['senha'] ?? '',
             'perfil' => $_POST['perfil'] ?? '',
             'modulos' => $_POST['modulos'] ?? [],
@@ -88,6 +89,7 @@ class UserController extends Controller
 
         $ok = $this->service->atualizar($id, [
             'nome' => $_POST['nome'] ?? '',
+            'email' => $_POST['email'] ?? '',
             'perfil' => $_POST['perfil'] ?? '',
             'modulos' => $_POST['modulos'] ?? [],
         ]);
