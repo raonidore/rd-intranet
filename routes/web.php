@@ -178,6 +178,7 @@ $router->get('/infraestrutura/servicos/recarregar', [InfrastructureController::c
 $router->get('/infraestrutura/servicos/logs', [InfrastructureController::class, 'logs']);
 $router->get('/infraestrutura/servicos/configurar', [InfrastructureController::class, 'servicosConfigurar']);
 $router->post('/infraestrutura/servicos/configurar', [InfrastructureController::class, 'servicosSalvar']);
+$router->get('/infraestrutura/servicos/diagnostico', [InfrastructureController::class, 'servicosDiagnostico']);
 
 $router->get('/infraestrutura/cron', [CronController::class, 'index']);
 $router->get('/infraestrutura/cron/novo', [CronController::class, 'novoForm']);

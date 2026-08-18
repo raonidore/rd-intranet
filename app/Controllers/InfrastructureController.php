@@ -86,6 +86,17 @@ class InfrastructureController extends Controller
         ]);
     }
 
+    public function servicosDiagnostico(): void
+    {
+        AuthMiddleware::checkModulo('infra_servicos');
+
+        $unidade = $_GET['unidade'] ?? '';
+
+        header('Content-Type: application/json');
+        echo json_encode($this->serviceManager->diagnostico($unidade));
+        exit;
+    }
+
     public function servicosSalvar(): void
     {
         AuthMiddleware::checkModulo('infra_servicos');

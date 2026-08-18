@@ -53,7 +53,19 @@ use App\Components\Badge;
                             <td><?= htmlspecialchars($item['nome']) ?></td>
                             <td><?= htmlspecialchars($item['inicializacao']) ?></td>
                             <td><?= $item['ativoDesde'] ? htmlspecialchars(data_br($item['ativoDesde'])) : '-' ?></td>
-                            <td><?= Badge::make($item['statusLabel']['texto'], $item['statusLabel']['cor']) ?></td>
+                            <td>
+                                <?= Badge::make($item['statusLabel']['texto'], $item['statusLabel']['cor']) ?>
+                                <?php if ($item['motivoFalha']): ?>
+                                    <div class="small text-danger mt-1">
+                                        <?= htmlspecialchars($item['motivoFalha']) ?>
+                                        <button type="button" class="btn btn-link btn-sm p-0 ms-1 botao-ver-logs"
+                                                data-unidade="<?= htmlspecialchars($item['unidade']) ?>"
+                                                data-unidade-completa="<?= htmlspecialchars($item['unidadeCompleta']) ?>">
+                                            ver logs
+                                        </button>
+                                    </div>
+                                <?php endif; ?>
+                            </td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
@@ -71,7 +83,48 @@ use App\Components\Badge;
     </div>
 </form>
 
+<div class="modal fade" id="modalLogsServico" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-terminal"></i> Últimas linhas do log -- <span id="modalLogsUnidade"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <pre id="modalLogsConteudo" class="bg-dark text-light p-3 rounded small mb-0" style="white-space:pre-wrap">Carregando...</pre>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
+(function () {
+    const modalUnidade = document.getElementById('modalLogsUnidade');
+    const modalConteudo = document.getElementById('modalLogsConteudo');
+
+    document.querySelectorAll('.botao-ver-logs').forEach(function (botao) {
+        botao.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            modalUnidade.textContent = botao.dataset.unidadeCompleta;
+            modalConteudo.textContent = 'Carregando...';
+            // instancia so' no clique -- nesse ponto o bootstrap.bundle.min.js
+            // (carregado no fim do layout, depois do $conteudo) ja rodou
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('modalLogsServico')).show();
+
+            fetch(<?= json_encode(url('/infraestrutura/servicos/diagnostico')) ?> + '?unidade=' + encodeURIComponent(botao.dataset.unidade))
+                .then(function (r) { return r.json(); })
+                .then(function (resultado) {
+                    modalConteudo.textContent = resultado.output || 'Sem log disponível.';
+                })
+                .catch(function () {
+                    modalConteudo.textContent = 'Erro ao buscar o log.';
+                });
+        });
+    });
+})();
+
 (function () {
     const campoFiltro = document.getElementById('filtro');
     const botaoSoFalha = document.getElementById('botaoSoFalha');

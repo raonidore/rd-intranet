@@ -96,14 +96,17 @@ class SystemServiceManager
         foreach ($unidades as $i => $unidade) {
             $d = $detalhes[$i] ?? [];
 
+            $statusLabel = $this->traduzirStatus($d['activeState'] ?? '', $d['subState'] ?? '');
+
             $catalogo[] = [
                 'unidade'          => $unidade,
                 'unidadeCompleta'  => $unidade . '.service',
                 'nome'             => ($d['descricao'] ?? '') ?: $unidade,
                 'gerenciado'       => in_array($unidade, $gerenciadas, true),
                 'inicializacao'    => $this->traduzirEstadoInicializacao($d['unitFileState'] ?? ''),
-                'statusLabel'      => $this->traduzirStatus($d['activeState'] ?? '', $d['subState'] ?? ''),
+                'statusLabel'      => $statusLabel,
                 'ativoDesde'       => $d['ativoDesde'] ?? '',
+                'motivoFalha'      => $statusLabel['texto'] === 'Falha' ? $this->motivoFalha($d['result'] ?? '', $d['execMainStatus'] ?? '') : '',
             ];
         }
 
@@ -133,7 +136,7 @@ class SystemServiceManager
 
         $args = implode(' ', array_map(fn($u) => escapeshellarg($u . '.service'), $unidades));
         $resultado = $this->linux->executar(
-            "systemctl show {$args} --property=Id,Description,UnitFileState,ActiveState,SubState,ActiveEnterTimestamp 2>/dev/null"
+            "systemctl show {$args} --property=Id,Description,UnitFileState,ActiveState,SubState,ActiveEnterTimestamp,Result,ExecMainStatus 2>/dev/null"
         );
 
         $blocos = preg_split('/\n\s*\n/', trim($resultado['output']));
@@ -156,6 +159,8 @@ class SystemServiceManager
                 'activeState'    => $atual['ActiveState'] ?? '',
                 'subState'       => $atual['SubState'] ?? '',
                 'ativoDesde'     => $atual['ActiveEnterTimestamp'] ?? '',
+                'result'         => $atual['Result'] ?? '',
+                'execMainStatus' => $atual['ExecMainStatus'] ?? '',
             ];
         }
 
@@ -193,6 +198,56 @@ class SystemServiceManager
             $subState === 'dead', $activeState === 'inactive' => ['texto' => 'Offline', 'cor' => 'secondary'],
             default => ['texto' => 'Desconhecido', 'cor' => 'secondary'],
         };
+    }
+
+    /**
+     * Traduz o "Result" que o systemd atribui a uma unidade em falha (por que
+     * ela caiu, nao so QUE caiu) -- junto com o codigo de saida quando
+     * disponivel, da pra entender o tipo de problema sem abrir terminal.
+     * Vem de graca no mesmo "systemctl show" em lote de catalogoDisponivel(),
+     * sem shell-out extra.
+     */
+    private function motivoFalha(string $result, string $execMainStatus): string
+    {
+        $texto = match ($result) {
+            'exit-code' => 'Encerrou com código de saída diferente de zero',
+            'signal' => 'Encerrado por sinal (processo morto/crash)',
+            'core-dump' => 'Encerrado com core dump (crash)',
+            'watchdog' => 'Watchdog expirou (processo travado, sem resposta)',
+            'start-limit-hit' => 'Excedeu o limite de tentativas de reinício automático',
+            'resources' => 'Falha ao alocar recursos do sistema pra iniciar',
+            'timeout' => 'Tempo limite excedido ao iniciar ou parar',
+            'protocol' => 'Erro de protocolo com o systemd (ex: sinal de "pronto" nunca chegou)',
+            '', '-' => 'Motivo não informado pelo systemd',
+            default => ucfirst(str_replace('-', ' ', $result)),
+        };
+
+        if ($execMainStatus !== '' && $execMainStatus !== '0') {
+            $texto .= " (código {$execMainStatus})";
+        }
+
+        return $texto;
+    }
+
+    /**
+     * Ultimas linhas do log da unidade -- pra entender O QUE deu errado de
+     * verdade (a mensagem real do processo), nao so a categoria generica do
+     * "Result". Diferente de logs() (usado pela tela de Serviços, restrita
+     * as unidades ja aprovadas na allowlist), esta e' usada pela tela de
+     * Configurar Servicos -- que existe justamente pra olhar unidades ANTES
+     * de decidir gerencia-las, entao nao faz sentido exigir allowlist aqui.
+     * So' leitura (journalctl), sem allowlist mas com a MESMA validacao de
+     * formato/existencia do services_web.sh -- nao da pra alterar nada do
+     * sistema com isso.
+     */
+    public function diagnostico(string $unidade): array
+    {
+        $resultado = $this->linux->executarScript(
+            '/opt/rdtecnologia/scripts/servico_diagnostico_web.sh',
+            [$unidade]
+        );
+
+        return ['success' => $resultado['success'], 'output' => $resultado['output']];
     }
 
     /**
