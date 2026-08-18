@@ -19,7 +19,7 @@ unset($_SESSION['flash_msg'], $_SESSION['flash_tipo']);
 <div class="card border-0 shadow-sm" style="width:390px;">
     <div class="card-body p-4">
         <div class="text-center mb-3">
-            <img src="<?= $logoSistemaConfigurada ? url('/administracao/empresa/logo-sistema') : url('/assets/img/logord.png') ?>" alt="RD Intranet" style="max-height:70px;max-width:100%;">
+            <img src="<?= $logoSistemaConfigurada ? url('/administracao/empresa/logo-sistema') : url('/assets/img/logord.png') ?>" alt="RD Intranet" style="max-height:70px;max-width:100%;border-radius:12px;">
         </div>
         <p class="text-muted text-center mb-4">Acesse o painel administrativo</p>
 
@@ -45,13 +45,11 @@ unset($_SESSION['flash_msg'], $_SESSION['flash_tipo']);
             </button>
         </form>
 
+        <?php if ($recuperacaoDisponivel): ?>
         <div class="text-center mt-3">
-            <?php if ($recuperacaoDisponivel): ?>
-                <a href="<?= url('/login/esqueci') ?>" class="small">Esqueci minha senha</a>
-            <?php else: ?>
-                <span class="small text-muted" title="Configure o envio de e-mail em Sistema > E-mail para habilitar">Esqueci minha senha</span>
-            <?php endif; ?>
+            <a href="<?= url('/login/esqueci') ?>" class="small">Esqueci minha senha</a>
         </div>
+        <?php endif; ?>
     </div>
 </div>
 
