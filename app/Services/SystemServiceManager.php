@@ -63,14 +63,22 @@ class SystemServiceManager
     }
 
     /**
-     * Todas as unidades .service instaladas no sistema, para a tela de seleção.
+     * Todas as unidades .service instaladas no sistema, para a tela de seleção
+     * -- com nome, estado de inicializacao, status (online/offline/falha) e
+     * "ativo desde" de cada uma, pra dar pra identificar visualmente qual
+     * unidade esta com problema (ex: a que faz a "saude do servidor" cair)
+     * sem precisar abrir terminal. Tudo isso vem de UM SO "systemctl show"
+     * pedindo todas as unidades de uma vez -- antes cada linha do catalogo
+     * disparava seu proprio "systemctl show" so pra pegar a descricao (N+1
+     * shell-outs pra uma lista que pode passar de 200 unidades); em lote
+     * fica mais rapido e ainda traz mais dado.
      */
     public function catalogoDisponivel(): array
     {
-        $resultado  = $this->linux->executar("systemctl list-unit-files --type=service --no-legend --plain 2>/dev/null");
+        $resultado = $this->linux->executar("systemctl list-unit-files --type=service --no-legend --plain 2>/dev/null");
         $gerenciadas = $this->unidadesGerenciadas();
 
-        $catalogo = [];
+        $unidades = [];
         foreach (explode("\n", trim($resultado['output'])) as $linha) {
             $linha = trim($linha);
             if ($linha === '') continue;
@@ -79,16 +87,112 @@ class SystemServiceManager
             $unidade = preg_replace('/\.service$/', '', $partes[0] ?? '');
             if ($unidade === '' || str_contains($unidade, '@')) continue;
 
+            $unidades[] = $unidade;
+        }
+
+        $detalhes = $this->detalhesEmLote($unidades);
+
+        $catalogo = [];
+        foreach ($unidades as $i => $unidade) {
+            $d = $detalhes[$i] ?? [];
+
             $catalogo[] = [
-                'unidade'    => $unidade,
-                'nome'       => $this->nomeAmigavel($unidade),
-                'gerenciado' => in_array($unidade, $gerenciadas, true),
+                'unidade'          => $unidade,
+                'unidadeCompleta'  => $unidade . '.service',
+                'nome'             => ($d['descricao'] ?? '') ?: $unidade,
+                'gerenciado'       => in_array($unidade, $gerenciadas, true),
+                'inicializacao'    => $this->traduzirEstadoInicializacao($d['unitFileState'] ?? ''),
+                'statusLabel'      => $this->traduzirStatus($d['activeState'] ?? '', $d['subState'] ?? ''),
+                'ativoDesde'       => $d['ativoDesde'] ?? '',
             ];
         }
 
         usort($catalogo, fn($a, $b) => strcmp($a['unidade'], $b['unidade']));
 
         return $catalogo;
+    }
+
+    /**
+     * Casa cada bloco de saida do "systemctl show" com a unidade pedida NA
+     * MESMA POSICAO (nao pelo "Id=" retornado) -- unidades "alias" (ex:
+     * mysql -> mariadb.service, syslog -> rsyslog.service, smb -> smbd.service)
+     * fazem o systemd devolver o Id do unit REAL por tras do alias, que não
+     * bate com o nome pedido; indexar pelo Id perdia essas unidades
+     * silenciosamente. A ordem dos blocos de saida acompanha a ordem dos
+     * argumentos (garantia do systemctl show), entao casar por posicao e'
+     * o jeito confiavel.
+     *
+     * @param string[] $unidades nomes sem ".service"
+     * @return array<int, array{descricao: string, unitFileState: string, activeState: string, subState: string, ativoDesde: string}>
+     */
+    private function detalhesEmLote(array $unidades): array
+    {
+        if (empty($unidades)) {
+            return [];
+        }
+
+        $args = implode(' ', array_map(fn($u) => escapeshellarg($u . '.service'), $unidades));
+        $resultado = $this->linux->executar(
+            "systemctl show {$args} --property=Id,Description,UnitFileState,ActiveState,SubState,ActiveEnterTimestamp 2>/dev/null"
+        );
+
+        $blocos = preg_split('/\n\s*\n/', trim($resultado['output']));
+
+        $detalhes = [];
+        foreach ($blocos as $i => $bloco) {
+            $atual = [];
+            foreach (explode("\n", $bloco) as $linha) {
+                $linha = rtrim($linha);
+                if (!str_contains($linha, '=')) {
+                    continue;
+                }
+                [$chave, $valor] = explode('=', $linha, 2);
+                $atual[$chave] = $valor;
+            }
+
+            $detalhes[$i] = [
+                'descricao'      => $atual['Description'] ?? '',
+                'unitFileState'  => $atual['UnitFileState'] ?? '',
+                'activeState'    => $atual['ActiveState'] ?? '',
+                'subState'       => $atual['SubState'] ?? '',
+                'ativoDesde'     => $atual['ActiveEnterTimestamp'] ?? '',
+            ];
+        }
+
+        return $detalhes;
+    }
+
+    public function traduzirEstadoInicializacao(string $estado): string
+    {
+        return match ($estado) {
+            'enabled', 'enabled-runtime' => 'Habilitado',
+            'disabled' => 'Desabilitado',
+            'static' => 'Estático',
+            'masked', 'masked-runtime' => 'Mascarado',
+            'alias' => 'Alias',
+            'indirect' => 'Indireto',
+            'generated' => 'Gerado',
+            'transient' => 'Transitório',
+            'bad' => 'Inválido',
+            '' => '-',
+            'unknown' => 'Desconhecido',
+            default => $estado,
+        };
+    }
+
+    /**
+     * @return array{texto: string, cor: string}
+     */
+    private function traduzirStatus(string $activeState, string $subState): array
+    {
+        return match (true) {
+            $activeState === 'active' => ['texto' => 'Online', 'cor' => 'success'],
+            $activeState === 'failed' => ['texto' => 'Falha', 'cor' => 'danger'],
+            $activeState === 'activating' => ['texto' => 'Iniciando', 'cor' => 'warning'],
+            $activeState === 'deactivating' => ['texto' => 'Parando', 'cor' => 'warning'],
+            $subState === 'dead', $activeState === 'inactive' => ['texto' => 'Offline', 'cor' => 'secondary'],
+            default => ['texto' => 'Desconhecido', 'cor' => 'secondary'],
+        };
     }
 
     /**

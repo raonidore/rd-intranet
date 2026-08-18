@@ -24,10 +24,13 @@ class InfrastructureController extends Controller
         $servicos = [];
 
         foreach ($this->serviceManager->listarServicos() as $chave => $nome) {
+            $status = $this->serviceManager->status($chave);
+            $status['enabled'] = $this->serviceManager->traduzirEstadoInicializacao($status['enabled']);
+
             $servicos[] = [
                 'chave' => $chave,
                 'nome' => $nome,
-                'status' => $this->serviceManager->status($chave)
+                'status' => $status
             ];
         }
 
