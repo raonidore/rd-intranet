@@ -102,6 +102,19 @@ function corPercentualInfra(float $p): string
             <span class="tech-label">Saúde geral</span>
         </div>
     </div>
+
+    <?php if ($saude['percentual'] < 100): ?>
+    <div class="hero-content mt-3 pt-3" style="border-top:1px solid rgba(255,255,255,.1)">
+        <div class="tech-label mb-2"><i class="bi bi-exclamation-triangle-fill" style="color:#f59e0b"></i> Por que não está em 100%</div>
+        <div class="d-flex flex-column gap-2">
+            <?php foreach ($saude['motivos'] as $motivo): ?>
+                <div class="d-flex align-items-center gap-2" style="font-size:13.5px; color:#fca5a5">
+                    <i class="bi bi-x-circle-fill" style="font-size:10px"></i> <?= htmlspecialchars($motivo) ?>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    </div>
+    <?php endif; ?>
 </div>
 
 <div class="row g-3">
