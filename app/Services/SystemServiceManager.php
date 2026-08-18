@@ -218,11 +218,15 @@ class SystemServiceManager
             'resources' => 'Falha ao alocar recursos do sistema pra iniciar',
             'timeout' => 'Tempo limite excedido ao iniciar ou parar',
             'protocol' => 'Erro de protocolo com o systemd (ex: sinal de "pronto" nunca chegou)',
+            'oom-kill' => 'Morto pelo OOM killer do Linux (o servidor ficou sem memória disponível)',
             '', '-' => 'Motivo não informado pelo systemd',
             default => ucfirst(str_replace('-', ' ', $result)),
         };
 
-        if ($execMainStatus !== '' && $execMainStatus !== '0') {
+        // O numero so' faz sentido como "codigo de saida" pra exit-code --
+        // pros demais resultados (sinal, oom-kill, etc.) ExecMainStatus e'
+        // o numero do SINAL, nao um codigo de erro, e so' confundiria.
+        if ($result === 'exit-code' && $execMainStatus !== '' && $execMainStatus !== '0') {
             $texto .= " (código {$execMainStatus})";
         }
 
