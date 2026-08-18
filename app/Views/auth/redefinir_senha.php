@@ -12,22 +12,20 @@ unset($_SESSION['flash_msg'], $_SESSION['flash_tipo']);
     <link rel="icon" href="<?= url('/assets/img/favicon.png') ?>" type="image/png">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    <style>
-    .senha-ui-requisito { display: flex; align-items: center; gap: 6px; font-size: 12.5px; }
-    </style>
+    <?php require __DIR__ . '/_auth_estilo.php'; ?>
 </head>
 
-<body class="bg-light d-flex align-items-center justify-content-center" style="min-height:100vh;">
+<body class="auth-body d-flex align-items-center justify-content-center">
 
-<div class="card border-0 shadow-sm" style="width:390px;">
-    <div class="card-body p-4">
-        <div class="text-center mb-3">
-            <img src="<?= $logoSistemaConfigurada ? url('/administracao/empresa/logo-sistema') : url('/assets/img/logord.png') ?>" alt="RD Intranet" style="max-height:70px;max-width:100%;">
+<div class="auth-card card border-0">
+    <div class="card-body p-4 p-sm-5">
+        <div class="text-center mb-4">
+            <img src="<?= $logoSistemaConfigurada ? url('/administracao/empresa/logo-sistema') : url('/assets/img/logord.png') ?>" alt="RD Intranet" class="auth-logo">
         </div>
         <h5 class="text-center mb-3">Criar nova senha</h5>
 
         <?php if ($mensagem): ?>
-            <div class="alert alert-<?= $tipoMensagem === 'success' ? 'success' : 'danger' ?>">
+            <div class="alert alert-<?= $tipoMensagem === 'success' ? 'success' : 'danger' ?> py-2">
                 <?= htmlspecialchars($mensagem) ?>
             </div>
         <?php endif; ?>
@@ -35,7 +33,7 @@ unset($_SESSION['flash_msg'], $_SESSION['flash_tipo']);
         <?php if (!$valido): ?>
             <div class="alert alert-danger">Link inválido ou expirado. Solicite a redefinição novamente.</div>
             <div class="text-center mt-3">
-                <a href="<?= url('/login/esqueci') ?>" class="small">Solicitar novo link</a>
+                <a href="<?= url('/login/esqueci') ?>" class="auth-link-esqueci">Solicitar novo link</a>
             </div>
         <?php else: ?>
             <form method="post" action="<?= url('/login/redefinir') ?>">
@@ -47,13 +45,13 @@ unset($_SESSION['flash_msg'], $_SESSION['flash_tipo']);
                     <div id="rsSenhaChecklist" class="mt-2"></div>
                 </div>
 
-                <div class="mb-3">
+                <div class="mb-4">
                     <label class="form-label">Confirmar nova senha</label>
                     <input type="password" name="confirmacao" id="rsConfirmacao" class="form-control" required>
                     <div id="rsSenhaMatch"></div>
                 </div>
 
-                <button type="submit" class="btn btn-primary w-100">
+                <button type="submit" class="btn btn-primary w-100 auth-btn">
                     <i class="bi bi-check-lg"></i> Redefinir senha
                 </button>
             </form>
@@ -71,8 +69,8 @@ unset($_SESSION['flash_msg'], $_SESSION['flash_tipo']);
             </script>
         <?php endif; ?>
 
-        <div class="text-center mt-3">
-            <a href="<?= url('/login') ?>" class="small"><i class="bi bi-arrow-left"></i> Voltar pro login</a>
+        <div class="text-center mt-4">
+            <a href="<?= url('/login') ?>" class="auth-voltar"><i class="bi bi-arrow-left"></i> Voltar pro login</a>
         </div>
     </div>
 </div>
