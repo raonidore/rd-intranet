@@ -34,10 +34,11 @@
     var ESTILO_EXPORT =
         'body{font-family:Arial,Helvetica,sans-serif;color:#1e293b;background:#fff;margin:0;padding:24px}' +
         '.rd-export-cabecalho{display:flex;align-items:center;gap:16px;border-bottom:2px solid #2563eb;padding-bottom:16px;margin-bottom:20px}' +
-        '.rd-export-cabecalho img{max-width:160px;max-height:64px;object-fit:contain}' +
+        '.rd-export-cabecalho img{max-width:150px;max-height:60px;object-fit:contain;border-radius:10px;background:#fff;padding:6px 10px;box-shadow:0 1px 4px rgba(0,0,0,.15)}' +
         '.rd-export-cabecalho h2{margin:0;font-size:20px;color:#0f172a}' +
         '.rd-export-cabecalho small{color:#64748b}' +
         '.rd-export-rodape{margin-top:24px;padding-top:12px;border-top:1px solid #e2e8f0;color:#94a3b8;font-size:12px;text-align:center}' +
+        '.rd-export-rodape a{color:#2563eb;text-decoration:underline}' +
         '.card{border:1px solid #e2e8f0;border-radius:10px;overflow:hidden}' +
         '.card-header{background:#f8fafc;padding:10px 16px;border-bottom:1px solid #e2e8f0;font-weight:600}' +
         '.card-body{padding:16px}' +
@@ -116,7 +117,13 @@
 
         var rodape = document.createElement('div');
         rodape.className = 'rd-export-rodape';
-        rodape.textContent = 'Desenvolvido por RD.Tecnologia — www.rd.inf.br';
+        rodape.appendChild(document.createTextNode('Desenvolvido por RD.Tecnologia — '));
+        var linkSite = document.createElement('a');
+        linkSite.href = 'https://www.rd.inf.br';
+        linkSite.target = '_blank';
+        linkSite.rel = 'noopener';
+        linkSite.textContent = 'www.rd.inf.br';
+        rodape.appendChild(linkSite);
         wrapper.appendChild(rodape);
 
         document.body.appendChild(wrapper);
@@ -159,24 +166,65 @@
         });
     }
 
+    /**
+     * Não usa doc.html() do jsPDF -- com o wrapper fora da tela
+     * (position:absolute;left:-9999px), o cálculo interno de paginação
+     * dele sai errado e gera dezenas de páginas em branco (visto ao vivo:
+     * MTR de 12 saltos virou um PDF de 27 páginas vazias). Em vez disso,
+     * captura o conteúdo uma vez com html2canvas (mesmo caminho que já
+     * funciona pro JPG) e fatia a imagem resultante manualmente em
+     * páginas A4 -- padrão simples e previsível pra imagem "alta".
+     */
     function exportarPdf(wrapper, nomeBase) {
         var jsPDF = window.jspdf && window.jspdf.jsPDF;
         if (!jsPDF) {
             return Promise.reject(new Error('jsPDF não carregado.'));
         }
 
-        var doc = new jsPDF('p', 'pt', 'a4');
+        // O rodapé vira texto real (clicável) via pdf.textWithLink() logo
+        // abaixo, em vez de pixel dentro da imagem -- por isso não entra
+        // na captura do html2canvas.
+        var rodapeNode = wrapper.querySelector('.rd-export-rodape');
+        if (rodapeNode) {
+            rodapeNode.remove();
+        }
 
-        return new Promise(function (resolve) {
-            doc.html(wrapper, {
-                margin: [24, 24, 24, 24],
-                autoPaging: 'text',
-                html2canvas: { scale: 2, backgroundColor: '#ffffff' },
-                callback: function (pdf) {
-                    pdf.save(nomeBase + '.pdf');
-                    resolve();
-                },
+        return window.html2canvas(wrapper, { backgroundColor: '#ffffff', scale: 2 }).then(function (canvas) {
+            var pdf = new jsPDF('p', 'pt', 'a4');
+            var margem = 24;
+            var pageWidth = pdf.internal.pageSize.getWidth();
+            var pageHeight = pdf.internal.pageSize.getHeight();
+            var imgWidth = pageWidth - margem * 2;
+            var imgHeight = (canvas.height * imgWidth) / canvas.width;
+            var imgData = canvas.toDataURL('image/jpeg', 0.92);
+            var areaUtil = pageHeight - margem * 2;
+
+            var restante = imgHeight;
+            var deslocamento = 0;
+
+            pdf.addImage(imgData, 'JPEG', margem, margem, imgWidth, imgHeight);
+            restante -= areaUtil;
+
+            while (restante > 0) {
+                deslocamento += areaUtil;
+                pdf.addPage();
+                pdf.addImage(imgData, 'JPEG', margem, margem - deslocamento, imgWidth, imgHeight);
+                restante -= areaUtil;
+            }
+
+            var alturaUltimaFatia = imgHeight - (Math.ceil(imgHeight / areaUtil) - 1) * areaUtil;
+            if (alturaUltimaFatia > areaUtil - 40) {
+                pdf.addPage();
+            }
+
+            pdf.setFontSize(9);
+            pdf.setTextColor(148, 163, 184);
+            pdf.textWithLink('Desenvolvido por RD.Tecnologia — www.rd.inf.br', pageWidth / 2, pageHeight - 20, {
+                align: 'center',
+                url: 'https://www.rd.inf.br',
             });
+
+            pdf.save(nomeBase + '.pdf');
         });
     }
 

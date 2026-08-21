@@ -94,7 +94,7 @@ use App\Components\Alert;
     </div>
 <?php endif; ?>
 
-<script src="<?= url('/assets/js/rd-diagnostico.js') ?>"></script>
+<script src="<?= asset_url('/assets/js/rd-diagnostico.js') ?>"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
 <script>
