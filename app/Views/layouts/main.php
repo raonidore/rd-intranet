@@ -35,6 +35,7 @@ $abrirVpn = $rdSecaoAtiva(['/vpn']);
 $abrirSistema = $rdSecaoAtiva(['/administracao', '/auditoria']);
 $abrirEntra = $rdSecaoAtiva(['/entra']);
 $abrirBaseConhecimento = $rdSecaoAtiva(['/base-conhecimento']);
+$abrirWhatsapp = $rdSecaoAtiva(['/whatsapp']);
 
 $abrirHardware = $rdSecaoAtiva(['/infraestrutura/hardware']);
 $abrirRede = $rdSecaoAtiva(['/infraestrutura/rede', '/infraestrutura/servidor/rede']);
@@ -299,6 +300,27 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         <a href="<?= url('/base-conhecimento') ?>" class="<?= str_starts_with($uriAtual, '/base-conhecimento') ? 'active' : '' ?>">
             <i class="bi bi-journal-text me-2"></i> Artigos
         </a>
+    </div>
+    <?php endif; ?>
+
+    <?php
+    $temWhatsapp = PermissionService::temAcesso('whatsapp_atendimentos')
+        || PermissionService::temAcesso('whatsapp_fila')
+        || PermissionService::temAcesso('whatsapp_chatbot')
+        || PermissionService::temAcesso('whatsapp_setores');
+    ?>
+    <?php if ($temWhatsapp): ?>
+    <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuWhatsapp"
+            aria-expanded="<?= $abrirWhatsapp ? 'true' : 'false' ?>">
+        <span><i class="bi bi-whatsapp me-2"></i>WhatsApp</span>
+        <i class="bi bi-chevron-right chevron"></i>
+    </button>
+    <div class="collapse <?= $abrirWhatsapp ? 'show' : '' ?>" id="menuWhatsapp">
+        <?php if (PermissionService::temAcesso('whatsapp_setores')): ?>
+        <a href="<?= url('/whatsapp/setores') ?>" class="<?= $uriAtual === '/whatsapp/setores' ? 'active' : '' ?>">
+            <i class="bi bi-diagram-3 me-2"></i> Setores
+        </a>
+        <?php endif; ?>
     </div>
     <?php endif; ?>
 

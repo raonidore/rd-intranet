@@ -63,6 +63,10 @@ class ModuloCatalogo
         'backup_historico' => ['label' => 'Histórico', 'grupo' => 'Backup'],
         'base_conhecimento_visualizar' => ['label' => 'Base de Conhecimento - Visualizar', 'grupo' => 'Base de Conhecimento'],
         'base_conhecimento_criar' => ['label' => 'Base de Conhecimento - Criar/Gerenciar', 'grupo' => 'Base de Conhecimento'],
+        'whatsapp_atendimentos' => ['label' => 'WhatsApp - Atendimentos', 'grupo' => 'WhatsApp'],
+        'whatsapp_fila' => ['label' => 'WhatsApp - Fila', 'grupo' => 'WhatsApp'],
+        'whatsapp_chatbot' => ['label' => 'WhatsApp - Chatbot', 'grupo' => 'WhatsApp'],
+        'whatsapp_setores' => ['label' => 'WhatsApp - Setores', 'grupo' => 'WhatsApp'],
     ];
 
     public static function chaves(): array
@@ -101,6 +105,7 @@ class ModuloCatalogo
         'Segurança' => 'bi-shield-lock',
         'SSH' => 'bi-hdd-network',
         'VPN' => 'bi-shield-shaded',
+        'WhatsApp' => 'bi-whatsapp',
     ];
 
     public static function iconeDoGrupo(string $grupo): string
@@ -120,7 +125,7 @@ class ModuloCatalogo
      */
 
     public const GRUPOS_TOGGLEAVEIS = [
-        'Apache', 'Banco de Dados', 'Ativos', 'Infraestrutura', 'VPN', 'Samba', 'Segurança', 'Microsoft Entra', 'Backup', 'SSH', 'Base de Conhecimento',
+        'Apache', 'Banco de Dados', 'Ativos', 'Infraestrutura', 'VPN', 'Samba', 'Segurança', 'Microsoft Entra', 'Backup', 'SSH', 'Base de Conhecimento', 'WhatsApp',
     ];
 
     /** Grupos que nascem desligados em instalações novas -- opt-in, não fazem parte do uso típico. */

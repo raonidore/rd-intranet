@@ -35,6 +35,7 @@ use App\Controllers\CronController;
 use App\Controllers\IptablesController;
 use App\Controllers\CertificadoController;
 use App\Controllers\KbController;
+use App\Controllers\WhatsAppSetorController;
 use App\Controllers\IntegracoesController;
 use App\Controllers\DependenciaController;
 use App\Controllers\SpeedtestController;
@@ -246,6 +247,12 @@ $router->post('/base-conhecimento/categoria/excluir', [KbController::class, 'cat
 $router->post('/base-conhecimento/subcategoria/criar', [KbController::class, 'subcategoriaCriar']);
 $router->post('/base-conhecimento/subcategoria/excluir', [KbController::class, 'subcategoriaExcluir']);
 $router->post('/base-conhecimento/sincronizar', [KbController::class, 'sincronizar']);
+
+$router->get('/whatsapp/setores', [WhatsAppSetorController::class, 'index']);
+$router->post('/whatsapp/setores/criar', [WhatsAppSetorController::class, 'criar']);
+$router->post('/whatsapp/setores/atualizar', [WhatsAppSetorController::class, 'atualizar']);
+$router->post('/whatsapp/setores/excluir', [WhatsAppSetorController::class, 'excluir']);
+$router->post('/whatsapp/setores/usuarios', [WhatsAppSetorController::class, 'salvarUsuarios']);
 
 $router->get('/administracao/integracoes', [IntegracoesController::class, 'index']);
 $router->get('/administracao/integracoes/base-conhecimento', [IntegracoesController::class, 'baseConhecimentoForm']);
