@@ -157,7 +157,7 @@ class WhatsAppChatbotService
 
     public function processarMensagem(array $atendimento, string $numero, string $texto): void
     {
-        $bridge = new WhatsAppBridgeService();
+        $mensageiro = new WhatsAppMensagemService();
         $atendimentoService = new WhatsAppAtendimentoService();
 
         if (empty($atendimento['no_bot_atual_id'])) {
@@ -171,7 +171,7 @@ class WhatsAppChatbotService
                 return;
             }
 
-            $this->entrarNo((int)$atendimento['id'], $raiz, $numero, $bridge, $atendimentoService, true);
+            $this->entrarNo((int)$atendimento['id'], $raiz, $numero, $mensageiro, $atendimentoService, true);
             return;
         }
 
@@ -198,23 +198,23 @@ class WhatsAppChatbotService
                 ->execute([$tentativas, $atendimento['id']]);
 
             $aviso = "Opção inválida. " . $atual['mensagem'];
-            $bridge->enviar($numero, $aviso);
+            $mensageiro->enviar($numero, $aviso);
             $atendimentoService->registrarMensagemSaida((int)$atendimento['id'], $aviso, 'bot');
             return;
         }
 
-        $this->entrarNo((int)$atendimento['id'], $selecionado, $numero, $bridge, $atendimentoService, true);
+        $this->entrarNo((int)$atendimento['id'], $selecionado, $numero, $mensageiro, $atendimentoService, true);
     }
 
     private function entrarNo(
         int $atendimentoId,
         array $no,
         string $numero,
-        WhatsAppBridgeService $bridge,
+        WhatsAppMensagemService $mensageiro,
         WhatsAppAtendimentoService $atendimentoService,
         bool $reiniciaTentativas
     ): void {
-        $bridge->enviar($numero, $no['mensagem']);
+        $mensageiro->enviar($numero, $no['mensagem']);
         $atendimentoService->registrarMensagemSaida($atendimentoId, $no['mensagem'], 'bot');
 
         if ($no['tipo'] === 'resposta_final') {

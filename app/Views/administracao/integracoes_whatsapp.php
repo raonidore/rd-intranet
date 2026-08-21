@@ -29,20 +29,20 @@ use App\Components\Alert;
                     </div>
                 </div>
                 <div class="col-md-4">
-                    <div class="form-check border rounded p-2 h-100 bg-light">
-                        <input type="radio" name="tipo" value="api_oficial" class="form-check-input" disabled>
-                        <label class="form-check-label d-block text-muted" for="tipoApiOficial">
+                    <div class="form-check border rounded p-2 h-100">
+                        <input type="radio" name="tipo" value="api_oficial" class="form-check-input" id="tipoApiOficial" <?= $tipoAtual === 'api_oficial' ? 'checked' : '' ?>>
+                        <label class="form-check-label d-block" for="tipoApiOficial">
                             <strong>API Oficial (Meta)</strong>
-                            <div class="small">Em breve.</div>
+                            <div class="text-muted small">Precisa de conta Meta Business verificada e número aprovado. <?= $metaConfigurado ? '<span class="text-success">Configurado.</span>' : '' ?></div>
                         </label>
                     </div>
                 </div>
                 <div class="col-md-4">
-                    <div class="form-check border rounded p-2 h-100 bg-light">
-                        <input type="radio" name="tipo" value="twilio" class="form-check-input" disabled>
-                        <label class="form-check-label d-block text-muted" for="tipoTwilio">
+                    <div class="form-check border rounded p-2 h-100">
+                        <input type="radio" name="tipo" value="twilio" class="form-check-input" id="tipoTwilio" <?= $tipoAtual === 'twilio' ? 'checked' : '' ?>>
+                        <label class="form-check-label d-block" for="tipoTwilio">
                             <strong>Twilio</strong>
-                            <div class="small">Em breve.</div>
+                            <div class="text-muted small">Custo por mensagem via Twilio, aprovação mais rápida. <?= $twilioConfigurado ? '<span class="text-success">Configurado.</span>' : '' ?></div>
                         </label>
                     </div>
                 </div>
@@ -172,6 +172,78 @@ use App\Components\Alert;
     timerStatus = setInterval(atualizarStatus, 3000);
 })();
 </script>
+<?php endif; ?>
+
+<?php if ($tipoAtual === 'api_oficial'): ?>
+<div class="card border-0 shadow-sm" style="max-width:720px">
+    <div class="card-header bg-white">Configuração -- API Oficial (Meta)</div>
+    <div class="card-body">
+        <p class="text-muted small">
+            Crie um app no <a href="https://developers.facebook.com/" target="_blank" rel="noopener">Meta for Developers</a>,
+            adicione o produto WhatsApp e pegue o <strong>Phone Number ID</strong> e o <strong>Access Token</strong> por lá.
+            No painel de configuração do webhook do app, cole a URL abaixo e o Verify Token que você escolher aqui.
+        </p>
+        <div class="mb-3">
+            <label class="form-label small">URL do webhook (colar no painel da Meta)</label>
+            <input type="text" class="form-control form-control-sm" value="<?= htmlspecialchars($webhookMetaUrl) ?>" readonly onclick="this.select()">
+        </div>
+        <form method="post" action="<?= url('/administracao/integracoes/whatsapp/meta') ?>">
+            <div class="mb-2">
+                <label class="form-label small">Phone Number ID</label>
+                <input type="text" name="phone_number_id" class="form-control form-control-sm" value="<?= htmlspecialchars($metaPhoneNumberId) ?>" required>
+            </div>
+            <div class="mb-2">
+                <label class="form-label small">Access Token</label>
+                <input type="password" name="access_token" class="form-control form-control-sm" placeholder="<?= $metaConfigurado ? '•••••••• (deixe em branco para manter)' : 'token de acesso permanente' ?>">
+            </div>
+            <div class="mb-2">
+                <label class="form-label small">Verify Token (você escolhe -- cole o mesmo valor no painel da Meta)</label>
+                <input type="text" name="verify_token" class="form-control form-control-sm" value="<?= htmlspecialchars($metaVerifyToken) ?>" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label small">App Secret (opcional -- valida a assinatura do webhook)</label>
+                <input type="password" name="app_secret" class="form-control form-control-sm" placeholder="opcional, mais seguro se preenchido">
+            </div>
+            <button type="submit" class="btn btn-sm btn-primary">
+                <i class="bi bi-check-lg"></i> Salvar
+            </button>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
+
+<?php if ($tipoAtual === 'twilio'): ?>
+<div class="card border-0 shadow-sm" style="max-width:720px">
+    <div class="card-header bg-white">Configuração -- Twilio</div>
+    <div class="card-body">
+        <p class="text-muted small">
+            No <a href="https://console.twilio.com/" target="_blank" rel="noopener">console da Twilio</a>, pegue o
+            <strong>Account SID</strong>, o <strong>Auth Token</strong> e o número habilitado pra WhatsApp (sandbox ou
+            número aprovado). Na configuração do WhatsApp Sender, cole a URL abaixo como webhook de mensagem recebida.
+        </p>
+        <div class="mb-3">
+            <label class="form-label small">URL do webhook (colar no console da Twilio)</label>
+            <input type="text" class="form-control form-control-sm" value="<?= htmlspecialchars($webhookTwilioUrl) ?>" readonly onclick="this.select()">
+        </div>
+        <form method="post" action="<?= url('/administracao/integracoes/whatsapp/twilio') ?>">
+            <div class="mb-2">
+                <label class="form-label small">Account SID</label>
+                <input type="text" name="account_sid" class="form-control form-control-sm" value="<?= htmlspecialchars($twilioAccountSid) ?>" required>
+            </div>
+            <div class="mb-2">
+                <label class="form-label small">Auth Token</label>
+                <input type="password" name="auth_token" class="form-control form-control-sm" placeholder="<?= $twilioConfigurado ? '•••••••• (deixe em branco para manter)' : 'auth token' ?>">
+            </div>
+            <div class="mb-3">
+                <label class="form-label small">Número do WhatsApp (Twilio)</label>
+                <input type="text" name="numero" class="form-control form-control-sm" value="<?= htmlspecialchars($twilioNumero) ?>" placeholder="+14155238886" required>
+            </div>
+            <button type="submit" class="btn btn-sm btn-primary">
+                <i class="bi bi-check-lg"></i> Salvar
+            </button>
+        </form>
+    </div>
+</div>
 <?php endif; ?>
 
 <?php

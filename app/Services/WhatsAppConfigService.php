@@ -17,7 +17,7 @@ class WhatsAppConfigService
     private const CHAVE_BRIDGE_INSTALADO = 'whatsapp_bridge_instalado';
 
     public const TIPOS_VALIDOS = ['qrcode', 'api_oficial', 'twilio'];
-    public const TIPOS_DISPONIVEIS = ['qrcode'];
+    public const TIPOS_DISPONIVEIS = ['qrcode', 'api_oficial', 'twilio'];
 
     private const PORTA_PADRAO = 3300;
 
@@ -38,7 +38,7 @@ class WhatsAppConfigService
         }
 
         if (!in_array($tipo, self::TIPOS_DISPONIVEIS, true)) {
-            return ['success' => false, 'message' => 'Esse tipo de integração ainda não está disponível -- só QR Code por enquanto.'];
+            return ['success' => false, 'message' => 'Esse tipo de integração ainda não está disponível.'];
         }
 
         ConfigService::set(self::CHAVE_TIPO, $tipo);

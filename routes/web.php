@@ -284,6 +284,8 @@ $router->post('/administracao/integracoes/whatsapp/instalar', [WhatsAppIntegraca
 $router->get('/administracao/integracoes/whatsapp/status', [WhatsAppIntegracaoController::class, 'status']);
 $router->get('/administracao/integracoes/whatsapp/qrcode', [WhatsAppIntegracaoController::class, 'qrcode']);
 $router->post('/administracao/integracoes/whatsapp/desconectar', [WhatsAppIntegracaoController::class, 'desconectar']);
+$router->post('/administracao/integracoes/whatsapp/meta', [WhatsAppIntegracaoController::class, 'salvarMeta']);
+$router->post('/administracao/integracoes/whatsapp/twilio', [WhatsAppIntegracaoController::class, 'salvarTwilio']);
 
 $router->get('/infraestrutura/dependencias', [DependenciaController::class, 'index']);
 $router->post('/infraestrutura/dependencias/instalar', [DependenciaController::class, 'instalar']);
@@ -624,6 +626,9 @@ $router->get('/api/ativos/agente/versao', [AtivoAgenteController::class, 'versao
 $router->get('/api/ativos/agente/download', [AtivoAgenteController::class, 'downloadAtualizacao']);
 
 $router->post('/api/whatsapp/webhook', [WhatsAppWebhookController::class, 'receber']);
+$router->get('/api/whatsapp/webhook/meta', [WhatsAppWebhookController::class, 'verificarMeta']);
+$router->post('/api/whatsapp/webhook/meta', [WhatsAppWebhookController::class, 'receberMeta']);
+$router->post('/api/whatsapp/webhook/twilio', [WhatsAppWebhookController::class, 'receberTwilio']);
 
 $router->get('/ativos/cadastros', [AtivoController::class, 'cadastros']);
 $router->post('/ativos/cadastros/novo', [AtivoController::class, 'cadastroNovo']);

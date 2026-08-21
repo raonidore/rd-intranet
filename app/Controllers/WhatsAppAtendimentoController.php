@@ -7,7 +7,7 @@ use App\Middleware\AuthMiddleware;
 use App\Services\AuditService;
 use App\Services\NotificationService;
 use App\Services\WhatsAppAtendimentoService;
-use App\Services\WhatsAppBridgeService;
+use App\Services\WhatsAppMensagemService;
 
 class WhatsAppAtendimentoController extends Controller
 {
@@ -61,7 +61,7 @@ class WhatsAppAtendimentoController extends Controller
             return;
         }
 
-        $envio = (new WhatsAppBridgeService())->enviar($atendimento['numero'], $texto);
+        $envio = (new WhatsAppMensagemService())->enviar($atendimento['numero'], $texto);
 
         if (!$envio['success']) {
             echo json_encode(['success' => false, 'message' => $envio['message'] ?? 'Falha ao enviar mensagem pelo WhatsApp.']);

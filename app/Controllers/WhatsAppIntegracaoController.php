@@ -7,8 +7,10 @@ use App\Middleware\AuthMiddleware;
 use App\Services\AuditService;
 use App\Services\LinuxService;
 use App\Services\NotificationService;
+use App\Services\WhatsAppApiOficialService;
 use App\Services\WhatsAppBridgeService;
 use App\Services\WhatsAppConfigService;
+use App\Services\WhatsAppTwilioService;
 
 class WhatsAppIntegracaoController extends Controller
 {
@@ -23,10 +25,69 @@ class WhatsAppIntegracaoController extends Controller
     {
         AuthMiddleware::checkAdmin();
 
+        $apiOficial = new WhatsAppApiOficialService();
+        $twilio = new WhatsAppTwilioService();
+
+        $esquema = ($_SERVER['HTTPS'] ?? '') === 'on' ? 'https' : 'http';
+        $baseUrl = $esquema . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+
         $this->view('administracao/integracoes_whatsapp', [
             'tipoAtual' => $this->config->tipoIntegracao(),
             'bridgeInstalado' => $this->config->bridgeInstalado(),
+            'webhookMetaUrl' => $baseUrl . url('/api/whatsapp/webhook/meta'),
+            'webhookTwilioUrl' => $baseUrl . url('/api/whatsapp/webhook/twilio'),
+            'metaPhoneNumberId' => $apiOficial->phoneNumberId(),
+            'metaVerifyToken' => $apiOficial->verifyToken(),
+            'metaConfigurado' => $apiOficial->configurado(),
+            'twilioAccountSid' => $twilio->accountSid(),
+            'twilioNumero' => $twilio->numero(),
+            'twilioConfigurado' => $twilio->configurado(),
         ]);
+    }
+
+    public function salvarMeta(): void
+    {
+        AuthMiddleware::checkAdmin();
+
+        $resultado = (new WhatsAppApiOficialService())->salvarConfig(
+            $_POST['phone_number_id'] ?? '',
+            $_POST['access_token'] ?? '',
+            $_POST['verify_token'] ?? '',
+            $_POST['app_secret'] ?? ''
+        );
+
+        AuditService::registrar('Integrações', 'WhatsApp API Oficial', $resultado['message']);
+
+        if ($resultado['success']) {
+            NotificationService::success($resultado['message']);
+        } else {
+            NotificationService::error($resultado['message']);
+        }
+
+        header('Location: ' . url('/administracao/integracoes/whatsapp'));
+        exit;
+    }
+
+    public function salvarTwilio(): void
+    {
+        AuthMiddleware::checkAdmin();
+
+        $resultado = (new WhatsAppTwilioService())->salvarConfig(
+            $_POST['account_sid'] ?? '',
+            $_POST['auth_token'] ?? '',
+            $_POST['numero'] ?? ''
+        );
+
+        AuditService::registrar('Integrações', 'WhatsApp Twilio', $resultado['message']);
+
+        if ($resultado['success']) {
+            NotificationService::success($resultado['message']);
+        } else {
+            NotificationService::error($resultado['message']);
+        }
+
+        header('Location: ' . url('/administracao/integracoes/whatsapp'));
+        exit;
     }
 
     public function salvarTipo(): void

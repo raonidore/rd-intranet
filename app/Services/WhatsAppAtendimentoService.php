@@ -21,6 +21,33 @@ class WhatsAppAtendimentoService
     }
 
     /**
+     * Ponto de entrada único pra mensagem recebida, seja lá qual for o
+     * canal (bridge QR Code, webhook da Meta ou da Twilio -- os 3
+     * controllers de webhook chamam isso, em vez de cada um duplicar
+     * a lógica de achar contato/atendimento e decidir se roda o bot).
+     */
+    public function receberMensagem(
+        string $numero,
+        ?string $nomeContato,
+        string $texto,
+        string $tipo,
+        ?string $whatsappMessageId
+    ): void {
+        $contato = (new WhatsAppContatoService())->buscarOuCriarPorNumero($numero, $nomeContato);
+        $atendimento = $this->abrirOuReaproveitar((int)$contato['id']);
+
+        $resultado = $this->registrarMensagemEntrada((int)$atendimento['id'], $texto, $tipo, $whatsappMessageId);
+
+        // $resultado === null quer dizer "já tinha essa mensagem" (retry
+        // do provedor) -- não roda o bot de novo pra não duplicar
+        // resposta. Bot só reage a texto (mídia é só logada por
+        // enquanto, mesma limitação em whatsapp-bridge/index.js).
+        if ($resultado !== null && $atendimento['status'] === 'bot' && $tipo === 'texto') {
+            (new WhatsAppChatbotService())->processarMensagem($atendimento, $numero, $texto);
+        }
+    }
+
+    /**
      * Atendimento ainda não encerrado mais recente do contato, ou cria
      * um novo (status inicial 'bot').
      */
