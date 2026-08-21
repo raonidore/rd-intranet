@@ -32,13 +32,38 @@ class MigrationService
     }
 
     /**
-     * Roda as migrations pendentes em ordem. Para no primeiro erro.
+     * Erros do MySQL/MariaDB que significam "a mudança que essa
+     * migration faria já existe no banco" -- coluna/tabela/índice/FK já
+     * presentes. Acontece quando o banco chegou nesse estado por outro
+     * caminho (schema.sql de uma instalação anterior já incluía a
+     * coluna, restauração de backup, intervenção manual) sem que
+     * migrations_aplicadas tivesse o registro correspondente. Visto ao
+     * vivo num cliente: 2026_07_27_ativos_rede_credencial.sql falhou com
+     * "Duplicate column name 'rede_usuario'" -- a coluna já existia (o
+     * schema.sql de quando o servidor foi instalado já vinha com ela),
+     * só a linha em migrations_aplicadas é que nunca tinha sido gravada.
+     * Sem esse tratamento, TODA migration seguinte no arquivo (inclusive
+     * as de verdade novas, de atualizações futuras) ficava bloqueada pra
+     * sempre, já que aplicar() para no primeiro erro.
+     */
+    private const CODIGOS_MYSQL_JA_EXISTE = [
+        1050, // ER_TABLE_EXISTS_ERROR
+        1060, // ER_DUP_FIELDNAME (coluna)
+        1061, // ER_DUP_KEYNAME (índice)
+        1826, // ER_DUP_CONSTRAINT_NAME (FK)
+    ];
+
+    /**
+     * Roda as migrations pendentes em ordem. Para no primeiro erro que
+     * não seja "já existe" (ver CODIGOS_MYSQL_JA_EXISTE) -- esses são
+     * marcados como aplicados sem reexecutar, não travam o resto.
      *
-     * @return array{success: bool, aplicadas: string[], erro: ?string}
+     * @return array{success: bool, aplicadas: string[], puladas: string[], erro: ?string}
      */
     public function aplicar(): array
     {
         $aplicadas = [];
+        $puladas = [];
 
         foreach ($this->pendentes() as $arquivo) {
             $sql = file_get_contents(self::DIRETORIO . '/' . $arquivo);
@@ -48,20 +73,42 @@ class MigrationService
                     $this->pdo->exec($comando);
                 }
 
-                $stmt = $this->pdo->prepare("INSERT INTO migrations_aplicadas (arquivo) VALUES (?)");
-                $stmt->execute([$arquivo]);
-
+                $this->marcarAplicada($arquivo);
                 $aplicadas[] = $arquivo;
             } catch (\Throwable $e) {
+                if ($this->erroIndicaJaExiste($e)) {
+                    $this->marcarAplicada($arquivo);
+                    $puladas[] = $arquivo;
+                    continue;
+                }
+
                 return [
                     'success' => false,
                     'aplicadas' => $aplicadas,
+                    'puladas' => $puladas,
                     'erro' => "Falha em {$arquivo}: " . $e->getMessage(),
                 ];
             }
         }
 
-        return ['success' => true, 'aplicadas' => $aplicadas, 'erro' => null];
+        return ['success' => true, 'aplicadas' => $aplicadas, 'puladas' => $puladas, 'erro' => null];
+    }
+
+    private function erroIndicaJaExiste(\Throwable $e): bool
+    {
+        if (!$e instanceof \PDOException) {
+            return false;
+        }
+
+        $codigoMysql = (int)($e->errorInfo[1] ?? 0);
+
+        return in_array($codigoMysql, self::CODIGOS_MYSQL_JA_EXISTE, true);
+    }
+
+    private function marcarAplicada(string $arquivo): void
+    {
+        $stmt = $this->pdo->prepare("INSERT IGNORE INTO migrations_aplicadas (arquivo) VALUES (?)");
+        $stmt->execute([$arquivo]);
     }
 
     /**

@@ -173,9 +173,7 @@ class AtualizacaoService
             $sucesso = $migracao['success'];
 
             $saida .= $migracao['success']
-                ? (' ' . (empty($migracao['aplicadas'])
-                    ? 'Nenhuma migration pendente.'
-                    : 'Migrations aplicadas: ' . implode(', ', $migracao['aplicadas']) . '.'))
+                ? (' ' . $this->resumoMigrations($migracao))
                 : (' Erro ao aplicar migrations: ' . $migracao['erro']);
         }
 
@@ -198,6 +196,28 @@ class AtualizacaoService
             'commit_antes' => $commitAntes,
             'commit_depois' => $commitDepois,
         ];
+    }
+
+    /**
+     * @param array{aplicadas: string[], puladas: string[]} $migracao
+     */
+    private function resumoMigrations(array $migracao): string
+    {
+        if (empty($migracao['aplicadas']) && empty($migracao['puladas'])) {
+            return 'Nenhuma migration pendente.';
+        }
+
+        $partes = [];
+
+        if (!empty($migracao['aplicadas'])) {
+            $partes[] = 'Migrations aplicadas: ' . implode(', ', $migracao['aplicadas']) . '.';
+        }
+
+        if (!empty($migracao['puladas'])) {
+            $partes[] = 'Já refletidas no banco (marcadas sem reaplicar): ' . implode(', ', $migracao['puladas']) . '.';
+        }
+
+        return implode(' ', $partes);
     }
 
     /**
