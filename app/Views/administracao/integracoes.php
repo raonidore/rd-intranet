@@ -47,6 +47,19 @@ ob_start();
             </div>
         </a>
     </div>
+    <div class="col-md-4">
+        <a href="<?= url('/administracao/integracoes/whatsapp') ?>" class="metodo-card">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="mb-2" style="font-size:28px; color:#25D366;"><i class="bi bi-whatsapp"></i></div>
+                    <h6 class="mb-1">WhatsApp</h6>
+                    <p class="text-muted small mb-0">
+                        Conexão do módulo de Atendimento com o WhatsApp -- QR Code, API Oficial ou Twilio.
+                    </p>
+                </div>
+            </div>
+        </a>
+    </div>
 </div>
 
 <?php

@@ -36,6 +36,8 @@ use App\Controllers\IptablesController;
 use App\Controllers\CertificadoController;
 use App\Controllers\KbController;
 use App\Controllers\WhatsAppSetorController;
+use App\Controllers\WhatsAppIntegracaoController;
+use App\Controllers\WhatsAppWebhookController;
 use App\Controllers\IntegracoesController;
 use App\Controllers\DependenciaController;
 use App\Controllers\SpeedtestController;
@@ -257,6 +259,13 @@ $router->post('/whatsapp/setores/usuarios', [WhatsAppSetorController::class, 'sa
 $router->get('/administracao/integracoes', [IntegracoesController::class, 'index']);
 $router->get('/administracao/integracoes/base-conhecimento', [IntegracoesController::class, 'baseConhecimentoForm']);
 $router->post('/administracao/integracoes/base-conhecimento', [IntegracoesController::class, 'baseConhecimentoSalvar']);
+
+$router->get('/administracao/integracoes/whatsapp', [WhatsAppIntegracaoController::class, 'form']);
+$router->post('/administracao/integracoes/whatsapp/tipo', [WhatsAppIntegracaoController::class, 'salvarTipo']);
+$router->post('/administracao/integracoes/whatsapp/instalar', [WhatsAppIntegracaoController::class, 'instalar']);
+$router->get('/administracao/integracoes/whatsapp/status', [WhatsAppIntegracaoController::class, 'status']);
+$router->get('/administracao/integracoes/whatsapp/qrcode', [WhatsAppIntegracaoController::class, 'qrcode']);
+$router->post('/administracao/integracoes/whatsapp/desconectar', [WhatsAppIntegracaoController::class, 'desconectar']);
 
 $router->get('/infraestrutura/dependencias', [DependenciaController::class, 'index']);
 $router->post('/infraestrutura/dependencias/instalar', [DependenciaController::class, 'instalar']);
@@ -595,6 +604,8 @@ $router->post('/api/ativos/solicitacoes/arquivo', [AtivoAgenteController::class,
 $router->get('/api/ativos/comandos/anexo', [AtivoAgenteController::class, 'baixarAnexoComando']);
 $router->get('/api/ativos/agente/versao', [AtivoAgenteController::class, 'versaoExecutavel']);
 $router->get('/api/ativos/agente/download', [AtivoAgenteController::class, 'downloadAtualizacao']);
+
+$router->post('/api/whatsapp/webhook', [WhatsAppWebhookController::class, 'receber']);
 
 $router->get('/ativos/cadastros', [AtivoController::class, 'cadastros']);
 $router->post('/ativos/cadastros/novo', [AtivoController::class, 'cadastroNovo']);
