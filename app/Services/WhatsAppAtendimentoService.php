@@ -69,8 +69,12 @@ class WhatsAppAtendimentoService
 
     /**
      * Atendimentos aguardando na fila -- $setorIds = null quer dizer
-     * "vê todos os setores" (admin); array vazio quer dizer "não atende
-     * em nenhum setor", devolve fila vazia mesmo (não é "vê tudo").
+     * "vê todos os setores" (admin). Pra quem não é admin, além dos
+     * próprios setores, sempre entra também a "fila geral"
+     * (setor_id IS NULL -- destino do chatbot quando ele não consegue
+     * rotear pra nenhum setor depois de várias tentativas inválidas):
+     * ninguém pode ficar "dono" de um contato sem setor nenhum, então
+     * fica visível pra qualquer atendente pegar.
      */
     public function listarFila(?array $setorIds): array
     {
@@ -83,12 +87,12 @@ class WhatsAppAtendimentoService
 
         if ($setorIds !== null) {
             if (empty($setorIds)) {
-                return [];
+                $sql .= ' AND a.setor_id IS NULL';
+            } else {
+                $marcadores = implode(',', array_fill(0, count($setorIds), '?'));
+                $sql .= " AND (a.setor_id IN ({$marcadores}) OR a.setor_id IS NULL)";
+                $params = $setorIds;
             }
-
-            $marcadores = implode(',', array_fill(0, count($setorIds), '?'));
-            $sql .= " AND a.setor_id IN ({$marcadores})";
-            $params = $setorIds;
         }
 
         $sql .= ' ORDER BY a.aberto_em ASC';

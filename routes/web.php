@@ -38,6 +38,7 @@ use App\Controllers\KbController;
 use App\Controllers\WhatsAppSetorController;
 use App\Controllers\WhatsAppFilaController;
 use App\Controllers\WhatsAppAtendimentoController;
+use App\Controllers\WhatsAppChatbotController;
 use App\Controllers\WhatsAppIntegracaoController;
 use App\Controllers\WhatsAppWebhookController;
 use App\Controllers\IntegracoesController;
@@ -266,6 +267,12 @@ $router->get('/whatsapp/atendimentos/ver', [WhatsAppAtendimentoController::class
 $router->post('/whatsapp/atendimentos/responder', [WhatsAppAtendimentoController::class, 'responder']);
 $router->get('/whatsapp/atendimentos/mensagens', [WhatsAppAtendimentoController::class, 'mensagensApi']);
 $router->post('/whatsapp/atendimentos/encerrar', [WhatsAppAtendimentoController::class, 'encerrar']);
+
+$router->get('/whatsapp/chatbot', [WhatsAppChatbotController::class, 'index']);
+$router->post('/whatsapp/chatbot/boas-vindas', [WhatsAppChatbotController::class, 'salvarRaiz']);
+$router->post('/whatsapp/chatbot/criar', [WhatsAppChatbotController::class, 'criar']);
+$router->post('/whatsapp/chatbot/atualizar', [WhatsAppChatbotController::class, 'atualizar']);
+$router->post('/whatsapp/chatbot/excluir', [WhatsAppChatbotController::class, 'excluir']);
 
 $router->get('/administracao/integracoes', [IntegracoesController::class, 'index']);
 $router->get('/administracao/integracoes/base-conhecimento', [IntegracoesController::class, 'baseConhecimentoForm']);

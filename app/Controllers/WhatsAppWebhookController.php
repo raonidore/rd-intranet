@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use App\Core\Controller;
 use App\Services\WhatsAppAtendimentoService;
+use App\Services\WhatsAppChatbotService;
 use App\Services\WhatsAppConfigService;
 use App\Services\WhatsAppContatoService;
 
@@ -56,7 +57,15 @@ class WhatsAppWebhookController extends Controller
         $atendimentoService = new WhatsAppAtendimentoService();
         $atendimento = $atendimentoService->abrirOuReaproveitar((int)$contato['id']);
 
-        $atendimentoService->registrarMensagemEntrada((int)$atendimento['id'], $texto, $tipo, $whatsappMessageId);
+        $resultado = $atendimentoService->registrarMensagemEntrada((int)$atendimento['id'], $texto, $tipo, $whatsappMessageId);
+
+        // $resultado === null quer dizer "já tinha essa mensagem" (retry
+        // do bridge) -- não roda o bot de novo pra não mandar a mesma
+        // resposta duplicada. Bot só reage a texto (mídia é só logada
+        // por enquanto, ver comentário equivalente em whatsapp-bridge/index.js).
+        if ($resultado !== null && $atendimento['status'] === 'bot' && $tipo === 'texto') {
+            (new WhatsAppChatbotService())->processarMensagem($atendimento, $numero, $texto);
+        }
 
         echo json_encode(['success' => true]);
     }

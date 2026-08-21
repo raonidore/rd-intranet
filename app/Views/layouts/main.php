@@ -326,6 +326,11 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
             <i class="bi bi-hourglass-split me-2"></i> Fila
         </a>
         <?php endif; ?>
+        <?php if (PermissionService::temAcesso('whatsapp_chatbot')): ?>
+        <a href="<?= url('/whatsapp/chatbot') ?>" class="<?= $uriAtual === '/whatsapp/chatbot' ? 'active' : '' ?>">
+            <i class="bi bi-robot me-2"></i> Chatbot
+        </a>
+        <?php endif; ?>
         <?php if (PermissionService::temAcesso('whatsapp_setores')): ?>
         <a href="<?= url('/whatsapp/setores') ?>" class="<?= $uriAtual === '/whatsapp/setores' ? 'active' : '' ?>">
             <i class="bi bi-diagram-3 me-2"></i> Setores
