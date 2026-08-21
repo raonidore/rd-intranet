@@ -52,6 +52,118 @@ class WhatsAppAtendimentoService
         return $atendimento ?: null;
     }
 
+    public function buscarComContato(int $id): ?array
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT a.*, c.numero, c.nome AS contato_nome
+             FROM whatsapp_atendimentos a
+             JOIN whatsapp_contatos c ON c.id = a.contato_id
+             WHERE a.id = ?"
+        );
+        $stmt->execute([$id]);
+
+        $atendimento = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $atendimento ?: null;
+    }
+
+    /**
+     * Atendimentos aguardando na fila -- $setorIds = null quer dizer
+     * "vê todos os setores" (admin); array vazio quer dizer "não atende
+     * em nenhum setor", devolve fila vazia mesmo (não é "vê tudo").
+     */
+    public function listarFila(?array $setorIds): array
+    {
+        $sql = "SELECT a.*, c.numero, c.nome AS contato_nome, s.nome AS setor_nome
+                FROM whatsapp_atendimentos a
+                JOIN whatsapp_contatos c ON c.id = a.contato_id
+                LEFT JOIN whatsapp_setores s ON s.id = a.setor_id
+                WHERE a.status = 'fila'";
+        $params = [];
+
+        if ($setorIds !== null) {
+            if (empty($setorIds)) {
+                return [];
+            }
+
+            $marcadores = implode(',', array_fill(0, count($setorIds), '?'));
+            $sql .= " AND a.setor_id IN ({$marcadores})";
+            $params = $setorIds;
+        }
+
+        $sql .= ' ORDER BY a.aberto_em ASC';
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * @return array{success: bool, message: string}
+     */
+    public function assumir(int $atendimentoId, int $usuarioId): array
+    {
+        // A condição "AND status = 'fila'" no próprio UPDATE evita corrida:
+        // se dois atendentes clicarem "Assumir" ao mesmo tempo, só o
+        // primeiro UPDATE realmente casa a linha (rowCount 1), o segundo
+        // não acha mais nada pra atualizar (rowCount 0).
+        $stmt = $this->pdo->prepare(
+            "UPDATE whatsapp_atendimentos SET status = 'em_atendimento', usuario_id = ?, atribuido_em = NOW()
+             WHERE id = ? AND status = 'fila'"
+        );
+        $stmt->execute([$usuarioId, $atendimentoId]);
+
+        if ($stmt->rowCount() === 0) {
+            return ['success' => false, 'message' => 'Esse atendimento não está mais na fila (outra pessoa já deve ter assumido).'];
+        }
+
+        return ['success' => true, 'message' => 'Atendimento assumido.'];
+    }
+
+    /**
+     * Conversas abertas do próprio usuário, com prévia da última mensagem.
+     */
+    public function listarDoUsuario(int $usuarioId): array
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT a.*, c.numero, c.nome AS contato_nome,
+                    (SELECT conteudo FROM whatsapp_mensagens m WHERE m.atendimento_id = a.id ORDER BY m.id DESC LIMIT 1) AS ultima_mensagem
+             FROM whatsapp_atendimentos a
+             JOIN whatsapp_contatos c ON c.id = a.contato_id
+             WHERE a.status = 'em_atendimento' AND a.usuario_id = ?
+             ORDER BY a.ultima_mensagem_em DESC"
+        );
+        $stmt->execute([$usuarioId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Mensagens do atendimento -- $desdeId > 0 pra polling incremental
+     * (só o que chegou depois da última mensagem já exibida na tela).
+     */
+    public function mensagens(int $atendimentoId, int $desdeId = 0): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT * FROM whatsapp_mensagens WHERE atendimento_id = ? AND id > ? ORDER BY id ASC'
+        );
+        $stmt->execute([$atendimentoId, $desdeId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * @return array{success: bool, message: string}
+     */
+    public function encerrar(int $atendimentoId): array
+    {
+        $stmt = $this->pdo->prepare("UPDATE whatsapp_atendimentos SET status = 'encerrado', encerrado_em = NOW() WHERE id = ?");
+        $stmt->execute([$atendimentoId]);
+
+        return ['success' => true, 'message' => 'Atendimento encerrado.'];
+    }
+
     /**
      * @return array{id: int}|null a mensagem já existia (mesmo
      *   whatsapp_message_id) -- retorna null pra sinalizar "não gravou

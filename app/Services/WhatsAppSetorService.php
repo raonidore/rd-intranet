@@ -90,6 +90,20 @@ class WhatsAppSetorService
     }
 
     /**
+     * IDs dos setores em que o usuário atende -- usado pra filtrar a
+     * Fila (admin vê todos os setores, o resto só os seus).
+     *
+     * @return int[]
+     */
+    public function idsSetoresDoUsuario(int $usuarioId): array
+    {
+        $stmt = $this->pdo->prepare('SELECT setor_id FROM whatsapp_setor_usuarios WHERE usuario_id = ?');
+        $stmt->execute([$usuarioId]);
+
+        return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    /**
      * IDs dos usuários já vinculados ao setor -- usado pra marcar os
      * checkboxes já selecionados na tela.
      *

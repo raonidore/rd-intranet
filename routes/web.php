@@ -36,6 +36,8 @@ use App\Controllers\IptablesController;
 use App\Controllers\CertificadoController;
 use App\Controllers\KbController;
 use App\Controllers\WhatsAppSetorController;
+use App\Controllers\WhatsAppFilaController;
+use App\Controllers\WhatsAppAtendimentoController;
 use App\Controllers\WhatsAppIntegracaoController;
 use App\Controllers\WhatsAppWebhookController;
 use App\Controllers\IntegracoesController;
@@ -255,6 +257,15 @@ $router->post('/whatsapp/setores/criar', [WhatsAppSetorController::class, 'criar
 $router->post('/whatsapp/setores/atualizar', [WhatsAppSetorController::class, 'atualizar']);
 $router->post('/whatsapp/setores/excluir', [WhatsAppSetorController::class, 'excluir']);
 $router->post('/whatsapp/setores/usuarios', [WhatsAppSetorController::class, 'salvarUsuarios']);
+
+$router->get('/whatsapp/fila', [WhatsAppFilaController::class, 'index']);
+$router->post('/whatsapp/fila/assumir', [WhatsAppFilaController::class, 'assumir']);
+
+$router->get('/whatsapp/atendimentos', [WhatsAppAtendimentoController::class, 'index']);
+$router->get('/whatsapp/atendimentos/ver', [WhatsAppAtendimentoController::class, 'ver']);
+$router->post('/whatsapp/atendimentos/responder', [WhatsAppAtendimentoController::class, 'responder']);
+$router->get('/whatsapp/atendimentos/mensagens', [WhatsAppAtendimentoController::class, 'mensagensApi']);
+$router->post('/whatsapp/atendimentos/encerrar', [WhatsAppAtendimentoController::class, 'encerrar']);
 
 $router->get('/administracao/integracoes', [IntegracoesController::class, 'index']);
 $router->get('/administracao/integracoes/base-conhecimento', [IntegracoesController::class, 'baseConhecimentoForm']);
