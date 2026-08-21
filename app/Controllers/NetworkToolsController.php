@@ -78,6 +78,59 @@ class NetworkToolsController extends Controller
         ]);
     }
 
+    public function mtrForm(): void
+    {
+        AuthMiddleware::checkModulo('infra_rede');
+
+        $this->view('infrastructure/rede_mtr', ['destino' => '', 'resultado' => null, 'saltos' => []]);
+    }
+
+    public function mtrExecutar(): void
+    {
+        AuthMiddleware::checkModulo('infra_rede');
+
+        set_time_limit(60);
+
+        $destino = trim($_POST['destino'] ?? '');
+        $resultado = $this->service->mtr($destino);
+
+        AuditService::registrar('Rede', 'MTR', "MTR para {$destino}.");
+
+        $saltos = $resultado['success'] ? $this->service->parsearMtr($resultado['output']) : [];
+
+        $this->view('infrastructure/rede_mtr', [
+            'destino' => $destino,
+            'resultado' => $resultado,
+            'saltos' => $saltos,
+        ]);
+    }
+
+    public function dnsForm(): void
+    {
+        AuthMiddleware::checkModulo('infra_rede');
+
+        $this->view('infrastructure/rede_dns', ['dominio' => '', 'resultado' => null, 'resolvconf' => '', 'resolvers' => []]);
+    }
+
+    public function dnsExecutar(): void
+    {
+        AuthMiddleware::checkModulo('infra_rede');
+
+        $dominio = trim($_POST['dominio'] ?? '');
+        $resultado = $this->service->verificarDns($dominio);
+
+        AuditService::registrar('Rede', 'Verificação DNS', "Consulta DNS para {$dominio}.");
+
+        $parseado = $resultado['success'] ? $this->service->parsearDns($resultado['output']) : ['resolvconf' => '', 'resolvers' => []];
+
+        $this->view('infrastructure/rede_dns', [
+            'dominio' => $dominio,
+            'resultado' => $resultado,
+            'resolvconf' => $parseado['resolvconf'],
+            'resolvers' => $parseado['resolvers'],
+        ]);
+    }
+
     public function trafego(): void
     {
         AuthMiddleware::checkModulo('infra_rede');

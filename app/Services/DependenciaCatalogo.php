@@ -159,6 +159,22 @@ class DependenciaCatalogo
                 'obrigatorio' => true,
             ],
             [
+                'chave' => 'mtr',
+                'nome' => 'mtr',
+                'pacote' => 'mtr-tiny',
+                'descricao' => 'Ping contínuo por salto (equivalente ao WinMTR) usado para identificar em qual trecho da rede está a perda de pacotes/latência.',
+                'usado_em' => 'Infraestrutura > Network > MTR',
+                'obrigatorio' => false,
+            ],
+            [
+                'chave' => 'bind9-dnsutils',
+                'nome' => 'dig (bind9-dnsutils)',
+                'pacote' => 'bind9-dnsutils',
+                'descricao' => 'Testa tempo de resposta e status da resolução DNS atual comparado a resolvers públicos (Google/Cloudflare).',
+                'usado_em' => 'Infraestrutura > Network > Diagnóstico DNS',
+                'obrigatorio' => false,
+            ],
+            [
                 'chave' => 'qrencode',
                 'nome' => 'qrencode',
                 'pacote' => 'qrencode',

@@ -78,6 +78,40 @@ class NetworkToolsService
         return $this->linux->executarScript('/opt/rdtecnologia/scripts/traceroute_web.sh', [$destino]);
     }
 
+    public function mtr(string $destino): array
+    {
+        if (!$this->validarDestino($destino)) {
+            return ['success' => false, 'output' => 'Destino inválido.'];
+        }
+
+        return $this->linux->executarScript('/opt/rdtecnologia/scripts/mtr_web.sh', [$destino]);
+    }
+
+    /**
+     * Só aceita hostname (não IP) -- resolução DNS de um IP literal não
+     * faz sentido nesse diagnóstico.
+     */
+    public function validarDominio(string $dominio): bool
+    {
+        if ($dominio === '' || strlen($dominio) > 253) {
+            return false;
+        }
+
+        return (bool)preg_match(
+            '/^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$/',
+            $dominio
+        );
+    }
+
+    public function verificarDns(string $dominio): array
+    {
+        if (!$this->validarDominio($dominio)) {
+            return ['success' => false, 'output' => 'Domínio inválido.'];
+        }
+
+        return $this->linux->executarScript('/opt/rdtecnologia/scripts/dns_check_web.sh', [$dominio]);
+    }
+
     /**
      * Converte a saída crua do traceroute -A (uma linha de texto por salto)
      * em uma lista estruturada [ttl, host, ip, as, ms, timeout] pra tabela.
@@ -135,6 +169,80 @@ class NetworkToolsService
         }
 
         return $saltos;
+    }
+
+    /**
+     * Converte a saída de "mtr -r -w -b" (relatório não-interativo, uma
+     * linha por salto) em uma lista estruturada [hop, host, ip,
+     * perda_pct, enviados, ultimo_ms, media_ms, melhor_ms, pior_ms,
+     * desvio_ms] pra tabela -- mesmo padrão de parsearTraceroute().
+     */
+    public function parsearMtr(string $output): array
+    {
+        $saltos = [];
+
+        foreach (explode("\n", $output) as $linha) {
+            $linha = rtrim($linha);
+
+            if (!preg_match(
+                '/^\s*(\d+)\.\|--\s+(\S+)(?:\s+\(([^)]+)\))?\s+([\d.]+)%\s+(\d+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/',
+                $linha,
+                $m
+            )) {
+                continue;
+            }
+
+            $saltos[] = [
+                'hop' => (int)$m[1],
+                'host' => $m[3] !== '' && isset($m[3]) ? $m[2] : null,
+                'ip' => $m[3] !== '' && isset($m[3]) ? $m[3] : $m[2],
+                'perda_pct' => (float)$m[4],
+                'enviados' => (int)$m[5],
+                'ultimo_ms' => (float)$m[6],
+                'media_ms' => (float)$m[7],
+                'melhor_ms' => (float)$m[8],
+                'pior_ms' => (float)$m[9],
+                'desvio_ms' => (float)$m[10],
+            ];
+        }
+
+        return $saltos;
+    }
+
+    /**
+     * Converte a saída de dns_check_web.sh (linhas "RESOLVCONF|..." e
+     * "RESOLVER|nome|servidor|status|tempo_ms|resposta") em
+     * ['resolvconf' => string, 'resolvers' => [...]] pra tela.
+     */
+    public function parsearDns(string $output): array
+    {
+        $resolvconf = '';
+        $resolvers = [];
+
+        foreach (explode("\n", $output) as $linha) {
+            $linha = rtrim($linha);
+
+            if (str_starts_with($linha, 'RESOLVCONF|')) {
+                $resolvconf = substr($linha, strlen('RESOLVCONF|'));
+                continue;
+            }
+
+            if (!str_starts_with($linha, 'RESOLVER|')) {
+                continue;
+            }
+
+            $campos = explode('|', substr($linha, strlen('RESOLVER|')));
+
+            $resolvers[] = [
+                'nome' => $campos[0] ?? '',
+                'servidor' => $campos[1] ?? '-',
+                'status' => $campos[2] ?? 'falha',
+                'tempo_ms' => isset($campos[3]) ? (int)$campos[3] : null,
+                'resposta' => $campos[4] ?? '',
+            ];
+        }
+
+        return ['resolvconf' => $resolvconf, 'resolvers' => $resolvers];
     }
 
     public function trafegoInterfaces(): array

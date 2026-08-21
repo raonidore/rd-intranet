@@ -160,6 +160,12 @@ $router->post('/infraestrutura/rede/ping', [NetworkToolsController::class, 'ping
 $router->get('/infraestrutura/rede/traceroute', [NetworkToolsController::class, 'tracerouteForm']);
 $router->post('/infraestrutura/rede/traceroute', [NetworkToolsController::class, 'tracerouteExecutar']);
 
+$router->get('/infraestrutura/rede/mtr', [NetworkToolsController::class, 'mtrForm']);
+$router->post('/infraestrutura/rede/mtr', [NetworkToolsController::class, 'mtrExecutar']);
+
+$router->get('/infraestrutura/rede/dns', [NetworkToolsController::class, 'dnsForm']);
+$router->post('/infraestrutura/rede/dns', [NetworkToolsController::class, 'dnsExecutar']);
+
 $router->get('/infraestrutura/rede/trafego', [NetworkToolsController::class, 'trafego']);
 $router->get('/infraestrutura/rede/trafego/api', [NetworkToolsController::class, 'trafegoApi']);
 $router->get('/infraestrutura/rede/trafego/historico', [NetworkToolsController::class, 'historico']);

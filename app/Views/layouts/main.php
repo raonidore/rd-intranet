@@ -362,6 +362,12 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
             <a href="<?= url('/infraestrutura/rede/traceroute') ?>" class="<?= $uriAtual === '/infraestrutura/rede/traceroute' ? 'active' : '' ?>">
                 <i class="bi bi-signpost me-2"></i> Traceroute
             </a>
+            <a href="<?= url('/infraestrutura/rede/mtr') ?>" class="<?= $uriAtual === '/infraestrutura/rede/mtr' ? 'active' : '' ?>">
+                <i class="bi bi-activity me-2"></i> MTR
+            </a>
+            <a href="<?= url('/infraestrutura/rede/dns') ?>" class="<?= $uriAtual === '/infraestrutura/rede/dns' ? 'active' : '' ?>">
+                <i class="bi bi-search me-2"></i> Diagnóstico DNS
+            </a>
             <a href="<?= url('/infraestrutura/rede/trafego') ?>" class="<?= $uriAtual === '/infraestrutura/rede/trafego' ? 'active' : '' ?>">
                 <i class="bi bi-speedometer me-2"></i> Tráfego de Banda
             </a>
