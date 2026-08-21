@@ -34,7 +34,12 @@
     var ESTILO_EXPORT =
         'body{font-family:Arial,Helvetica,sans-serif;color:#1e293b;background:#fff;margin:0;padding:24px}' +
         '.rd-export-cabecalho{display:flex;align-items:center;gap:16px;border-bottom:2px solid #2563eb;padding-bottom:16px;margin-bottom:20px}' +
-        '.rd-export-cabecalho img{max-width:150px;max-height:60px;object-fit:contain;border-radius:10px;background:#fff;padding:6px 10px;box-shadow:0 1px 4px rgba(0,0,0,.15)}' +
+        // Moldura em <div> (não direto no <img>) porque html2canvas tem
+        // suporte fraco a border-radius/object-fit aplicados num <img> --
+        // recorte funciona de forma bem mais confiável num container com
+        // overflow:hidden.
+        '.rd-export-logo-frame{width:150px;height:60px;flex:none;display:flex;align-items:center;justify-content:center;border-radius:10px;overflow:hidden;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15)}' +
+        '.rd-export-logo-frame img{max-width:90%;max-height:90%;object-fit:contain}' +
         '.rd-export-cabecalho h2{margin:0;font-size:20px;color:#0f172a}' +
         '.rd-export-cabecalho small{color:#64748b}' +
         '.rd-export-rodape{margin-top:24px;padding-top:12px;border-top:1px solid #e2e8f0;color:#94a3b8;font-size:12px;text-align:center}' +
@@ -57,8 +62,41 @@
             .replace(/^-+|-+$/g, '') || 'resultado';
     }
 
-    function montarWrapper(opcoes) {
+    /**
+     * Busca a logo já renderizada no sidebar e converte pra data: URI --
+     * necessário porque o HTML exportado é um arquivo standalone (aberto
+     * via file:// depois de baixado, ex: anexado num e-mail pro suporte
+     * do provedor), sem acesso à intranet pra buscar a imagem por URL; e
+     * também deixa a captura do html2canvas (JPG/PDF) mais confiável, sem
+     * depender de um fetch de rede terminar a tempo durante a captura.
+     */
+    function carregarLogoComoDataUri() {
         var logo = document.querySelector('.sidebar img[alt="RD Intranet"]');
+
+        if (!logo || !logo.src) {
+            return Promise.resolve(null);
+        }
+
+        return fetch(logo.src, { credentials: 'same-origin' })
+            .then(function (resposta) {
+                return resposta.ok ? resposta.blob() : null;
+            })
+            .then(function (blob) {
+                if (!blob) {
+                    return null;
+                }
+
+                return new Promise(function (resolve) {
+                    var leitor = new FileReader();
+                    leitor.onload = function () { resolve(leitor.result); };
+                    leitor.onerror = function () { resolve(null); };
+                    leitor.readAsDataURL(blob);
+                });
+            })
+            .catch(function () { return null; });
+    }
+
+    function montarWrapper(opcoes, logoDataUri) {
         var origem = document.querySelector(opcoes.container);
 
         if (!origem) {
@@ -93,11 +131,16 @@
         var cabecalho = document.createElement('div');
         cabecalho.className = 'rd-export-cabecalho';
 
-        if (logo) {
+        if (logoDataUri) {
+            var moldura = document.createElement('div');
+            moldura.className = 'rd-export-logo-frame';
+
             var imgLogo = document.createElement('img');
-            imgLogo.src = logo.src;
+            imgLogo.src = logoDataUri;
             imgLogo.alt = 'Logo';
-            cabecalho.appendChild(imgLogo);
+            moldura.appendChild(imgLogo);
+
+            cabecalho.appendChild(moldura);
         }
 
         var textos = document.createElement('div');
@@ -229,35 +272,37 @@
     }
 
     function exportar(formato, opcoes) {
-        var wrapper = montarWrapper(opcoes);
+        carregarLogoComoDataUri().then(function (logoDataUri) {
+            var wrapper = montarWrapper(opcoes, logoDataUri);
 
-        if (!wrapper) {
-            return;
-        }
-
-        var nomeBase = sanitizarNomeArquivo(opcoes.ferramenta) + '-' +
-            sanitizarNomeArquivo(opcoes.alvo) + '-' +
-            new Date().toISOString().slice(0, 10);
-
-        var terminado = function () {
-            wrapper.remove();
-        };
-
-        try {
-            if (formato === 'html') {
-                exportarHtml(wrapper, nomeBase);
-                terminado();
-            } else if (formato === 'jpg') {
-                exportarJpg(wrapper, nomeBase).then(terminado).catch(terminado);
-            } else if (formato === 'pdf') {
-                exportarPdf(wrapper, nomeBase).then(terminado).catch(terminado);
-            } else {
-                terminado();
+            if (!wrapper) {
+                return;
             }
-        } catch (e) {
-            terminado();
-            throw e;
-        }
+
+            var nomeBase = sanitizarNomeArquivo(opcoes.ferramenta) + '-' +
+                sanitizarNomeArquivo(opcoes.alvo) + '-' +
+                new Date().toISOString().slice(0, 10);
+
+            var terminado = function () {
+                wrapper.remove();
+            };
+
+            try {
+                if (formato === 'html') {
+                    exportarHtml(wrapper, nomeBase);
+                    terminado();
+                } else if (formato === 'jpg') {
+                    exportarJpg(wrapper, nomeBase).then(terminado).catch(terminado);
+                } else if (formato === 'pdf') {
+                    exportarPdf(wrapper, nomeBase).then(terminado).catch(terminado);
+                } else {
+                    terminado();
+                }
+            } catch (e) {
+                terminado();
+                throw e;
+            }
+        });
     }
 
     // Delegação de clique nos itens "Exportar" -- os dados vêm de
