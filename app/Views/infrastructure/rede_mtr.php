@@ -18,7 +18,7 @@ use App\Components\Alert;
 
 <div class="card border-0 shadow-sm mb-3">
     <div class="card-body">
-        <form method="post" action="<?= url('/infraestrutura/rede/mtr') ?>" class="d-flex gap-2">
+        <form method="post" action="<?= url('/infraestrutura/rede/mtr') ?>" id="formMtr" class="d-flex gap-2">
             <input type="text" name="destino" class="form-control" placeholder="Ex: 8.8.8.8 ou google.com"
                    value="<?= htmlspecialchars($destino) ?>" required>
             <button type="submit" class="btn btn-primary text-nowrap">
@@ -30,16 +30,30 @@ use App\Components\Alert;
 </div>
 
 <?php if ($resultado !== null): ?>
-    <div class="card border-0 shadow-sm">
+    <div class="card border-0 shadow-sm" id="cardResultadoMtr">
         <div class="card-header bg-white d-flex justify-content-between align-items-center">
             <span>Resultado para <code><?= htmlspecialchars($destino) ?></code></span>
-            <div>
+            <div class="d-flex align-items-center gap-1">
                 <?= $resultado['success'] ? '<span class="badge text-bg-success">OK</span>' : '<span class="badge text-bg-danger">Falhou</span>' ?>
                 <?php if ($resultado['success']): ?>
-                    <button class="btn btn-sm btn-outline-secondary ms-1" type="button" data-bs-toggle="collapse" data-bs-target="#saida-bruta">
+                    <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#saida-bruta" data-rd-export-ignore>
                         <i class="bi bi-terminal"></i> Saída bruta
                     </button>
                 <?php endif; ?>
+                <div class="dropdown d-inline-block" data-rd-export-ignore
+                     data-rd-export-container="#cardResultadoMtr"
+                     data-rd-export-titulo="MTR"
+                     data-rd-export-ferramenta="mtr"
+                     data-rd-export-alvo="<?= htmlspecialchars($destino) ?>">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        <i class="bi bi-download"></i> Exportar
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="#" data-rd-export-formato="html">HTML</a></li>
+                        <li><a class="dropdown-item" href="#" data-rd-export-formato="pdf">PDF</a></li>
+                        <li><a class="dropdown-item" href="#" data-rd-export-formato="jpg">JPG</a></li>
+                    </ul>
+                </div>
             </div>
         </div>
 
@@ -99,6 +113,13 @@ use App\Components\Alert;
         <?php endif; ?>
     </div>
 <?php endif; ?>
+
+<script src="<?= url('/assets/js/rd-diagnostico.js') ?>"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+<script>
+    RdDiagnostico.armarFormulario(document.getElementById('formMtr'), 'Executando MTR... pode levar até 20 segundos.');
+</script>
 
 <?php
 $conteudo = ob_get_clean();
