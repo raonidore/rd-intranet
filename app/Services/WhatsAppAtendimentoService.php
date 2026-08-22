@@ -31,7 +31,7 @@ class WhatsAppAtendimentoService
     {
         $identificacao = $setorNome ? "{$setorNome} - {$nomeUsuario}" : $nomeUsuario;
 
-        return "*{$identificacao}:*\n{$texto}";
+        return $texto === '' ? "*{$identificacao}:*" : "*{$identificacao}:*\n{$texto}";
     }
 
     /**
@@ -45,17 +45,47 @@ class WhatsAppAtendimentoService
         ?string $nomeContato,
         string $texto,
         string $tipo,
-        ?string $whatsappMessageId
+        ?string $whatsappMessageId,
+        ?string $midiaBase64 = null,
+        ?string $midiaMimetype = null
     ): void {
+        // Confere retry ANTES de gastar disco baixando/salvando o anexo
+        // de novo -- registrarMensagemEntrada() já dedupa pelo id, mas só
+        // depois de já ter o arquivo salvo; sem essa checagem aqui na
+        // frente, cada reenvio do mesmo evento (retry de rede do
+        // provedor) deixava um arquivo órfão pra trás.
+        if ($whatsappMessageId !== null && $this->mensagemJaExiste($whatsappMessageId)) {
+            return;
+        }
+
+        $midiaPath = null;
+
+        if ($tipo !== 'texto') {
+            // Anexo desse tipo desligado em Configurações -- some sem
+            // deixar rastro nenhum (nem abre atendimento por causa
+            // disso), igual ao comportamento de antes de mídia existir.
+            if (!(new WhatsAppConfigService())->tipoAnexoPermitido($tipo)) {
+                return;
+            }
+
+            if ($midiaBase64 === null || $midiaMimetype === null) {
+                return;
+            }
+
+            $midiaPath = WhatsAppMidiaService::salvarBase64($midiaBase64, $midiaMimetype);
+            if ($midiaPath === null) {
+                return;
+            }
+        }
+
         $contato = (new WhatsAppContatoService())->buscarOuCriarPorNumero($numero, $nomeContato);
         $atendimento = $this->abrirOuReaproveitar((int)$contato['id']);
 
-        $resultado = $this->registrarMensagemEntrada((int)$atendimento['id'], $texto, $tipo, $whatsappMessageId);
+        $resultado = $this->registrarMensagemEntrada((int)$atendimento['id'], $texto, $tipo, $whatsappMessageId, $midiaPath);
 
         // $resultado === null quer dizer "já tinha essa mensagem" (retry
         // do provedor) -- não roda o bot/NPS de novo pra não duplicar
-        // resposta. Bot/NPS só reagem a texto (mídia é só logada por
-        // enquanto, mesma limitação em whatsapp-bridge/index.js).
+        // resposta. Bot/NPS só reagem a texto.
         if ($resultado === null || $tipo !== 'texto') {
             return;
         }
@@ -332,6 +362,16 @@ class WhatsAppAtendimentoService
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public function buscarMensagem(int $mensagemId): ?array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM whatsapp_mensagens WHERE id = ?');
+        $stmt->execute([$mensagemId]);
+
+        $mensagem = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $mensagem ?: null;
+    }
+
     /**
      * Encerramento manual (atendente clica "Encerrar" no chat) -- avisa
      * o cliente com a mensagem configurada em Chatbot > Finalização
@@ -410,21 +450,18 @@ class WhatsAppAtendimentoService
         int $atendimentoId,
         string $conteudo,
         string $tipo = 'texto',
-        ?string $whatsappMessageId = null
+        ?string $whatsappMessageId = null,
+        ?string $midiaPath = null
     ): ?array {
-        if ($whatsappMessageId !== null) {
-            $existe = $this->pdo->prepare('SELECT id FROM whatsapp_mensagens WHERE whatsapp_message_id = ?');
-            $existe->execute([$whatsappMessageId]);
-            if ($existe->fetch()) {
-                return null;
-            }
+        if ($whatsappMessageId !== null && $this->mensagemJaExiste($whatsappMessageId)) {
+            return null;
         }
 
         $stmt = $this->pdo->prepare(
-            "INSERT INTO whatsapp_mensagens (atendimento_id, direcao, tipo, conteudo, origem, whatsapp_message_id)
-             VALUES (?, 'entrada', ?, ?, 'cliente', ?)"
+            "INSERT INTO whatsapp_mensagens (atendimento_id, direcao, tipo, conteudo, origem, whatsapp_message_id, midia_path)
+             VALUES (?, 'entrada', ?, ?, 'cliente', ?, ?)"
         );
-        $stmt->execute([$atendimentoId, $tipo, $conteudo, $whatsappMessageId]);
+        $stmt->execute([$atendimentoId, $tipo, $conteudo, $whatsappMessageId, $midiaPath]);
 
         // lastInsertId() precisa ser lido ANTES do UPDATE de
         // tocarUltimaMensagem() -- confirmado ao vivo: nesse driver
@@ -443,13 +480,14 @@ class WhatsAppAtendimentoService
         string $conteudo,
         string $origem = 'usuario',
         ?int $usuarioId = null,
-        string $tipo = 'texto'
+        string $tipo = 'texto',
+        ?string $midiaPath = null
     ): int {
         $stmt = $this->pdo->prepare(
-            "INSERT INTO whatsapp_mensagens (atendimento_id, direcao, tipo, conteudo, origem, usuario_id)
-             VALUES (?, 'saida', ?, ?, ?, ?)"
+            "INSERT INTO whatsapp_mensagens (atendimento_id, direcao, tipo, conteudo, origem, usuario_id, midia_path)
+             VALUES (?, 'saida', ?, ?, ?, ?, ?)"
         );
-        $stmt->execute([$atendimentoId, $tipo, $conteudo, $origem, $usuarioId]);
+        $stmt->execute([$atendimentoId, $tipo, $conteudo, $origem, $usuarioId, $midiaPath]);
 
         $id = (int)$this->pdo->lastInsertId();
 
@@ -521,5 +559,13 @@ class WhatsAppAtendimentoService
     {
         $stmt = $this->pdo->prepare('UPDATE whatsapp_atendimentos SET ultima_mensagem_em = NOW() WHERE id = ?');
         $stmt->execute([$atendimentoId]);
+    }
+
+    private function mensagemJaExiste(string $whatsappMessageId): bool
+    {
+        $stmt = $this->pdo->prepare('SELECT id FROM whatsapp_mensagens WHERE whatsapp_message_id = ?');
+        $stmt->execute([$whatsappMessageId]);
+
+        return (bool)$stmt->fetch();
     }
 }

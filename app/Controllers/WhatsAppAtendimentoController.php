@@ -7,8 +7,10 @@ use App\Middleware\AuthMiddleware;
 use App\Services\AuditService;
 use App\Services\NotificationService;
 use App\Services\WhatsAppAtendimentoService;
+use App\Services\WhatsAppConfigService;
 use App\Services\WhatsAppContatoService;
 use App\Services\WhatsAppMensagemService;
+use App\Services\WhatsAppMidiaService;
 use App\Services\WhatsAppSetorService;
 
 class WhatsAppAtendimentoController extends Controller
@@ -83,10 +85,13 @@ class WhatsAppAtendimentoController extends Controller
             fn (array $s) => (bool)$s['ativo'] && (int)$s['id'] !== (int)$atendimento['setor_id']
         ));
 
+        $config = new WhatsAppConfigService();
+
         $this->view('whatsapp/atendimento_chat', [
             'atendimento' => $atendimento,
             'mensagens' => $service->mensagens($id),
             'setoresAtivos' => $setoresAtivos,
+            'anexosAtivos' => $config->anexosAtivos(),
         ]);
     }
 
@@ -127,6 +132,130 @@ class WhatsAppAtendimentoController extends Controller
         $service->registrarMensagemSaida($id, $texto, 'usuario', (int)$_SESSION['usuario']['id']);
 
         echo json_encode(['success' => true]);
+    }
+
+    public function anexo(): void
+    {
+        AuthMiddleware::checkModulo('whatsapp_atendimentos');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $service = new WhatsAppAtendimentoService();
+        $atendimento = $service->buscarComContato($id);
+
+        if (!$this->pertenceAoUsuarioLogado($atendimento)) {
+            echo json_encode(['success' => false, 'message' => 'Atendimento não encontrado ou não é seu.']);
+            return;
+        }
+
+        if (empty($_FILES['arquivo']) || ($_FILES['arquivo']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            echo json_encode(['success' => false, 'message' => 'Selecione um arquivo.']);
+            return;
+        }
+
+        $arquivo = $_FILES['arquivo'];
+
+        if ((int)$arquivo['size'] > WhatsAppMidiaService::TAMANHO_MAXIMO) {
+            echo json_encode(['success' => false, 'message' => 'Arquivo maior que 16MB.']);
+            return;
+        }
+
+        $mimetype = mime_content_type($arquivo['tmp_name']) ?: 'application/octet-stream';
+        $tipo = WhatsAppMidiaService::tipoPorMimetype($mimetype);
+
+        if ($tipo === null) {
+            echo json_encode(['success' => false, 'message' => 'Tipo de arquivo não suportado.']);
+            return;
+        }
+
+        if (!(new WhatsAppConfigService())->tipoAnexoPermitido($tipo)) {
+            echo json_encode(['success' => false, 'message' => 'Esse tipo de anexo está desativado -- veja WhatsApp > Configurações.']);
+            return;
+        }
+
+        $nomeArquivo = WhatsAppMidiaService::gerarNomeArquivo($mimetype);
+        $caminhoCompleto = WhatsAppMidiaService::caminhoCompleto($nomeArquivo);
+
+        if (!move_uploaded_file($arquivo['tmp_name'], $caminhoCompleto)) {
+            echo json_encode(['success' => false, 'message' => 'Falha ao salvar o arquivo.']);
+            return;
+        }
+
+        $legenda = trim($_POST['legenda'] ?? '');
+        $nomeUsuario = (string)$_SESSION['usuario']['nome'];
+        $setorNome = $atendimento['setor_nome'] ?? null;
+
+        if ($tipo === 'audio') {
+            // Nota de voz não aceita legenda/caption no protocolo do
+            // WhatsApp -- manda a identificação como mensagem de texto
+            // avulsa logo antes, só pro cliente saber quem tá falando
+            // (não vira uma linha extra no nosso histórico -- o balão
+            // já mostra o nome de quem mandou).
+            (new WhatsAppMensagemService())->enviar(
+                $atendimento['numero'],
+                WhatsAppAtendimentoService::comIdentificacaoDoAtendente('', $setorNome, $nomeUsuario)
+            );
+            $legendaParaEnvio = null;
+        } else {
+            $legendaParaEnvio = WhatsAppAtendimentoService::comIdentificacaoDoAtendente($legenda, $setorNome, $nomeUsuario);
+        }
+
+        $envio = (new WhatsAppMensagemService())->enviarMidia(
+            $atendimento['numero'],
+            $caminhoCompleto,
+            $mimetype,
+            $tipo,
+            $legendaParaEnvio,
+            $arquivo['name']
+        );
+
+        if (!$envio['success']) {
+            unlink($caminhoCompleto);
+            echo json_encode(['success' => false, 'message' => $envio['message'] ?? 'Falha ao enviar anexo pelo WhatsApp.']);
+            return;
+        }
+
+        $service->registrarMensagemSaida($id, $legenda, 'usuario', (int)$_SESSION['usuario']['id'], $tipo, $nomeArquivo);
+
+        echo json_encode(['success' => true]);
+    }
+
+    /**
+     * Serve o arquivo de um anexo -- nunca por URL direta (storage/
+     * fica fora de public/), só depois de confirmar que a mensagem é
+     * de um atendimento do usuário logado.
+     */
+    public function midia(): void
+    {
+        AuthMiddleware::checkModulo('whatsapp_atendimentos');
+
+        $mensagemId = (int)($_GET['id'] ?? 0);
+        $service = new WhatsAppAtendimentoService();
+        $mensagem = $service->buscarMensagem($mensagemId);
+
+        if (!$mensagem || !$mensagem['midia_path']) {
+            http_response_code(404);
+            return;
+        }
+
+        $atendimento = $service->buscar((int)$mensagem['atendimento_id']);
+
+        if (!$this->pertenceAoUsuarioLogado($atendimento)) {
+            http_response_code(403);
+            return;
+        }
+
+        $caminho = WhatsAppMidiaService::caminhoCompleto($mensagem['midia_path']);
+
+        if (!is_file($caminho)) {
+            http_response_code(404);
+            return;
+        }
+
+        header('Content-Type: ' . (mime_content_type($caminho) ?: 'application/octet-stream'));
+        header('Content-Length: ' . filesize($caminho));
+        header('Content-Disposition: inline; filename="' . basename($mensagem['midia_path']) . '"');
+        readfile($caminho);
     }
 
     public function mensagensApi(): void

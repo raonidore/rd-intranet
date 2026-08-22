@@ -33,18 +33,47 @@ class WhatsAppBridgeService
         return $this->chamar('/enviar', 'POST', ['numero' => $numero, 'texto' => $texto]);
     }
 
+    /**
+     * Anexo (imagem/áudio/documento) -- manda o arquivo em base64 no
+     * corpo (bridge roda como outro usuário de sistema, num diretório
+     * diferente do app; é mais simples transportar os bytes pela
+     * própria chamada HTTP local do que tentar compartilhar caminho de
+     * disco entre processos com dono diferente). Timeout maior que o
+     * padrão porque codificar+mandar+o bridge subir pro WhatsApp pode
+     * levar mais que os 10s normais de uma mensagem de texto.
+     *
+     * @return array{success: bool, message: string}
+     */
+    public function enviarMidia(string $numero, string $caminhoArquivo, string $mimetype, string $tipoMidia, ?string $legenda, ?string $nomeArquivo): array
+    {
+        if (!is_file($caminhoArquivo)) {
+            return ['success' => false, 'message' => 'Arquivo não encontrado.'];
+        }
+
+        $base64 = base64_encode((string)file_get_contents($caminhoArquivo));
+
+        return $this->chamar('/enviar', 'POST', [
+            'numero' => $numero,
+            'midia_base64' => $base64,
+            'midia_mimetype' => $mimetype,
+            'midia_tipo' => $tipoMidia,
+            'legenda' => $legenda,
+            'nome_arquivo' => $nomeArquivo,
+        ], 60);
+    }
+
     public function desconectar(): array
     {
         return $this->chamar('/logout', 'POST');
     }
 
-    private function chamar(string $caminho, string $metodo = 'GET', array $corpo = []): array
+    private function chamar(string $caminho, string $metodo = 'GET', array $corpo = [], int $timeout = 10): array
     {
         $ch = curl_init('http://127.0.0.1:' . $this->config->bridgePorta() . $caminho);
 
         $opcoes = [
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => 10,
+            CURLOPT_TIMEOUT => $timeout,
             CURLOPT_CONNECTTIMEOUT => 3,
             CURLOPT_HTTPHEADER => [
                 'X-Api-Key: ' . $this->config->bridgeApiKey(),

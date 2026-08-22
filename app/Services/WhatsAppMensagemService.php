@@ -23,4 +23,20 @@ class WhatsAppMensagemService
             default => (new WhatsAppBridgeService())->enviar($numero, $texto),
         };
     }
+
+    /**
+     * Anexo (imagem/áudio/documento) -- só implementado pra QR Code
+     * (bridge) por enquanto; API Oficial e Twilio têm fluxos de mídia
+     * próprios e bem diferentes (upload prévio num endpoint deles),
+     * fica pra quando alguém realmente usar um desses dois em produção.
+     *
+     * @return array{success: bool, message: string}
+     */
+    public function enviarMidia(string $numero, string $caminhoArquivo, string $mimetype, string $tipoMidia, ?string $legenda, ?string $nomeArquivo): array
+    {
+        return match ((new WhatsAppConfigService())->tipoIntegracao()) {
+            'api_oficial', 'twilio' => ['success' => false, 'message' => 'Envio de anexo ainda não é suportado nesse tipo de integração -- só via QR Code, por enquanto.'],
+            default => (new WhatsAppBridgeService())->enviarMidia($numero, $caminhoArquivo, $mimetype, $tipoMidia, $legenda, $nomeArquivo),
+        };
+    }
 }

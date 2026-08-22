@@ -19,7 +19,17 @@ const http = require('http');
 const crypto = require('crypto');
 const pino = require('pino');
 const QRCode = require('qrcode');
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, jidDecode, isLidUser } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, jidDecode, isLidUser, downloadMediaMessage } = require('@whiskeysockets/baileys');
+
+// Chave do objeto de mensagem do Baileys -> tipo usado do lado do PHP
+// (mesmos valores do enum `tipo` de whatsapp_mensagens). Vídeo e
+// sticker ficam fora por enquanto -- só os 3 tipos que o painel sabe
+// mostrar/mandar.
+const MAPA_TIPO_MIDIA = {
+    imageMessage: 'imagem',
+    audioMessage: 'audio',
+    documentMessage: 'documento',
+};
 
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 const SESSAO_DIR = path.join(__dirname, 'sessao');
@@ -149,20 +159,46 @@ async function iniciarSessaoWhatsapp() {
             }
 
             const nome = msg.pushName || null;
-            const texto = msg.message.conversation
+
+            const chaveMidia = Object.keys(MAPA_TIPO_MIDIA).find((chave) => msg.message[chave]);
+            const tipoMidia = chaveMidia ? MAPA_TIPO_MIDIA[chaveMidia] : null;
+
+            let texto = msg.message.conversation
                 || (msg.message.extendedTextMessage && msg.message.extendedTextMessage.text)
                 || '';
+            let midiaBase64 = null;
+            let midiaMimetype = null;
+            let nomeArquivo = null;
 
-            if (!texto) {
-                continue; // midia (imagem/audio/documento) fica pra uma proxima fase
+            if (tipoMidia) {
+                const conteudoMidia = msg.message[chaveMidia];
+
+                try {
+                    const buffer = await downloadMediaMessage(msg, 'buffer', {});
+                    midiaBase64 = buffer.toString('base64');
+                } catch (e) {
+                    console.error('Falha ao baixar mídia recebida:', e.message);
+                    continue;
+                }
+
+                midiaMimetype = conteudoMidia.mimetype || null;
+                nomeArquivo = conteudoMidia.fileName || null;
+                texto = conteudoMidia.caption || '';
+            }
+
+            if (!texto && !tipoMidia) {
+                continue; // nem texto nem midia reconhecida (ex: figurinha, localizacao) -- fora de escopo
             }
 
             await avisarWebhook({
                 numero,
                 nome,
                 texto,
-                tipo: 'texto',
+                tipo: tipoMidia || 'texto',
                 id_mensagem: msg.key.id,
+                midia_base64: midiaBase64,
+                midia_mimetype: midiaMimetype,
+                nome_arquivo: nomeArquivo,
             });
         }
     });
@@ -215,7 +251,29 @@ const servidor = http.createServer(async (req, res) => {
             }
 
             const jid = String(dados.numero || '').replace(/\D+/g, '') + '@s.whatsapp.net';
-            await socketAtual.sendMessage(jid, { text: String(dados.texto || '') });
+
+            if (dados.midia_base64) {
+                const buffer = Buffer.from(String(dados.midia_base64), 'base64');
+                const mimetype = String(dados.midia_mimetype || 'application/octet-stream');
+                const legenda = dados.legenda ? String(dados.legenda) : undefined;
+
+                let conteudo;
+                if (dados.midia_tipo === 'imagem') {
+                    conteudo = { image: buffer, mimetype, caption: legenda };
+                } else if (dados.midia_tipo === 'audio') {
+                    conteudo = { audio: buffer, mimetype, ptt: false };
+                } else if (dados.midia_tipo === 'documento') {
+                    conteudo = { document: buffer, mimetype, fileName: String(dados.nome_arquivo || 'arquivo'), caption: legenda };
+                } else {
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, message: 'Tipo de mídia inválido.' }));
+                    return;
+                }
+
+                await socketAtual.sendMessage(jid, conteudo);
+            } else {
+                await socketAtual.sendMessage(jid, { text: String(dados.texto || '') });
+            }
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: true, message: 'Mensagem enviada.' }));

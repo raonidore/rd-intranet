@@ -269,6 +269,8 @@ $router->get('/whatsapp/atendimentos', [WhatsAppAtendimentoController::class, 'i
 $router->post('/whatsapp/atendimentos/iniciar', [WhatsAppAtendimentoController::class, 'iniciar']);
 $router->get('/whatsapp/atendimentos/ver', [WhatsAppAtendimentoController::class, 'ver']);
 $router->post('/whatsapp/atendimentos/responder', [WhatsAppAtendimentoController::class, 'responder']);
+$router->post('/whatsapp/atendimentos/anexo', [WhatsAppAtendimentoController::class, 'anexo']);
+$router->get('/whatsapp/atendimentos/midia', [WhatsAppAtendimentoController::class, 'midia']);
 $router->get('/whatsapp/atendimentos/mensagens', [WhatsAppAtendimentoController::class, 'mensagensApi']);
 $router->post('/whatsapp/atendimentos/encerrar', [WhatsAppAtendimentoController::class, 'encerrar']);
 $router->post('/whatsapp/atendimentos/transferir', [WhatsAppAtendimentoController::class, 'transferir']);

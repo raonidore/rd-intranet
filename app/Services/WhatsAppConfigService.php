@@ -39,6 +39,9 @@ class WhatsAppConfigService
     private const MENSAGEM_FORA_EXPEDIENTE_PADRAO = 'Olá, {nome}! Nosso horário de atendimento está encerrado no momento. Retornaremos assim que estivermos disponíveis.';
 
     private const CHAVE_ANEXOS_ATIVO = 'whatsapp_anexos_ativo';
+    private const CHAVE_ANEXOS_IMAGENS = 'whatsapp_anexos_imagens';
+    private const CHAVE_ANEXOS_DOCUMENTOS = 'whatsapp_anexos_documentos';
+    private const CHAVE_ANEXOS_AUDIOS = 'whatsapp_anexos_audios';
 
     private const CHAVE_NPS_MENSAGEM_ESPERA = 'whatsapp_nps_mensagem_espera';
     private const CHAVE_NPS_PERGUNTA_ATENDENTE = 'whatsapp_nps_pergunta_atendente';
@@ -158,21 +161,58 @@ class WhatsAppConfigService
     }
 
     /**
-     * Se atendentes podem mandar/receber anexos (imagem, áudio,
-     * documento) durante o atendimento -- desligado por padrão até o
-     * envio/recebimento de mídia ser suportado de ponta a ponta.
+     * Chave-mestra: se desligada, nenhum anexo passa, não importa o
+     * que as chaves por tipo (imagens/documentos/áudios) digam.
      */
     public function anexosAtivos(): bool
     {
         return ConfigService::get(self::CHAVE_ANEXOS_ATIVO, '') === '1';
     }
 
+    public function imagensAtivas(): bool
+    {
+        return ConfigService::get(self::CHAVE_ANEXOS_IMAGENS, '') === '1';
+    }
+
+    public function documentosAtivos(): bool
+    {
+        return ConfigService::get(self::CHAVE_ANEXOS_DOCUMENTOS, '') === '1';
+    }
+
+    public function audiosAtivos(): bool
+    {
+        return ConfigService::get(self::CHAVE_ANEXOS_AUDIOS, '') === '1';
+    }
+
+    /**
+     * Se esse tipo específico de anexo pode ir/vir agora -- combina a
+     * chave-mestra com a chave do tipo. Único ponto usado tanto no
+     * upload/download quanto no webhook, pra nunca dessincronizar as
+     * duas checagens.
+     */
+    public function tipoAnexoPermitido(string $tipo): bool
+    {
+        if (!$this->anexosAtivos()) {
+            return false;
+        }
+
+        return match ($tipo) {
+            'imagem' => $this->imagensAtivas(),
+            'documento' => $this->documentosAtivos(),
+            'audio' => $this->audiosAtivos(),
+            default => false,
+        };
+    }
+
     /**
      * @return array{success: bool, message: string}
      */
-    public function salvarAnexos(bool $ativo): array
+    public function salvarAnexos(bool $ativo, bool $imagens, bool $documentos, bool $audios): array
     {
         ConfigService::set(self::CHAVE_ANEXOS_ATIVO, $ativo ? '1' : '0');
+        ConfigService::set(self::CHAVE_ANEXOS_IMAGENS, $imagens ? '1' : '0');
+        ConfigService::set(self::CHAVE_ANEXOS_DOCUMENTOS, $documentos ? '1' : '0');
+        ConfigService::set(self::CHAVE_ANEXOS_AUDIOS, $audios ? '1' : '0');
 
         return ['success' => true, 'message' => 'Configuração de anexos salva.'];
     }

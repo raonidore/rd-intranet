@@ -61,8 +61,10 @@ class WhatsAppWebhookController extends Controller
         $tipo = (string)($corpo['tipo'] ?? 'texto');
         $whatsappMessageId = $corpo['id_mensagem'] ?? null;
         $whatsappMessageId = $whatsappMessageId !== null ? (string)$whatsappMessageId : null;
+        $midiaBase64 = isset($corpo['midia_base64']) ? (string)$corpo['midia_base64'] : null;
+        $midiaMimetype = isset($corpo['midia_mimetype']) ? (string)$corpo['midia_mimetype'] : null;
 
-        (new WhatsAppAtendimentoService())->receberMensagem($numero, $nomeContato, $texto, $tipo, $whatsappMessageId);
+        (new WhatsAppAtendimentoService())->receberMensagem($numero, $nomeContato, $texto, $tipo, $whatsappMessageId, $midiaBase64, $midiaMimetype);
 
         echo json_encode(['success' => true]);
     }

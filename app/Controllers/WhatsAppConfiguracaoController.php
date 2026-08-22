@@ -18,6 +18,9 @@ class WhatsAppConfiguracaoController extends Controller
 
         $this->view('whatsapp/configuracoes', [
             'anexosAtivos' => $config->anexosAtivos(),
+            'imagensAtivas' => $config->imagensAtivas(),
+            'documentosAtivos' => $config->documentosAtivos(),
+            'audiosAtivos' => $config->audiosAtivos(),
         ]);
     }
 
@@ -25,7 +28,12 @@ class WhatsAppConfiguracaoController extends Controller
     {
         AuthMiddleware::checkModulo('whatsapp_configuracoes');
 
-        $resultado = (new WhatsAppConfigService())->salvarAnexos(isset($_POST['anexos_ativos']));
+        $resultado = (new WhatsAppConfigService())->salvarAnexos(
+            isset($_POST['anexos_ativos']),
+            isset($_POST['imagens_ativas']),
+            isset($_POST['documentos_ativos']),
+            isset($_POST['audios_ativos'])
+        );
 
         AuditService::registrar('WhatsApp', 'Configurações', $resultado['message']);
 

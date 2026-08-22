@@ -8,6 +8,41 @@ use App\Components\Alert;
  * o polling de mensagens novas monta o equivalente em JS (montarBolha()
  * no script abaixo), mesma lógica de cor/alinhamento nos dois lugares.
  */
+/** Imagem/áudio/documento em vez do texto simples, quando a mensagem tiver midia_path. */
+function renderizarConteudoBolha(array $m): string
+{
+    if (empty($m['midia_path'])) {
+        return '<div style="white-space:pre-wrap">' . htmlspecialchars($m['conteudo']) . '</div>';
+    }
+
+    $url = url('/whatsapp/atendimentos/midia?id=' . (int)$m['id']);
+
+    if ($m['tipo'] === 'imagem') {
+        return '<a href="' . htmlspecialchars($url) . '" target="_blank">'
+            . '<img src="' . htmlspecialchars($url) . '" style="max-width:100%; border-radius:6px; display:block; margin-bottom:4px">'
+            . '</a>'
+            . ($m['conteudo'] !== '' ? '<div style="white-space:pre-wrap">' . htmlspecialchars($m['conteudo']) . '</div>' : '');
+    }
+
+    if ($m['tipo'] === 'audio') {
+        return '<audio controls style="max-width:220px; display:block"><source src="' . htmlspecialchars($url) . '"></audio>';
+    }
+
+    if ($m['tipo'] === 'documento') {
+        return '<a href="' . htmlspecialchars($url) . '" target="_blank" class="d-flex align-items-center gap-2 text-decoration-none text-reset">'
+            . '<i class="bi bi-file-earmark-arrow-down fs-4"></i>'
+            . '<span>' . htmlspecialchars($m['conteudo'] !== '' ? $m['conteudo'] : 'Documento') . '</span>'
+            . '</a>';
+    }
+
+    return '<div style="white-space:pre-wrap">' . htmlspecialchars($m['conteudo']) . '</div>';
+}
+
+/**
+ * Bolha de mensagem (HTML) -- usada só na primeira renderização (SSR);
+ * o polling de mensagens novas monta o equivalente em JS (montarBolha()
+ * no script abaixo), mesma lógica de cor/alinhamento nos dois lugares.
+ */
 function renderizarBolha(array $m): string
 {
     $minhas = $m['direcao'] === 'saida';
@@ -18,7 +53,7 @@ function renderizarBolha(array $m): string
     return '<div class="d-flex mb-2" style="justify-content:' . $alinhamento . '" data-msg-id="' . (int)$m['id'] . '">'
         . '<div style="max-width:70%; background:' . $corBolha . '; border-radius:10px; padding:8px 12px; box-shadow:0 1px 2px rgba(0,0,0,.1);">'
         . ($rotulo ? '<div class="small text-muted mb-1">' . htmlspecialchars($rotulo) . '</div>' : '')
-        . '<div style="white-space:pre-wrap">' . htmlspecialchars($m['conteudo']) . '</div>'
+        . renderizarConteudoBolha($m)
         . '<div class="text-muted text-end" style="font-size:10px">' . htmlspecialchars(data_br($m['criado_em'], 'H:i')) . '</div>'
         . '</div></div>';
 }
@@ -81,6 +116,13 @@ $somenteLeitura = $atendimento['status'] === 'encerrado';
         <div id="painelEmojiChat" class="shadow-sm"
              style="display:none; position:absolute; bottom:100%; right:16px; margin-bottom:6px; background:#fff; border:1px solid #dee2e6; border-radius:10px; padding:8px; width:220px; grid-template-columns:repeat(5, 1fr); gap:2px; z-index:10;"></div>
         <form id="formResponder" class="d-flex gap-2">
+            <?php if ($anexosAtivos): ?>
+                <button type="button" id="botaoAnexoChat" class="btn btn-outline-secondary" title="Anexar arquivo">
+                    <i class="bi bi-paperclip"></i>
+                </button>
+                <input type="file" id="campoArquivoChat" style="display:none"
+                       accept="image/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip">
+            <?php endif; ?>
             <button type="button" id="botaoEmojiChat" class="btn btn-outline-secondary" title="Emoji">
                 <i class="bi bi-emoji-smile"></i>
             </button>
@@ -116,6 +158,70 @@ $somenteLeitura = $atendimento['status'] === 'encerrado';
         return direcao === 'saida' ? '#dcf8c6' : '#ffffff';
     }
 
+    function montarConteudoBolha(bolha, m) {
+        if (!m.midia_path) {
+            const elTexto = document.createElement('div');
+            elTexto.style.whiteSpace = 'pre-wrap';
+            elTexto.textContent = m.conteudo;
+            bolha.appendChild(elTexto);
+            return;
+        }
+
+        const url = <?= json_encode(url('/whatsapp/atendimentos/midia')) ?> + '?id=' + m.id;
+
+        if (m.tipo === 'imagem') {
+            const link = document.createElement('a');
+            link.href = url;
+            link.target = '_blank';
+            const img = document.createElement('img');
+            img.src = url;
+            img.style.maxWidth = '100%';
+            img.style.borderRadius = '6px';
+            img.style.display = 'block';
+            img.style.marginBottom = '4px';
+            link.appendChild(img);
+            bolha.appendChild(link);
+
+            if (m.conteudo) {
+                const elLegenda = document.createElement('div');
+                elLegenda.style.whiteSpace = 'pre-wrap';
+                elLegenda.textContent = m.conteudo;
+                bolha.appendChild(elLegenda);
+            }
+            return;
+        }
+
+        if (m.tipo === 'audio') {
+            const audio = document.createElement('audio');
+            audio.controls = true;
+            audio.style.maxWidth = '220px';
+            audio.style.display = 'block';
+            const fonte = document.createElement('source');
+            fonte.src = url;
+            audio.appendChild(fonte);
+            bolha.appendChild(audio);
+            return;
+        }
+
+        if (m.tipo === 'documento') {
+            const link = document.createElement('a');
+            link.href = url;
+            link.target = '_blank';
+            link.className = 'd-flex align-items-center gap-2 text-decoration-none text-reset';
+            link.innerHTML = '<i class="bi bi-file-earmark-arrow-down fs-4"></i>';
+            const elNome = document.createElement('span');
+            elNome.textContent = m.conteudo || 'Documento';
+            link.appendChild(elNome);
+            bolha.appendChild(link);
+            return;
+        }
+
+        const elTexto = document.createElement('div');
+        elTexto.style.whiteSpace = 'pre-wrap';
+        elTexto.textContent = m.conteudo;
+        bolha.appendChild(elTexto);
+    }
+
     function montarBolha(m) {
         const minhas = m.direcao === 'saida';
 
@@ -140,10 +246,7 @@ $somenteLeitura = $atendimento['status'] === 'encerrado';
             bolha.appendChild(elRotulo);
         }
 
-        const elTexto = document.createElement('div');
-        elTexto.style.whiteSpace = 'pre-wrap';
-        elTexto.textContent = m.conteudo;
-        bolha.appendChild(elTexto);
+        montarConteudoBolha(bolha, m);
 
         const elData = document.createElement('div');
         elData.className = 'text-muted text-end';
@@ -212,6 +315,52 @@ $somenteLeitura = $atendimento['status'] === 'encerrado';
     });
 
     setInterval(buscarNovas, 3000);
+
+    // -- Anexo: pega o que tiver digitado no campo como legenda (fica
+    // vazio se não digitou nada), sobe o arquivo e limpa o campo --
+    // mesmo endpoint de envio de texto normal, só que multipart.
+    const botaoAnexo = document.getElementById('botaoAnexoChat');
+    const campoArquivo = document.getElementById('campoArquivoChat');
+
+    if (botaoAnexo && campoArquivo) {
+        botaoAnexo.addEventListener('click', function () {
+            campoArquivo.click();
+        });
+
+        campoArquivo.addEventListener('change', function () {
+            const arquivo = campoArquivo.files[0];
+            if (!arquivo) {
+                return;
+            }
+
+            botaoAnexo.disabled = true;
+            campo.disabled = true;
+
+            const dados = new FormData();
+            dados.set('id', atendimentoId);
+            dados.set('legenda', campo.value.trim());
+            dados.set('arquivo', arquivo);
+
+            fetch(<?= json_encode(url('/whatsapp/atendimentos/anexo')) ?>, { method: 'POST', body: dados })
+                .then(function (r) { return r.json(); })
+                .then(function (resultado) {
+                    if (resultado.success) {
+                        campo.value = '';
+                        buscarNovas();
+                    } else {
+                        alert(resultado.message || 'Falha ao enviar anexo.');
+                    }
+                })
+                .catch(function () {
+                    alert('Erro ao comunicar com o servidor.');
+                })
+                .finally(function () {
+                    botaoAnexo.disabled = false;
+                    campo.disabled = false;
+                    campoArquivo.value = '';
+                });
+        });
+    }
 
     // -- Emoji: mesma ideia dos chips de {nome}/{periodo} do Chatbot,
     // mas aqui insere direto no campo de resposta em vez de um textarea.
