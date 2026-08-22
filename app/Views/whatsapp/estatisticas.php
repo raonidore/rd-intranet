@@ -37,6 +37,9 @@ $rotulosPeriodoRanking = ['geral' => 'Histórico geral', 'mes' => 'Este mês', '
     <li class="nav-item">
         <a class="nav-link <?= $aba === 'ranking' ? 'active' : '' ?>" href="<?= url('/whatsapp/estatisticas?aba=ranking') ?>">Ranking</a>
     </li>
+    <li class="nav-item">
+        <a class="nav-link <?= $aba === 'nps' ? 'active' : '' ?>" href="<?= url('/whatsapp/estatisticas?aba=nps') ?>">NPS</a>
+    </li>
 </ul>
 
 <?php if ($aba === 'tempo-real'): ?>
@@ -241,14 +244,38 @@ $rotulosPeriodoRanking = ['geral' => 'Histórico geral', 'mes' => 'Este mês', '
         </div>
     <?php endif; ?>
 
-<?php endif; ?>
+<?php elseif ($aba === 'nps'): ?>
 
-<div class="card border-0 shadow-sm mt-4" style="max-width:900px">
-    <div class="card-header bg-white" style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#configNps">
-        <i class="bi bi-gear me-1"></i> Configurar pesquisa de satisfação (NPS)
+    <div class="row g-3 mb-3">
+        <div class="col-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="text-muted small">Respostas (90 dias)</div>
+                    <div class="fs-2"><?= (int)$resumoNps['total'] ?></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="text-muted small">Nota média (1-5)</div>
+                    <div class="fs-2"><?= $resumoNps['media'] !== null ? htmlspecialchars((string)$resumoNps['media']) : '—' ?></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="text-muted small">% resolvido</div>
+                    <div class="fs-2"><?= $resumoNps['pct_resolvido'] !== null ? (int)$resumoNps['pct_resolvido'] . '%' : '—' ?></div>
+                </div>
+            </div>
+        </div>
     </div>
-    <div class="collapse" id="configNps">
+
+    <div class="card border-0 shadow-sm" style="max-width:900px">
         <div class="card-body">
+            <h6 class="mb-2">Configurar pesquisa de satisfação</h6>
             <p class="text-muted small">
                 Ativa por setor em <a href="<?= url('/whatsapp/setores') ?>">Setores</a>. As notas/opções abaixo de cada
                 pergunta são fixas (alimentam as estatísticas) -- só o texto da pergunta em si pode ser mudado.
@@ -277,26 +304,10 @@ $rotulosPeriodoRanking = ['geral' => 'Histórico geral', 'mes' => 'Este mês', '
                 <p class="text-muted small mb-2">Use <code>{nome}</code> pro nome do cliente. Emojis também funcionam.</p>
                 <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-check-lg"></i> Salvar</button>
             </form>
-
-            <hr>
-            <h6 class="mb-2">Resumo (últimos 90 dias)</h6>
-            <div class="row g-3">
-                <div class="col-4">
-                    <div class="text-muted small">Respostas</div>
-                    <div class="fs-4"><?= (int)$resumoNps['total'] ?></div>
-                </div>
-                <div class="col-4">
-                    <div class="text-muted small">Nota média (1-5)</div>
-                    <div class="fs-4"><?= $resumoNps['media'] !== null ? htmlspecialchars((string)$resumoNps['media']) : '—' ?></div>
-                </div>
-                <div class="col-4">
-                    <div class="text-muted small">% resolvido</div>
-                    <div class="fs-4"><?= $resumoNps['pct_resolvido'] !== null ? (int)$resumoNps['pct_resolvido'] . '%' : '—' ?></div>
-                </div>
-            </div>
         </div>
     </div>
-</div>
+
+<?php endif; ?>
 
 <?php
 $conteudo = ob_get_clean();

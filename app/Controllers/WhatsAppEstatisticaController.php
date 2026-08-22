@@ -62,7 +62,7 @@ class WhatsAppEstatisticaController extends Controller
             NotificationService::error($resultado['message']);
         }
 
-        header('Location: ' . url('/whatsapp/estatisticas?aba=ranking'));
+        header('Location: ' . url('/whatsapp/estatisticas?aba=nps'));
         exit;
     }
 }
