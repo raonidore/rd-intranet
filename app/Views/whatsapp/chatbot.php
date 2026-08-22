@@ -9,6 +9,12 @@ const WPP_TIPOS_OPCAO = [
     'encaminhar_setor' => 'Encaminha pro setor',
 ];
 
+/** Emojis mais usados em atendimento -- clique insere no cursor, mesmo mecanismo dos chips de {nome}/{periodo}. */
+const WPP_EMOJIS = [
+    '😀', '🙂', '😉', '😅', '🙁', '😢', '😡', '👍', '👎', '🙏',
+    '👋', '✅', '❌', '⏳', '📞', '📅', '💰', '🎉', '❤️', '🤝',
+];
+
 /** <option>s de setor reaproveitadas tanto nas linhas já salvas quanto no template de linha nova (JS). */
 function wppOpcoesSetor(array $setoresAtivos, ?int $selecionadoId = null): string
 {
@@ -56,6 +62,14 @@ function wppCampoMensagem(string $nomeCampo, string $valor, string $modo, int $r
         <div class="rd-chips-template">
             <button type="button" class="rd-chip" data-insere="{nome}"><i class="bi bi-person-fill"></i> Nome do cliente</button>
             <button type="button" class="rd-chip" data-insere="{periodo}"><i class="bi bi-brightness-high-fill"></i> Bom dia / tarde / noite</button>
+            <div class="rd-emoji-wrap">
+                <button type="button" class="rd-chip botao-emoji"><i class="bi bi-emoji-smile"></i> Emoji</button>
+                <div class="rd-emoji-painel">
+                    <?php foreach (WPP_EMOJIS as $emoji): ?>
+                        <button type="button" class="rd-emoji-chip" data-insere="<?= $emoji ?>"><?= $emoji ?></button>
+                    <?php endforeach; ?>
+                </div>
+            </div>
         </div>
         <div class="rd-editor-template-corpo">
             <textarea name="<?= htmlspecialchars($nomeCampo) ?>" class="form-control campo-mensagem-template" rows="<?= $rows ?>"
@@ -136,6 +150,20 @@ function wppLinhaOpcao(array $opcao, array $setoresAtivos): void
     white-space:pre-wrap; box-shadow:0 1px 1px rgba(0,0,0,.1); max-width:100%;
 }
 .rd-preview-compacta { white-space:pre-wrap; font-style:italic; font-size:.8rem; color:#6c757d; margin-top:2px; }
+
+.rd-emoji-wrap { position:relative; display:inline-block; }
+.rd-emoji-painel {
+    display:none; position:absolute; z-index:20; top:calc(100% + 6px); left:0;
+    background:#fff; border:1px solid #dee2e6; border-radius:10px; padding:8px;
+    box-shadow:0 6px 18px rgba(0,0,0,.15); width:220px;
+    grid-template-columns:repeat(5, 1fr); gap:2px;
+}
+.rd-emoji-painel.aberto { display:grid; }
+.rd-emoji-chip {
+    border:none; background:none; font-size:1.2rem; line-height:1; padding:6px;
+    border-radius:6px; cursor:pointer;
+}
+.rd-emoji-chip:hover { background:#eef2ff; }
 </style>
 
 <?= Alert::flash() ?>
@@ -514,7 +542,7 @@ function wppLinhaOpcao(array $opcao, array $setoresAtivos): void
 
         textarea.addEventListener('input', atualizar);
 
-        container.querySelectorAll('.rd-chip').forEach(function (chip) {
+        container.querySelectorAll('.rd-chip[data-insere], .rd-emoji-chip').forEach(function (chip) {
             chip.addEventListener('click', function () {
                 const trecho = chip.dataset.insere;
                 const inicio = textarea.selectionStart != null ? textarea.selectionStart : textarea.value.length;
@@ -528,9 +556,36 @@ function wppLinhaOpcao(array $opcao, array $setoresAtivos): void
                 textarea.setSelectionRange(novaPosicao, novaPosicao);
 
                 atualizar();
+
+                const painelAberto = container.querySelector('.rd-emoji-painel.aberto');
+                if (painelAberto) {
+                    painelAberto.classList.remove('aberto');
+                }
             });
         });
+
+        const botaoEmoji = container.querySelector('.botao-emoji');
+        const painelEmoji = container.querySelector('.rd-emoji-painel');
+        if (botaoEmoji && painelEmoji) {
+            botaoEmoji.addEventListener('click', function (evento) {
+                evento.stopPropagation();
+                document.querySelectorAll('.rd-emoji-painel.aberto').forEach(function (p) {
+                    if (p !== painelEmoji) {
+                        p.classList.remove('aberto');
+                    }
+                });
+                painelEmoji.classList.toggle('aberto');
+            });
+        }
     };
+
+    document.addEventListener('click', function (evento) {
+        document.querySelectorAll('.rd-emoji-painel.aberto').forEach(function (painel) {
+            if (!painel.closest('.rd-emoji-wrap').contains(evento.target)) {
+                painel.classList.remove('aberto');
+            }
+        });
+    });
 
     document.querySelectorAll('.rd-editor-template').forEach(window.rdInicializarEditorTemplate);
 })();

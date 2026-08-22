@@ -59,7 +59,12 @@ function renderizarBolha(array $m): string
     <div class="card-footer bg-white position-relative">
         <div id="listaAutocompleteRapidas" class="list-group position-absolute shadow-sm"
              style="display:none; bottom:100%; left:16px; right:16px; max-height:200px; overflow-y:auto; z-index:10;"></div>
+        <div id="painelEmojiChat" class="shadow-sm"
+             style="display:none; position:absolute; bottom:100%; right:16px; margin-bottom:6px; background:#fff; border:1px solid #dee2e6; border-radius:10px; padding:8px; width:220px; grid-template-columns:repeat(5, 1fr); gap:2px; z-index:10;"></div>
         <form id="formResponder" class="d-flex gap-2">
+            <button type="button" id="botaoEmojiChat" class="btn btn-outline-secondary" title="Emoji">
+                <i class="bi bi-emoji-smile"></i>
+            </button>
             <input type="text" id="campoTexto" class="form-control" placeholder="Digite uma mensagem... (use /comando pra respostas rápidas)" autocomplete="off" required>
             <button type="submit" class="btn btn-primary text-nowrap">
                 <i class="bi bi-send"></i> Enviar
@@ -185,6 +190,46 @@ function renderizarBolha(array $m): string
 
     lista.scrollTop = lista.scrollHeight;
     setInterval(buscarNovas, 3000);
+
+    // -- Emoji: mesma ideia dos chips de {nome}/{periodo} do Chatbot,
+    // mas aqui insere direto no campo de resposta em vez de um textarea.
+    const EMOJIS = ['😀', '🙂', '😉', '😅', '🙁', '😢', '😡', '👍', '👎', '🙏', '👋', '✅', '❌', '⏳', '📞', '📅', '💰', '🎉', '❤️', '🤝'];
+    const botaoEmoji = document.getElementById('botaoEmojiChat');
+    const painelEmoji = document.getElementById('painelEmojiChat');
+
+    EMOJIS.forEach(function (emoji) {
+        const botao = document.createElement('button');
+        botao.type = 'button';
+        botao.textContent = emoji;
+        botao.style.cssText = 'border:none; background:none; font-size:1.2rem; line-height:1; padding:6px; border-radius:6px; cursor:pointer;';
+        botao.addEventListener('mouseenter', function () { botao.style.background = '#eef2ff'; });
+        botao.addEventListener('mouseleave', function () { botao.style.background = 'none'; });
+        botao.addEventListener('click', function () {
+            const inicio = campo.selectionStart != null ? campo.selectionStart : campo.value.length;
+            const fim = campo.selectionEnd != null ? campo.selectionEnd : campo.value.length;
+            const valor = campo.value;
+
+            campo.value = valor.slice(0, inicio) + emoji + valor.slice(fim);
+
+            const novaPosicao = inicio + emoji.length;
+            campo.focus();
+            campo.setSelectionRange(novaPosicao, novaPosicao);
+
+            painelEmoji.style.display = 'none';
+        });
+        painelEmoji.appendChild(botao);
+    });
+
+    botaoEmoji.addEventListener('click', function (evento) {
+        evento.stopPropagation();
+        painelEmoji.style.display = painelEmoji.style.display === 'none' ? 'grid' : 'none';
+    });
+
+    document.addEventListener('click', function (evento) {
+        if (painelEmoji.style.display !== 'none' && !painelEmoji.contains(evento.target) && evento.target !== botaoEmoji) {
+            painelEmoji.style.display = 'none';
+        }
+    });
 
     // -- Mensagens rápidas: digitar "/comando" mostra sugestões, clicar
     // substitui o campo pelo texto completo da mensagem cadastrada.
