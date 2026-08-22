@@ -48,11 +48,11 @@ class WhatsAppNpsService
 
         $mensagemEspera = $chatbot->renderizarTemplate($config->npsMensagemEspera(), ['nome' => $nome]);
         $mensageiro->enviar($numero, $mensagemEspera);
-        $atendimentoService->registrarMensagemSaida((int)$atendimentoComContato['id'], $mensagemEspera, 'bot');
+        $atendimentoService->registrarMensagemSaida((int)$atendimentoComContato['id'], $mensagemEspera, 'bot', null, 'texto', null, 'nps');
 
         $perguntaAtendente = $chatbot->renderizarTemplate($config->npsPerguntaAtendente(), ['nome' => $nome]) . self::LEGENDA_ATENDENTE;
         $mensageiro->enviar($numero, $perguntaAtendente);
-        $atendimentoService->registrarMensagemSaida((int)$atendimentoComContato['id'], $perguntaAtendente, 'bot');
+        $atendimentoService->registrarMensagemSaida((int)$atendimentoComContato['id'], $perguntaAtendente, 'bot', null, 'texto', null, 'nps');
 
         $this->pdo->prepare("UPDATE whatsapp_atendimentos SET status = 'aguardando_nps_atendente' WHERE id = ?")
             ->execute([$atendimentoComContato['id']]);
@@ -81,7 +81,7 @@ class WhatsAppNpsService
         if (!preg_match('/^[1-5]$/', $texto)) {
             $mensagemErro = 'Não entendi -- responda só com um número de 1 a 5, por favor.';
             (new WhatsAppMensagemService())->enviar($atendimento['numero'], $mensagemErro);
-            $atendimentoService->registrarMensagemSaida((int)$atendimento['id'], $mensagemErro, 'bot');
+            $atendimentoService->registrarMensagemSaida((int)$atendimento['id'], $mensagemErro, 'bot', null, 'texto', null, 'nps');
             return;
         }
 
@@ -95,7 +95,7 @@ class WhatsAppNpsService
         $perguntaResolucao = $chatbot->renderizarTemplate($config->npsPerguntaResolucao(), ['nome' => $atendimento['contato_nome']]) . self::LEGENDA_RESOLUCAO;
 
         (new WhatsAppMensagemService())->enviar($atendimento['numero'], $perguntaResolucao);
-        $atendimentoService->registrarMensagemSaida((int)$atendimento['id'], $perguntaResolucao, 'bot');
+        $atendimentoService->registrarMensagemSaida((int)$atendimento['id'], $perguntaResolucao, 'bot', null, 'texto', null, 'nps');
 
         $this->pdo->prepare("UPDATE whatsapp_atendimentos SET status = 'aguardando_nps_resolucao' WHERE id = ?")
             ->execute([$atendimento['id']]);
@@ -109,7 +109,7 @@ class WhatsAppNpsService
         if ($texto !== '1' && $texto !== '2') {
             $mensagemErro = 'Não entendi -- digite 1 para Sim ou 2 para Não, por favor.';
             (new WhatsAppMensagemService())->enviar($atendimento['numero'], $mensagemErro);
-            $atendimentoService->registrarMensagemSaida((int)$atendimento['id'], $mensagemErro, 'bot');
+            $atendimentoService->registrarMensagemSaida((int)$atendimento['id'], $mensagemErro, 'bot', null, 'texto', null, 'nps');
             return;
         }
 
@@ -121,7 +121,7 @@ class WhatsAppNpsService
         $agradecimento = $chatbot->renderizarTemplate($config->npsAgradecimento(), ['nome' => $atendimento['contato_nome']]);
 
         (new WhatsAppMensagemService())->enviar($atendimento['numero'], $agradecimento);
-        $atendimentoService->registrarMensagemSaida((int)$atendimento['id'], $agradecimento, 'bot');
+        $atendimentoService->registrarMensagemSaida((int)$atendimento['id'], $agradecimento, 'bot', null, 'texto', null, 'nps');
 
         $this->pdo->prepare("UPDATE whatsapp_atendimentos SET status = 'encerrado', encerrado_em = NOW() WHERE id = ?")
             ->execute([$atendimento['id']]);

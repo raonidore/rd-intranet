@@ -20,9 +20,11 @@ use App\Components\Alert;
     <li class="nav-item">
         <a class="nav-link <?= $aba === 'andamento' ? 'active' : '' ?>" href="<?= url('/whatsapp/atendimentos?aba=andamento') ?>">Em andamento</a>
     </li>
+    <?php if ($podeVerEncerrados): ?>
     <li class="nav-item">
         <a class="nav-link <?= $aba === 'encerrados' ? 'active' : '' ?>" href="<?= url('/whatsapp/atendimentos?aba=encerrados') ?>">Encerrados</a>
     </li>
+    <?php endif; ?>
 </ul>
 
 <?php if ($aba === 'encerrados'): ?>

@@ -11,6 +11,7 @@ use App\Services\WhatsAppConfigService;
 use App\Services\WhatsAppContatoService;
 use App\Services\WhatsAppMensagemService;
 use App\Services\WhatsAppMidiaService;
+use App\Services\WhatsAppPermissaoService;
 use App\Services\WhatsAppSetorService;
 
 class WhatsAppAtendimentoController extends Controller
@@ -20,12 +21,22 @@ class WhatsAppAtendimentoController extends Controller
         AuthMiddleware::checkModulo('whatsapp_atendimentos');
 
         $service = new WhatsAppAtendimentoService();
+        $permissao = new WhatsAppPermissaoService();
         $usuarioId = (int)$_SESSION['usuario']['id'];
 
+        $podeVerEncerrados = $permissao->usuarioPodeVerEncerrados($_SESSION['usuario']);
+        $podeVerNps = $permissao->usuarioPodeVerNps($_SESSION['usuario']);
+
+        $aba = $_GET['aba'] ?? 'andamento';
+        if ($aba === 'encerrados' && !$podeVerEncerrados) {
+            $aba = 'andamento';
+        }
+
         $this->view('whatsapp/atendimentos', [
-            'aba' => $_GET['aba'] ?? 'andamento',
+            'aba' => $aba,
             'atendimentos' => $service->listarDoUsuario($usuarioId),
-            'encerrados' => $service->listarEncerradosDoUsuario($usuarioId),
+            'encerrados' => $podeVerEncerrados ? $service->listarEncerradosDoUsuario($usuarioId, !$podeVerNps) : [],
+            'podeVerEncerrados' => $podeVerEncerrados,
         ]);
     }
 
@@ -80,6 +91,16 @@ class WhatsAppAtendimentoController extends Controller
             exit;
         }
 
+        $permissao = new WhatsAppPermissaoService();
+
+        if ($atendimento['status'] === 'encerrado' && !$permissao->usuarioPodeVerEncerrados($_SESSION['usuario'])) {
+            NotificationService::error('Você não tem permissão pra ver atendimentos encerrados.');
+            header('Location: ' . url('/whatsapp/atendimentos'));
+            exit;
+        }
+
+        $podeVerNps = $permissao->usuarioPodeVerNps($_SESSION['usuario']);
+
         $setoresAtivos = array_values(array_filter(
             (new WhatsAppSetorService())->listar(),
             fn (array $s) => (bool)$s['ativo'] && (int)$s['id'] !== (int)$atendimento['setor_id']
@@ -89,7 +110,7 @@ class WhatsAppAtendimentoController extends Controller
 
         $this->view('whatsapp/atendimento_chat', [
             'atendimento' => $atendimento,
-            'mensagens' => $service->mensagens($id),
+            'mensagens' => $service->mensagens($id, 0, !$podeVerNps),
             'setoresAtivos' => $setoresAtivos,
             'anexosAtivos' => $config->anexosAtivos(),
         ]);
@@ -274,7 +295,9 @@ class WhatsAppAtendimentoController extends Controller
             return;
         }
 
-        echo json_encode(['success' => true, 'mensagens' => $service->mensagens($id, $desde)]);
+        $podeVerNps = (new WhatsAppPermissaoService())->usuarioPodeVerNps($_SESSION['usuario']);
+
+        echo json_encode(['success' => true, 'mensagens' => $service->mensagens($id, $desde, !$podeVerNps)]);
     }
 
     public function encerrar(): void

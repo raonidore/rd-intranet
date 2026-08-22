@@ -81,7 +81,14 @@ class WhatsAppAtendimentoService
         $contato = (new WhatsAppContatoService())->buscarOuCriarPorNumero($numero, $nomeContato);
         $atendimento = $this->abrirOuReaproveitar((int)$contato['id']);
 
-        $resultado = $this->registrarMensagemEntrada((int)$atendimento['id'], $texto, $tipo, $whatsappMessageId, $midiaPath);
+        // Se o atendimento tá esperando resposta do NPS, essa mensagem
+        // (o número que o cliente digitou pra avaliar) é parte do
+        // mini-fluxo de pesquisa, não da conversa em si -- marcada
+        // como tal pra dar pra esconder junto com o resto do NPS.
+        $emFluxoNps = $atendimento['status'] === 'aguardando_nps_atendente' || $atendimento['status'] === 'aguardando_nps_resolucao';
+        $contexto = $emFluxoNps ? 'nps' : 'atendimento';
+
+        $resultado = $this->registrarMensagemEntrada((int)$atendimento['id'], $texto, $tipo, $whatsappMessageId, $midiaPath, $contexto);
 
         // $resultado === null quer dizer "já tinha essa mensagem" (retry
         // do provedor) -- não roda o bot/NPS de novo pra não duplicar
@@ -90,7 +97,7 @@ class WhatsAppAtendimentoService
             return;
         }
 
-        if ($atendimento['status'] === 'aguardando_nps_atendente' || $atendimento['status'] === 'aguardando_nps_resolucao') {
+        if ($emFluxoNps) {
             (new WhatsAppNpsService())->processarResposta($atendimento + ['numero' => $numero, 'contato_nome' => $contato['nome']], $texto);
             return;
         }
@@ -325,11 +332,13 @@ class WhatsAppAtendimentoService
      * usuário -- só consulta, sem link pro chat (conversa fechada não
      * reabre por aqui, é só a aba "Encerrados" de Atendimentos).
      */
-    public function listarEncerradosDoUsuario(int $usuarioId, int $limite = 100): array
+    public function listarEncerradosDoUsuario(int $usuarioId, bool $ocultarNps = false, int $limite = 100): array
     {
+        $filtroNps = $ocultarNps ? "AND m.contexto != 'nps'" : '';
+
         $stmt = $this->pdo->prepare(
             "SELECT a.*, c.numero, c.nome AS contato_nome, s.nome AS setor_nome,
-                    (SELECT conteudo FROM whatsapp_mensagens m WHERE m.atendimento_id = a.id ORDER BY m.id DESC LIMIT 1) AS ultima_mensagem
+                    (SELECT conteudo FROM whatsapp_mensagens m WHERE m.atendimento_id = a.id {$filtroNps} ORDER BY m.id DESC LIMIT 1) AS ultima_mensagem
              FROM whatsapp_atendimentos a
              JOIN whatsapp_contatos c ON c.id = a.contato_id
              LEFT JOIN whatsapp_setores s ON s.id = a.setor_id
@@ -347,14 +356,18 @@ class WhatsAppAtendimentoService
     /**
      * Mensagens do atendimento -- $desdeId > 0 pra polling incremental
      * (só o que chegou depois da última mensagem já exibida na tela).
+     * $ocultarNps tira as mensagens do mini-fluxo de pesquisa de
+     * satisfação de quem não tem permissão de ver isso.
      */
-    public function mensagens(int $atendimentoId, int $desdeId = 0): array
+    public function mensagens(int $atendimentoId, int $desdeId = 0, bool $ocultarNps = false): array
     {
+        $filtroNps = $ocultarNps ? "AND m.contexto != 'nps'" : '';
+
         $stmt = $this->pdo->prepare(
             "SELECT m.*, u.nome AS usuario_nome
              FROM whatsapp_mensagens m
              LEFT JOIN usuarios u ON u.id = m.usuario_id
-             WHERE m.atendimento_id = ? AND m.id > ?
+             WHERE m.atendimento_id = ? AND m.id > ? {$filtroNps}
              ORDER BY m.id ASC"
         );
         $stmt->execute([$atendimentoId, $desdeId]);
@@ -451,17 +464,18 @@ class WhatsAppAtendimentoService
         string $conteudo,
         string $tipo = 'texto',
         ?string $whatsappMessageId = null,
-        ?string $midiaPath = null
+        ?string $midiaPath = null,
+        string $contexto = 'atendimento'
     ): ?array {
         if ($whatsappMessageId !== null && $this->mensagemJaExiste($whatsappMessageId)) {
             return null;
         }
 
         $stmt = $this->pdo->prepare(
-            "INSERT INTO whatsapp_mensagens (atendimento_id, direcao, tipo, conteudo, origem, whatsapp_message_id, midia_path)
-             VALUES (?, 'entrada', ?, ?, 'cliente', ?, ?)"
+            "INSERT INTO whatsapp_mensagens (atendimento_id, direcao, tipo, contexto, conteudo, origem, whatsapp_message_id, midia_path)
+             VALUES (?, 'entrada', ?, ?, ?, 'cliente', ?, ?)"
         );
-        $stmt->execute([$atendimentoId, $tipo, $conteudo, $whatsappMessageId, $midiaPath]);
+        $stmt->execute([$atendimentoId, $tipo, $contexto, $conteudo, $whatsappMessageId, $midiaPath]);
 
         // lastInsertId() precisa ser lido ANTES do UPDATE de
         // tocarUltimaMensagem() -- confirmado ao vivo: nesse driver
@@ -481,13 +495,14 @@ class WhatsAppAtendimentoService
         string $origem = 'usuario',
         ?int $usuarioId = null,
         string $tipo = 'texto',
-        ?string $midiaPath = null
+        ?string $midiaPath = null,
+        string $contexto = 'atendimento'
     ): int {
         $stmt = $this->pdo->prepare(
-            "INSERT INTO whatsapp_mensagens (atendimento_id, direcao, tipo, conteudo, origem, usuario_id, midia_path)
-             VALUES (?, 'saida', ?, ?, ?, ?, ?)"
+            "INSERT INTO whatsapp_mensagens (atendimento_id, direcao, tipo, contexto, conteudo, origem, usuario_id, midia_path)
+             VALUES (?, 'saida', ?, ?, ?, ?, ?, ?)"
         );
-        $stmt->execute([$atendimentoId, $tipo, $conteudo, $origem, $usuarioId, $midiaPath]);
+        $stmt->execute([$atendimentoId, $tipo, $contexto, $conteudo, $origem, $usuarioId, $midiaPath]);
 
         $id = (int)$this->pdo->lastInsertId();
 

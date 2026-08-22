@@ -287,6 +287,8 @@ $router->post('/whatsapp/estatisticas/nps', [WhatsAppEstatisticaController::clas
 
 $router->get('/whatsapp/configuracoes', [WhatsAppConfiguracaoController::class, 'index']);
 $router->post('/whatsapp/configuracoes/salvar', [WhatsAppConfiguracaoController::class, 'salvar']);
+$router->post('/whatsapp/configuracoes/acesso-encerrados', [WhatsAppConfiguracaoController::class, 'salvarAcessoEncerrados']);
+$router->post('/whatsapp/configuracoes/acesso-nps', [WhatsAppConfiguracaoController::class, 'salvarAcessoNps']);
 
 $router->post('/whatsapp/mensagens-rapidas/criar', [WhatsAppMensagemRapidaController::class, 'criar']);
 $router->post('/whatsapp/mensagens-rapidas/atualizar', [WhatsAppMensagemRapidaController::class, 'atualizar']);
