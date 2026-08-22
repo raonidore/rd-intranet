@@ -146,8 +146,18 @@ use App\Components\Alert;
     }
 
     btnSom.addEventListener('click', () => {
-        localStorage.setItem(CHAVE_SOM, somAtivo() ? '0' : '1');
+        const vaiLigar = !somAtivo();
+        localStorage.setItem(CHAVE_SOM, vaiLigar ? '1' : '0');
         atualizarIcone();
+
+        // Bip de teste na hora, dentro do próprio clique -- esse clique
+        // é o gesto que destrava o áudio no navegador, então se o som
+        // do computador estiver ok isso TEM que tocar. Se não tocar
+        // aqui, o problema não é do nosso alerta -- é volume/saída de
+        // áudio/aba silenciada no navegador.
+        if (vaiLigar && typeof window.wppTocarBip === 'function') {
+            window.wppTocarBip();
+        }
     });
 
     atualizarIcone();

@@ -871,7 +871,7 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
     // o dela e destrava de novo, mas isso costuma acontecer em segundos
     // no uso normal do painel).
     let audioCtxWpp = null;
-    function obterAudioCtxWpp() {
+    async function obterAudioCtxWpp() {
         if (!audioCtxWpp) {
             const Ctor = window.AudioContext || window.webkitAudioContext;
             if (!Ctor) {
@@ -880,19 +880,26 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
             audioCtxWpp = new Ctor();
         }
         if (audioCtxWpp.state === 'suspended') {
-            audioCtxWpp.resume().catch(() => {});
+            // Espera o resume() de verdade terminar antes de devolver o
+            // contexto -- ler o state logo em seguida, sem esperar,
+            // ainda pega "suspended" no meio da transição.
+            try {
+                await audioCtxWpp.resume();
+            } catch (e) {
+                // bloqueado pela política de autoplay -- segue mudo mesmo
+            }
         }
         return audioCtxWpp;
     }
     ['pointerdown', 'keydown'].forEach((evento) => {
-        document.addEventListener(evento, obterAudioCtxWpp, { passive: true });
+        document.addEventListener(evento, () => { obterAudioCtxWpp(); }, { passive: true });
     });
 
-    function tocarBipWpp() {
+    async function tocarBipWpp() {
         try {
-            const ctx = obterAudioCtxWpp();
+            const ctx = await obterAudioCtxWpp();
             if (!ctx || ctx.state !== 'running') {
-                return; // ainda sem nenhuma interação nessa página -- navegador bloqueia o som
+                return; // navegador não deixou destravar o áudio nessa página ainda
             }
             [880, 1108].forEach((freq, i) => {
                 const osc = ctx.createOscillator();
@@ -912,6 +919,12 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
             // navegador sem suporte a Web Audio -- ignora, sem quebrar o resto
         }
     }
+
+    // Exposto pro botão liga/desliga (em atendimentos.php) poder tocar
+    // um bip de teste na hora, dentro do próprio clique -- prova direta
+    // pro usuário (e pra gente) se o áudio funciona nesse navegador,
+    // sem depender de esperar uma mensagem nova chegar.
+    window.wppTocarBip = tocarBipWpp;
 
     // Guardado em sessionStorage (sobrevive a navegar entre páginas na
     // mesma aba, mas não a fechar/reabrir) pra não perder o "antes" só
