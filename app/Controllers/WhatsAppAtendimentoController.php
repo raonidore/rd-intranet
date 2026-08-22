@@ -307,8 +307,13 @@ class WhatsAppAtendimentoController extends Controller
         header('Content-Type: application/json');
 
         $usuarioId = (int)$_SESSION['usuario']['id'];
+        $service = new WhatsAppAtendimentoService();
 
-        echo json_encode(['success' => true, 'aguardando' => (new WhatsAppAtendimentoService())->contarAguardandoResposta($usuarioId)]);
+        echo json_encode([
+            'success' => true,
+            'aguardando' => $service->contarAguardandoResposta($usuarioId),
+            'ultimaMensagemId' => $service->ultimoIdMensagemRecebida($usuarioId),
+        ]);
     }
 
     public function encerrar(): void

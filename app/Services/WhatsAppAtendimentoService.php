@@ -594,6 +594,27 @@ class WhatsAppAtendimentoService
         return (int)$stmt->fetchColumn();
     }
 
+    /**
+     * Maior id de mensagem recebida (do cliente) nas conversas em
+     * andamento desse usuário -- gatilho do alerta sonoro. Não dá pra
+     * usar só a contagem de "aguardando resposta" (contarAguardandoResposta)
+     * pra isso: ela conta atendimentos, não mensagens, então uma
+     * segunda mensagem numa conversa que já estava aguardando resposta
+     * não muda esse número e o alerta nunca dispararia de novo.
+     */
+    public function ultimoIdMensagemRecebida(int $usuarioId): int
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT COALESCE(MAX(m.id), 0)
+             FROM whatsapp_mensagens m
+             JOIN whatsapp_atendimentos a ON a.id = m.atendimento_id
+             WHERE a.usuario_id = ? AND a.status = 'em_atendimento' AND m.direcao = 'entrada'"
+        );
+        $stmt->execute([$usuarioId]);
+
+        return (int)$stmt->fetchColumn();
+    }
+
     private function mensagemJaExiste(string $whatsappMessageId): bool
     {
         $stmt = $this->pdo->prepare('SELECT id FROM whatsapp_mensagens WHERE whatsapp_message_id = ?');

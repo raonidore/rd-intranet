@@ -854,7 +854,7 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
     // nova -- o botão de liga/desliga fica só em Atendimentos, mas essa
     // checagem e o alerta sonoro valem pra qualquer página.
     const CHAVE_SOM = 'wppSomAtivo';
-    const CHAVE_CONTAGEM = 'wppUltimaContagem';
+    const CHAVE_ULTIMA_MSG = 'wppUltimaMensagemId';
 
     function somAtivo() {
         return localStorage.getItem(CHAVE_SOM) === '1';
@@ -929,8 +929,16 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
     // Guardado em sessionStorage (sobrevive a navegar entre páginas na
     // mesma aba, mas não a fechar/reabrir) pra não perder o "antes" só
     // porque o usuário trocou de tela entre uma checagem e outra.
-    let ultimaContagem = sessionStorage.getItem(CHAVE_CONTAGEM);
-    ultimaContagem = ultimaContagem === null ? null : parseInt(ultimaContagem, 10);
+    //
+    // O bip usa o id da última mensagem recebida, não a contagem de
+    // "aguardando resposta" -- essa contagem é por atendimento (0 ou 1),
+    // então uma segunda mensagem numa conversa que já estava aguardando
+    // resposta não muda o número e o alerta nunca dispararia de novo.
+    // O id da mensagem, por outro lado, sempre cresce a cada mensagem
+    // nova, então dá pra detectar toda chegada, mesmo repetida na mesma
+    // conversa.
+    let ultimaMensagemId = sessionStorage.getItem(CHAVE_ULTIMA_MSG);
+    ultimaMensagemId = ultimaMensagemId === null ? null : parseInt(ultimaMensagemId, 10);
 
     const badgeMenu = document.getElementById('rdWppBadgeAtendimentos');
 
@@ -942,11 +950,11 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
                 return;
             }
 
-            if (ultimaContagem !== null && dados.aguardando > ultimaContagem && somAtivo()) {
+            if (ultimaMensagemId !== null && dados.ultimaMensagemId > ultimaMensagemId && somAtivo()) {
                 tocarBipWpp();
             }
-            ultimaContagem = dados.aguardando;
-            sessionStorage.setItem(CHAVE_CONTAGEM, String(ultimaContagem));
+            ultimaMensagemId = dados.ultimaMensagemId;
+            sessionStorage.setItem(CHAVE_ULTIMA_MSG, String(ultimaMensagemId));
 
             if (badgeMenu) {
                 badgeMenu.textContent = dados.aguardando;
