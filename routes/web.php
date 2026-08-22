@@ -273,6 +273,7 @@ $router->get('/whatsapp/chatbot', [WhatsAppChatbotController::class, 'index']);
 $router->post('/whatsapp/chatbot/boas-vindas', [WhatsAppChatbotController::class, 'salvarRaiz']);
 $router->post('/whatsapp/chatbot/opcoes', [WhatsAppChatbotController::class, 'salvarOpcoes']);
 $router->post('/whatsapp/chatbot/finalizacao', [WhatsAppChatbotController::class, 'salvarFinalizacao']);
+$router->post('/whatsapp/chatbot/atender', [WhatsAppChatbotController::class, 'atender']);
 
 $router->post('/whatsapp/mensagens-rapidas/criar', [WhatsAppMensagemRapidaController::class, 'criar']);
 $router->post('/whatsapp/mensagens-rapidas/atualizar', [WhatsAppMensagemRapidaController::class, 'atualizar']);

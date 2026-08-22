@@ -6,6 +6,7 @@ use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
 use App\Services\AuditService;
 use App\Services\NotificationService;
+use App\Services\WhatsAppAtendimentoService;
 use App\Services\WhatsAppChatbotService;
 use App\Services\WhatsAppConfigService;
 use App\Services\WhatsAppMensagemRapidaService;
@@ -54,7 +55,32 @@ class WhatsAppChatbotController extends Controller
             'encerramentoNormal' => $config->encerramentoNormal(),
             'encerramentoInatividade' => $config->encerramentoInatividade(),
             'mensagensRapidas' => (new WhatsAppMensagemRapidaService())->listar(),
+            'emEspera' => (new WhatsAppAtendimentoService())->listarEmEsperaChatbot(),
         ]);
+    }
+
+    /**
+     * Atendente clica "Atender" numa conversa que ainda está com o bot --
+     * intervém e assume na hora, mesmo padrão de WhatsAppFilaController::assumir().
+     */
+    public function atender(): void
+    {
+        AuthMiddleware::checkModulo('whatsapp_chatbot');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $resultado = (new WhatsAppAtendimentoService())->assumirDoBot($id, (int)$_SESSION['usuario']['id']);
+
+        AuditService::registrar('WhatsApp', 'Assumir do chatbot', "Atendimento #{$id}: {$resultado['message']}");
+
+        if ($resultado['success']) {
+            NotificationService::success($resultado['message']);
+            header('Location: ' . url('/whatsapp/atendimentos/ver?id=' . $id));
+            exit;
+        }
+
+        NotificationService::error($resultado['message']);
+        header('Location: ' . url('/whatsapp/chatbot?aba=espera'));
+        exit;
     }
 
     public function salvarRaiz(): void

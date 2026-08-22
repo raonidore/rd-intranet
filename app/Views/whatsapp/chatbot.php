@@ -131,6 +131,14 @@ function wppLinhaOpcao(array $opcao, array $setoresAtivos): void
 
 <ul class="nav nav-tabs mb-3">
     <li class="nav-item">
+        <a class="nav-link <?= $aba === 'espera' ? 'active' : '' ?>" href="<?= url('/whatsapp/chatbot?aba=espera') ?>">
+            Em espera no chatbot
+            <?php if (!empty($emEspera)): ?>
+                <span class="badge rounded-pill bg-danger ms-1"><?= count($emEspera) ?></span>
+            <?php endif; ?>
+        </a>
+    </li>
+    <li class="nav-item">
         <a class="nav-link <?= $aba === 'fluxo' ? 'active' : '' ?>" href="<?= url('/whatsapp/chatbot?aba=fluxo') ?>">Fluxo</a>
     </li>
     <li class="nav-item">
@@ -141,7 +149,44 @@ function wppLinhaOpcao(array $opcao, array $setoresAtivos): void
     </li>
 </ul>
 
-<?php if ($aba === 'fluxo'): ?>
+<?php if ($aba === 'espera'): ?>
+
+    <p class="text-muted small">
+        Conversas que o cliente ainda está trocando com o robô (nenhum atendente é "dono" delas ainda). Clique em
+        <strong>Atender</strong> pra intervir e assumir na hora, sem esperar o cliente terminar de navegar o menu.
+    </p>
+
+    <?php if (empty($emEspera)): ?>
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center text-muted py-4">
+                <i class="bi bi-robot" style="font-size:2rem;"></i>
+                <p class="mb-0 mt-2">Nenhuma conversa com o bot no momento.</p>
+            </div>
+        </div>
+    <?php else: ?>
+        <?php foreach ($emEspera as $item): ?>
+            <div class="card border-0 shadow-sm mb-2" style="max-width:900px">
+                <div class="card-body d-flex justify-content-between align-items-center gap-3">
+                    <div class="flex-grow-1" style="min-width:0">
+                        <strong><?= htmlspecialchars($item['contato_nome'] ?: '(sem nome)') ?></strong>
+                        <span class="text-muted small ms-1"><?= htmlspecialchars($item['numero']) ?></span>
+                        <div class="text-muted small text-truncate">
+                            <?= $item['ultima_mensagem'] !== null ? htmlspecialchars($item['ultima_mensagem']) : '(sem mensagens)' ?>
+                        </div>
+                    </div>
+                    <small class="text-muted text-nowrap"><?= htmlspecialchars($item['ultima_mensagem_em']) ?></small>
+                    <form method="post" action="<?= url('/whatsapp/chatbot/atender') ?>">
+                        <input type="hidden" name="id" value="<?= (int)$item['id'] ?>">
+                        <button type="submit" class="btn btn-sm btn-primary text-nowrap">
+                            <i class="bi bi-hand-index-thumb"></i> Atender
+                        </button>
+                    </form>
+                </div>
+            </div>
+        <?php endforeach; ?>
+    <?php endif; ?>
+
+<?php elseif ($aba === 'fluxo'): ?>
 
     <?php if (!$raiz): ?>
         <div class="card border-0 shadow-sm" style="max-width:900px">

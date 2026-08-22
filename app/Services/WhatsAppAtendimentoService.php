@@ -153,6 +153,48 @@ class WhatsAppAtendimentoService
     }
 
     /**
+     * Conversas ainda presas no chatbot (status 'bot') -- ninguém é "dono"
+     * delas ainda, então qualquer atendente pode intervir e assumir direto,
+     * sem esperar o bot rotear pra fila. Com prévia da última mensagem,
+     * igual listarDoUsuario().
+     */
+    public function listarEmEsperaChatbot(): array
+    {
+        $stmt = $this->pdo->query(
+            "SELECT a.*, c.numero, c.nome AS contato_nome,
+                    (SELECT conteudo FROM whatsapp_mensagens m WHERE m.atendimento_id = a.id ORDER BY m.id DESC LIMIT 1) AS ultima_mensagem
+             FROM whatsapp_atendimentos a
+             JOIN whatsapp_contatos c ON c.id = a.contato_id
+             WHERE a.status = 'bot'
+             ORDER BY a.ultima_mensagem_em DESC"
+        );
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Atendente intervém e assume uma conversa que ainda estava com o bot
+     * (interrompe o fluxo automático) -- mesma proteção contra corrida de
+     * assumir() (condição no próprio UPDATE).
+     *
+     * @return array{success: bool, message: string}
+     */
+    public function assumirDoBot(int $atendimentoId, int $usuarioId): array
+    {
+        $stmt = $this->pdo->prepare(
+            "UPDATE whatsapp_atendimentos SET status = 'em_atendimento', usuario_id = ?, atribuido_em = NOW()
+             WHERE id = ? AND status = 'bot'"
+        );
+        $stmt->execute([$usuarioId, $atendimentoId]);
+
+        if ($stmt->rowCount() === 0) {
+            return ['success' => false, 'message' => 'Essa conversa não está mais com o bot (outra pessoa já deve ter assumido, ou o cliente já foi encaminhado).'];
+        }
+
+        return ['success' => true, 'message' => 'Você assumiu a conversa.'];
+    }
+
+    /**
      * Conversas abertas do próprio usuário, com prévia da última mensagem.
      */
     public function listarDoUsuario(int $usuarioId): array
