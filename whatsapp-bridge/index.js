@@ -19,7 +19,7 @@ const http = require('http');
 const crypto = require('crypto');
 const pino = require('pino');
 const QRCode = require('qrcode');
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, jidDecode, isLidUser } = require('@whiskeysockets/baileys');
 
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 const SESSAO_DIR = path.join(__dirname, 'sessao');
@@ -131,7 +131,23 @@ async function iniciarSessaoWhatsapp() {
                 continue; // grupo -- fora de escopo por enquanto, só atendimento 1:1
             }
 
-            const numero = (msg.key.remoteJid || '').split('@')[0];
+            // O WhatsApp vem escondendo o numero de telefone de varias contas
+            // atras de um LID (identidade opaca, "...@lid") em vez do JID
+            // classico ("numero@s.whatsapp.net") em remoteJid -- se for o
+            // caso, o numero de telefone de verdade vem à parte em
+            // key.senderPn. Sem isso, a gente salvava os digitos do LID como
+            // se fossem o numero do contato, e a resposta que mandavamos
+            // depois pra "<digitos do lid>@s.whatsapp.net" nao chegava em
+            // lugar nenhum (nao existe conta nenhuma nesse endereco).
+            const jidOrigem = isLidUser(msg.key.remoteJid) && msg.key.senderPn
+                ? msg.key.senderPn
+                : msg.key.remoteJid;
+            const numero = jidDecode(jidOrigem)?.user || '';
+
+            if (!numero) {
+                continue;
+            }
+
             const nome = msg.pushName || null;
             const texto = msg.message.conversation
                 || (msg.message.extendedTextMessage && msg.message.extendedTextMessage.text)
