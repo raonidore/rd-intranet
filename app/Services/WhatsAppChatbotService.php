@@ -287,8 +287,8 @@ class WhatsAppChatbotService
                 ->execute([$tentativas, $atendimento['id']]);
 
             $aviso = "Opção inválida. " . $this->montarMensagemDoNo($atual, $filhos, $contato);
-            $mensageiro->enviar($numero, $aviso);
-            $atendimentoService->registrarMensagemSaida((int)$atendimento['id'], $aviso, 'bot');
+            $envio = $mensageiro->enviar($numero, $aviso);
+            $atendimentoService->registrarMensagemSaida((int)$atendimento['id'], $aviso, 'bot', null, 'texto', null, 'atendimento', $envio['success'] ? 'enviado' : 'falhou');
             return;
         }
 
@@ -307,8 +307,8 @@ class WhatsAppChatbotService
         $filhos = $no['tipo'] === 'menu' ? $this->filhosAtivos((int)$no['id']) : [];
         $texto = $this->montarMensagemDoNo($no, $filhos, $contato);
 
-        $mensageiro->enviar($numero, $texto);
-        $atendimentoService->registrarMensagemSaida($atendimentoId, $texto, 'bot');
+        $envio = $mensageiro->enviar($numero, $texto);
+        $atendimentoService->registrarMensagemSaida($atendimentoId, $texto, 'bot', null, 'texto', null, 'atendimento', $envio['success'] ? 'enviado' : 'falhou');
 
         if ($no['tipo'] === 'resposta_final') {
             $stmt = $this->pdo->prepare(

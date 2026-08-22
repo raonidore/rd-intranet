@@ -117,8 +117,8 @@ class WhatsAppAtendimentoService
         if (!$config->dentroDoExpediente()) {
             $mensagemForaExpediente = $chatbot->renderizarTemplate($config->mensagemForaExpediente(), $contato);
 
-            (new WhatsAppMensagemService())->enviar($numero, $mensagemForaExpediente);
-            $this->registrarMensagemSaida((int)$atendimento['id'], $mensagemForaExpediente, 'bot');
+            $envio = (new WhatsAppMensagemService())->enviar($numero, $mensagemForaExpediente);
+            $this->registrarMensagemSaida((int)$atendimento['id'], $mensagemForaExpediente, 'bot', null, 'texto', null, 'atendimento', $envio['success'] ? 'enviado' : 'falhou');
 
             return;
         }
@@ -417,8 +417,8 @@ class WhatsAppAtendimentoService
             ['nome' => $atendimento['contato_nome']]
         );
 
-        (new WhatsAppMensagemService())->enviar($atendimento['numero'], $mensagemFechamento);
-        $this->registrarMensagemSaida($atendimentoId, $mensagemFechamento, 'bot');
+        $envio = (new WhatsAppMensagemService())->enviar($atendimento['numero'], $mensagemFechamento);
+        $this->registrarMensagemSaida($atendimentoId, $mensagemFechamento, 'bot', null, 'texto', null, 'atendimento', $envio['success'] ? 'enviado' : 'falhou');
 
         $stmt = $this->pdo->prepare("UPDATE whatsapp_atendimentos SET status = 'encerrado', encerrado_em = NOW() WHERE id = ?");
         $stmt->execute([$atendimentoId]);
@@ -496,13 +496,14 @@ class WhatsAppAtendimentoService
         ?int $usuarioId = null,
         string $tipo = 'texto',
         ?string $midiaPath = null,
-        string $contexto = 'atendimento'
+        string $contexto = 'atendimento',
+        ?string $statusEntrega = 'enviado'
     ): int {
         $stmt = $this->pdo->prepare(
-            "INSERT INTO whatsapp_mensagens (atendimento_id, direcao, tipo, contexto, conteudo, origem, usuario_id, midia_path)
-             VALUES (?, 'saida', ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO whatsapp_mensagens (atendimento_id, direcao, tipo, contexto, conteudo, origem, usuario_id, midia_path, status_entrega)
+             VALUES (?, 'saida', ?, ?, ?, ?, ?, ?, ?)"
         );
-        $stmt->execute([$atendimentoId, $tipo, $contexto, $conteudo, $origem, $usuarioId, $midiaPath]);
+        $stmt->execute([$atendimentoId, $tipo, $contexto, $conteudo, $origem, $usuarioId, $midiaPath, $statusEntrega]);
 
         $id = (int)$this->pdo->lastInsertId();
 
@@ -543,8 +544,8 @@ class WhatsAppAtendimentoService
         foreach ($inativos as $item) {
             $mensagemFechamento = $chatbot->renderizarTemplate($mensagemBase, ['nome' => $item['nome']]);
 
-            $mensageiro->enviar($item['numero'], $mensagemFechamento);
-            $this->registrarMensagemSaida((int)$item['id'], $mensagemFechamento, 'bot');
+            $envio = $mensageiro->enviar($item['numero'], $mensagemFechamento);
+            $this->registrarMensagemSaida((int)$item['id'], $mensagemFechamento, 'bot', null, 'texto', null, 'atendimento', $envio['success'] ? 'enviado' : 'falhou');
 
             $this->pdo->prepare("UPDATE whatsapp_atendimentos SET status = 'encerrado', encerrado_em = NOW() WHERE id = ?")
                 ->execute([$item['id']]);

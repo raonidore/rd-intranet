@@ -33,11 +33,15 @@ function wppBolhaMensagem(array $m): string
     $corBolha = $m['origem'] === 'bot' ? '#e0e7ff' : ($minhas ? '#dcf8c6' : '#ffffff');
     $alinhamento = $minhas ? 'flex-end' : 'flex-start';
     $rotulo = $m['origem'] === 'bot' ? 'Bot' : ($m['origem'] === 'cliente' ? '' : ($m['usuario_nome'] ?? 'Você'));
+    $avisoFalha = ($m['status_entrega'] ?? null) === 'falhou'
+        ? '<div class="small text-danger mt-1"><i class="bi bi-exclamation-triangle-fill"></i> Falha ao enviar -- não chegou no WhatsApp do cliente.</div>'
+        : '';
 
     return '<div class="d-flex mb-2" style="justify-content:' . $alinhamento . '">'
         . '<div style="max-width:70%; background:' . $corBolha . '; border-radius:10px; padding:8px 12px; box-shadow:0 1px 2px rgba(0,0,0,.1);">'
         . ($rotulo ? '<div class="small text-muted mb-1">' . htmlspecialchars($rotulo) . '</div>' : '')
         . '<div style="white-space:pre-wrap">' . htmlspecialchars($m['conteudo']) . '</div>'
+        . $avisoFalha
         . '<div class="text-muted text-end" style="font-size:10px">' . htmlspecialchars(data_br($m['criado_em'], 'H:i')) . '</div>'
         . '</div></div>';
 }

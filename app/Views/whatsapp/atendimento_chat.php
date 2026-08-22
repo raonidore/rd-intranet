@@ -50,10 +50,15 @@ function renderizarBolha(array $m): string
     $alinhamento = $minhas ? 'flex-end' : 'flex-start';
     $rotulo = $m['origem'] === 'bot' ? 'Bot' : ($m['origem'] === 'cliente' ? '' : ($m['usuario_nome'] ?? 'Você'));
 
+    $avisoFalha = $m['status_entrega'] === 'falhou'
+        ? '<div class="small text-danger mt-1"><i class="bi bi-exclamation-triangle-fill"></i> Falha ao enviar -- não chegou no WhatsApp do cliente.</div>'
+        : '';
+
     return '<div class="d-flex mb-2" style="justify-content:' . $alinhamento . '" data-msg-id="' . (int)$m['id'] . '">'
         . '<div style="max-width:70%; background:' . $corBolha . '; border-radius:10px; padding:8px 12px; box-shadow:0 1px 2px rgba(0,0,0,.1);">'
         . ($rotulo ? '<div class="small text-muted mb-1">' . htmlspecialchars($rotulo) . '</div>' : '')
         . renderizarConteudoBolha($m)
+        . $avisoFalha
         . '<div class="text-muted text-end" style="font-size:10px">' . htmlspecialchars(data_br($m['criado_em'], 'H:i')) . '</div>'
         . '</div></div>';
 }
@@ -247,6 +252,13 @@ $somenteLeitura = $atendimento['status'] === 'encerrado';
         }
 
         montarConteudoBolha(bolha, m);
+
+        if (m.status_entrega === 'falhou') {
+            const elFalha = document.createElement('div');
+            elFalha.className = 'small text-danger mt-1';
+            elFalha.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i> Falha ao enviar -- não chegou no WhatsApp do cliente.';
+            bolha.appendChild(elFalha);
+        }
 
         const elData = document.createElement('div');
         elData.className = 'text-muted text-end';
