@@ -23,11 +23,39 @@ USUARIO="whatsapp-bridge"
 
 export DEBIAN_FRONTEND=noninteractive
 
-if ! command -v node >/dev/null 2>&1; then
-  if ! apt-get install -y -qq nodejs npm >/tmp/rd_wpp_out_$$ 2>/tmp/rd_wpp_err_$$; then
+# Baileys exige Node 20+ (checagem própria dele, via preinstall
+# script) -- o pacote "nodejs" do apt do Ubuntu 24.04 traz só a 18.x,
+# então "node existe" sozinho não basta (visto ao vivo: servidor já
+# tinha Node 18 de outra aplicação, "npm ci" falhava sem essa versão
+# nova, e o script morria ali sem nunca chegar a criar o serviço
+# systemd -- por isso o bridge ficava "instalado" pela metade e o
+# painel via só "bridge não respondeu", sem pista nenhuma do motivo).
+NODE_MAJOR_MINIMO=20
+
+precisa_instalar_node() {
+  if ! command -v node >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local maior
+  maior="$(node -v | sed -E 's/^v([0-9]+)\..*/\1/')"
+
+  [ -z "$maior" ] || [ "$maior" -lt "$NODE_MAJOR_MINIMO" ]
+}
+
+if precisa_instalar_node; then
+  if ! curl -fsSL https://deb.nodesource.com/setup_20.x | bash - >/tmp/rd_wpp_out_$$ 2>/tmp/rd_wpp_err_$$; then
     ERRO="$(tail -20 /tmp/rd_wpp_err_$$ | tr '\n' ' ' | sed 's/"/\\"/g')"
     rm -f /tmp/rd_wpp_out_$$ /tmp/rd_wpp_err_$$
-    echo "{\"success\":false,\"message\":\"Erro ao instalar Node.js: ${ERRO}\"}"
+    echo "{\"success\":false,\"message\":\"Erro ao configurar o repositório do Node.js 20+ (NodeSource): ${ERRO}\"}"
+    exit 1
+  fi
+  rm -f /tmp/rd_wpp_out_$$ /tmp/rd_wpp_err_$$
+
+  if ! apt-get install -y -qq nodejs >/tmp/rd_wpp_out_$$ 2>/tmp/rd_wpp_err_$$; then
+    ERRO="$(tail -20 /tmp/rd_wpp_err_$$ | tr '\n' ' ' | sed 's/"/\\"/g')"
+    rm -f /tmp/rd_wpp_out_$$ /tmp/rd_wpp_err_$$
+    echo "{\"success\":false,\"message\":\"Erro ao instalar Node.js 20+: ${ERRO}\"}"
     exit 1
   fi
   rm -f /tmp/rd_wpp_out_$$ /tmp/rd_wpp_err_$$
