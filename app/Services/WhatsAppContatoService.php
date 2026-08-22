@@ -47,6 +47,25 @@ class WhatsAppContatoService
         return ['id' => (int)$this->pdo->lastInsertId(), 'numero' => $numero, 'nome' => $nome];
     }
 
+    /**
+     * Normaliza um número digitado à mão (ex: "(83) 99104-3598") pro
+     * mesmo formato usado internamente (DDI 55 + DDD + número, só
+     * dígitos) -- aceita tanto com quanto sem o "55" na frente (mais
+     * natural pra quem tá digitando um número local). Retorna null se
+     * não bater com o formato esperado (nem 10/11 dígitos locais, nem
+     * 12/13 já com DDI).
+     */
+    public function normalizarNumeroBr(string $entrada): ?string
+    {
+        $digitos = $this->normalizarNumero($entrada);
+
+        if (preg_match('/^\d{10,11}$/', $digitos)) {
+            $digitos = '55' . $digitos;
+        }
+
+        return preg_match('/^55\d{10,11}$/', $digitos) ? $digitos : null;
+    }
+
     public function buscarPorId(int $id): ?array
     {
         $stmt = $this->pdo->prepare('SELECT * FROM whatsapp_contatos WHERE id = ?');

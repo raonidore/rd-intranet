@@ -7,6 +7,7 @@ use App\Middleware\AuthMiddleware;
 use App\Services\AuditService;
 use App\Services\NotificationService;
 use App\Services\WhatsAppAtendimentoService;
+use App\Services\WhatsAppContatoService;
 use App\Services\WhatsAppMensagemService;
 
 class WhatsAppAtendimentoController extends Controller
@@ -18,6 +19,42 @@ class WhatsAppAtendimentoController extends Controller
         $this->view('whatsapp/atendimentos', [
             'atendimentos' => (new WhatsAppAtendimentoService())->listarDoUsuario((int)$_SESSION['usuario']['id']),
         ]);
+    }
+
+    /**
+     * Atendente inicia o contato por conta própria (botão "Iniciar
+     * Atendimento" em vez de esperar o cliente mandar mensagem primeiro).
+     */
+    public function iniciar(): void
+    {
+        AuthMiddleware::checkModulo('whatsapp_atendimentos');
+
+        $numero = (new WhatsAppContatoService())->normalizarNumeroBr((string)($_POST['telefone'] ?? ''));
+
+        if ($numero === null) {
+            NotificationService::error('Telefone inválido -- informe DDD + número (com ou sem o 55 na frente).');
+            header('Location: ' . url('/whatsapp/atendimentos'));
+            exit;
+        }
+
+        $resultado = (new WhatsAppAtendimentoService())->iniciarProativo(
+            $numero,
+            trim($_POST['nome'] ?? '') ?: null,
+            $_POST['mensagem'] ?? '',
+            (int)$_SESSION['usuario']['id']
+        );
+
+        AuditService::registrar('WhatsApp', 'Iniciar atendimento', "Número {$numero}: {$resultado['message']}");
+
+        if ($resultado['success']) {
+            NotificationService::success($resultado['message']);
+            header('Location: ' . url('/whatsapp/atendimentos/ver?id=' . $resultado['atendimento_id']));
+            exit;
+        }
+
+        NotificationService::error($resultado['message']);
+        header('Location: ' . url('/whatsapp/atendimentos'));
+        exit;
     }
 
     public function ver(): void

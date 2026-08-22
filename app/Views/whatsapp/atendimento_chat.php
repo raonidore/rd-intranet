@@ -13,13 +13,13 @@ function renderizarBolha(array $m): string
     $minhas = $m['direcao'] === 'saida';
     $corBolha = $m['origem'] === 'bot' ? '#e0e7ff' : ($minhas ? '#dcf8c6' : '#ffffff');
     $alinhamento = $minhas ? 'flex-end' : 'flex-start';
-    $rotulo = $m['origem'] === 'bot' ? 'Bot' : ($m['origem'] === 'cliente' ? '' : 'Você');
+    $rotulo = $m['origem'] === 'bot' ? 'Bot' : ($m['origem'] === 'cliente' ? '' : ($m['usuario_nome'] ?? 'Você'));
 
     return '<div class="d-flex mb-2" style="justify-content:' . $alinhamento . '" data-msg-id="' . (int)$m['id'] . '">'
         . '<div style="max-width:70%; background:' . $corBolha . '; border-radius:10px; padding:8px 12px; box-shadow:0 1px 2px rgba(0,0,0,.1);">'
         . ($rotulo ? '<div class="small text-muted mb-1">' . htmlspecialchars($rotulo) . '</div>' : '')
         . '<div style="white-space:pre-wrap">' . htmlspecialchars($m['conteudo']) . '</div>'
-        . '<div class="text-muted text-end" style="font-size:10px">' . htmlspecialchars($m['criado_em']) . '</div>'
+        . '<div class="text-muted text-end" style="font-size:10px">' . htmlspecialchars(data_br($m['criado_em'], 'H:i')) . '</div>'
         . '</div></div>';
 }
 ?>
@@ -28,8 +28,13 @@ function renderizarBolha(array $m): string
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
-        <h4 class="mb-1"><i class="bi bi-chat-dots me-1"></i> <?= htmlspecialchars($atendimento['contato_nome'] ?: '(sem nome)') ?></h4>
-        <small class="text-muted"><?= htmlspecialchars($atendimento['numero']) ?></small>
+        <h4 class="mb-1"><i class="bi bi-chat-dots me-1"></i> Cliente: <?= htmlspecialchars($atendimento['contato_nome'] ?: '(sem nome)') ?></h4>
+        <small class="text-muted">
+            <?= htmlspecialchars(telefone_br($atendimento['numero'])) ?>
+            <?php if (!empty($atendimento['setor_nome'])): ?>
+                &middot; Setor: <?= htmlspecialchars($atendimento['setor_nome']) ?>
+            <?php endif; ?>
+        </small>
     </div>
     <div>
         <a href="<?= url('/whatsapp/atendimentos') ?>" class="btn btn-sm btn-outline-secondary">
@@ -92,7 +97,7 @@ function renderizarBolha(array $m): string
         div.style.justifyContent = minhas ? 'flex-end' : 'flex-start';
         div.dataset.msgId = m.id;
 
-        const rotulo = m.origem === 'bot' ? 'Bot' : (m.origem === 'cliente' ? '' : 'Você');
+        const rotulo = m.origem === 'bot' ? 'Bot' : (m.origem === 'cliente' ? '' : (m.usuario_nome || 'Você'));
 
         const bolha = document.createElement('div');
         bolha.style.maxWidth = '70%';
@@ -116,7 +121,7 @@ function renderizarBolha(array $m): string
         const elData = document.createElement('div');
         elData.className = 'text-muted text-end';
         elData.style.fontSize = '10px';
-        elData.textContent = m.criado_em;
+        elData.textContent = m.criado_em.substring(11, 16);
         bolha.appendChild(elData);
 
         div.appendChild(bolha);

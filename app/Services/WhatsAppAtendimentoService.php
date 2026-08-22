@@ -67,6 +67,41 @@ class WhatsAppAtendimentoService
     }
 
     /**
+     * Atendente inicia contato por conta própria (em vez de esperar o
+     * cliente escrever primeiro) -- pula bot/fila inteiramente, já
+     * abre direto em 'em_atendimento' com o atendente atual, e manda a
+     * primeira mensagem de verdade (sem isso não existe conversa
+     * nenhuma pra o cliente responder). Se já existir uma conversa
+     * aberta com esse contato (em qualquer status não encerrado),
+     * reaproveita e assume ela também, em vez de abrir uma segunda.
+     *
+     * @return array{success: bool, message: string, atendimento_id?: int}
+     */
+    public function iniciarProativo(string $numero, ?string $nome, string $mensagem, int $usuarioId): array
+    {
+        $mensagem = trim($mensagem);
+        if ($mensagem === '') {
+            return ['success' => false, 'message' => 'Escreva a primeira mensagem.'];
+        }
+
+        $contato = (new WhatsAppContatoService())->buscarOuCriarPorNumero($numero, $nome);
+        $atendimento = $this->abrirOuReaproveitar((int)$contato['id']);
+
+        $envio = (new WhatsAppMensagemService())->enviar($numero, $mensagem);
+        if (!$envio['success']) {
+            return ['success' => false, 'message' => $envio['message'] ?? 'Falha ao enviar mensagem pelo WhatsApp.'];
+        }
+
+        $this->pdo->prepare(
+            "UPDATE whatsapp_atendimentos SET status = 'em_atendimento', usuario_id = ?, atribuido_em = NOW() WHERE id = ?"
+        )->execute([$usuarioId, $atendimento['id']]);
+
+        $this->registrarMensagemSaida((int)$atendimento['id'], $mensagem, 'usuario', $usuarioId);
+
+        return ['success' => true, 'message' => 'Atendimento iniciado.', 'atendimento_id' => (int)$atendimento['id']];
+    }
+
+    /**
      * Atendimento ainda não encerrado mais recente do contato, ou cria
      * um novo (status inicial 'bot').
      */
@@ -101,9 +136,10 @@ class WhatsAppAtendimentoService
     public function buscarComContato(int $id): ?array
     {
         $stmt = $this->pdo->prepare(
-            "SELECT a.*, c.numero, c.nome AS contato_nome
+            "SELECT a.*, c.numero, c.nome AS contato_nome, s.nome AS setor_nome
              FROM whatsapp_atendimentos a
              JOIN whatsapp_contatos c ON c.id = a.contato_id
+             LEFT JOIN whatsapp_setores s ON s.id = a.setor_id
              WHERE a.id = ?"
         );
         $stmt->execute([$id]);
@@ -238,7 +274,11 @@ class WhatsAppAtendimentoService
     public function mensagens(int $atendimentoId, int $desdeId = 0): array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT * FROM whatsapp_mensagens WHERE atendimento_id = ? AND id > ? ORDER BY id ASC'
+            "SELECT m.*, u.nome AS usuario_nome
+             FROM whatsapp_mensagens m
+             LEFT JOIN usuarios u ON u.id = m.usuario_id
+             WHERE m.atendimento_id = ? AND m.id > ?
+             ORDER BY m.id ASC"
         );
         $stmt->execute([$atendimentoId, $desdeId]);
 

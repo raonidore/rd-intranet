@@ -35,9 +35,9 @@ use App\Components\Alert;
                     <?php foreach ($fila as $item): ?>
                         <tr>
                             <td><?= htmlspecialchars($item['contato_nome'] ?: '(sem nome)') ?></td>
-                            <td><code><?= htmlspecialchars($item['numero']) ?></code></td>
+                            <td><code><?= htmlspecialchars(telefone_br($item['numero'])) ?></code></td>
                             <td><?= $item['setor_nome'] ? htmlspecialchars($item['setor_nome']) : '<span class="text-muted">-</span>' ?></td>
-                            <td><?= htmlspecialchars($item['aberto_em']) ?></td>
+                            <td><?= data_br($item['aberto_em']) ?></td>
                             <td class="text-end">
                                 <form method="post" action="<?= url('/whatsapp/fila/assumir') ?>">
                                     <input type="hidden" name="id" value="<?= (int)$item['id'] ?>">

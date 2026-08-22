@@ -304,42 +304,6 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
     <?php endif; ?>
 
     <?php
-    $temWhatsapp = PermissionService::temAcesso('whatsapp_atendimentos')
-        || PermissionService::temAcesso('whatsapp_fila')
-        || PermissionService::temAcesso('whatsapp_chatbot')
-        || PermissionService::temAcesso('whatsapp_setores');
-    ?>
-    <?php if ($temWhatsapp): ?>
-    <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuWhatsapp"
-            aria-expanded="<?= $abrirWhatsapp ? 'true' : 'false' ?>">
-        <span><i class="bi bi-whatsapp me-2"></i>WhatsApp</span>
-        <i class="bi bi-chevron-right chevron"></i>
-    </button>
-    <div class="collapse <?= $abrirWhatsapp ? 'show' : '' ?>" id="menuWhatsapp">
-        <?php if (PermissionService::temAcesso('whatsapp_atendimentos')): ?>
-        <a href="<?= url('/whatsapp/atendimentos') ?>" class="<?= str_starts_with($uriAtual, '/whatsapp/atendimentos') ? 'active' : '' ?>">
-            <i class="bi bi-chat-dots me-2"></i> Atendimentos
-        </a>
-        <?php endif; ?>
-        <?php if (PermissionService::temAcesso('whatsapp_fila')): ?>
-        <a href="<?= url('/whatsapp/fila') ?>" class="<?= $uriAtual === '/whatsapp/fila' ? 'active' : '' ?>">
-            <i class="bi bi-hourglass-split me-2"></i> Fila
-        </a>
-        <?php endif; ?>
-        <?php if (PermissionService::temAcesso('whatsapp_chatbot')): ?>
-        <a href="<?= url('/whatsapp/chatbot') ?>" class="<?= $uriAtual === '/whatsapp/chatbot' ? 'active' : '' ?>">
-            <i class="bi bi-robot me-2"></i> Chatbot
-        </a>
-        <?php endif; ?>
-        <?php if (PermissionService::temAcesso('whatsapp_setores')): ?>
-        <a href="<?= url('/whatsapp/setores') ?>" class="<?= $uriAtual === '/whatsapp/setores' ? 'active' : '' ?>">
-            <i class="bi bi-diagram-3 me-2"></i> Setores
-        </a>
-        <?php endif; ?>
-    </div>
-    <?php endif; ?>
-
-    <?php
     $temInfra = PermissionService::temAcesso('infra_servidor')
         || PermissionService::temAcesso('infra_hardware')
         || PermissionService::temAcesso('infra_rede')
@@ -776,6 +740,42 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
             </a>
             <?php endif; ?>
         </div>
+        <?php endif; ?>
+    </div>
+    <?php endif; ?>
+
+    <?php
+    $temWhatsapp = PermissionService::temAcesso('whatsapp_atendimentos')
+        || PermissionService::temAcesso('whatsapp_fila')
+        || PermissionService::temAcesso('whatsapp_chatbot')
+        || PermissionService::temAcesso('whatsapp_setores');
+    ?>
+    <?php if ($temWhatsapp): ?>
+    <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuWhatsapp"
+            aria-expanded="<?= $abrirWhatsapp ? 'true' : 'false' ?>">
+        <span><i class="bi bi-whatsapp me-2"></i>WhatsApp</span>
+        <i class="bi bi-chevron-right chevron"></i>
+    </button>
+    <div class="collapse <?= $abrirWhatsapp ? 'show' : '' ?>" id="menuWhatsapp">
+        <?php if (PermissionService::temAcesso('whatsapp_atendimentos')): ?>
+        <a href="<?= url('/whatsapp/atendimentos') ?>" class="<?= str_starts_with($uriAtual, '/whatsapp/atendimentos') ? 'active' : '' ?>">
+            <i class="bi bi-chat-dots me-2"></i> Atendimentos
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('whatsapp_fila')): ?>
+        <a href="<?= url('/whatsapp/fila') ?>" class="<?= $uriAtual === '/whatsapp/fila' ? 'active' : '' ?>">
+            <i class="bi bi-hourglass-split me-2"></i> Fila
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('whatsapp_chatbot')): ?>
+        <a href="<?= url('/whatsapp/chatbot') ?>" class="<?= $uriAtual === '/whatsapp/chatbot' ? 'active' : '' ?>">
+            <i class="bi bi-robot me-2"></i> Chatbot
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('whatsapp_setores')): ?>
+        <a href="<?= url('/whatsapp/setores') ?>" class="<?= $uriAtual === '/whatsapp/setores' ? 'active' : '' ?>">
+            <i class="bi bi-diagram-3 me-2"></i> Setores
+        </a>
         <?php endif; ?>
     </div>
     <?php endif; ?>

@@ -26,13 +26,13 @@ function wppBolhaMensagem(array $m): string
     $minhas = $m['direcao'] === 'saida';
     $corBolha = $m['origem'] === 'bot' ? '#e0e7ff' : ($minhas ? '#dcf8c6' : '#ffffff');
     $alinhamento = $minhas ? 'flex-end' : 'flex-start';
-    $rotulo = $m['origem'] === 'bot' ? 'Bot' : ($m['origem'] === 'cliente' ? '' : 'Você');
+    $rotulo = $m['origem'] === 'bot' ? 'Bot' : ($m['origem'] === 'cliente' ? '' : ($m['usuario_nome'] ?? 'Você'));
 
     return '<div class="d-flex mb-2" style="justify-content:' . $alinhamento . '">'
         . '<div style="max-width:70%; background:' . $corBolha . '; border-radius:10px; padding:8px 12px; box-shadow:0 1px 2px rgba(0,0,0,.1);">'
         . ($rotulo ? '<div class="small text-muted mb-1">' . htmlspecialchars($rotulo) . '</div>' : '')
         . '<div style="white-space:pre-wrap">' . htmlspecialchars($m['conteudo']) . '</div>'
-        . '<div class="text-muted text-end" style="font-size:10px">' . htmlspecialchars($m['criado_em']) . '</div>'
+        . '<div class="text-muted text-end" style="font-size:10px">' . htmlspecialchars(data_br($m['criado_em'], 'H:i')) . '</div>'
         . '</div></div>';
 }
 
@@ -189,9 +189,9 @@ function wppLinhaOpcao(array $opcao, array $setoresAtivos): void
                                data-busca="<?= htmlspecialchars(mb_strtolower(($item['contato_nome'] ?: '') . ' ' . $item['numero'])) ?>">
                                 <div class="d-flex justify-content-between">
                                     <strong class="text-truncate"><?= htmlspecialchars($item['contato_nome'] ?: '(sem nome)') ?></strong>
-                                    <small class="text-muted text-nowrap ms-2"><?= htmlspecialchars(substr($item['ultima_mensagem_em'], 11, 5)) ?></small>
+                                    <small class="text-muted text-nowrap ms-2"><?= data_br($item['ultima_mensagem_em'], 'H:i') ?></small>
                                 </div>
-                                <div class="text-muted small"><?= htmlspecialchars($item['numero']) ?></div>
+                                <div class="text-muted small"><?= htmlspecialchars(telefone_br($item['numero'])) ?></div>
                                 <div class="text-muted small text-truncate">
                                     <?= $item['ultima_mensagem'] !== null ? htmlspecialchars($item['ultima_mensagem']) : '(sem mensagens)' ?>
                                 </div>
@@ -209,8 +209,8 @@ function wppLinhaOpcao(array $opcao, array $setoresAtivos): void
                         </div>
                     <?php else: ?>
                         <div class="p-3 border-bottom">
-                            <strong><?= htmlspecialchars($emEsperaSelecionado['contato_nome'] ?: '(sem nome)') ?></strong>
-                            <span class="text-muted small ms-1"><?= htmlspecialchars($emEsperaSelecionado['numero']) ?></span>
+                            <strong>Cliente: <?= htmlspecialchars($emEsperaSelecionado['contato_nome'] ?: '(sem nome)') ?></strong>
+                            <div class="text-muted small"><?= htmlspecialchars(telefone_br($emEsperaSelecionado['numero'])) ?></div>
                         </div>
                         <div class="p-3 flex-grow-1" style="overflow-y:auto; max-height:420px; background:#f5f7fb">
                             <?php foreach ($emEsperaMensagens as $m): ?>

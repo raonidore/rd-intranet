@@ -6,9 +6,14 @@ use App\Components\Alert;
 
 <?= Alert::flash() ?>
 
-<div class="mb-4">
-    <h4 class="mb-1"><i class="bi bi-chat-dots me-1"></i> WhatsApp - Atendimentos</h4>
-    <small class="text-muted">Suas conversas em andamento. Novos atendimentos aparecem em <a href="<?= url('/whatsapp/fila') ?>">Fila</a>.</small>
+<div class="mb-4 d-flex justify-content-between align-items-start">
+    <div>
+        <h4 class="mb-1"><i class="bi bi-chat-dots me-1"></i> WhatsApp - Atendimentos</h4>
+        <small class="text-muted">Suas conversas em andamento. Novos atendimentos aparecem em <a href="<?= url('/whatsapp/fila') ?>">Fila</a>.</small>
+    </div>
+    <button type="button" class="btn btn-primary text-nowrap" data-bs-toggle="modal" data-bs-target="#modalIniciarAtendimento">
+        <i class="bi bi-plus-lg"></i> Iniciar Atendimento
+    </button>
 </div>
 
 <?php if (empty($atendimentos)): ?>
@@ -25,17 +30,52 @@ use App\Components\Alert;
                 <div class="card-body d-flex justify-content-between align-items-center">
                     <div>
                         <strong><?= htmlspecialchars($item['contato_nome'] ?: '(sem nome)') ?></strong>
-                        <span class="text-muted small ms-1"><?= htmlspecialchars($item['numero']) ?></span>
+                        <span class="text-muted small ms-1"><?= htmlspecialchars(telefone_br($item['numero'])) ?></span>
                         <div class="text-muted small text-truncate" style="max-width:480px">
                             <?= $item['ultima_mensagem'] !== null ? htmlspecialchars($item['ultima_mensagem']) : '(sem mensagens)' ?>
                         </div>
                     </div>
-                    <small class="text-muted text-nowrap"><?= htmlspecialchars($item['ultima_mensagem_em']) ?></small>
+                    <small class="text-muted text-nowrap"><?= data_br($item['ultima_mensagem_em']) ?></small>
                 </div>
             </div>
         </a>
     <?php endforeach; ?>
 <?php endif; ?>
+
+<div class="modal fade" id="modalIniciarAtendimento" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="<?= url('/whatsapp/atendimentos/iniciar') ?>">
+                <div class="modal-header">
+                    <h5 class="modal-title">Iniciar Atendimento</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small">
+                        Manda a primeira mensagem pra um número que ainda não entrou em contato -- o atendimento já abre
+                        direto com você, sem passar pelo bot ou pela fila.
+                    </p>
+                    <div class="mb-3">
+                        <label class="form-label">Telefone (com DDD)</label>
+                        <input type="text" name="telefone" class="form-control" placeholder="(83) 99104-3598" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Nome <span class="text-muted">(opcional)</span></label>
+                        <input type="text" name="nome" class="form-control" placeholder="Nome do cliente">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Primeira mensagem</label>
+                        <textarea name="mensagem" class="form-control" rows="3" required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-send"></i> Iniciar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
 <?php
 $conteudo = ob_get_clean();
