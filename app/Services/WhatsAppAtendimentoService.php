@@ -42,9 +42,28 @@ class WhatsAppAtendimentoService
         // do provedor) -- não roda o bot de novo pra não duplicar
         // resposta. Bot só reage a texto (mídia é só logada por
         // enquanto, mesma limitação em whatsapp-bridge/index.js).
-        if ($resultado !== null && $atendimento['status'] === 'bot' && $tipo === 'texto') {
-            (new WhatsAppChatbotService())->processarMensagem($atendimento, $numero, $texto);
+        if ($resultado === null || $atendimento['status'] !== 'bot' || $tipo !== 'texto') {
+            return;
         }
+
+        $chatbot = new WhatsAppChatbotService();
+        $config = new WhatsAppConfigService();
+
+        // Fora do expediente, responde só com o aviso -- não faz sentido
+        // abrir o menu do bot pra um contato novo se ninguém vai poder
+        // atender de verdade agora mesmo. Só vale enquanto o atendimento
+        // ainda está com o bot: quem já está na fila ou com um atendente
+        // continua normalmente, sem interromper.
+        if (!$config->dentroDoExpediente()) {
+            $mensagemForaExpediente = $chatbot->renderizarTemplate($config->mensagemForaExpediente(), $contato);
+
+            (new WhatsAppMensagemService())->enviar($numero, $mensagemForaExpediente);
+            $this->registrarMensagemSaida((int)$atendimento['id'], $mensagemForaExpediente, 'bot');
+
+            return;
+        }
+
+        $chatbot->processarMensagem($atendimento, $numero, $texto);
     }
 
     /**

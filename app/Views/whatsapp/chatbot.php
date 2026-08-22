@@ -20,6 +20,22 @@ function wppOpcoesSetor(array $setoresAtivos, ?int $selecionadoId = null): strin
     return $html;
 }
 
+/** Bolha de mensagem -- mesmo estilo/cores de atendimento_chat.php (renderizarBolha()). */
+function wppBolhaMensagem(array $m): string
+{
+    $minhas = $m['direcao'] === 'saida';
+    $corBolha = $m['origem'] === 'bot' ? '#e0e7ff' : ($minhas ? '#dcf8c6' : '#ffffff');
+    $alinhamento = $minhas ? 'flex-end' : 'flex-start';
+    $rotulo = $m['origem'] === 'bot' ? 'Bot' : ($m['origem'] === 'cliente' ? '' : 'Você');
+
+    return '<div class="d-flex mb-2" style="justify-content:' . $alinhamento . '">'
+        . '<div style="max-width:70%; background:' . $corBolha . '; border-radius:10px; padding:8px 12px; box-shadow:0 1px 2px rgba(0,0,0,.1);">'
+        . ($rotulo ? '<div class="small text-muted mb-1">' . htmlspecialchars($rotulo) . '</div>' : '')
+        . '<div style="white-space:pre-wrap">' . htmlspecialchars($m['conteudo']) . '</div>'
+        . '<div class="text-muted text-end" style="font-size:10px">' . htmlspecialchars($m['criado_em']) . '</div>'
+        . '</div></div>';
+}
+
 /**
  * Campo de mensagem com templates -- toolbar de "chips" clicáveis
  * ({nome}/{periodo}, insere na posição do cursor) + preview ao vivo.
@@ -151,11 +167,6 @@ function wppLinhaOpcao(array $opcao, array $setoresAtivos): void
 
 <?php if ($aba === 'espera'): ?>
 
-    <p class="text-muted small">
-        Conversas que o cliente ainda está trocando com o robô (nenhum atendente é "dono" delas ainda). Clique em
-        <strong>Atender</strong> pra intervir e assumir na hora, sem esperar o cliente terminar de navegar o menu.
-    </p>
-
     <?php if (empty($emEspera)): ?>
         <div class="card border-0 shadow-sm">
             <div class="card-body text-center text-muted py-4">
@@ -164,26 +175,69 @@ function wppLinhaOpcao(array $opcao, array $setoresAtivos): void
             </div>
         </div>
     <?php else: ?>
-        <?php foreach ($emEspera as $item): ?>
-            <div class="card border-0 shadow-sm mb-2" style="max-width:900px">
-                <div class="card-body d-flex justify-content-between align-items-center gap-3">
-                    <div class="flex-grow-1" style="min-width:0">
-                        <strong><?= htmlspecialchars($item['contato_nome'] ?: '(sem nome)') ?></strong>
-                        <span class="text-muted small ms-1"><?= htmlspecialchars($item['numero']) ?></span>
-                        <div class="text-muted small text-truncate">
-                            <?= $item['ultima_mensagem'] !== null ? htmlspecialchars($item['ultima_mensagem']) : '(sem mensagens)' ?>
-                        </div>
+        <div class="card border-0 shadow-sm" style="max-width:1300px">
+            <div class="row g-0" style="min-height:520px">
+                <div class="col-4 border-end">
+                    <div class="p-2 border-bottom">
+                        <input type="text" id="buscaEmEspera" class="form-control form-control-sm" placeholder="Buscar conversa...">
                     </div>
-                    <small class="text-muted text-nowrap"><?= htmlspecialchars($item['ultima_mensagem_em']) ?></small>
-                    <form method="post" action="<?= url('/whatsapp/chatbot/atender') ?>">
-                        <input type="hidden" name="id" value="<?= (int)$item['id'] ?>">
-                        <button type="submit" class="btn btn-sm btn-primary text-nowrap">
-                            <i class="bi bi-hand-index-thumb"></i> Atender
-                        </button>
-                    </form>
+                    <div id="listaEmEspera" style="max-height:520px; overflow-y:auto">
+                        <?php foreach ($emEspera as $item): ?>
+                            <?php $selecionado = $emEsperaSelecionado && (int)$emEsperaSelecionado['id'] === (int)$item['id']; ?>
+                            <a href="<?= url('/whatsapp/chatbot?aba=espera&atendimento_id=' . (int)$item['id']) ?>"
+                               class="d-block text-decoration-none text-reset px-3 py-2 border-bottom item-em-espera <?= $selecionado ? 'bg-light' : '' ?>"
+                               data-busca="<?= htmlspecialchars(mb_strtolower(($item['contato_nome'] ?: '') . ' ' . $item['numero'])) ?>">
+                                <div class="d-flex justify-content-between">
+                                    <strong class="text-truncate"><?= htmlspecialchars($item['contato_nome'] ?: '(sem nome)') ?></strong>
+                                    <small class="text-muted text-nowrap ms-2"><?= htmlspecialchars(substr($item['ultima_mensagem_em'], 11, 5)) ?></small>
+                                </div>
+                                <div class="text-muted small"><?= htmlspecialchars($item['numero']) ?></div>
+                                <div class="text-muted small text-truncate">
+                                    <?= $item['ultima_mensagem'] !== null ? htmlspecialchars($item['ultima_mensagem']) : '(sem mensagens)' ?>
+                                </div>
+                            </a>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+                <div class="col-8 d-flex flex-column">
+                    <?php if (!$emEsperaSelecionado): ?>
+                        <div class="d-flex align-items-center justify-content-center flex-grow-1 text-muted">
+                            <div class="text-center">
+                                <i class="bi bi-chat-square-text" style="font-size:2rem;"></i>
+                                <p class="mb-0 mt-2">Selecione uma conversa pra ver o histórico completo.</p>
+                            </div>
+                        </div>
+                    <?php else: ?>
+                        <div class="p-3 border-bottom">
+                            <strong><?= htmlspecialchars($emEsperaSelecionado['contato_nome'] ?: '(sem nome)') ?></strong>
+                            <span class="text-muted small ms-1"><?= htmlspecialchars($emEsperaSelecionado['numero']) ?></span>
+                        </div>
+                        <div class="p-3 flex-grow-1" style="overflow-y:auto; max-height:420px; background:#f5f7fb">
+                            <?php foreach ($emEsperaMensagens as $m): ?>
+                                <?= wppBolhaMensagem($m) ?>
+                            <?php endforeach; ?>
+                        </div>
+                        <div class="p-3 border-top text-end">
+                            <form method="post" action="<?= url('/whatsapp/chatbot/atender') ?>">
+                                <input type="hidden" name="id" value="<?= (int)$emEsperaSelecionado['id'] ?>">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-hand-index-thumb"></i> Atender
+                                </button>
+                            </form>
+                        </div>
+                    <?php endif; ?>
                 </div>
             </div>
-        <?php endforeach; ?>
+        </div>
+
+        <script>
+        document.getElementById('buscaEmEspera').addEventListener('input', function () {
+            const filtro = this.value.trim().toLowerCase();
+            document.querySelectorAll('#listaEmEspera .item-em-espera').forEach(function (item) {
+                item.style.display = item.dataset.busca.includes(filtro) ? '' : 'none';
+            });
+        });
+        </script>
     <?php endif; ?>
 
 <?php elseif ($aba === 'fluxo'): ?>
@@ -325,6 +379,41 @@ function wppLinhaOpcao(array $opcao, array $setoresAtivos): void
                 <p class="text-muted small">Mandada quando o atendimento é encerrado sozinho por falta de mensagem.</p>
                 <div class="mb-3">
                     <?php wppCampoMensagem('encerramento_inatividade', $encerramentoInatividade, 'bubble', 3); ?>
+                </div>
+
+                <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Salvar</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mt-3" style="max-width:1100px">
+        <div class="card-body">
+            <form method="post" action="<?= url('/whatsapp/chatbot/expediente') ?>">
+                <h6 class="mb-1">Horário de expediente</h6>
+                <p class="text-muted small">
+                    Fora desse horário, quem manda a primeira mensagem recebe direto o aviso abaixo, sem passar pelo menu do bot
+                    (quem já está na fila ou com um atendente não é afetado).
+                </p>
+
+                <div class="form-check mb-2">
+                    <input type="checkbox" name="ativo" class="form-check-input" id="expedienteAtivo" <?= $expedienteAtivo ? 'checked' : '' ?>>
+                    <label class="form-check-label small" for="expedienteAtivo">Aplicar horário de expediente</label>
+                </div>
+
+                <div class="row g-2 mb-3" style="max-width:320px">
+                    <div class="col-6">
+                        <label class="form-label small text-muted mb-1">Início</label>
+                        <input type="time" name="inicio" class="form-control form-control-sm" value="<?= htmlspecialchars($expedienteInicio) ?>">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small text-muted mb-1">Fim</label>
+                        <input type="time" name="fim" class="form-control form-control-sm" value="<?= htmlspecialchars($expedienteFim) ?>">
+                    </div>
+                </div>
+
+                <h6 class="mb-1">Mensagem fora do expediente</h6>
+                <div class="mb-3">
+                    <?php wppCampoMensagem('mensagem', $mensagemForaExpediente, 'bubble', 3); ?>
                 </div>
 
                 <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Salvar</button>

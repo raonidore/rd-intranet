@@ -29,6 +29,15 @@ class WhatsAppConfigService
     private const ENCERRAMENTO_NORMAL_PADRAO = 'Atendimento finalizado. Qualquer dúvida, é só chamar novamente!';
     private const ENCERRAMENTO_INATIVIDADE_PADRAO = 'Este atendimento foi encerrado automaticamente por falta de interação. Caso precise de algo, é só mandar uma mensagem que a gente recomeça.';
 
+    private const CHAVE_EXPEDIENTE_ATIVO = 'whatsapp_expediente_ativo';
+    private const CHAVE_EXPEDIENTE_INICIO = 'whatsapp_expediente_inicio';
+    private const CHAVE_EXPEDIENTE_FIM = 'whatsapp_expediente_fim';
+    private const CHAVE_MENSAGEM_FORA_EXPEDIENTE = 'whatsapp_mensagem_fora_expediente';
+
+    private const EXPEDIENTE_INICIO_PADRAO = '08:00';
+    private const EXPEDIENTE_FIM_PADRAO = '18:00';
+    private const MENSAGEM_FORA_EXPEDIENTE_PADRAO = 'Olá, {nome}! Nosso horário de atendimento está encerrado no momento. Retornaremos assim que estivermos disponíveis.';
+
     public function tipoIntegracao(): string
     {
         $tipo = ConfigService::get(self::CHAVE_TIPO, 'qrcode') ?: 'qrcode';
@@ -132,5 +141,70 @@ class WhatsAppConfigService
         ConfigService::set(self::CHAVE_ENCERRAMENTO_INATIVIDADE, $encerramentoInatividade);
 
         return ['success' => true, 'message' => 'Configuração de finalização salva.'];
+    }
+
+    public function expedienteAtivo(): bool
+    {
+        return ConfigService::get(self::CHAVE_EXPEDIENTE_ATIVO, '') === '1';
+    }
+
+    public function expedienteInicio(): string
+    {
+        return (string)(ConfigService::get(self::CHAVE_EXPEDIENTE_INICIO, self::EXPEDIENTE_INICIO_PADRAO) ?: self::EXPEDIENTE_INICIO_PADRAO);
+    }
+
+    public function expedienteFim(): string
+    {
+        return (string)(ConfigService::get(self::CHAVE_EXPEDIENTE_FIM, self::EXPEDIENTE_FIM_PADRAO) ?: self::EXPEDIENTE_FIM_PADRAO);
+    }
+
+    public function mensagemForaExpediente(): string
+    {
+        return (string)(ConfigService::get(self::CHAVE_MENSAGEM_FORA_EXPEDIENTE, self::MENSAGEM_FORA_EXPEDIENTE_PADRAO) ?: self::MENSAGEM_FORA_EXPEDIENTE_PADRAO);
+    }
+
+    /**
+     * Só considera o expediente pra quem ainda está com o bot (não
+     * atrapalha quem já está na fila ou já com um atendente -- essas
+     * conversas continuam normalmente fora do horário).
+     */
+    public function dentroDoExpediente(): bool
+    {
+        if (!$this->expedienteAtivo()) {
+            return true;
+        }
+
+        $agora = date('H:i');
+
+        return $agora >= $this->expedienteInicio() && $agora <= $this->expedienteFim();
+    }
+
+    /**
+     * @return array{success: bool, message: string}
+     */
+    public function salvarExpediente(bool $ativo, string $inicio, string $fim, string $mensagem): array
+    {
+        $mensagem = trim($mensagem);
+
+        if ($ativo) {
+            if (!preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $inicio) || !preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $fim)) {
+                return ['success' => false, 'message' => 'Informe os horários de início e fim no formato HH:MM.'];
+            }
+
+            if ($inicio >= $fim) {
+                return ['success' => false, 'message' => 'O horário de início precisa ser antes do horário de fim.'];
+            }
+
+            if ($mensagem === '') {
+                return ['success' => false, 'message' => 'Preencha a mensagem de fora do expediente.'];
+            }
+        }
+
+        ConfigService::set(self::CHAVE_EXPEDIENTE_ATIVO, $ativo ? '1' : '0');
+        ConfigService::set(self::CHAVE_EXPEDIENTE_INICIO, $inicio);
+        ConfigService::set(self::CHAVE_EXPEDIENTE_FIM, $fim);
+        ConfigService::set(self::CHAVE_MENSAGEM_FORA_EXPEDIENTE, $mensagem);
+
+        return ['success' => true, 'message' => 'Horário de expediente salvo.'];
     }
 }

@@ -43,6 +43,24 @@ class WhatsAppChatbotController extends Controller
         ));
 
         $config = new WhatsAppConfigService();
+        $atendimentoService = new WhatsAppAtendimentoService();
+
+        $emEspera = $atendimentoService->listarEmEsperaChatbot();
+
+        // Só deixa selecionar (e ver a conversa inteira de) quem está
+        // realmente na lista "em espera" agora -- evita vazar mensagens
+        // de qualquer atendimento só forjando o id na URL.
+        $emEsperaSelecionadoId = (int)($_GET['atendimento_id'] ?? 0);
+        $emEsperaSelecionado = null;
+        $emEsperaMensagens = [];
+
+        foreach ($emEspera as $item) {
+            if ((int)$item['id'] === $emEsperaSelecionadoId) {
+                $emEsperaSelecionado = $item;
+                $emEsperaMensagens = $atendimentoService->mensagens($emEsperaSelecionadoId);
+                break;
+            }
+        }
 
         $this->view('whatsapp/chatbot', [
             'aba' => $_GET['aba'] ?? 'fluxo',
@@ -55,7 +73,13 @@ class WhatsAppChatbotController extends Controller
             'encerramentoNormal' => $config->encerramentoNormal(),
             'encerramentoInatividade' => $config->encerramentoInatividade(),
             'mensagensRapidas' => (new WhatsAppMensagemRapidaService())->listar(),
-            'emEspera' => (new WhatsAppAtendimentoService())->listarEmEsperaChatbot(),
+            'emEspera' => $emEspera,
+            'emEsperaSelecionado' => $emEsperaSelecionado,
+            'emEsperaMensagens' => $emEsperaMensagens,
+            'expedienteAtivo' => $config->expedienteAtivo(),
+            'expedienteInicio' => $config->expedienteInicio(),
+            'expedienteFim' => $config->expedienteFim(),
+            'mensagemForaExpediente' => $config->mensagemForaExpediente(),
         ]);
     }
 
@@ -135,6 +159,22 @@ class WhatsAppChatbotController extends Controller
         );
 
         AuditService::registrar('WhatsApp', 'Chatbot - finalização', $resultado['message']);
+
+        $this->notificarEVoltar($resultado, ['aba' => 'finalizacao']);
+    }
+
+    public function salvarExpediente(): void
+    {
+        AuthMiddleware::checkModulo('whatsapp_chatbot');
+
+        $resultado = (new WhatsAppConfigService())->salvarExpediente(
+            isset($_POST['ativo']),
+            trim($_POST['inicio'] ?? ''),
+            trim($_POST['fim'] ?? ''),
+            $_POST['mensagem'] ?? ''
+        );
+
+        AuditService::registrar('WhatsApp', 'Chatbot - expediente', $resultado['message']);
 
         $this->notificarEVoltar($resultado, ['aba' => 'finalizacao']);
     }
