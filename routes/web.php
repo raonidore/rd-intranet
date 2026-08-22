@@ -272,6 +272,7 @@ $router->post('/whatsapp/atendimentos/responder', [WhatsAppAtendimentoController
 $router->post('/whatsapp/atendimentos/anexo', [WhatsAppAtendimentoController::class, 'anexo']);
 $router->get('/whatsapp/atendimentos/midia', [WhatsAppAtendimentoController::class, 'midia']);
 $router->get('/whatsapp/atendimentos/mensagens', [WhatsAppAtendimentoController::class, 'mensagensApi']);
+$router->get('/whatsapp/atendimentos/contador', [WhatsAppAtendimentoController::class, 'contadorApi']);
 $router->post('/whatsapp/atendimentos/encerrar', [WhatsAppAtendimentoController::class, 'encerrar']);
 $router->post('/whatsapp/atendimentos/transferir', [WhatsAppAtendimentoController::class, 'transferir']);
 
@@ -283,6 +284,7 @@ $router->post('/whatsapp/chatbot/atender', [WhatsAppChatbotController::class, 'a
 $router->post('/whatsapp/chatbot/expediente', [WhatsAppChatbotController::class, 'salvarExpediente']);
 
 $router->get('/whatsapp/estatisticas', [WhatsAppEstatisticaController::class, 'index']);
+$router->get('/whatsapp/estatisticas/tempo-real-api', [WhatsAppEstatisticaController::class, 'tempoRealApi']);
 $router->post('/whatsapp/estatisticas/nps', [WhatsAppEstatisticaController::class, 'salvarNps']);
 
 $router->get('/whatsapp/configuracoes', [WhatsAppConfiguracaoController::class, 'index']);

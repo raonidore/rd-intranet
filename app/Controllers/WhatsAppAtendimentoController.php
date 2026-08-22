@@ -300,6 +300,17 @@ class WhatsAppAtendimentoController extends Controller
         echo json_encode(['success' => true, 'mensagens' => $service->mensagens($id, $desde, !$podeVerNps)]);
     }
 
+    /** Contagem de "aguardando resposta" -- badge do menu e alerta sonoro em Atendimentos. */
+    public function contadorApi(): void
+    {
+        AuthMiddleware::checkModulo('whatsapp_atendimentos');
+        header('Content-Type: application/json');
+
+        $usuarioId = (int)$_SESSION['usuario']['id'];
+
+        echo json_encode(['success' => true, 'aguardando' => (new WhatsAppAtendimentoService())->contarAguardandoResposta($usuarioId)]);
+    }
+
     public function encerrar(): void
     {
         AuthMiddleware::checkModulo('whatsapp_atendimentos');

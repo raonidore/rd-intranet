@@ -149,6 +149,39 @@ class WhatsAppEstatisticaService
         ];
     }
 
+    /**
+     * Por setor, só hoje -- tabela do modo tela cheia (painel de gestão)
+     * na aba "Em tempo real", mesmas colunas da aba "Geral" só que sem
+     * quebrar por período, já que aqui o período é sempre "hoje".
+     *
+     * @return array<int, array{setor_nome:string, total_atendimentos:int, tempo_total_atendimento:int, tempo_medio_espera:?int}>
+     */
+    public function porSetorHoje(): array
+    {
+        $sql = "SELECT
+                    COALESCE(s.nome, 'Sem Setor') AS setor_nome,
+                    COUNT(*) AS total_atendimentos,
+                    SUM(TIMESTAMPDIFF(SECOND, COALESCE(a.atribuido_em, a.aberto_em), a.encerrado_em)) AS tempo_total_atendimento,
+                    AVG(TIMESTAMPDIFF(SECOND, a.aberto_em, COALESCE(a.atribuido_em, a.encerrado_em))) AS tempo_medio_espera
+                FROM whatsapp_atendimentos a
+                LEFT JOIN whatsapp_setores s ON s.id = a.setor_id
+                WHERE a.encerrado_em IS NOT NULL AND a.encerrado_em >= CURDATE()
+                GROUP BY setor_nome
+                ORDER BY total_atendimentos DESC";
+
+        $linhas = $this->pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($linhas as &$linha) {
+            $linha['total_atendimentos'] = (int)$linha['total_atendimentos'];
+            $linha['tempo_total_atendimento'] = (int)$linha['tempo_total_atendimento'];
+            $linha['tempo_medio_espera'] = $linha['tempo_medio_espera'] !== null
+                ? (int)round((float)$linha['tempo_medio_espera'])
+                : null;
+        }
+
+        return $linhas;
+    }
+
     private function inicioPeriodoRanking(string $periodo): string
     {
         return match ($periodo) {

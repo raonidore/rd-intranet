@@ -2,6 +2,7 @@
 
 use App\Services\AtivoService;
 use App\Services\PermissionService;
+use App\Services\WhatsAppAtendimentoService;
 
 $usuarioLogado = $_SESSION['usuario'] ?? ['nome' => 'Usuário'];
 $ativoServiceMenu = new AtivoService();
@@ -82,6 +83,24 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         .sidebar a:hover, .sidebar a.active {
             background:#1f2937;
             color:#fff;
+        }
+        .sidebar a.rd-menu-item-badge {
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+        }
+        .rd-menu-badge {
+            background:var(--rd-primary);
+            color:#fff;
+            font-size:11px;
+            font-weight:700;
+            min-width:20px;
+            height:20px;
+            line-height:20px;
+            text-align:center;
+            border-radius:10px;
+            padding:0 6px;
+            flex-shrink:0;
         }
         .menu-section {
             color:#6b7280;
@@ -752,6 +771,12 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         || PermissionService::temAcesso('whatsapp_estatisticas')
         || PermissionService::temAcesso('whatsapp_configuracoes');
     ?>
+    <?php
+    $wppAguardando = 0;
+    if (PermissionService::temAcesso('whatsapp_atendimentos') && isset($_SESSION['usuario']['id'])) {
+        $wppAguardando = (new WhatsAppAtendimentoService())->contarAguardandoResposta((int)$_SESSION['usuario']['id']);
+    }
+    ?>
     <?php if ($temWhatsapp): ?>
     <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuWhatsapp"
             aria-expanded="<?= $abrirWhatsapp ? 'true' : 'false' ?>">
@@ -760,8 +785,9 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
     </button>
     <div class="collapse <?= $abrirWhatsapp ? 'show' : '' ?>" id="menuWhatsapp">
         <?php if (PermissionService::temAcesso('whatsapp_atendimentos')): ?>
-        <a href="<?= url('/whatsapp/atendimentos') ?>" class="<?= str_starts_with($uriAtual, '/whatsapp/atendimentos') ? 'active' : '' ?>">
-            <i class="bi bi-chat-dots me-2"></i> Atendimentos
+        <a href="<?= url('/whatsapp/atendimentos') ?>" class="rd-menu-item-badge <?= str_starts_with($uriAtual, '/whatsapp/atendimentos') ? 'active' : '' ?>">
+            <span><i class="bi bi-chat-dots me-2"></i> Atendimentos</span>
+            <span class="rd-menu-badge" id="rdWppBadgeAtendimentos" style="<?= $wppAguardando > 0 ? '' : 'display:none' ?>"><?= $wppAguardando ?></span>
         </a>
         <?php endif; ?>
         <?php if (PermissionService::temAcesso('whatsapp_fila')): ?>

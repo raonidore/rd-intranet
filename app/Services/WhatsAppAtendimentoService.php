@@ -484,7 +484,7 @@ class WhatsAppAtendimentoService
         // LAST_INSERT_ID(), que preserva entre statements).
         $id = (int)$this->pdo->lastInsertId();
 
-        $this->tocarUltimaMensagem($atendimentoId);
+        $this->tocarUltimaMensagem($atendimentoId, true);
 
         return ['id' => $id];
     }
@@ -507,7 +507,7 @@ class WhatsAppAtendimentoService
 
         $id = (int)$this->pdo->lastInsertId();
 
-        $this->tocarUltimaMensagem($atendimentoId);
+        $this->tocarUltimaMensagem($atendimentoId, false);
 
         return $id;
     }
@@ -571,10 +571,27 @@ class WhatsAppAtendimentoService
         return ['encerrados' => count($inativos) + count($npsInativos)];
     }
 
-    private function tocarUltimaMensagem(int $atendimentoId): void
+    private function tocarUltimaMensagem(int $atendimentoId, bool $aguardandoResposta): void
     {
-        $stmt = $this->pdo->prepare('UPDATE whatsapp_atendimentos SET ultima_mensagem_em = NOW() WHERE id = ?');
-        $stmt->execute([$atendimentoId]);
+        $stmt = $this->pdo->prepare(
+            'UPDATE whatsapp_atendimentos SET ultima_mensagem_em = NOW(), aguardando_resposta = ? WHERE id = ?'
+        );
+        $stmt->execute([$aguardandoResposta ? 1 : 0, $atendimentoId]);
+    }
+
+    /**
+     * Quantos atendimentos em andamento desse usuário têm a última
+     * mensagem vinda do cliente -- badge do menu lateral e gatilho do
+     * alerta sonoro em Atendimentos.
+     */
+    public function contarAguardandoResposta(int $usuarioId): int
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT COUNT(*) FROM whatsapp_atendimentos WHERE status = 'em_atendimento' AND usuario_id = ? AND aguardando_resposta = 1"
+        );
+        $stmt->execute([$usuarioId]);
+
+        return (int)$stmt->fetchColumn();
     }
 
     private function mensagemJaExiste(string $whatsappMessageId): bool

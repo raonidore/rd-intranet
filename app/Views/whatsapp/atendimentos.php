@@ -11,9 +11,14 @@ use App\Components\Alert;
         <h4 class="mb-1"><i class="bi bi-chat-dots me-1"></i> WhatsApp - Atendimentos</h4>
         <small class="text-muted">Suas conversas em andamento. Novos atendimentos aparecem em <a href="<?= url('/whatsapp/fila') ?>">Fila</a>.</small>
     </div>
-    <button type="button" class="btn btn-primary text-nowrap" data-bs-toggle="modal" data-bs-target="#modalIniciarAtendimento">
-        <i class="bi bi-plus-lg"></i> Iniciar Atendimento
-    </button>
+    <div class="d-flex gap-2">
+        <button type="button" id="btnSomWpp" class="btn btn-outline-secondary" title="Ativar som para mensagens novas">
+            <i class="bi bi-volume-mute"></i>
+        </button>
+        <button type="button" class="btn btn-primary text-nowrap" data-bs-toggle="modal" data-bs-target="#modalIniciarAtendimento">
+            <i class="bi bi-plus-lg"></i> Iniciar Atendimento
+        </button>
+    </div>
 </div>
 
 <ul class="nav nav-tabs mb-3">
@@ -122,6 +127,86 @@ use App\Components\Alert;
         </div>
     </div>
 </div>
+
+<script>
+(function () {
+    const CHAVE_SOM = 'wppSomAtivo';
+    const btnSom = document.getElementById('btnSomWpp');
+    const icone = btnSom.querySelector('i');
+
+    function somAtivo() {
+        return localStorage.getItem(CHAVE_SOM) === '1';
+    }
+
+    function atualizarIcone() {
+        icone.className = somAtivo() ? 'bi bi-volume-up-fill' : 'bi bi-volume-mute';
+        btnSom.classList.toggle('btn-primary', somAtivo());
+        btnSom.classList.toggle('btn-outline-secondary', !somAtivo());
+        btnSom.title = somAtivo() ? 'Som ativado -- clique pra desativar' : 'Ativar som para mensagens novas';
+    }
+
+    btnSom.addEventListener('click', () => {
+        localStorage.setItem(CHAVE_SOM, somAtivo() ? '0' : '1');
+        atualizarIcone();
+    });
+
+    atualizarIcone();
+
+    function tocarBipWpp() {
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            [880, 1108].forEach((freq, i) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.type = 'sine';
+                osc.frequency.value = freq;
+                const inicio = ctx.currentTime + i * 0.14;
+                gain.gain.setValueAtTime(0.001, inicio);
+                gain.gain.exponentialRampToValueAtTime(0.18, inicio + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.001, inicio + 0.28);
+                osc.start(inicio);
+                osc.stop(inicio + 0.3);
+            });
+        } catch (e) {
+            // navegador sem suporte a Web Audio -- ignora, sem quebrar o resto
+        }
+    }
+
+    let ultimaContagem = null;
+    const badgeMenu = document.getElementById('rdWppBadgeAtendimentos');
+
+    async function verificarNovasMensagens() {
+        try {
+            const resp = await fetch('<?= url('/whatsapp/atendimentos/contador') ?>');
+            const dados = await resp.json();
+            if (!dados.success) {
+                return;
+            }
+
+            if (ultimaContagem !== null && dados.aguardando > ultimaContagem && somAtivo()) {
+                tocarBipWpp();
+            }
+            ultimaContagem = dados.aguardando;
+
+            if (badgeMenu) {
+                if (dados.aguardando > 0) {
+                    badgeMenu.textContent = dados.aguardando;
+                    badgeMenu.style.display = '';
+                } else {
+                    badgeMenu.style.display = 'none';
+                }
+            }
+        } catch (e) {
+            // rede instável -- tenta de novo no próximo ciclo
+        }
+    }
+
+    verificarNovasMensagens();
+    setInterval(verificarNovasMensagens, 15000);
+})();
+</script>
 
 <?php
 $conteudo = ob_get_clean();

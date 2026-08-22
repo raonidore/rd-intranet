@@ -20,6 +20,14 @@ $rotulosPeriodoGeral = ['mes' => 'Mês', 'semana' => 'Semana', 'dia' => 'Dia', '
 $rotulosPeriodoRanking = ['geral' => 'Histórico geral', 'mes' => 'Este mês', 'semana' => 'Esta semana', 'hoje' => 'Hoje', 'hora' => 'Última hora'];
 ?>
 
+<style>
+#wppPainelTempoReal:fullscreen {
+    background:#f4f6f9;
+    padding:2.5rem;
+    overflow-y:auto;
+}
+</style>
+
 <?= Alert::flash() ?>
 
 <div class="mb-4">
@@ -44,54 +52,184 @@ $rotulosPeriodoRanking = ['geral' => 'Histórico geral', 'mes' => 'Este mês', '
 
 <?php if ($aba === 'tempo-real'): ?>
 
-    <div class="row g-3 mb-3">
-        <div class="col-6 col-md-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body text-center">
-                    <div class="text-muted small">Em espera no chatbot</div>
-                    <div class="fs-2"><?= (int)$tempoReal['em_espera_bot'] ?></div>
+    <div class="d-flex justify-content-end mb-2">
+        <button type="button" id="wppBtnTelaCheia" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrows-fullscreen"></i> Tela cheia
+        </button>
+    </div>
+
+    <div id="wppPainelTempoReal">
+        <div class="row g-3 mb-3">
+            <div class="col-6 col-md-3">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body text-center">
+                        <div class="text-muted small">Em espera no chatbot</div>
+                        <div class="fs-2" id="wppEmEsperaBot"><?= (int)$tempoReal['em_espera_bot'] ?></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body text-center">
+                        <div class="text-muted small">Na fila</div>
+                        <div class="fs-2" id="wppFila"><?= (int)$tempoReal['fila'] ?></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body text-center">
+                        <div class="text-muted small">Em atendimento</div>
+                        <div class="fs-2" id="wppEmAtendimento"><?= (int)$tempoReal['em_atendimento'] ?></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body text-center">
+                        <div class="text-muted small">Atendentes ativos agora</div>
+                        <div class="fs-2" id="wppAtendentesAtivos"><?= (int)$tempoReal['atendentes_ativos'] ?></div>
+                    </div>
                 </div>
             </div>
         </div>
-        <div class="col-6 col-md-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body text-center">
-                    <div class="text-muted small">Na fila</div>
-                    <div class="fs-2"><?= (int)$tempoReal['fila'] ?></div>
+
+        <div class="card border-0 shadow-sm mb-3" style="max-width:600px; <?= empty($tempoReal['fila_por_setor']) ? 'display:none' : '' ?>" id="wppCardFilaPorSetor">
+            <div class="card-body">
+                <h6 class="mb-2">Fila por setor</h6>
+                <div id="wppFilaPorSetorLista">
+                    <?php foreach ($tempoReal['fila_por_setor'] as $item): ?>
+                        <div class="d-flex justify-content-between border-bottom py-1">
+                            <span><?= htmlspecialchars($item['setor_nome']) ?></span>
+                            <strong><?= (int)$item['total'] ?></strong>
+                        </div>
+                    <?php endforeach; ?>
                 </div>
             </div>
         </div>
-        <div class="col-6 col-md-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body text-center">
-                    <div class="text-muted small">Em atendimento</div>
-                    <div class="fs-2"><?= (int)$tempoReal['em_atendimento'] ?></div>
-                </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body text-center">
-                    <div class="text-muted small">Atendentes ativos agora</div>
-                    <div class="fs-2"><?= (int)$tempoReal['atendentes_ativos'] ?></div>
-                </div>
+
+        <div id="wppPainelGestao" style="display:none">
+            <h6 class="mt-4 mb-2">Por setor -- hoje</h6>
+            <div class="table-responsive">
+                <table class="table table-sm bg-white">
+                    <thead>
+                        <tr>
+                            <th>Setor</th>
+                            <th>Total de Atendimentos</th>
+                            <th>Tempo Total de Atendimento</th>
+                            <th>Tempo Médio de Espera do dia</th>
+                        </tr>
+                    </thead>
+                    <tbody id="wppPorSetorHojeBody">
+                        <?php foreach ($porSetorHoje as $item): ?>
+                            <tr>
+                                <td><?= htmlspecialchars($item['setor_nome']) ?></td>
+                                <td><?= (int)$item['total_atendimentos'] ?></td>
+                                <td><?= wppDuracao($item['tempo_total_atendimento']) ?></td>
+                                <td><?= wppDuracao($item['tempo_medio_espera']) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
 
-    <?php if (!empty($tempoReal['fila_por_setor'])): ?>
-        <div class="card border-0 shadow-sm" style="max-width:600px">
-            <div class="card-body">
-                <h6 class="mb-2">Fila por setor</h6>
-                <?php foreach ($tempoReal['fila_por_setor'] as $item): ?>
-                    <div class="d-flex justify-content-between border-bottom py-1">
-                        <span><?= htmlspecialchars($item['setor_nome']) ?></span>
-                        <strong><?= (int)$item['total'] ?></strong>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-        </div>
-    <?php endif; ?>
+    <script>
+    (function () {
+        const painel = document.getElementById('wppPainelTempoReal');
+        const painelGestao = document.getElementById('wppPainelGestao');
+        const btnTelaCheia = document.getElementById('wppBtnTelaCheia');
+        let timerAtualizacao = null;
+
+        function estaEmTelaCheia() {
+            return document.fullscreenElement === painel;
+        }
+
+        function atualizarBotao() {
+            btnTelaCheia.innerHTML = estaEmTelaCheia()
+                ? '<i class="bi bi-fullscreen-exit"></i> Sair da tela cheia'
+                : '<i class="bi bi-arrows-fullscreen"></i> Tela cheia';
+        }
+
+        function atualizarDom(tempoReal, porSetorHoje) {
+            document.getElementById('wppEmEsperaBot').textContent = tempoReal.em_espera_bot;
+            document.getElementById('wppFila').textContent = tempoReal.fila;
+            document.getElementById('wppEmAtendimento').textContent = tempoReal.em_atendimento;
+            document.getElementById('wppAtendentesAtivos').textContent = tempoReal.atendentes_ativos;
+
+            const cardFila = document.getElementById('wppCardFilaPorSetor');
+            const listaFila = document.getElementById('wppFilaPorSetorLista');
+            if (tempoReal.fila_por_setor.length === 0) {
+                cardFila.style.display = 'none';
+            } else {
+                cardFila.style.display = '';
+                listaFila.innerHTML = tempoReal.fila_por_setor.map((item) =>
+                    '<div class="d-flex justify-content-between border-bottom py-1">'
+                    + '<span>' + escapeHtmlWpp(item.setor_nome) + '</span>'
+                    + '<strong>' + item.total + '</strong></div>'
+                ).join('');
+            }
+
+            const corpo = document.getElementById('wppPorSetorHojeBody');
+            corpo.innerHTML = porSetorHoje.map((item) =>
+                '<tr><td>' + escapeHtmlWpp(item.setor_nome) + '</td>'
+                + '<td>' + item.total_atendimentos + '</td>'
+                + '<td>' + formatarDuracaoWpp(item.tempo_total_atendimento) + '</td>'
+                + '<td>' + formatarDuracaoWpp(item.tempo_medio_espera) + '</td></tr>'
+            ).join('');
+        }
+
+        function escapeHtmlWpp(texto) {
+            const div = document.createElement('div');
+            div.textContent = texto;
+            return div.innerHTML;
+        }
+
+        function formatarDuracaoWpp(segundos) {
+            if (segundos === null || segundos === undefined) {
+                return '—';
+            }
+            const h = Math.floor(segundos / 3600);
+            const m = Math.floor((segundos % 3600) / 60);
+            const s = Math.floor(segundos % 60);
+            return [h, m, s].map((n) => String(n).padStart(2, '0')).join(':');
+        }
+
+        async function atualizarPainel() {
+            try {
+                const resp = await fetch('<?= url('/whatsapp/estatisticas/tempo-real-api') ?>');
+                const dados = await resp.json();
+                if (dados.success) {
+                    atualizarDom(dados.tempoReal, dados.porSetorHoje);
+                }
+            } catch (e) {
+                // rede instável -- tenta de novo no próximo ciclo
+            }
+        }
+
+        btnTelaCheia.addEventListener('click', () => {
+            if (estaEmTelaCheia()) {
+                document.exitFullscreen();
+            } else {
+                painel.requestFullscreen();
+            }
+        });
+
+        document.addEventListener('fullscreenchange', () => {
+            atualizarBotao();
+            painelGestao.style.display = estaEmTelaCheia() ? '' : 'none';
+
+            if (estaEmTelaCheia()) {
+                atualizarPainel();
+                timerAtualizacao = setInterval(atualizarPainel, 15000);
+            } else if (timerAtualizacao) {
+                clearInterval(timerAtualizacao);
+                timerAtualizacao = null;
+            }
+        });
+    })();
+    </script>
 
 <?php elseif ($aba === 'geral'): ?>
 

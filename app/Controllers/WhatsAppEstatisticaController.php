@@ -33,12 +33,28 @@ class WhatsAppEstatisticaController extends Controller
             'geral' => $estatistica->geral($periodoGeral),
             'ranking' => $estatistica->ranking($periodoRanking),
             'tempoReal' => $estatistica->tempoReal(),
+            'porSetorHoje' => $estatistica->porSetorHoje(),
             'resumoNps' => $nps->resumo(),
             'npsMensagemEspera' => $config->npsMensagemEspera(),
             'npsPerguntaAtendente' => $config->npsPerguntaAtendente(),
             'npsPerguntaResolucao' => $config->npsPerguntaResolucao(),
             'npsAgradecimento' => $config->npsAgradecimento(),
             'npsTimeoutMinutos' => $config->npsTimeoutMinutos(),
+        ]);
+    }
+
+    /** Atualização periódica do painel "tela cheia" (aba Em tempo real), sem recarregar a página. */
+    public function tempoRealApi(): void
+    {
+        AuthMiddleware::checkModulo('whatsapp_estatisticas');
+        header('Content-Type: application/json');
+
+        $estatistica = new WhatsAppEstatisticaService();
+
+        echo json_encode([
+            'success' => true,
+            'tempoReal' => $estatistica->tempoReal(),
+            'porSetorHoje' => $estatistica->porSetorHoje(),
         ]);
     }
 
