@@ -151,60 +151,11 @@ use App\Components\Alert;
     });
 
     atualizarIcone();
-
-    function tocarBipWpp() {
-        try {
-            const ctx = new (window.AudioContext || window.webkitAudioContext)();
-            [880, 1108].forEach((freq, i) => {
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
-                osc.connect(gain);
-                gain.connect(ctx.destination);
-                osc.type = 'sine';
-                osc.frequency.value = freq;
-                const inicio = ctx.currentTime + i * 0.14;
-                gain.gain.setValueAtTime(0.001, inicio);
-                gain.gain.exponentialRampToValueAtTime(0.18, inicio + 0.02);
-                gain.gain.exponentialRampToValueAtTime(0.001, inicio + 0.28);
-                osc.start(inicio);
-                osc.stop(inicio + 0.3);
-            });
-        } catch (e) {
-            // navegador sem suporte a Web Audio -- ignora, sem quebrar o resto
-        }
-    }
-
-    let ultimaContagem = null;
-    const badgeMenu = document.getElementById('rdWppBadgeAtendimentos');
-
-    async function verificarNovasMensagens() {
-        try {
-            const resp = await fetch('<?= url('/whatsapp/atendimentos/contador') ?>');
-            const dados = await resp.json();
-            if (!dados.success) {
-                return;
-            }
-
-            if (ultimaContagem !== null && dados.aguardando > ultimaContagem && somAtivo()) {
-                tocarBipWpp();
-            }
-            ultimaContagem = dados.aguardando;
-
-            if (badgeMenu) {
-                if (dados.aguardando > 0) {
-                    badgeMenu.textContent = dados.aguardando;
-                    badgeMenu.style.display = '';
-                } else {
-                    badgeMenu.style.display = 'none';
-                }
-            }
-        } catch (e) {
-            // rede instável -- tenta de novo no próximo ciclo
-        }
-    }
-
-    verificarNovasMensagens();
-    setInterval(verificarNovasMensagens, 15000);
+    // O alerta sonoro em si (o "bip") e a checagem periódica rodam em
+    // main.php -- assim funcionam em qualquer tela do sistema, não só
+    // aqui em Atendimentos, já que o usuário pode estar em Fila,
+    // Chatbot etc. quando a mensagem chega. Esse botão só liga/desliga
+    // a preferência (localStorage), lida por aquele script.
 })();
 </script>
 

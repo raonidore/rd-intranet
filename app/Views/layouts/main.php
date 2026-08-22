@@ -846,5 +846,78 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
+<?php if (PermissionService::temAcesso('whatsapp_atendimentos') && isset($_SESSION['usuario']['id'])): ?>
+<script>
+(function () {
+    // Roda em toda tela do sistema (não só em Atendimentos) porque o
+    // atendente pode estar em Fila, Chatbot etc. quando chega mensagem
+    // nova -- o botão de liga/desliga fica só em Atendimentos, mas essa
+    // checagem e o alerta sonoro valem pra qualquer página.
+    const CHAVE_SOM = 'wppSomAtivo';
+    const CHAVE_CONTAGEM = 'wppUltimaContagem';
+
+    function somAtivo() {
+        return localStorage.getItem(CHAVE_SOM) === '1';
+    }
+
+    function tocarBipWpp() {
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            [880, 1108].forEach((freq, i) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.type = 'sine';
+                osc.frequency.value = freq;
+                const inicio = ctx.currentTime + i * 0.14;
+                gain.gain.setValueAtTime(0.001, inicio);
+                gain.gain.exponentialRampToValueAtTime(0.18, inicio + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.001, inicio + 0.28);
+                osc.start(inicio);
+                osc.stop(inicio + 0.3);
+            });
+        } catch (e) {
+            // navegador sem suporte a Web Audio -- ignora, sem quebrar o resto
+        }
+    }
+
+    // Guardado em sessionStorage (sobrevive a navegar entre páginas na
+    // mesma aba, mas não a fechar/reabrir) pra não perder o "antes" só
+    // porque o usuário trocou de tela entre uma checagem e outra.
+    let ultimaContagem = sessionStorage.getItem(CHAVE_CONTAGEM);
+    ultimaContagem = ultimaContagem === null ? null : parseInt(ultimaContagem, 10);
+
+    const badgeMenu = document.getElementById('rdWppBadgeAtendimentos');
+
+    async function verificarNovasMensagens() {
+        try {
+            const resp = await fetch('<?= url('/whatsapp/atendimentos/contador') ?>');
+            const dados = await resp.json();
+            if (!dados.success) {
+                return;
+            }
+
+            if (ultimaContagem !== null && dados.aguardando > ultimaContagem && somAtivo()) {
+                tocarBipWpp();
+            }
+            ultimaContagem = dados.aguardando;
+            sessionStorage.setItem(CHAVE_CONTAGEM, String(ultimaContagem));
+
+            if (badgeMenu) {
+                badgeMenu.textContent = dados.aguardando;
+                badgeMenu.style.display = dados.aguardando > 0 ? '' : 'none';
+            }
+        } catch (e) {
+            // rede instável -- tenta de novo no próximo ciclo
+        }
+    }
+
+    verificarNovasMensagens();
+    setInterval(verificarNovasMensagens, 15000);
+})();
+</script>
+<?php endif; ?>
+
 </body>
 </html>
