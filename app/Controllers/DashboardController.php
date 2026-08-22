@@ -11,6 +11,7 @@ use App\Services\SpeedtestService;
 use App\Services\AtivoService;
 use App\Services\BackupService;
 use App\Services\PermissionService;
+use App\Services\WhatsAppEstatisticaService;
 
 class DashboardController extends Controller
 {
@@ -25,6 +26,7 @@ class DashboardController extends Controller
             'ativos' => null,
             'speedtest' => null,
             'backup' => null,
+            'whatsapp' => null,
         ];
 
         if (
@@ -60,6 +62,17 @@ class DashboardController extends Controller
             || PermissionService::temAcesso('backup_historico')
         ) {
             $dados['backup'] = (new BackupService())->dashboard();
+        }
+
+        if (
+            PermissionService::temAcesso('whatsapp_atendimentos')
+            || PermissionService::temAcesso('whatsapp_fila')
+            || PermissionService::temAcesso('whatsapp_chatbot')
+            || PermissionService::temAcesso('whatsapp_setores')
+            || PermissionService::temAcesso('whatsapp_estatisticas')
+            || PermissionService::temAcesso('whatsapp_configuracoes')
+        ) {
+            $dados['whatsapp'] = (new WhatsAppEstatisticaService())->tempoReal();
         }
 
         $this->view('dashboard/index', $dados);

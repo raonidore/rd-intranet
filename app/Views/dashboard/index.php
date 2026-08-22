@@ -6,7 +6,7 @@ use App\Services\PermissionService;
 $hora = date('H:i');
 $dataExtenso = date('d/m/Y');
 
-$temAlgumModulo = $samba !== null || $apache !== null || $servidor !== null || $ativos !== null || $backup !== null;
+$temAlgumModulo = $samba !== null || $apache !== null || $servidor !== null || $ativos !== null || $backup !== null || $whatsapp !== null;
 
 function techCorPercentual(float $p): string {
     if ($p >= 90) return '#ef4444';
@@ -36,6 +36,7 @@ $cardsDisponiveis = [
     'servidor' => ['label' => 'Servidor', 'padrao' => true],
     'ativos' => ['label' => 'Ativos', 'padrao' => true],
     'backup' => ['label' => 'Backup em Nuvem', 'padrao' => true],
+    'whatsapp' => ['label' => 'Módulo WhatsApp', 'padrao' => true],
     'hardware' => ['label' => 'Hardware', 'padrao' => false],
     'rede' => ['label' => 'Network', 'padrao' => false],
     'servicos' => ['label' => 'Serviços', 'padrao' => false],
@@ -361,6 +362,36 @@ if ($servidor) {
                 <div class="stat-mini-row">
                     <span class="tech-label mb-0">Destino</span>
                     <span class="tech-mini"><?= $backup['destino_ativo_nome'] ? htmlspecialchars($backup['destino_ativo_nome']) : 'Nenhum' ?></span>
+                </div>
+            </div>
+        </a>
+    </div>
+    <?php endif; ?>
+
+    <?php if ($whatsapp): ?>
+    <div class="col-md-4" data-card="whatsapp">
+        <a href="<?= url('/whatsapp/atendimentos') ?>" class="tech-card">
+            <div class="accent" style="background:#25d366"></div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <div>
+                        <div class="tech-label">Módulo</div>
+                        <h5 class="mb-0"><i class="bi bi-whatsapp me-1"></i> WhatsApp</h5>
+                    </div>
+                    <span class="pulse-dot <?= $whatsapp['atendentes_ativos'] > 0 ? 'online' : 'offline' ?>"></span>
+                </div>
+
+                <div class="stat-mini-row">
+                    <span class="tech-label mb-0">Na fila</span>
+                    <span class="tech-num" style="font-size:18px"><?= (int)$whatsapp['fila'] ?></span>
+                </div>
+                <div class="stat-mini-row">
+                    <span class="tech-label mb-0">Em atendimento</span>
+                    <span class="tech-mini"><?= (int)$whatsapp['em_atendimento'] ?></span>
+                </div>
+                <div class="stat-mini-row">
+                    <span class="tech-label mb-0">Atendentes ativos</span>
+                    <span class="tech-mini"><?= (int)$whatsapp['atendentes_ativos'] ?></span>
                 </div>
             </div>
         </a>
