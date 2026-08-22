@@ -21,6 +21,20 @@ class WhatsAppAtendimentoService
     }
 
     /**
+     * Prefixo "*Setor - Nome:*" antes de toda mensagem que um atendente
+     * manda pro cliente -- sem isso o cliente não tem como saber quem
+     * está falando do outro lado (principalmente depois de uma
+     * transferência de setor, quando quem responde muda no meio da
+     * conversa). "*texto*" é negrito no formato do próprio WhatsApp.
+     */
+    public static function comIdentificacaoDoAtendente(string $texto, ?string $setorNome, string $nomeUsuario): string
+    {
+        $identificacao = $setorNome ? "{$setorNome} - {$nomeUsuario}" : $nomeUsuario;
+
+        return "*{$identificacao}:*\n{$texto}";
+    }
+
+    /**
      * Ponto de entrada único pra mensagem recebida, seja lá qual for o
      * canal (bridge QR Code, webhook da Meta ou da Twilio -- os 3
      * controllers de webhook chamam isso, em vez de cada um duplicar
@@ -86,7 +100,7 @@ class WhatsAppAtendimentoService
      *
      * @return array{success: bool, message: string, atendimento_id?: int}
      */
-    public function iniciarProativo(string $numero, ?string $nome, string $mensagem, int $usuarioId): array
+    public function iniciarProativo(string $numero, ?string $nome, string $mensagem, int $usuarioId, string $nomeUsuario): array
     {
         $mensagem = trim($mensagem);
         if ($mensagem === '') {
@@ -96,7 +110,7 @@ class WhatsAppAtendimentoService
         $contato = (new WhatsAppContatoService())->buscarOuCriarPorNumero($numero, $nome);
         $atendimento = $this->abrirOuReaproveitar((int)$contato['id']);
 
-        $envio = (new WhatsAppMensagemService())->enviar($numero, $mensagem);
+        $envio = (new WhatsAppMensagemService())->enviar($numero, self::comIdentificacaoDoAtendente($mensagem, null, $nomeUsuario));
         if (!$envio['success']) {
             return ['success' => false, 'message' => $envio['message'] ?? 'Falha ao enviar mensagem pelo WhatsApp.'];
         }

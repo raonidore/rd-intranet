@@ -47,7 +47,8 @@ class WhatsAppAtendimentoController extends Controller
             $numero,
             trim($_POST['nome'] ?? '') ?: null,
             $_POST['mensagem'] ?? '',
-            (int)$_SESSION['usuario']['id']
+            (int)$_SESSION['usuario']['id'],
+            (string)$_SESSION['usuario']['nome']
         );
 
         AuditService::registrar('WhatsApp', 'Iniciar atendimento', "Número {$numero}: {$resultado['message']}");
@@ -110,7 +111,13 @@ class WhatsAppAtendimentoController extends Controller
             return;
         }
 
-        $envio = (new WhatsAppMensagemService())->enviar($atendimento['numero'], $texto);
+        $textoComIdentificacao = WhatsAppAtendimentoService::comIdentificacaoDoAtendente(
+            $texto,
+            $atendimento['setor_nome'] ?? null,
+            (string)$_SESSION['usuario']['nome']
+        );
+
+        $envio = (new WhatsAppMensagemService())->enviar($atendimento['numero'], $textoComIdentificacao);
 
         if (!$envio['success']) {
             echo json_encode(['success' => false, 'message' => $envio['message'] ?? 'Falha ao enviar mensagem pelo WhatsApp.']);

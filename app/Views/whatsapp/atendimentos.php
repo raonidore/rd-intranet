@@ -36,6 +36,7 @@ use App\Components\Alert;
         </div>
     <?php else: ?>
         <?php foreach ($encerrados as $item): ?>
+            <a href="<?= url('/whatsapp/atendimentos/ver?id=' . (int)$item['id']) ?>" class="text-decoration-none text-reset">
             <div class="card border-0 shadow-sm mb-2">
                 <div class="card-body d-flex justify-content-between align-items-center">
                     <div style="min-width:0">
@@ -51,6 +52,7 @@ use App\Components\Alert;
                     <small class="text-muted text-nowrap">Encerrado em <?= data_br($item['encerrado_em']) ?></small>
                 </div>
             </div>
+            </a>
         <?php endforeach; ?>
     <?php endif; ?>
 

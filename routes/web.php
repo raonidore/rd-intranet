@@ -43,6 +43,7 @@ use App\Controllers\WhatsAppMensagemRapidaController;
 use App\Controllers\WhatsAppIntegracaoController;
 use App\Controllers\WhatsAppWebhookController;
 use App\Controllers\WhatsAppEstatisticaController;
+use App\Controllers\WhatsAppConfiguracaoController;
 use App\Controllers\IntegracoesController;
 use App\Controllers\DependenciaController;
 use App\Controllers\SpeedtestController;
@@ -281,6 +282,9 @@ $router->post('/whatsapp/chatbot/expediente', [WhatsAppChatbotController::class,
 
 $router->get('/whatsapp/estatisticas', [WhatsAppEstatisticaController::class, 'index']);
 $router->post('/whatsapp/estatisticas/nps', [WhatsAppEstatisticaController::class, 'salvarNps']);
+
+$router->get('/whatsapp/configuracoes', [WhatsAppConfiguracaoController::class, 'index']);
+$router->post('/whatsapp/configuracoes/salvar', [WhatsAppConfiguracaoController::class, 'salvar']);
 
 $router->post('/whatsapp/mensagens-rapidas/criar', [WhatsAppMensagemRapidaController::class, 'criar']);
 $router->post('/whatsapp/mensagens-rapidas/atualizar', [WhatsAppMensagemRapidaController::class, 'atualizar']);

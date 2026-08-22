@@ -749,7 +749,8 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         || PermissionService::temAcesso('whatsapp_fila')
         || PermissionService::temAcesso('whatsapp_chatbot')
         || PermissionService::temAcesso('whatsapp_setores')
-        || PermissionService::temAcesso('whatsapp_estatisticas');
+        || PermissionService::temAcesso('whatsapp_estatisticas')
+        || PermissionService::temAcesso('whatsapp_configuracoes');
     ?>
     <?php if ($temWhatsapp): ?>
     <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuWhatsapp"
@@ -781,6 +782,11 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         <?php if (PermissionService::temAcesso('whatsapp_estatisticas')): ?>
         <a href="<?= url('/whatsapp/estatisticas') ?>" class="<?= $uriAtual === '/whatsapp/estatisticas' ? 'active' : '' ?>">
             <i class="bi bi-bar-chart-line me-2"></i> Estatísticas
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('whatsapp_configuracoes')): ?>
+        <a href="<?= url('/whatsapp/configuracoes') ?>" class="<?= $uriAtual === '/whatsapp/configuracoes' ? 'active' : '' ?>">
+            <i class="bi bi-gear me-2"></i> Configurações
         </a>
         <?php endif; ?>
     </div>

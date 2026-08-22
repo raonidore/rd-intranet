@@ -38,6 +38,8 @@ class WhatsAppConfigService
     private const EXPEDIENTE_FIM_PADRAO = '18:00';
     private const MENSAGEM_FORA_EXPEDIENTE_PADRAO = 'Olá, {nome}! Nosso horário de atendimento está encerrado no momento. Retornaremos assim que estivermos disponíveis.';
 
+    private const CHAVE_ANEXOS_ATIVO = 'whatsapp_anexos_ativo';
+
     private const CHAVE_NPS_MENSAGEM_ESPERA = 'whatsapp_nps_mensagem_espera';
     private const CHAVE_NPS_PERGUNTA_ATENDENTE = 'whatsapp_nps_pergunta_atendente';
     private const CHAVE_NPS_PERGUNTA_RESOLUCAO = 'whatsapp_nps_pergunta_resolucao';
@@ -153,6 +155,26 @@ class WhatsAppConfigService
         ConfigService::set(self::CHAVE_ENCERRAMENTO_INATIVIDADE, $encerramentoInatividade);
 
         return ['success' => true, 'message' => 'Configuração de finalização salva.'];
+    }
+
+    /**
+     * Se atendentes podem mandar/receber anexos (imagem, áudio,
+     * documento) durante o atendimento -- desligado por padrão até o
+     * envio/recebimento de mídia ser suportado de ponta a ponta.
+     */
+    public function anexosAtivos(): bool
+    {
+        return ConfigService::get(self::CHAVE_ANEXOS_ATIVO, '') === '1';
+    }
+
+    /**
+     * @return array{success: bool, message: string}
+     */
+    public function salvarAnexos(bool $ativo): array
+    {
+        ConfigService::set(self::CHAVE_ANEXOS_ATIVO, $ativo ? '1' : '0');
+
+        return ['success' => true, 'message' => 'Configuração de anexos salva.'];
     }
 
     public function expedienteAtivo(): bool

@@ -22,6 +22,8 @@ function renderizarBolha(array $m): string
         . '<div class="text-muted text-end" style="font-size:10px">' . htmlspecialchars(data_br($m['criado_em'], 'H:i')) . '</div>'
         . '</div></div>';
 }
+
+$somenteLeitura = $atendimento['status'] === 'encerrado';
 ?>
 
 <?= Alert::flash() ?>
@@ -40,19 +42,30 @@ function renderizarBolha(array $m): string
         <a href="<?= url('/whatsapp/atendimentos') ?>" class="btn btn-sm btn-outline-secondary">
             <i class="bi bi-arrow-left"></i> Atendimentos
         </a>
-        <?php if (!empty($setoresAtivos)): ?>
-            <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalTransferir">
-                <i class="bi bi-arrow-left-right"></i> Transferir
-            </button>
+        <button type="button" id="botaoExportarPdf" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-file-earmark-pdf"></i> Exportar PDF
+        </button>
+        <?php if (!$somenteLeitura): ?>
+            <?php if (!empty($setoresAtivos)): ?>
+                <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalTransferir">
+                    <i class="bi bi-arrow-left-right"></i> Transferir
+                </button>
+            <?php endif; ?>
+            <form method="post" action="<?= url('/whatsapp/atendimentos/encerrar') ?>" class="d-inline" onsubmit="return confirm('Encerrar este atendimento?');">
+                <input type="hidden" name="id" value="<?= (int)$atendimento['id'] ?>">
+                <button type="submit" class="btn btn-sm btn-outline-danger">
+                    <i class="bi bi-check2-circle"></i> Encerrar
+                </button>
+            </form>
         <?php endif; ?>
-        <form method="post" action="<?= url('/whatsapp/atendimentos/encerrar') ?>" class="d-inline" onsubmit="return confirm('Encerrar este atendimento?');">
-            <input type="hidden" name="id" value="<?= (int)$atendimento['id'] ?>">
-            <button type="submit" class="btn btn-sm btn-outline-danger">
-                <i class="bi bi-check2-circle"></i> Encerrar
-            </button>
-        </form>
     </div>
 </div>
+
+<?php if ($somenteLeitura): ?>
+    <div class="alert alert-secondary py-2 small">
+        <i class="bi bi-lock"></i> Atendimento encerrado em <?= data_br($atendimento['encerrado_em']) ?> -- só consulta, não é possível responder por aqui.
+    </div>
+<?php endif; ?>
 
 <div class="card border-0 shadow-sm">
     <div class="card-body" id="listaMensagens" data-atendimento-id="<?= (int)$atendimento['id'] ?>"
@@ -61,6 +74,7 @@ function renderizarBolha(array $m): string
             <?= renderizarBolha($m) ?>
         <?php endforeach; ?>
     </div>
+    <?php if (!$somenteLeitura): ?>
     <div class="card-footer bg-white position-relative">
         <div id="listaAutocompleteRapidas" class="list-group position-absolute shadow-sm"
              style="display:none; bottom:100%; left:16px; right:16px; max-height:200px; overflow-y:auto; z-index:10;"></div>
@@ -76,6 +90,7 @@ function renderizarBolha(array $m): string
             </button>
         </form>
     </div>
+    <?php endif; ?>
 </div>
 
 <script>
@@ -84,6 +99,8 @@ function renderizarBolha(array $m): string
     const form = document.getElementById('formResponder');
     const campo = document.getElementById('campoTexto');
     const atendimentoId = lista.dataset.atendimentoId;
+
+    lista.scrollTop = lista.scrollHeight;
 
     function ultimoIdRenderizado() {
         const bolhas = lista.querySelectorAll('[data-msg-id]');
@@ -157,6 +174,7 @@ function renderizarBolha(array $m): string
             .catch(function () {});
     }
 
+    if (form) {
     form.addEventListener('submit', function (evento) {
         evento.preventDefault();
 
@@ -193,7 +211,6 @@ function renderizarBolha(array $m): string
             });
     });
 
-    lista.scrollTop = lista.scrollHeight;
     setInterval(buscarNovas, 3000);
 
     // -- Emoji: mesma ideia dos chips de {nome}/{periodo} do Chatbot,
@@ -316,8 +333,62 @@ function renderizarBolha(array $m): string
             esconderAutocomplete();
         }
     });
+    } // if (form)
+
+    const botaoExportarPdf = document.getElementById('botaoExportarPdf');
+    botaoExportarPdf.addEventListener('click', function () {
+        const jsPDFClasse = window.jspdf && window.jspdf.jsPDF;
+        if (!jsPDFClasse || !window.html2canvas) {
+            alert('Não foi possível carregar as bibliotecas de exportação.');
+            return;
+        }
+
+        botaoExportarPdf.disabled = true;
+
+        const alturaOriginal = lista.style.height;
+        const overflowOriginal = lista.style.overflowY;
+        lista.style.height = 'auto';
+        lista.style.overflowY = 'visible';
+
+        window.html2canvas(lista, { backgroundColor: '#f5f7fb', scale: 2 }).then(function (canvas) {
+            lista.style.height = alturaOriginal;
+            lista.style.overflowY = overflowOriginal;
+
+            const pdf = new jsPDFClasse('p', 'pt', 'a4');
+            const margem = 24;
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            const pageHeight = pdf.internal.pageSize.getHeight();
+            const imgWidth = pageWidth - margem * 2;
+            const imgHeight = (canvas.height * imgWidth) / canvas.width;
+            const imgData = canvas.toDataURL('image/jpeg', 0.92);
+            const areaUtil = pageHeight - margem * 2;
+
+            let restante = imgHeight;
+            let deslocamento = 0;
+
+            pdf.addImage(imgData, 'JPEG', margem, margem, imgWidth, imgHeight);
+            restante -= areaUtil;
+
+            while (restante > 0) {
+                deslocamento += areaUtil;
+                pdf.addPage();
+                pdf.addImage(imgData, 'JPEG', margem, margem - deslocamento, imgWidth, imgHeight);
+                restante -= areaUtil;
+            }
+
+            pdf.save('atendimento-' + atendimentoId + '.pdf');
+        }).catch(function () {
+            lista.style.height = alturaOriginal;
+            lista.style.overflowY = overflowOriginal;
+            alert('Falha ao gerar o PDF.');
+        }).finally(function () {
+            botaoExportarPdf.disabled = false;
+        });
+    });
 })();
 </script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
 
 <?php if (!empty($setoresAtivos)): ?>
 <div class="modal fade" id="modalTransferir" tabindex="-1">
