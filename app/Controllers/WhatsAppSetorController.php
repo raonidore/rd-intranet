@@ -59,7 +59,7 @@ class WhatsAppSetorController extends Controller
 
         $id = (int)($_POST['id'] ?? 0);
         $nome = trim($_POST['nome'] ?? '');
-        $resultado = $this->service->atualizar($id, $nome, isset($_POST['ativo']));
+        $resultado = $this->service->atualizar($id, $nome, isset($_POST['ativo']), isset($_POST['nps_ativo']));
 
         AuditService::registrar('WhatsApp', 'Atualizar setor', "Setor #{$id}: {$resultado['message']}");
 

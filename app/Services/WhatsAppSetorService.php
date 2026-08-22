@@ -60,7 +60,7 @@ class WhatsAppSetorService
     /**
      * @return array{success: bool, message: string}
      */
-    public function atualizar(int $id, string $nome, bool $ativo): array
+    public function atualizar(int $id, string $nome, bool $ativo, bool $npsAtivo = false): array
     {
         $nome = trim($nome);
 
@@ -72,8 +72,8 @@ class WhatsAppSetorService
             return ['success' => false, 'message' => 'Já existe um setor com esse nome.'];
         }
 
-        $stmt = $this->pdo->prepare('UPDATE whatsapp_setores SET nome = ?, ativo = ? WHERE id = ?');
-        $stmt->execute([$nome, $ativo ? 1 : 0, $id]);
+        $stmt = $this->pdo->prepare('UPDATE whatsapp_setores SET nome = ?, ativo = ?, nps_ativo = ? WHERE id = ?');
+        $stmt->execute([$nome, $ativo ? 1 : 0, $npsAtivo ? 1 : 0, $id]);
 
         return ['success' => true, 'message' => 'Setor atualizado com sucesso.'];
     }

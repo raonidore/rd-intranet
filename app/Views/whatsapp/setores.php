@@ -33,6 +33,7 @@ use App\Components\Alert;
             <div>
                 <strong><?= htmlspecialchars($setor['nome']) ?></strong>
                 <?= $setor['ativo'] ? '<span class="badge text-bg-success ms-1">Ativo</span>' : '<span class="badge text-bg-secondary ms-1">Inativo</span>' ?>
+                <?php if ($setor['nps_ativo']): ?><span class="badge text-bg-info ms-1">NPS</span><?php endif; ?>
                 <span class="badge text-bg-light border ms-1"><?= (int)$setor['total_usuarios'] ?> usuário(s)</span>
             </div>
             <i class="bi bi-chevron-down text-muted"></i>
@@ -51,6 +52,12 @@ use App\Components\Alert;
                             <div class="form-check mb-2">
                                 <input type="checkbox" name="ativo" class="form-check-input" id="ativo<?= (int)$setor['id'] ?>" <?= $setor['ativo'] ? 'checked' : '' ?>>
                                 <label class="form-check-label small" for="ativo<?= (int)$setor['id'] ?>">Setor ativo</label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input type="checkbox" name="nps_ativo" class="form-check-input" id="nps<?= (int)$setor['id'] ?>" <?= $setor['nps_ativo'] ? 'checked' : '' ?>>
+                                <label class="form-check-label small" for="nps<?= (int)$setor['id'] ?>">
+                                    Pesquisa de satisfação (NPS) ao encerrar
+                                </label>
                             </div>
                             <button type="submit" class="btn btn-sm btn-outline-primary">
                                 <i class="bi bi-check-lg"></i> Salvar

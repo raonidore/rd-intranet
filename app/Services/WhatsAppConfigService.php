@@ -38,6 +38,12 @@ class WhatsAppConfigService
     private const EXPEDIENTE_FIM_PADRAO = '18:00';
     private const MENSAGEM_FORA_EXPEDIENTE_PADRAO = 'Olá, {nome}! Nosso horário de atendimento está encerrado no momento. Retornaremos assim que estivermos disponíveis.';
 
+    private const CHAVE_NPS_PERGUNTA = 'whatsapp_nps_pergunta';
+    private const CHAVE_NPS_AGRADECIMENTO = 'whatsapp_nps_agradecimento';
+
+    private const NPS_PERGUNTA_PADRAO = 'De 0 a 10, o quanto você recomendaria nosso atendimento a um amigo ou colega? Responda só com o número.';
+    private const NPS_AGRADECIMENTO_PADRAO = 'Muito obrigado pela sua avaliação, {nome}!';
+
     public function tipoIntegracao(): string
     {
         $tipo = ConfigService::get(self::CHAVE_TIPO, 'qrcode') ?: 'qrcode';
@@ -206,5 +212,33 @@ class WhatsAppConfigService
         ConfigService::set(self::CHAVE_MENSAGEM_FORA_EXPEDIENTE, $mensagem);
 
         return ['success' => true, 'message' => 'Horário de expediente salvo.'];
+    }
+
+    public function npsPergunta(): string
+    {
+        return (string)(ConfigService::get(self::CHAVE_NPS_PERGUNTA, self::NPS_PERGUNTA_PADRAO) ?: self::NPS_PERGUNTA_PADRAO);
+    }
+
+    public function npsAgradecimento(): string
+    {
+        return (string)(ConfigService::get(self::CHAVE_NPS_AGRADECIMENTO, self::NPS_AGRADECIMENTO_PADRAO) ?: self::NPS_AGRADECIMENTO_PADRAO);
+    }
+
+    /**
+     * @return array{success: bool, message: string}
+     */
+    public function salvarNps(string $pergunta, string $agradecimento): array
+    {
+        $pergunta = trim($pergunta);
+        $agradecimento = trim($agradecimento);
+
+        if ($pergunta === '' || $agradecimento === '') {
+            return ['success' => false, 'message' => 'Preencha a pergunta e a mensagem de agradecimento.'];
+        }
+
+        ConfigService::set(self::CHAVE_NPS_PERGUNTA, $pergunta);
+        ConfigService::set(self::CHAVE_NPS_AGRADECIMENTO, $agradecimento);
+
+        return ['success' => true, 'message' => 'Mensagens de NPS salvas.'];
     }
 }

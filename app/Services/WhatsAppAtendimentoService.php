@@ -39,10 +39,19 @@ class WhatsAppAtendimentoService
         $resultado = $this->registrarMensagemEntrada((int)$atendimento['id'], $texto, $tipo, $whatsappMessageId);
 
         // $resultado === null quer dizer "já tinha essa mensagem" (retry
-        // do provedor) -- não roda o bot de novo pra não duplicar
-        // resposta. Bot só reage a texto (mídia é só logada por
+        // do provedor) -- não roda o bot/NPS de novo pra não duplicar
+        // resposta. Bot/NPS só reagem a texto (mídia é só logada por
         // enquanto, mesma limitação em whatsapp-bridge/index.js).
-        if ($resultado === null || $atendimento['status'] !== 'bot' || $tipo !== 'texto') {
+        if ($resultado === null || $tipo !== 'texto') {
+            return;
+        }
+
+        if ($atendimento['status'] === 'aguardando_nps') {
+            (new WhatsAppNpsService())->processarResposta($atendimento + ['numero' => $numero, 'contato_nome' => $contato['nome']], $texto);
+            return;
+        }
+
+        if ($atendimento['status'] !== 'bot') {
             return;
         }
 
@@ -136,7 +145,7 @@ class WhatsAppAtendimentoService
     public function buscarComContato(int $id): ?array
     {
         $stmt = $this->pdo->prepare(
-            "SELECT a.*, c.numero, c.nome AS contato_nome, s.nome AS setor_nome
+            "SELECT a.*, c.numero, c.nome AS contato_nome, s.nome AS setor_nome, s.nps_ativo
              FROM whatsapp_atendimentos a
              JOIN whatsapp_contatos c ON c.id = a.contato_id
              LEFT JOIN whatsapp_setores s ON s.id = a.setor_id
@@ -298,15 +307,27 @@ class WhatsAppAtendimentoService
     {
         $atendimento = $this->buscarComContato($atendimentoId);
 
-        if ($atendimento) {
-            $mensagemFechamento = (new WhatsAppChatbotService())->renderizarTemplate(
-                (new WhatsAppConfigService())->encerramentoNormal(),
-                ['nome' => $atendimento['contato_nome']]
-            );
-
-            (new WhatsAppMensagemService())->enviar($atendimento['numero'], $mensagemFechamento);
-            $this->registrarMensagemSaida($atendimentoId, $mensagemFechamento, 'bot');
+        if (!$atendimento) {
+            return ['success' => true, 'message' => 'Atendimento encerrado.'];
         }
+
+        // Setor com NPS ativo: em vez de fechar na hora, manda a
+        // pesquisa de satisfação e deixa o atendimento em
+        // 'aguardando_nps' -- só fecha de verdade depois que o cliente
+        // responder (ou pelo cron de inatividade, se nunca responder).
+        if ($atendimento['nps_ativo']) {
+            (new WhatsAppNpsService())->perguntar($atendimento);
+
+            return ['success' => true, 'message' => 'Atendimento encerrado -- pesquisa de satisfação enviada ao cliente.'];
+        }
+
+        $mensagemFechamento = (new WhatsAppChatbotService())->renderizarTemplate(
+            (new WhatsAppConfigService())->encerramentoNormal(),
+            ['nome' => $atendimento['contato_nome']]
+        );
+
+        (new WhatsAppMensagemService())->enviar($atendimento['numero'], $mensagemFechamento);
+        $this->registrarMensagemSaida($atendimentoId, $mensagemFechamento, 'bot');
 
         $stmt = $this->pdo->prepare("UPDATE whatsapp_atendimentos SET status = 'encerrado', encerrado_em = NOW() WHERE id = ?");
         $stmt->execute([$atendimentoId]);

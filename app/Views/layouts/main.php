@@ -748,7 +748,8 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
     $temWhatsapp = PermissionService::temAcesso('whatsapp_atendimentos')
         || PermissionService::temAcesso('whatsapp_fila')
         || PermissionService::temAcesso('whatsapp_chatbot')
-        || PermissionService::temAcesso('whatsapp_setores');
+        || PermissionService::temAcesso('whatsapp_setores')
+        || PermissionService::temAcesso('whatsapp_nps');
     ?>
     <?php if ($temWhatsapp): ?>
     <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuWhatsapp"
@@ -775,6 +776,11 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         <?php if (PermissionService::temAcesso('whatsapp_setores')): ?>
         <a href="<?= url('/whatsapp/setores') ?>" class="<?= $uriAtual === '/whatsapp/setores' ? 'active' : '' ?>">
             <i class="bi bi-diagram-3 me-2"></i> Setores
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('whatsapp_nps')): ?>
+        <a href="<?= url('/whatsapp/nps') ?>" class="<?= $uriAtual === '/whatsapp/nps' ? 'active' : '' ?>">
+            <i class="bi bi-emoji-smile me-2"></i> NPS
         </a>
         <?php endif; ?>
     </div>
