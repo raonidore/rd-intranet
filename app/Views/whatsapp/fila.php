@@ -28,6 +28,7 @@ use App\Components\Alert;
                         <th>Número</th>
                         <th>Setor</th>
                         <th>Aguardando desde</th>
+                        <th>Tempo</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -38,6 +39,9 @@ use App\Components\Alert;
                             <td><code><?= htmlspecialchars(telefone_br($item['numero'])) ?></code></td>
                             <td><?= $item['setor_nome'] ? htmlspecialchars($item['setor_nome']) : '<span class="text-muted">-</span>' ?></td>
                             <td><?= data_br($item['aberto_em']) ?></td>
+                            <td>
+                                <span class="tempo-espera fw-semibold" data-aberto-em="<?= htmlspecialchars(str_replace(' ', 'T', $item['aberto_em'])) ?>">--:--</span>
+                            </td>
                             <td class="text-end">
                                 <form method="post" action="<?= url('/whatsapp/fila/assumir') ?>">
                                     <input type="hidden" name="id" value="<?= (int)$item['id'] ?>">
@@ -53,6 +57,26 @@ use App\Components\Alert;
         </div>
     </div>
 <?php endif; ?>
+
+<script>
+(function () {
+    function atualizarTempos() {
+        var agora = new Date();
+
+        document.querySelectorAll('.tempo-espera').forEach(function (el) {
+            var abertoEm = new Date(el.dataset.abertoEm);
+            var segundos = Math.max(0, Math.floor((agora - abertoEm) / 1000));
+            var horas = Math.floor(segundos / 3600);
+            var minutos = Math.floor((segundos % 3600) / 60);
+
+            el.textContent = String(horas).padStart(2, '0') + ':' + String(minutos).padStart(2, '0');
+        });
+    }
+
+    atualizarTempos();
+    setInterval(atualizarTempos, 1000);
+})();
+</script>
 
 <?php
 $conteudo = ob_get_clean();
