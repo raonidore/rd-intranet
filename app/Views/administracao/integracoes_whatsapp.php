@@ -20,31 +20,31 @@ use App\Components\Alert;
         <form method="post" action="<?= url('/administracao/integracoes/whatsapp/tipo') ?>">
             <div class="row g-2 mb-3">
                 <div class="col-md-4">
-                    <div class="form-check border rounded p-2 h-100">
-                        <input type="radio" name="tipo" value="qrcode" class="form-check-input" id="tipoQrcode" <?= $tipoAtual === 'qrcode' ? 'checked' : '' ?>>
-                        <label class="form-check-label d-block" for="tipoQrcode">
-                            <strong>QR Code</strong>
-                            <div class="text-muted small">Sem custo por mensagem, sem aprovação prévia. Não é a API oficial da Meta.</div>
-                        </label>
-                    </div>
+                    <label class="border rounded p-2 h-100 d-flex align-items-start gap-2 mb-0" for="tipoQrcode" style="cursor:pointer">
+                        <input type="radio" name="tipo" value="qrcode" class="form-check-input mt-1 flex-shrink-0" id="tipoQrcode" <?= $tipoAtual === 'qrcode' ? 'checked' : '' ?>>
+                        <span>
+                            <strong class="d-block">QR Code</strong>
+                            <span class="text-muted small">Sem custo por mensagem, sem aprovação prévia. Não é a API oficial da Meta.</span>
+                        </span>
+                    </label>
                 </div>
                 <div class="col-md-4">
-                    <div class="form-check border rounded p-2 h-100">
-                        <input type="radio" name="tipo" value="api_oficial" class="form-check-input" id="tipoApiOficial" <?= $tipoAtual === 'api_oficial' ? 'checked' : '' ?>>
-                        <label class="form-check-label d-block" for="tipoApiOficial">
-                            <strong>API Oficial (Meta)</strong>
-                            <div class="text-muted small">Precisa de conta Meta Business verificada e número aprovado. <?= $metaConfigurado ? '<span class="text-success">Configurado.</span>' : '' ?></div>
-                        </label>
-                    </div>
+                    <label class="border rounded p-2 h-100 d-flex align-items-start gap-2 mb-0" for="tipoApiOficial" style="cursor:pointer">
+                        <input type="radio" name="tipo" value="api_oficial" class="form-check-input mt-1 flex-shrink-0" id="tipoApiOficial" <?= $tipoAtual === 'api_oficial' ? 'checked' : '' ?>>
+                        <span>
+                            <strong class="d-block">API Oficial (Meta)</strong>
+                            <span class="text-muted small">Precisa de conta Meta Business verificada e número aprovado. <?= $metaConfigurado ? '<span class="text-success">Configurado.</span>' : '' ?></span>
+                        </span>
+                    </label>
                 </div>
                 <div class="col-md-4">
-                    <div class="form-check border rounded p-2 h-100">
-                        <input type="radio" name="tipo" value="twilio" class="form-check-input" id="tipoTwilio" <?= $tipoAtual === 'twilio' ? 'checked' : '' ?>>
-                        <label class="form-check-label d-block" for="tipoTwilio">
-                            <strong>Twilio</strong>
-                            <div class="text-muted small">Custo por mensagem via Twilio, aprovação mais rápida. <?= $twilioConfigurado ? '<span class="text-success">Configurado.</span>' : '' ?></div>
-                        </label>
-                    </div>
+                    <label class="border rounded p-2 h-100 d-flex align-items-start gap-2 mb-0" for="tipoTwilio" style="cursor:pointer">
+                        <input type="radio" name="tipo" value="twilio" class="form-check-input mt-1 flex-shrink-0" id="tipoTwilio" <?= $tipoAtual === 'twilio' ? 'checked' : '' ?>>
+                        <span>
+                            <strong class="d-block">Twilio</strong>
+                            <span class="text-muted small">Custo por mensagem via Twilio, aprovação mais rápida. <?= $twilioConfigurado ? '<span class="text-success">Configurado.</span>' : '' ?></span>
+                        </span>
+                    </label>
                 </div>
             </div>
             <button type="submit" class="btn btn-sm btn-outline-primary">
