@@ -4,6 +4,7 @@
   "private": true,
   "description": "Bridge local entre a RD Intranet e o WhatsApp via QR Code (Baileys). Instalado/gerenciado por scripts/system/whatsapp_bridge_instalar_web.sh -- não roda sozinho fora desse fluxo.",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "start": "node index.js"
   },
@@ -11,7 +12,7 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.7.0",
+    "@whiskeysockets/baileys": "7.0.0-rc14",
     "pino": "^9.0.0",
     "qrcode": "^1.5.4"
   }

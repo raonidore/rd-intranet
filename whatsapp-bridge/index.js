@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * Bridge local entre a RD Intranet (PHP) e o WhatsApp via QR Code
  * (Baileys) -- roda como serviço systemd próprio, instalado/gerenciado
@@ -11,15 +9,31 @@
  * local (GET /status, GET /qrcode, POST /enviar, POST /logout,
  * protegidos pela mesma chave em X-Api-Key) e recebe mensagens novas
  * via webhook (POST pro WEBHOOK_URL configurado, mesma chave).
+ *
+ * Baileys 7.x (ESM só, dependências novas de escrever nós mesmos:
+ * getMessage() e o cache de chaves) -- migrado do 6.7.x por causa de
+ * erros recorrentes de sessão ("No session record"/"Bad MAC") em
+ * contatos endereçados por LID, corrigidos na reescrita de sessão da
+ * v7 (fix de "ghost sessions" + mapeamento LID<->PN mais completo).
  */
 
-const fs = require('fs');
-const path = require('path');
-const http = require('http');
-const crypto = require('crypto');
-const pino = require('pino');
-const QRCode = require('qrcode');
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, jidDecode, isLidUser, downloadMediaMessage } = require('@whiskeysockets/baileys');
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import http from 'http';
+import crypto from 'crypto';
+import pino from 'pino';
+import QRCode from 'qrcode';
+import makeWASocket, {
+    useMultiFileAuthState,
+    makeCacheableSignalKeyStore,
+    DisconnectReason,
+    jidDecode,
+    isLidUser,
+    downloadMediaMessage,
+} from '@whiskeysockets/baileys';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // libsignal-node (dependência do Baileys pro protocolo Signal) despeja a
 // sessão inteira -- incluindo chaves privadas de verdade -- via
@@ -75,6 +89,20 @@ let qrcodeAtualDataUri = null;
 let numeroConectado = null;
 let socketAtual = null;
 
+// Baileys 7 não guarda mais histórico de mensagens internamente (virou
+// stateless por padrão) -- getMessage() abaixo depende da gente lembrar
+// o que MANDAMOS recentemente, senão uma retentativa de entrega pedida
+// pelo outro lado (ex: ele não conseguiu decriptar da primeira vez) não
+// tem o que reenviar. Só guarda por alguns minutos, é só pra cobrir
+// retry de curto prazo, não é histórico de verdade (esse fica no MySQL).
+const MENSAGENS_RECENTES_TTL_MS = 5 * 60 * 1000;
+const mensagensRecentes = new Map();
+
+function lembrarMensagemEnviada(id, conteudo) {
+    mensagensRecentes.set(id, conteudo);
+    setTimeout(() => mensagensRecentes.delete(id), MENSAGENS_RECENTES_TTL_MS);
+}
+
 function chaveValida(chaveRecebida) {
     const a = Buffer.from(String(chaveRecebida));
     const b = Buffer.from(API_KEY);
@@ -106,10 +134,23 @@ async function iniciarSessaoWhatsapp() {
     const { state, saveCreds } = await useMultiFileAuthState(SESSAO_DIR);
 
     const socket = makeWASocket({
-        auth: state,
+        auth: {
+            creds: state.creds,
+            // Cache em memória por cima do keystore em disco -- reduz
+            // leitura/escrita repetida de chave durante uma rajada de
+            // mensagens, que é exatamente o tipo de corrida que pode
+            // deixar sessão inconsistente (recomendado pelo guia de
+            // migração da v7 por causa disso).
+            keys: makeCacheableSignalKeyStore(state.keys, logger),
+        },
         logger,
         printQRInTerminal: false,
         syncFullHistory: false,
+        // Obrigatório na v7 (deixou de manter histórico interno) -- usado
+        // quando o outro lado pede reenvio de algo que a gente mandou.
+        getMessage: async (key) => {
+            return mensagensRecentes.get(key.id);
+        },
     });
     socketAtual = socket;
 
@@ -276,12 +317,12 @@ const servidor = http.createServer(async (req, res) => {
 
             const jid = String(dados.numero || '').replace(/\D+/g, '') + '@s.whatsapp.net';
 
+            let conteudo;
             if (dados.midia_base64) {
                 const buffer = Buffer.from(String(dados.midia_base64), 'base64');
                 const mimetype = String(dados.midia_mimetype || 'application/octet-stream');
                 const legenda = dados.legenda ? String(dados.legenda) : undefined;
 
-                let conteudo;
                 if (dados.midia_tipo === 'imagem') {
                     conteudo = { image: buffer, mimetype, caption: legenda };
                 } else if (dados.midia_tipo === 'audio') {
@@ -293,10 +334,13 @@ const servidor = http.createServer(async (req, res) => {
                     res.end(JSON.stringify({ success: false, message: 'Tipo de mídia inválido.' }));
                     return;
                 }
-
-                await socketAtual.sendMessage(jid, conteudo);
             } else {
-                await socketAtual.sendMessage(jid, { text: String(dados.texto || '') });
+                conteudo = { text: String(dados.texto || '') };
+            }
+
+            const enviada = await socketAtual.sendMessage(jid, conteudo);
+            if (enviada && enviada.key && enviada.key.id && enviada.message) {
+                lembrarMensagemEnviada(enviada.key.id, enviada.message);
             }
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
