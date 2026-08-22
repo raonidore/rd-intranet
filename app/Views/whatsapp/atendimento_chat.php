@@ -51,9 +51,11 @@ function renderizarBolha(array $m): string
             <?= renderizarBolha($m) ?>
         <?php endforeach; ?>
     </div>
-    <div class="card-footer bg-white">
+    <div class="card-footer bg-white position-relative">
+        <div id="listaAutocompleteRapidas" class="list-group position-absolute shadow-sm"
+             style="display:none; bottom:100%; left:16px; right:16px; max-height:200px; overflow-y:auto; z-index:10;"></div>
         <form id="formResponder" class="d-flex gap-2">
-            <input type="text" id="campoTexto" class="form-control" placeholder="Digite uma mensagem..." autocomplete="off" required>
+            <input type="text" id="campoTexto" class="form-control" placeholder="Digite uma mensagem... (use /comando pra respostas rápidas)" autocomplete="off" required>
             <button type="submit" class="btn btn-primary text-nowrap">
                 <i class="bi bi-send"></i> Enviar
             </button>
@@ -178,6 +180,87 @@ function renderizarBolha(array $m): string
 
     lista.scrollTop = lista.scrollHeight;
     setInterval(buscarNovas, 3000);
+
+    // -- Mensagens rápidas: digitar "/comando" mostra sugestões, clicar
+    // substitui o campo pelo texto completo da mensagem cadastrada.
+    const listaAutocomplete = document.getElementById('listaAutocompleteRapidas');
+    let mensagensRapidas = null;
+
+    function carregarMensagensRapidas() {
+        if (mensagensRapidas !== null) {
+            return Promise.resolve(mensagensRapidas);
+        }
+        return fetch(<?= json_encode(url('/whatsapp/mensagens-rapidas/buscar')) ?>)
+            .then(function (r) { return r.json(); })
+            .then(function (dados) {
+                mensagensRapidas = (dados.success && dados.mensagens) ? dados.mensagens : [];
+                return mensagensRapidas;
+            })
+            .catch(function () { return []; });
+    }
+
+    function esconderAutocomplete() {
+        listaAutocomplete.style.display = 'none';
+        listaAutocomplete.innerHTML = '';
+    }
+
+    function mostrarAutocomplete(itens) {
+        listaAutocomplete.innerHTML = '';
+
+        if (!itens.length) {
+            esconderAutocomplete();
+            return;
+        }
+
+        itens.forEach(function (item) {
+            const botao = document.createElement('button');
+            botao.type = 'button';
+            botao.className = 'list-group-item list-group-item-action py-1';
+
+            const elComando = document.createElement('code');
+            elComando.textContent = '/' + item.comando;
+            botao.appendChild(elComando);
+
+            const elTexto = document.createElement('span');
+            elTexto.className = 'text-muted small ms-2';
+            elTexto.textContent = item.mensagem;
+            botao.appendChild(elTexto);
+
+            botao.addEventListener('click', function () {
+                campo.value = item.mensagem;
+                esconderAutocomplete();
+                campo.focus();
+            });
+
+            listaAutocomplete.appendChild(botao);
+        });
+
+        listaAutocomplete.style.display = '';
+    }
+
+    campo.addEventListener('input', function () {
+        const valor = campo.value;
+
+        if (!valor.startsWith('/')) {
+            esconderAutocomplete();
+            return;
+        }
+
+        const filtro = valor.slice(1).toLowerCase();
+
+        carregarMensagensRapidas().then(function (itens) {
+            const filtrados = itens.filter(function (item) {
+                return item.comando.toLowerCase().startsWith(filtro);
+            });
+            mostrarAutocomplete(filtrados);
+        });
+    });
+
+    document.addEventListener('click', function (evento) {
+        if (evento.target !== campo && !listaAutocomplete.contains(evento.target)) {
+            esconderAutocomplete();
+        }
+    });
 })();
 </script>
 

@@ -3,7 +3,7 @@
 -- cria todas as tabelas ja no estado final, sem precisar repetir o
 -- historico incremental de database/migrations/ (algumas dessas
 -- migrations usam ALTER TABLE, que nao e seguro reaplicar aqui).
--- Gerado em 2026-08-21 23:18:14.
+-- Gerado em 2026-08-22 03:46:03.
 
 -- Import nao respeita ordem de dependencia entre tabelas (algumas tem FK
 -- pra tabelas que so aparecem depois neste arquivo) -- desliga a checagem
@@ -1187,6 +1187,18 @@ CREATE TABLE IF NOT EXISTS `whatsapp_mensagens` (
   KEY `fk_whatsapp_mensagens_usuario` (`usuario_id`),
   CONSTRAINT `fk_whatsapp_mensagens_atendimento` FOREIGN KEY (`atendimento_id`) REFERENCES `whatsapp_atendimentos` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_whatsapp_mensagens_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- whatsapp_mensagens_rapidas
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `whatsapp_mensagens_rapidas` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `comando` varchar(50) NOT NULL,
+  `mensagem` text NOT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_whatsapp_mensagens_rapidas_comando` (`comando`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------

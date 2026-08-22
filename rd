@@ -20,6 +20,7 @@ if (!$comando) {
     echo "  backup:executar <id>    Roda o backup em nuvem do destino <id> (Backup > Configuração)\n";
     echo "  certificado:verificar   Manda e-mail se o certificado HTTPS estiver perto de vencer/vencido\n";
     echo "  kb:sincronizar          Atualiza o cache local da Base de Conhecimento pública e confere status dos artigos propostos\n";
+    echo "  whatsapp:encerrar-inativos  Encerra atendimentos sem mensagem há mais tempo que o configurado em Chatbot > Finalização\n";
     exit;
 }
 
@@ -261,6 +262,12 @@ switch ($comando) {
         if (!$resultado['success']) {
             exit(1);
         }
+
+        break;
+
+    case 'whatsapp:encerrar-inativos':
+        $resultado = (new \App\Services\WhatsAppAtendimentoService())->encerrarInativos();
+        echo "OK: {$resultado['encerrados']} atendimento(s) encerrado(s) por inatividade.\n";
 
         break;
 

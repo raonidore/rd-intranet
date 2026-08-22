@@ -185,10 +185,28 @@ class WhatsAppAtendimentoService
     }
 
     /**
+     * Encerramento manual (atendente clica "Encerrar" no chat) -- avisa
+     * o cliente com a mensagem configurada em Chatbot > Finalização
+     * antes de marcar `encerrado`. Diferente do encerramento pelo
+     * próprio chatbot (nó tipo 'resposta_final'), que já manda seu
+     * texto específico -- essa mensagem genérica não se aplica lá.
+     *
      * @return array{success: bool, message: string}
      */
     public function encerrar(int $atendimentoId): array
     {
+        $atendimento = $this->buscarComContato($atendimentoId);
+
+        if ($atendimento) {
+            $mensagemFechamento = (new WhatsAppChatbotService())->renderizarTemplate(
+                (new WhatsAppConfigService())->encerramentoNormal(),
+                ['nome' => $atendimento['contato_nome']]
+            );
+
+            (new WhatsAppMensagemService())->enviar($atendimento['numero'], $mensagemFechamento);
+            $this->registrarMensagemSaida($atendimentoId, $mensagemFechamento, 'bot');
+        }
+
         $stmt = $this->pdo->prepare("UPDATE whatsapp_atendimentos SET status = 'encerrado', encerrado_em = NOW() WHERE id = ?");
         $stmt->execute([$atendimentoId]);
 
@@ -251,6 +269,52 @@ class WhatsAppAtendimentoService
         $this->tocarUltimaMensagem($atendimentoId);
 
         return $id;
+    }
+
+    /**
+     * Encerra automaticamente atendimentos sem nenhuma mensagem (entrada
+     * ou saída) há mais tempo que o configurado em Chatbot >
+     * Finalização -- chamado pelo cron nativo "whatsapp:encerrar-inativos"
+     * (ver AtualizacaoService::garantirCronWhatsappInatividade()).
+     * "Geral": vale pra qualquer status não encerrado (bot, fila,
+     * em_atendimento), não só quem está preso no bot.
+     *
+     * @return array{encerrados: int}
+     */
+    public function encerrarInativos(): array
+    {
+        $config = new WhatsAppConfigService();
+        $timeoutMinutos = $config->timeoutMinutos();
+        $mensagemBase = $config->encerramentoInatividade();
+        $chatbot = new WhatsAppChatbotService();
+
+        $stmt = $this->pdo->prepare(
+            "SELECT a.id, c.numero, c.nome
+             FROM whatsapp_atendimentos a
+             JOIN whatsapp_contatos c ON c.id = a.contato_id
+             WHERE a.status != 'encerrado'
+               AND a.ultima_mensagem_em < (NOW() - INTERVAL ? MINUTE)"
+        );
+        $stmt->execute([$timeoutMinutos]);
+        $inativos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        if (!$inativos) {
+            return ['encerrados' => 0];
+        }
+
+        $mensageiro = new WhatsAppMensagemService();
+
+        foreach ($inativos as $item) {
+            $mensagemFechamento = $chatbot->renderizarTemplate($mensagemBase, ['nome' => $item['nome']]);
+
+            $mensageiro->enviar($item['numero'], $mensagemFechamento);
+            $this->registrarMensagemSaida((int)$item['id'], $mensagemFechamento, 'bot');
+
+            $this->pdo->prepare("UPDATE whatsapp_atendimentos SET status = 'encerrado', encerrado_em = NOW() WHERE id = ?")
+                ->execute([$item['id']]);
+        }
+
+        return ['encerrados' => count($inativos)];
     }
 
     private function tocarUltimaMensagem(int $atendimentoId): void

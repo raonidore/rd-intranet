@@ -181,6 +181,7 @@ class AtualizacaoService
             $this->garantirCronsColeta();
             $this->garantirCronCertificado();
             $this->garantirCronBaseConhecimento();
+            $this->garantirCronWhatsappInatividade();
         }
 
         $commitDepois = $this->commitAtual();
@@ -315,6 +316,24 @@ class AtualizacaoService
             'Atualiza o cache local dos artigos publicos aprovados e confere o status dos artigos propostos por esta instalacao.',
             '@daily',
             'php ' . $this->repoDir() . '/rd kb:sincronizar'
+        );
+    }
+
+    /**
+     * Cron nativo do módulo WhatsApp: encerra sozinho qualquer
+     * atendimento (bot, fila ou já em atendimento) sem nenhuma
+     * mensagem há mais tempo que o configurado em WhatsApp > Chatbot >
+     * Finalização, mandando a mensagem de encerramento por inatividade
+     * antes. Roda mesmo sem nenhuma integração configurada (não faz
+     * nada, sem erro, se não houver atendimento nenhum aberto).
+     */
+    public function garantirCronWhatsappInatividade(): void
+    {
+        $this->garantirCronJob(
+            'Encerrar atendimentos WhatsApp inativos',
+            'Encerra automaticamente conversas do módulo WhatsApp sem mensagem há mais tempo que o configurado em WhatsApp > Chatbot > Finalização.',
+            '*/5 * * * *',
+            'php ' . $this->repoDir() . '/rd whatsapp:encerrar-inativos'
         );
     }
 

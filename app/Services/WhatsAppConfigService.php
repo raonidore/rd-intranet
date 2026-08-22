@@ -21,6 +21,14 @@ class WhatsAppConfigService
 
     private const PORTA_PADRAO = 3300;
 
+    private const CHAVE_TIMEOUT_MINUTOS = 'whatsapp_chatbot_timeout_minutos';
+    private const CHAVE_ENCERRAMENTO_NORMAL = 'whatsapp_chatbot_encerramento_normal';
+    private const CHAVE_ENCERRAMENTO_INATIVIDADE = 'whatsapp_chatbot_encerramento_inatividade';
+
+    private const TIMEOUT_MINUTOS_PADRAO = 40;
+    private const ENCERRAMENTO_NORMAL_PADRAO = 'Atendimento finalizado. Qualquer dúvida, é só chamar novamente!';
+    private const ENCERRAMENTO_INATIVIDADE_PADRAO = 'Este atendimento foi encerrado automaticamente por falta de interação. Caso precise de algo, é só mandar uma mensagem que a gente recomeça.';
+
     public function tipoIntegracao(): string
     {
         $tipo = ConfigService::get(self::CHAVE_TIPO, 'qrcode') ?: 'qrcode';
@@ -84,5 +92,45 @@ class WhatsAppConfigService
         ConfigService::set(self::CHAVE_BRIDGE_API_KEY_CIFRADA, CryptoService::encriptar($chave));
 
         return $chave;
+    }
+
+    public function timeoutMinutos(): int
+    {
+        $valor = (int)(ConfigService::get(self::CHAVE_TIMEOUT_MINUTOS, (string)self::TIMEOUT_MINUTOS_PADRAO) ?: self::TIMEOUT_MINUTOS_PADRAO);
+
+        return $valor > 0 ? $valor : self::TIMEOUT_MINUTOS_PADRAO;
+    }
+
+    public function encerramentoNormal(): string
+    {
+        return (string)(ConfigService::get(self::CHAVE_ENCERRAMENTO_NORMAL, self::ENCERRAMENTO_NORMAL_PADRAO) ?: self::ENCERRAMENTO_NORMAL_PADRAO);
+    }
+
+    public function encerramentoInatividade(): string
+    {
+        return (string)(ConfigService::get(self::CHAVE_ENCERRAMENTO_INATIVIDADE, self::ENCERRAMENTO_INATIVIDADE_PADRAO) ?: self::ENCERRAMENTO_INATIVIDADE_PADRAO);
+    }
+
+    /**
+     * @return array{success: bool, message: string}
+     */
+    public function salvarFinalizacao(int $timeoutMinutos, string $encerramentoNormal, string $encerramentoInatividade): array
+    {
+        if ($timeoutMinutos < 5 || $timeoutMinutos > 1440) {
+            return ['success' => false, 'message' => 'Informe um tempo de inatividade entre 5 e 1440 minutos.'];
+        }
+
+        $encerramentoNormal = trim($encerramentoNormal);
+        $encerramentoInatividade = trim($encerramentoInatividade);
+
+        if ($encerramentoNormal === '' || $encerramentoInatividade === '') {
+            return ['success' => false, 'message' => 'Preencha as duas mensagens de encerramento.'];
+        }
+
+        ConfigService::set(self::CHAVE_TIMEOUT_MINUTOS, (string)$timeoutMinutos);
+        ConfigService::set(self::CHAVE_ENCERRAMENTO_NORMAL, $encerramentoNormal);
+        ConfigService::set(self::CHAVE_ENCERRAMENTO_INATIVIDADE, $encerramentoInatividade);
+
+        return ['success' => true, 'message' => 'Configuração de finalização salva.'];
     }
 }

@@ -47,6 +47,16 @@ class WhatsAppContatoService
         return ['id' => (int)$this->pdo->lastInsertId(), 'numero' => $numero, 'nome' => $nome];
     }
 
+    public function buscarPorId(int $id): ?array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM whatsapp_contatos WHERE id = ?');
+        $stmt->execute([$id]);
+
+        $contato = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $contato ?: null;
+    }
+
     private function normalizarNumero(string $numero): string
     {
         return preg_replace('/\D+/', '', $numero) ?? '';

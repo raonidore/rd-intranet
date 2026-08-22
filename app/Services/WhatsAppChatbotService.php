@@ -4,15 +4,18 @@ namespace App\Services;
 
 use App\Core\Database;
 use PDO;
+use RuntimeException;
+use Throwable;
 
 /**
  * Motor do chatbot (árvore de menus, múltiplos níveis) + CRUD da
- * árvore usado pela tela de configuração. A mensagem de cada nó
- * "menu" é texto livre escrito pelo admin (inclusive a lista numerada
- * de opções) -- o motor só interpreta o NÚMERO que o cliente responde
- * como a posição (1, 2, 3...) entre os filhos ativos do nó atual, na
- * ordem de `ordem`. Por isso a tela mostra a posição de cada opção:
- * o admin precisa escrever esse número na mensagem do nó pai.
+ * árvore usado pela tela de configuração. A mensagem de um nó tipo
+ * 'menu' é só o texto de saudação/introdução -- a lista numerada das
+ * opções filhas é GERADA automaticamente (montarMensagemDoNo()), nunca
+ * digitada à mão pelo admin. O motor interpreta o NÚMERO que o cliente
+ * responde como a posição (1, 2, 3...) entre os filhos ativos do nó
+ * atual, na mesma ordem usada pra gerar a lista -- por isso os dois
+ * (texto mostrado e número aceito) nunca desincronizam.
  */
 class WhatsAppChatbotService
 {
@@ -67,11 +70,23 @@ class WhatsAppChatbotService
     // Árvore de opções (filhos da raiz em diante) -- CRUD pra tela
     // ------------------------------------------------------------------
 
-    public function arvoreDeOpcoes(): array
+    /**
+     * Filhos diretos de um nível (TODOS, não só os ativos -- usado pela
+     * tela, que precisa listar tudo pra edição; o motor usa a versão
+     * privada filhosAtivos()). Com a posição (1, 2, 3...) já calculada,
+     * mesmo número que o cliente digita pra escolher aquela opção.
+     */
+    public function filhos(int $noPaiId): array
     {
-        $raiz = $this->buscarRaizBruta();
+        $stmt = $this->pdo->prepare('SELECT * FROM whatsapp_chatbot_nos WHERE no_pai_id = ? ORDER BY ordem, id');
+        $stmt->execute([$noPaiId]);
+        $filhos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        return $raiz ? $this->montarSubarvore((int)$raiz['id']) : [];
+        foreach ($filhos as $indice => $filho) {
+            $filhos[$indice]['posicao'] = $indice + 1;
+        }
+
+        return $filhos;
     }
 
     public function no(int $id): ?array
@@ -84,71 +99,144 @@ class WhatsAppChatbotService
         return $no ?: null;
     }
 
-    /**
-     * @return array{success: bool, message: string}
-     */
-    public function criarNo(int $noPaiId, string $rotulo, string $mensagem, string $tipo, ?int $setorDestinoId): array
+    /** Caminho da raiz até o nó (inclusive), pra breadcrumb da tela. */
+    public function caminhoAteRaiz(int $noId): array
     {
-        $erro = $this->validarCampos($rotulo, $mensagem, $tipo, $setorDestinoId);
-        if ($erro) {
-            return $erro;
+        $caminho = [];
+        $atual = $this->no($noId);
+
+        while ($atual) {
+            array_unshift($caminho, $atual);
+            $atual = $atual['no_pai_id'] !== null ? $this->no((int)$atual['no_pai_id']) : null;
         }
 
-        $stmtOrdem = $this->pdo->prepare('SELECT COALESCE(MAX(ordem), -1) + 1 FROM whatsapp_chatbot_nos WHERE no_pai_id = ?');
-        $stmtOrdem->execute([$noPaiId]);
-        $proximaOrdem = (int)$stmtOrdem->fetchColumn();
-
-        $stmt = $this->pdo->prepare(
-            'INSERT INTO whatsapp_chatbot_nos (no_pai_id, ordem, rotulo, mensagem, tipo, setor_destino_id) VALUES (?, ?, ?, ?, ?, ?)'
-        );
-        $stmt->execute([
-            $noPaiId,
-            $proximaOrdem,
-            trim($rotulo),
-            trim($mensagem),
-            $tipo,
-            $tipo === 'encaminhar_setor' ? $setorDestinoId : null,
-        ]);
-
-        return ['success' => true, 'message' => 'Opção adicionada.'];
+        return $caminho;
     }
 
     /**
-     * @return array{success: bool, message: string}
+     * Monta o texto de verdade que vai pro cliente: aplica os
+     * templates ({nome}/{periodo}) e, só pra nó tipo 'menu', acrescenta
+     * a lista numerada dos filhos ativos (nunca escrita à mão).
      */
-    public function atualizarNo(int $id, string $rotulo, string $mensagem, string $tipo, ?int $setorDestinoId, bool $ativo): array
+    public function montarMensagemDoNo(array $no, array $filhosAtivos, array $contato): string
     {
-        $erro = $this->validarCampos($rotulo, $mensagem, $tipo, $setorDestinoId);
-        if ($erro) {
-            return $erro;
+        $texto = $this->renderizarTemplate($no['mensagem'], $contato);
+
+        if ($no['tipo'] !== 'menu' || empty($filhosAtivos)) {
+            return $texto;
         }
 
-        $stmt = $this->pdo->prepare(
-            'UPDATE whatsapp_chatbot_nos SET rotulo = ?, mensagem = ?, tipo = ?, setor_destino_id = ?, ativo = ? WHERE id = ?'
-        );
-        $stmt->execute([
-            trim($rotulo),
-            trim($mensagem),
-            $tipo,
-            $tipo === 'encaminhar_setor' ? $setorDestinoId : null,
-            $ativo ? 1 : 0,
-            $id,
-        ]);
+        $linhas = [];
+        foreach ($filhosAtivos as $indice => $filho) {
+            $linhas[] = ($indice + 1) . ' - ' . $filho['rotulo'];
+        }
 
-        return ['success' => true, 'message' => 'Opção atualizada.'];
+        return $texto . "\n\n" . implode("\n", $linhas);
+    }
+
+    public function renderizarTemplate(string $texto, array $contato): string
+    {
+        $hora = (int)date('G');
+        $periodo = $hora < 12 ? 'Bom dia' : ($hora < 18 ? 'Boa tarde' : 'Boa noite');
+        $nome = trim((string)($contato['nome'] ?? ''));
+
+        return str_replace(['{nome}', '{periodo}'], [$nome, $periodo], $texto);
     }
 
     /**
+     * Salva TODAS as opções de um nível de uma vez só (a tela manda a
+     * lista inteira) -- faz diff contra o que já existe: atualiza quem
+     * tem id, cria quem não tem, remove quem sumiu da lista (cascade
+     * cuida dos descendentes de quem foi removido). Tudo numa transação
+     * só, pra nunca ficar num estado parcial se der erro no meio.
+     *
+     * @param array<int, array{id: ?int, rotulo: string, tipo: string, setor_destino_id: ?int, mensagem: ?string}> $linhas
      * @return array{success: bool, message: string}
      */
-    public function excluirNo(int $id): array
+    public function salvarOpcoes(int $noPaiId, array $linhas): array
     {
-        // FK ON DELETE CASCADE cuida dos descendentes -- avisa no
-        // texto pra não ser surpresa (apaga uma sub-árvore inteira).
-        $stmt = $this->pdo->prepare('DELETE FROM whatsapp_chatbot_nos WHERE id = ?');
-        $stmt->execute([$id]);
+        if (!$this->no($noPaiId)) {
+            return ['success' => false, 'message' => 'Nível não encontrado.'];
+        }
 
-        return ['success' => true, 'message' => 'Opção removida (e as opções abaixo dela, se houver).'];
+        $existeStmt = $this->pdo->prepare('SELECT id FROM whatsapp_chatbot_nos WHERE no_pai_id = ?');
+        $existeStmt->execute([$noPaiId]);
+        $idsExistentes = array_map('intval', $existeStmt->fetchAll(PDO::FETCH_COLUMN));
+
+        $idsMantidos = [];
+        $ordem = 0;
+
+        $this->pdo->beginTransaction();
+
+        try {
+            foreach ($linhas as $linha) {
+                $rotulo = trim((string)($linha['rotulo'] ?? ''));
+
+                if ($rotulo === '') {
+                    continue; // linha em branco (opção adicionada e não preenchida) -- ignora, não é erro
+                }
+
+                $tipo = (string)($linha['tipo'] ?? '');
+                if (!in_array($tipo, self::TIPOS_VALIDOS, true)) {
+                    throw new RuntimeException("Tipo inválido na opção \"{$rotulo}\".");
+                }
+
+                $setorDestinoId = !empty($linha['setor_destino_id']) ? (int)$linha['setor_destino_id'] : null;
+                if ($tipo === 'encaminhar_setor' && !$setorDestinoId) {
+                    throw new RuntimeException("Escolha o setor de destino da opção \"{$rotulo}\".");
+                }
+                if ($tipo !== 'encaminhar_setor') {
+                    $setorDestinoId = null;
+                }
+
+                $mensagem = trim((string)($linha['mensagem'] ?? ''));
+                if ($mensagem === '') {
+                    if ($tipo !== 'encaminhar_setor') {
+                        throw new RuntimeException("Escreva a mensagem da opção \"{$rotulo}\".");
+                    }
+                    // pra "encaminha pro setor" a mensagem é opcional --
+                    // sem ela, manda um texto padrão de transferência
+                    $mensagem = "Encaminhando você para o setor {$rotulo}. Aguarde um instante.";
+                }
+
+                $id = !empty($linha['id']) ? (int)$linha['id'] : null;
+
+                if ($id !== null && in_array($id, $idsExistentes, true)) {
+                    $upd = $this->pdo->prepare(
+                        // ativo = 1 sempre: a tela nova não tem toggle de
+                        // "opção inativa" (só existe/removida) -- força
+                        // reativar aqui pra evitar uma opção antiga que
+                        // ficou ativo=0 (criada pela tela antiga, com
+                        // formulário por nó) aparecer no editor mas ser
+                        // pulada pelo motor sem nenhum jeito de corrigir.
+                        'UPDATE whatsapp_chatbot_nos SET rotulo = ?, mensagem = ?, tipo = ?, setor_destino_id = ?, ordem = ?, ativo = 1 WHERE id = ?'
+                    );
+                    $upd->execute([$rotulo, $mensagem, $tipo, $setorDestinoId, $ordem, $id]);
+                    $idsMantidos[] = $id;
+                } else {
+                    $ins = $this->pdo->prepare(
+                        'INSERT INTO whatsapp_chatbot_nos (no_pai_id, ordem, rotulo, mensagem, tipo, setor_destino_id) VALUES (?, ?, ?, ?, ?, ?)'
+                    );
+                    $ins->execute([$noPaiId, $ordem, $rotulo, $mensagem, $tipo, $setorDestinoId]);
+                    $idsMantidos[] = (int)$this->pdo->lastInsertId();
+                }
+
+                $ordem++;
+            }
+
+            $idsRemover = array_values(array_diff($idsExistentes, $idsMantidos));
+            if ($idsRemover) {
+                $marcadores = implode(',', array_fill(0, count($idsRemover), '?'));
+                $this->pdo->prepare("DELETE FROM whatsapp_chatbot_nos WHERE id IN ({$marcadores})")->execute($idsRemover);
+            }
+
+            $this->pdo->commit();
+        } catch (Throwable $e) {
+            $this->pdo->rollBack();
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
+
+        return ['success' => true, 'message' => 'Fluxo salvo.'];
     }
 
     // ------------------------------------------------------------------
@@ -159,6 +247,7 @@ class WhatsAppChatbotService
     {
         $mensageiro = new WhatsAppMensagemService();
         $atendimentoService = new WhatsAppAtendimentoService();
+        $contato = (new WhatsAppContatoService())->buscarPorId((int)$atendimento['contato_id']) ?? [];
 
         if (empty($atendimento['no_bot_atual_id'])) {
             $raiz = $this->buscarRaiz();
@@ -171,7 +260,7 @@ class WhatsAppChatbotService
                 return;
             }
 
-            $this->entrarNo((int)$atendimento['id'], $raiz, $numero, $mensageiro, $atendimentoService, true);
+            $this->entrarNo((int)$atendimento['id'], $raiz, $numero, $contato, $mensageiro, $atendimentoService, true);
             return;
         }
 
@@ -197,25 +286,29 @@ class WhatsAppChatbotService
             $this->pdo->prepare('UPDATE whatsapp_atendimentos SET tentativas_invalidas_bot = ? WHERE id = ?')
                 ->execute([$tentativas, $atendimento['id']]);
 
-            $aviso = "Opção inválida. " . $atual['mensagem'];
+            $aviso = "Opção inválida. " . $this->montarMensagemDoNo($atual, $filhos, $contato);
             $mensageiro->enviar($numero, $aviso);
             $atendimentoService->registrarMensagemSaida((int)$atendimento['id'], $aviso, 'bot');
             return;
         }
 
-        $this->entrarNo((int)$atendimento['id'], $selecionado, $numero, $mensageiro, $atendimentoService, true);
+        $this->entrarNo((int)$atendimento['id'], $selecionado, $numero, $contato, $mensageiro, $atendimentoService, true);
     }
 
     private function entrarNo(
         int $atendimentoId,
         array $no,
         string $numero,
+        array $contato,
         WhatsAppMensagemService $mensageiro,
         WhatsAppAtendimentoService $atendimentoService,
         bool $reiniciaTentativas
     ): void {
-        $mensageiro->enviar($numero, $no['mensagem']);
-        $atendimentoService->registrarMensagemSaida($atendimentoId, $no['mensagem'], 'bot');
+        $filhos = $no['tipo'] === 'menu' ? $this->filhosAtivos((int)$no['id']) : [];
+        $texto = $this->montarMensagemDoNo($no, $filhos, $contato);
+
+        $mensageiro->enviar($numero, $texto);
+        $atendimentoService->registrarMensagemSaida($atendimentoId, $texto, 'bot');
 
         if ($no['tipo'] === 'resposta_final') {
             $stmt = $this->pdo->prepare(
@@ -267,39 +360,5 @@ class WhatsAppChatbotService
         $stmt->execute([$noPaiId]);
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    private function montarSubarvore(int $noPaiId): array
-    {
-        $stmt = $this->pdo->prepare('SELECT * FROM whatsapp_chatbot_nos WHERE no_pai_id = ? ORDER BY ordem, id');
-        $stmt->execute([$noPaiId]);
-        $filhos = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        foreach ($filhos as $indice => $filho) {
-            $filhos[$indice]['posicao'] = $indice + 1;
-            $filhos[$indice]['filhos'] = $this->montarSubarvore((int)$filho['id']);
-        }
-
-        return $filhos;
-    }
-
-    /**
-     * @return array{success: bool, message: string}|null null = campos válidos
-     */
-    private function validarCampos(string $rotulo, string $mensagem, string $tipo, ?int $setorDestinoId): ?array
-    {
-        if (trim($rotulo) === '' || trim($mensagem) === '') {
-            return ['success' => false, 'message' => 'Preencha rótulo e mensagem.'];
-        }
-
-        if (!in_array($tipo, self::TIPOS_VALIDOS, true)) {
-            return ['success' => false, 'message' => 'Tipo inválido.'];
-        }
-
-        if ($tipo === 'encaminhar_setor' && !$setorDestinoId) {
-            return ['success' => false, 'message' => 'Escolha o setor de destino.'];
-        }
-
-        return null;
     }
 }

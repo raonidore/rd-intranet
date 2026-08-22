@@ -3,138 +3,59 @@ ob_start();
 
 use App\Components\Alert;
 
-const WPP_CHATBOT_ROTULOS_TIPO = [
-    'menu' => 'Menu (leva a mais opções)',
-    'resposta_final' => 'Resposta e encerra',
+const WPP_TIPOS_OPCAO = [
+    'menu' => 'Abre submenu',
+    'resposta_final' => 'Responde e encerra',
     'encaminhar_setor' => 'Encaminha pro setor',
 ];
 
-const WPP_CHATBOT_BADGE_TIPO = [
-    'menu' => 'text-bg-primary',
-    'resposta_final' => 'text-bg-secondary',
-    'encaminhar_setor' => 'text-bg-success',
-];
-
-/**
- * Renderiza um nó da árvore (recursivo) -- cada nó mostra sua posição
- * (1, 2, 3... entre os irmãos ativos), que é o número que o admin
- * precisa escrever na mensagem do nó PAI pro cliente escolher (o motor
- * não gera a lista numerada sozinho, a mensagem é texto livre).
- */
-function renderizarNoChatbot(array $no, int $profundidade, array $setoresAtivos): void
+/** <option>s de setor reaproveitadas tanto nas linhas já salvas quanto no template de linha nova (JS). */
+function wppOpcoesSetor(array $setoresAtivos, ?int $selecionadoId = null): string
 {
-    $idColapso = 'no' . (int)$no['id'];
-    $badge = WPP_CHATBOT_BADGE_TIPO[$no['tipo']] ?? 'text-bg-secondary';
-    ?>
-    <div class="border rounded mb-2" style="margin-left:<?= $profundidade * 28 ?>px">
-        <div class="p-2 d-flex justify-content-between align-items-center" style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#<?= $idColapso ?>">
-            <div>
-                <span class="badge text-bg-light border me-1">#<?= (int)$no['posicao'] ?></span>
-                <strong><?= htmlspecialchars($no['rotulo']) ?></strong>
-                <span class="badge <?= $badge ?> ms-1"><?= htmlspecialchars(WPP_CHATBOT_ROTULOS_TIPO[$no['tipo']] ?? $no['tipo']) ?></span>
-                <?= $no['ativo'] ? '' : '<span class="badge text-bg-secondary ms-1">Inativa</span>' ?>
-            </div>
-            <i class="bi bi-chevron-down text-muted"></i>
-        </div>
-        <div class="collapse" id="<?= $idColapso ?>">
-            <div class="p-3 border-top">
-                <form method="post" action="<?= url('/whatsapp/chatbot/atualizar') ?>" class="mb-3">
-                    <input type="hidden" name="id" value="<?= (int)$no['id'] ?>">
-                    <div class="row g-2">
-                        <div class="col-md-6">
-                            <label class="form-label small">Rótulo (uso interno, não vai pro cliente)</label>
-                            <input type="text" name="rotulo" class="form-control form-control-sm" value="<?= htmlspecialchars($no['rotulo']) ?>" required maxlength="150">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label small">Tipo</label>
-                            <select name="tipo" class="form-select form-select-sm campo-tipo-chatbot" required>
-                                <?php foreach (WPP_CHATBOT_ROTULOS_TIPO as $valor => $rotuloTipo): ?>
-                                    <option value="<?= $valor ?>" <?= $no['tipo'] === $valor ? 'selected' : '' ?>><?= htmlspecialchars($rotuloTipo) ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label small">Mensagem enviada ao cliente ao entrar aqui</label>
-                            <textarea name="mensagem" class="form-control form-control-sm" rows="3" required><?= htmlspecialchars($no['mensagem']) ?></textarea>
-                        </div>
-                        <div class="col-md-6 campo-setor-chatbot" style="<?= $no['tipo'] === 'encaminhar_setor' ? '' : 'display:none' ?>">
-                            <label class="form-label small">Setor de destino</label>
-                            <select name="setor_destino_id" class="form-select form-select-sm">
-                                <option value="">Selecione...</option>
-                                <?php foreach ($setoresAtivos as $s): ?>
-                                    <option value="<?= (int)$s['id'] ?>" <?= (int)($no['setor_destino_id'] ?? 0) === (int)$s['id'] ? 'selected' : '' ?>><?= htmlspecialchars($s['nome']) ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        <div class="col-md-6 d-flex align-items-end">
-                            <div class="form-check">
-                                <input type="checkbox" name="ativo" class="form-check-input" id="ativo<?= (int)$no['id'] ?>" <?= $no['ativo'] ? 'checked' : '' ?>>
-                                <label class="form-check-label small" for="ativo<?= (int)$no['id'] ?>">Ativa</label>
-                            </div>
-                        </div>
-                    </div>
-                    <button type="submit" class="btn btn-sm btn-outline-primary mt-2">
-                        <i class="bi bi-check-lg"></i> Salvar
-                    </button>
-                </form>
-
-                <form method="post" action="<?= url('/whatsapp/chatbot/excluir') ?>" class="d-inline" onsubmit="return confirm('Excluir esta opção e tudo que estiver abaixo dela na árvore?');">
-                    <input type="hidden" name="id" value="<?= (int)$no['id'] ?>">
-                    <button type="submit" class="btn btn-sm btn-outline-danger">
-                        <i class="bi bi-trash"></i> Excluir
-                    </button>
-                </form>
-
-                <?php if ($no['tipo'] === 'menu'): ?>
-                    <hr>
-                    <h6 class="small text-muted">Adicionar opção abaixo de "<?= htmlspecialchars($no['rotulo']) ?>"</h6>
-                    <?php renderizarFormularioNovaOpcao((int)$no['id'], $setoresAtivos); ?>
-                <?php endif; ?>
-            </div>
-        </div>
-    </div>
-    <?php
-    foreach ($no['filhos'] as $filho) {
-        renderizarNoChatbot($filho, $profundidade + 1, $setoresAtivos);
+    $html = '<option value="">Selecione...</option>';
+    foreach ($setoresAtivos as $s) {
+        $sel = $selecionadoId !== null && $selecionadoId === (int)$s['id'] ? 'selected' : '';
+        $html .= '<option value="' . (int)$s['id'] . '" ' . $sel . '>' . htmlspecialchars($s['nome']) . '</option>';
     }
+    return $html;
 }
 
-function renderizarFormularioNovaOpcao(int $noPaiId, array $setoresAtivos): void
+function wppLinhaOpcao(array $opcao, array $setoresAtivos): void
 {
+    $ehExistente = !empty($opcao['id']);
     ?>
-    <form method="post" action="<?= url('/whatsapp/chatbot/criar') ?>">
-        <input type="hidden" name="no_pai_id" value="<?= $noPaiId ?>">
-        <div class="row g-2">
-            <div class="col-md-6">
-                <label class="form-label small">Rótulo (uso interno)</label>
-                <input type="text" name="rotulo" class="form-control form-control-sm" placeholder="Ex: Suporte técnico" required maxlength="150">
-            </div>
-            <div class="col-md-6">
-                <label class="form-label small">Tipo</label>
-                <select name="tipo" class="form-select form-select-sm campo-tipo-chatbot" required>
-                    <?php foreach (WPP_CHATBOT_ROTULOS_TIPO as $valor => $rotuloTipo): ?>
-                        <option value="<?= $valor ?>"><?= htmlspecialchars($rotuloTipo) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="col-12">
-                <label class="form-label small">Mensagem enviada ao cliente ao escolher esta opção</label>
-                <textarea name="mensagem" class="form-control form-control-sm" rows="2" placeholder="Ex: Você foi encaminhado para o Suporte técnico. Aguarde um instante." required></textarea>
-            </div>
-            <div class="col-md-6 campo-setor-chatbot" style="display:none">
-                <label class="form-label small">Setor de destino</label>
-                <select name="setor_destino_id" class="form-select form-select-sm">
-                    <option value="">Selecione...</option>
-                    <?php foreach ($setoresAtivos as $s): ?>
-                        <option value="<?= (int)$s['id'] ?>"><?= htmlspecialchars($s['nome']) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
+    <div class="row g-2 align-items-start mb-2 linha-opcao pb-2 border-bottom" data-existente="<?= $ehExistente ? '1' : '0' ?>">
+        <input type="hidden" name="id[]" value="<?= $ehExistente ? (int)$opcao['id'] : '' ?>">
+        <div class="col-md-1 pt-2 text-muted small">#<?= (int)($opcao['posicao'] ?? 0) ?: '' ?></div>
+        <div class="col-md-3">
+            <input type="text" name="rotulo[]" class="form-control form-control-sm" placeholder="Rótulo (ex: Suporte Técnico)" value="<?= htmlspecialchars($opcao['rotulo'] ?? '') ?>">
         </div>
-        <button type="submit" class="btn btn-sm btn-primary mt-2">
-            <i class="bi bi-plus-lg"></i> Adicionar opção
-        </button>
-    </form>
+        <div class="col-md-3">
+            <select name="tipo[]" class="form-select form-select-sm campo-tipo">
+                <?php foreach (WPP_TIPOS_OPCAO as $valor => $rotulo): ?>
+                    <option value="<?= $valor ?>" <?= ($opcao['tipo'] ?? 'encaminhar_setor') === $valor ? 'selected' : '' ?>><?= htmlspecialchars($rotulo) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="col-md-3 campo-setor">
+            <select name="setor_destino_id[]" class="form-select form-select-sm">
+                <?= wppOpcoesSetor($setoresAtivos, isset($opcao['setor_destino_id']) ? (int)$opcao['setor_destino_id'] : null) ?>
+            </select>
+        </div>
+        <div class="col-md-1 pt-1 text-end">
+            <?php if ($ehExistente && ($opcao['tipo'] ?? '') === 'menu'): ?>
+                <a href="<?= url('/whatsapp/chatbot?aba=fluxo&no_pai_id=' . (int)$opcao['id']) ?>" class="btn btn-sm btn-outline-secondary" title="Sub-opções">
+                    <i class="bi bi-arrow-return-right"></i>
+                </a>
+            <?php endif; ?>
+            <button type="button" class="btn btn-sm btn-outline-danger botao-remover" title="Remover">
+                <i class="bi bi-trash"></i>
+            </button>
+        </div>
+        <div class="col-md-11 offset-md-1">
+            <textarea name="mensagem[]" class="form-control form-control-sm" rows="2" placeholder="Mensagem enviada ao cliente ao escolher/entrar aqui (opcional pra &quot;Encaminha pro setor&quot;)"><?= htmlspecialchars($opcao['mensagem'] ?? '') ?></textarea>
+        </div>
+    </div>
     <?php
 }
 ?>
@@ -143,57 +64,219 @@ function renderizarFormularioNovaOpcao(int $noPaiId, array $setoresAtivos): void
 
 <div class="mb-4">
     <h4 class="mb-1"><i class="bi bi-robot me-1"></i> WhatsApp - Chatbot</h4>
-    <small class="text-muted">Menu automático em árvore: o cliente responde com o número da opção. A numeração usada pelo motor é a posição de cada opção aqui embaixo -- escreva esse número na mensagem do nível acima.</small>
+    <small class="text-muted">Menu automático em árvore: a numeração das opções é gerada sozinha, o cliente só digita o número.</small>
 </div>
 
-<div class="card border-0 shadow-sm mb-3" style="max-width:720px">
-    <div class="card-body">
-        <h6 class="mb-2">Mensagem de boas-vindas</h6>
-        <p class="text-muted small">Enviada automaticamente na primeira mensagem de um contato novo. Inclua aqui a lista numerada das opções que você for cadastrar abaixo.</p>
-        <form method="post" action="<?= url('/whatsapp/chatbot/boas-vindas') ?>">
-            <textarea name="mensagem" class="form-control mb-2" rows="4" placeholder="Ex: Olá! Bem-vindo ao atendimento. Digite o número da opção desejada:&#10;1 - Suporte técnico&#10;2 - Financeiro" required><?= htmlspecialchars($raiz['mensagem'] ?? '') ?></textarea>
-            <div class="form-check mb-2">
-                <input type="checkbox" name="ativo" class="form-check-input" id="chatbotAtivo" <?= (!$raiz || $raiz['ativo']) ? 'checked' : '' ?>>
-                <label class="form-check-label small" for="chatbotAtivo">
-                    Chatbot ativo (desmarcado: toda mensagem nova cai direto na fila geral, sem menu)
-                </label>
-            </div>
-            <button type="submit" class="btn btn-sm btn-primary">
-                <i class="bi bi-check-lg"></i> Salvar
-            </button>
-        </form>
-    </div>
-</div>
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <a class="nav-link <?= $aba === 'fluxo' ? 'active' : '' ?>" href="<?= url('/whatsapp/chatbot?aba=fluxo') ?>">Fluxo</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link <?= $aba === 'finalizacao' ? 'active' : '' ?>" href="<?= url('/whatsapp/chatbot?aba=finalizacao') ?>">Finalização</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link <?= $aba === 'mensagens-rapidas' ? 'active' : '' ?>" href="<?= url('/whatsapp/chatbot?aba=mensagens-rapidas') ?>">Mensagens Rápidas</a>
+    </li>
+</ul>
 
-<?php if ($raiz): ?>
-    <div style="max-width:900px">
-        <h6 class="mb-2">Opções do menu</h6>
-        <?php if (empty($opcoes)): ?>
-            <p class="text-muted small">Nenhuma opção cadastrada ainda.</p>
-        <?php endif; ?>
-        <?php foreach ($opcoes as $indice => $no): $no['posicao'] = $indice + 1; renderizarNoChatbot($no, 0, $setoresAtivos); endforeach; ?>
+<?php if ($aba === 'fluxo'): ?>
 
-        <div class="card border-0 shadow-sm mt-3">
+    <?php if (!$raiz): ?>
+        <div class="card border-0 shadow-sm" style="max-width:720px">
             <div class="card-body">
-                <h6 class="small text-muted mb-2">Adicionar opção de primeiro nível (direto no menu de boas-vindas)</h6>
-                <?php renderizarFormularioNovaOpcao((int)$raiz['id'], $setoresAtivos); ?>
+                <h6 class="mb-2">Mensagem de boas-vindas</h6>
+                <p class="text-muted small">Enviada automaticamente na primeira mensagem de um contato novo. Depois de salvar, você cadastra as opções do menu logo abaixo.</p>
+                <form method="post" action="<?= url('/whatsapp/chatbot/boas-vindas') ?>">
+                    <textarea name="mensagem" class="form-control mb-2" rows="4" placeholder="Ex: {periodo}, {nome}! Bem-vindo ao atendimento." required></textarea>
+                    <div class="form-check mb-2">
+                        <input type="checkbox" name="ativo" class="form-check-input" id="chatbotAtivo" checked>
+                        <label class="form-check-label small" for="chatbotAtivo">Chatbot ativo</label>
+                    </div>
+                    <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-check-lg"></i> Salvar</button>
+                </form>
             </div>
         </div>
-    </div>
-<?php endif; ?>
+    <?php else: ?>
 
-<script>
-document.addEventListener('change', function (evento) {
-    if (!evento.target.classList.contains('campo-tipo-chatbot')) {
-        return;
-    }
-    const container = evento.target.closest('form');
-    const campoSetor = container.querySelector('.campo-setor-chatbot');
-    if (campoSetor) {
-        campoSetor.style.display = evento.target.value === 'encaminhar_setor' ? '' : 'none';
-    }
-});
-</script>
+        <?php if ((int)$noAtual['id'] === (int)$raiz['id']): ?>
+            <div class="card border-0 shadow-sm mb-3" style="max-width:900px">
+                <div class="card-body">
+                    <h6 class="mb-2">Saudação</h6>
+                    <p class="text-muted small mb-2">
+                        Use <code>{nome}</code> pro primeiro nome do cliente e <code>{periodo}</code> pra "Bom dia/Boa tarde/Boa noite" automático.
+                        A lista numerada das opções abaixo é acrescentada sozinha, não precisa escrever aqui.
+                    </p>
+                    <form method="post" action="<?= url('/whatsapp/chatbot/boas-vindas') ?>">
+                        <textarea name="mensagem" class="form-control mb-2" rows="3" required><?= htmlspecialchars($raiz['mensagem']) ?></textarea>
+                        <div class="form-check mb-2">
+                            <input type="checkbox" name="ativo" class="form-check-input" id="chatbotAtivo" <?= $raiz['ativo'] ? 'checked' : '' ?>>
+                            <label class="form-check-label small" for="chatbotAtivo">
+                                Chatbot ativo (desmarcado: toda mensagem nova cai direto na fila geral, sem menu)
+                            </label>
+                        </div>
+                        <button type="submit" class="btn btn-sm btn-outline-primary"><i class="bi bi-check-lg"></i> Salvar saudação</button>
+                    </form>
+                </div>
+            </div>
+        <?php else: ?>
+            <nav class="mb-3">
+                <?php foreach ($caminho as $indice => $no): ?>
+                    <?php if ($indice > 0): ?><span class="text-muted mx-1">/</span><?php endif; ?>
+                    <?php if ($indice === count($caminho) - 1): ?>
+                        <strong><?= htmlspecialchars($indice === 0 ? 'Menu principal' : $no['rotulo']) ?></strong>
+                    <?php else: ?>
+                        <a href="<?= url('/whatsapp/chatbot?aba=fluxo&no_pai_id=' . (int)$no['id']) ?>"><?= htmlspecialchars($indice === 0 ? 'Menu principal' : $no['rotulo']) ?></a>
+                    <?php endif; ?>
+                <?php endforeach; ?>
+            </nav>
+        <?php endif; ?>
+
+        <div class="card border-0 shadow-sm" style="max-width:900px">
+            <div class="card-body">
+                <h6 class="mb-1">Opções do menu</h6>
+                <p class="text-muted small">O número que o cliente digita é a posição (#1, #2...) mostrada em cada linha -- some sozinha na mensagem acima quando a opção é do tipo "Abre submenu".</p>
+
+                <form method="post" action="<?= url('/whatsapp/chatbot/opcoes') ?>">
+                    <input type="hidden" name="no_pai_id" value="<?= (int)$noAtual['id'] ?>">
+
+                    <div id="listaOpcoes">
+                        <?php foreach ($opcoes as $opcao): ?>
+                            <?php wppLinhaOpcao($opcao, $setoresAtivos); ?>
+                        <?php endforeach; ?>
+                    </div>
+
+                    <button type="button" id="botaoAdicionarOpcao" class="btn btn-sm btn-outline-secondary mb-3">
+                        <i class="bi bi-plus-lg"></i> Adicionar opção
+                    </button>
+                    <br>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Salvar fluxo</button>
+                </form>
+            </div>
+        </div>
+
+        <template id="templateLinhaOpcao">
+            <?php wppLinhaOpcao([], $setoresAtivos); ?>
+        </template>
+
+        <script>
+        (function () {
+            const lista = document.getElementById('listaOpcoes');
+            const template = document.getElementById('templateLinhaOpcao');
+
+            function ligarLinha(linha) {
+                const campoTipo = linha.querySelector('.campo-tipo');
+                const campoSetor = linha.querySelector('.campo-setor');
+
+                function atualizar() {
+                    campoSetor.style.display = campoTipo.value === 'encaminhar_setor' ? '' : 'none';
+                }
+
+                campoTipo.addEventListener('change', atualizar);
+                atualizar();
+
+                linha.querySelector('.botao-remover').addEventListener('click', function () {
+                    if (linha.dataset.existente === '1' && !confirm('Remover esta opção? Se ela tiver sub-opções, todas serão removidas também.')) {
+                        return;
+                    }
+                    linha.remove();
+                });
+            }
+
+            document.querySelectorAll('.linha-opcao').forEach(ligarLinha);
+
+            document.getElementById('botaoAdicionarOpcao').addEventListener('click', function () {
+                const clone = template.content.cloneNode(true);
+                lista.appendChild(clone);
+                ligarLinha(lista.lastElementChild);
+            });
+        })();
+        </script>
+    <?php endif; ?>
+
+<?php elseif ($aba === 'finalizacao'): ?>
+
+    <div class="card border-0 shadow-sm" style="max-width:720px">
+        <div class="card-body">
+            <form method="post" action="<?= url('/whatsapp/chatbot/finalizacao') ?>">
+                <h6 class="mb-2">Tempo geral de inatividade</h6>
+                <div class="mb-3 d-flex align-items-center gap-2">
+                    <input type="number" name="timeout_minutos" class="form-control form-control-sm" style="max-width:120px" min="5" max="1440" value="<?= (int)$timeoutMinutos ?>" required>
+                    <span class="text-muted small">minutos</span>
+                </div>
+
+                <h6 class="mb-2">Encerramento normal</h6>
+                <p class="text-muted small">Mandada ao cliente quando um atendente clica "Encerrar" na conversa. Use <code>{nome}</code>.</p>
+                <textarea name="encerramento_normal" class="form-control mb-3" rows="3" required><?= htmlspecialchars($encerramentoNormal) ?></textarea>
+
+                <h6 class="mb-2">Encerramento por inatividade</h6>
+                <p class="text-muted small">Mandada quando o atendimento é encerrado sozinho por falta de mensagem. Use <code>{nome}</code>.</p>
+                <textarea name="encerramento_inatividade" class="form-control mb-3" rows="3" required><?= htmlspecialchars($encerramentoInatividade) ?></textarea>
+
+                <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Salvar</button>
+            </form>
+        </div>
+    </div>
+
+<?php elseif ($aba === 'mensagens-rapidas'): ?>
+
+    <div class="card border-0 shadow-sm mb-3" style="max-width:720px">
+        <div class="card-body">
+            <h6 class="mb-2">Nova mensagem rápida</h6>
+            <form method="post" action="<?= url('/whatsapp/mensagens-rapidas/criar') ?>" class="row g-2">
+                <div class="col-md-3">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text">/</span>
+                        <input type="text" name="comando" class="form-control" placeholder="comando" required maxlength="50">
+                    </div>
+                </div>
+                <div class="col-md-7">
+                    <input type="text" name="mensagem" class="form-control form-control-sm" placeholder="Mensagem completa" required>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-sm btn-primary w-100"><i class="bi bi-plus-lg"></i> Criar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <?php if (empty($mensagensRapidas)): ?>
+        <p class="text-muted">Nenhuma mensagem rápida cadastrada ainda.</p>
+    <?php endif; ?>
+
+    <?php foreach ($mensagensRapidas as $item): ?>
+        <?php $idColapso = 'mr' . (int)$item['id']; ?>
+        <div class="card border-0 shadow-sm mb-2" style="max-width:900px">
+            <div class="card-header bg-white" style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#<?= $idColapso ?>">
+                <code>/<?= htmlspecialchars($item['comando']) ?></code>
+                <span class="text-muted small ms-2 text-truncate d-inline-block align-middle" style="max-width:500px"><?= htmlspecialchars($item['mensagem']) ?></span>
+            </div>
+            <div class="collapse" id="<?= $idColapso ?>">
+                <div class="card-body">
+                    <form method="post" action="<?= url('/whatsapp/mensagens-rapidas/atualizar') ?>" class="mb-2">
+                        <input type="hidden" name="id" value="<?= (int)$item['id'] ?>">
+                        <div class="row g-2 mb-2">
+                            <div class="col-md-3">
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text">/</span>
+                                    <input type="text" name="comando" class="form-control" value="<?= htmlspecialchars($item['comando']) ?>" required maxlength="50">
+                                </div>
+                            </div>
+                            <div class="col-md-9">
+                                <input type="text" name="mensagem" class="form-control form-control-sm" value="<?= htmlspecialchars($item['mensagem']) ?>" required>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-sm btn-outline-primary"><i class="bi bi-check-lg"></i> Salvar</button>
+                    </form>
+                    <form method="post" action="<?= url('/whatsapp/mensagens-rapidas/excluir') ?>" onsubmit="return confirm('Excluir esta mensagem rápida?');">
+                        <input type="hidden" name="id" value="<?= (int)$item['id'] ?>">
+                        <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> Excluir</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    <?php endforeach; ?>
+
+<?php endif; ?>
 
 <?php
 $conteudo = ob_get_clean();

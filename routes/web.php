@@ -39,6 +39,7 @@ use App\Controllers\WhatsAppSetorController;
 use App\Controllers\WhatsAppFilaController;
 use App\Controllers\WhatsAppAtendimentoController;
 use App\Controllers\WhatsAppChatbotController;
+use App\Controllers\WhatsAppMensagemRapidaController;
 use App\Controllers\WhatsAppIntegracaoController;
 use App\Controllers\WhatsAppWebhookController;
 use App\Controllers\IntegracoesController;
@@ -270,9 +271,13 @@ $router->post('/whatsapp/atendimentos/encerrar', [WhatsAppAtendimentoController:
 
 $router->get('/whatsapp/chatbot', [WhatsAppChatbotController::class, 'index']);
 $router->post('/whatsapp/chatbot/boas-vindas', [WhatsAppChatbotController::class, 'salvarRaiz']);
-$router->post('/whatsapp/chatbot/criar', [WhatsAppChatbotController::class, 'criar']);
-$router->post('/whatsapp/chatbot/atualizar', [WhatsAppChatbotController::class, 'atualizar']);
-$router->post('/whatsapp/chatbot/excluir', [WhatsAppChatbotController::class, 'excluir']);
+$router->post('/whatsapp/chatbot/opcoes', [WhatsAppChatbotController::class, 'salvarOpcoes']);
+$router->post('/whatsapp/chatbot/finalizacao', [WhatsAppChatbotController::class, 'salvarFinalizacao']);
+
+$router->post('/whatsapp/mensagens-rapidas/criar', [WhatsAppMensagemRapidaController::class, 'criar']);
+$router->post('/whatsapp/mensagens-rapidas/atualizar', [WhatsAppMensagemRapidaController::class, 'atualizar']);
+$router->post('/whatsapp/mensagens-rapidas/excluir', [WhatsAppMensagemRapidaController::class, 'excluir']);
+$router->get('/whatsapp/mensagens-rapidas/buscar', [WhatsAppMensagemRapidaController::class, 'buscar']);
 
 $router->get('/administracao/integracoes', [IntegracoesController::class, 'index']);
 $router->get('/administracao/integracoes/base-conhecimento', [IntegracoesController::class, 'baseConhecimentoForm']);
