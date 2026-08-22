@@ -860,9 +860,40 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         return localStorage.getItem(CHAVE_SOM) === '1';
     }
 
+    // Navegador só deixa um AudioContext tocar de verdade depois de uma
+    // interação real do usuário na página (clique, tecla etc.) -- como
+    // o alerta dispara sozinho (setInterval, sem gesto nenhum no
+    // momento), criar um contexto novo a cada bip fica sempre "suspenso"
+    // e mudo, sem erro nenhum avisando. Por isso criamos UM contexto só
+    // por carregamento de página e destravamos ele no primeiro clique/
+    // tecla/toque -- depois disso ele fica liberado pro resto da vida
+    // dessa página (não sobrevive a navegar pra outra, cada página cria
+    // o dela e destrava de novo, mas isso costuma acontecer em segundos
+    // no uso normal do painel).
+    let audioCtxWpp = null;
+    function obterAudioCtxWpp() {
+        if (!audioCtxWpp) {
+            const Ctor = window.AudioContext || window.webkitAudioContext;
+            if (!Ctor) {
+                return null;
+            }
+            audioCtxWpp = new Ctor();
+        }
+        if (audioCtxWpp.state === 'suspended') {
+            audioCtxWpp.resume().catch(() => {});
+        }
+        return audioCtxWpp;
+    }
+    ['pointerdown', 'keydown'].forEach((evento) => {
+        document.addEventListener(evento, obterAudioCtxWpp, { passive: true });
+    });
+
     function tocarBipWpp() {
         try {
-            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const ctx = obterAudioCtxWpp();
+            if (!ctx || ctx.state !== 'running') {
+                return; // ainda sem nenhuma interação nessa página -- navegador bloqueia o som
+            }
             [880, 1108].forEach((freq, i) => {
                 const osc = ctx.createOscillator();
                 const gain = ctx.createGain();
