@@ -46,7 +46,7 @@ class WhatsAppAtendimentoService
             return;
         }
 
-        if ($atendimento['status'] === 'aguardando_nps') {
+        if ($atendimento['status'] === 'aguardando_nps_atendente' || $atendimento['status'] === 'aguardando_nps_resolucao') {
             (new WhatsAppNpsService())->processarResposta($atendimento + ['numero' => $numero, 'contato_nome' => $contato['nome']], $texto);
             return;
         }
@@ -277,6 +277,30 @@ class WhatsAppAtendimentoService
     }
 
     /**
+     * Histórico dos atendimentos já encerrados que passaram pelo
+     * usuário -- só consulta, sem link pro chat (conversa fechada não
+     * reabre por aqui, é só a aba "Encerrados" de Atendimentos).
+     */
+    public function listarEncerradosDoUsuario(int $usuarioId, int $limite = 100): array
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT a.*, c.numero, c.nome AS contato_nome, s.nome AS setor_nome,
+                    (SELECT conteudo FROM whatsapp_mensagens m WHERE m.atendimento_id = a.id ORDER BY m.id DESC LIMIT 1) AS ultima_mensagem
+             FROM whatsapp_atendimentos a
+             JOIN whatsapp_contatos c ON c.id = a.contato_id
+             LEFT JOIN whatsapp_setores s ON s.id = a.setor_id
+             WHERE a.status = 'encerrado' AND a.usuario_id = ?
+             ORDER BY a.encerrado_em DESC
+             LIMIT ?"
+        );
+        $stmt->bindValue(1, $usuarioId, PDO::PARAM_INT);
+        $stmt->bindValue(2, $limite, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
      * Mensagens do atendimento -- $desdeId > 0 pra polling incremental
      * (só o que chegou depois da última mensagem já exibida na tela).
      */
@@ -333,6 +357,33 @@ class WhatsAppAtendimentoService
         $stmt->execute([$atendimentoId]);
 
         return ['success' => true, 'message' => 'Atendimento encerrado.'];
+    }
+
+    /**
+     * Transfere pra outro setor -- volta pra 'fila' e desatribui do
+     * atendente atual (mesmo padrão de encaminhar_setor do chatbot),
+     * pra alguém do setor de destino assumir. Deixa uma mensagem
+     * interna marcando a transferência, visível no histórico da
+     * conversa.
+     *
+     * @return array{success: bool, message: string}
+     */
+    public function transferir(int $atendimentoId, int $novoSetorId): array
+    {
+        $setor = (new WhatsAppSetorService())->buscar($novoSetorId);
+
+        if (!$setor || !$setor['ativo']) {
+            return ['success' => false, 'message' => 'Setor de destino inválido.'];
+        }
+
+        $stmt = $this->pdo->prepare(
+            "UPDATE whatsapp_atendimentos SET status = 'fila', setor_id = ?, usuario_id = NULL WHERE id = ?"
+        );
+        $stmt->execute([$novoSetorId, $atendimentoId]);
+
+        $this->registrarMensagemSaida($atendimentoId, "Atendimento transferido para o setor \"{$setor['nome']}\".", 'bot');
+
+        return ['success' => true, 'message' => "Atendimento transferido para \"{$setor['nome']}\"."];
     }
 
     /**
@@ -406,26 +457,22 @@ class WhatsAppAtendimentoService
     public function encerrarInativos(): array
     {
         $config = new WhatsAppConfigService();
-        $timeoutMinutos = $config->timeoutMinutos();
-        $mensagemBase = $config->encerramentoInatividade();
         $chatbot = new WhatsAppChatbotService();
+        $mensageiro = new WhatsAppMensagemService();
 
+        // Estados 'normais' (bot/fila/em_atendimento) -- timeout geral,
+        // manda o aviso de encerramento por inatividade.
         $stmt = $this->pdo->prepare(
             "SELECT a.id, c.numero, c.nome
              FROM whatsapp_atendimentos a
              JOIN whatsapp_contatos c ON c.id = a.contato_id
-             WHERE a.status != 'encerrado'
+             WHERE a.status IN ('bot', 'fila', 'em_atendimento')
                AND a.ultima_mensagem_em < (NOW() - INTERVAL ? MINUTE)"
         );
-        $stmt->execute([$timeoutMinutos]);
+        $stmt->execute([$config->timeoutMinutos()]);
         $inativos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        if (!$inativos) {
-            return ['encerrados' => 0];
-        }
-
-        $mensageiro = new WhatsAppMensagemService();
-
+        $mensagemBase = $config->encerramentoInatividade();
         foreach ($inativos as $item) {
             $mensagemFechamento = $chatbot->renderizarTemplate($mensagemBase, ['nome' => $item['nome']]);
 
@@ -436,7 +483,24 @@ class WhatsAppAtendimentoService
                 ->execute([$item['id']]);
         }
 
-        return ['encerrados' => count($inativos)];
+        // Preso esperando resposta do NPS -- timeout próprio (mais
+        // curto, o cliente já recebeu 2 mensagens da pesquisa) e fecha
+        // sem mandar mais nada, com o que já tiver sido respondido
+        // (nota do atendente sozinha, ou nada, se nem isso respondeu).
+        $stmtNps = $this->pdo->prepare(
+            "SELECT id FROM whatsapp_atendimentos
+             WHERE status IN ('aguardando_nps_atendente', 'aguardando_nps_resolucao')
+               AND ultima_mensagem_em < (NOW() - INTERVAL ? MINUTE)"
+        );
+        $stmtNps->execute([$config->npsTimeoutMinutos()]);
+        $npsInativos = $stmtNps->fetchAll(PDO::FETCH_COLUMN);
+
+        foreach ($npsInativos as $atendimentoId) {
+            $this->pdo->prepare("UPDATE whatsapp_atendimentos SET status = 'encerrado', encerrado_em = NOW() WHERE id = ?")
+                ->execute([$atendimentoId]);
+        }
+
+        return ['encerrados' => count($inativos) + count($npsInativos)];
     }
 
     private function tocarUltimaMensagem(int $atendimentoId): void

@@ -38,11 +38,17 @@ class WhatsAppConfigService
     private const EXPEDIENTE_FIM_PADRAO = '18:00';
     private const MENSAGEM_FORA_EXPEDIENTE_PADRAO = 'Olá, {nome}! Nosso horário de atendimento está encerrado no momento. Retornaremos assim que estivermos disponíveis.';
 
-    private const CHAVE_NPS_PERGUNTA = 'whatsapp_nps_pergunta';
+    private const CHAVE_NPS_MENSAGEM_ESPERA = 'whatsapp_nps_mensagem_espera';
+    private const CHAVE_NPS_PERGUNTA_ATENDENTE = 'whatsapp_nps_pergunta_atendente';
+    private const CHAVE_NPS_PERGUNTA_RESOLUCAO = 'whatsapp_nps_pergunta_resolucao';
     private const CHAVE_NPS_AGRADECIMENTO = 'whatsapp_nps_agradecimento';
+    private const CHAVE_NPS_TIMEOUT_MINUTOS = 'whatsapp_nps_timeout_minutos';
 
-    private const NPS_PERGUNTA_PADRAO = 'De 0 a 10, o quanto você recomendaria nosso atendimento a um amigo ou colega? Responda só com o número.';
+    private const NPS_MENSAGEM_ESPERA_PADRAO = 'Peço que por gentileza aguarde só mais um momento para avaliar meu atendimento, prometo que será bem rápido, fico grato.';
+    private const NPS_PERGUNTA_ATENDENTE_PADRAO = "Sobre a forma como você foi atendido, como você avalia nosso(a) atendente? 👇\nDê uma nota entre 1 e 5 onde:";
+    private const NPS_PERGUNTA_RESOLUCAO_PADRAO = 'Ao final deste atendimento, resolvemos a sua solicitação?';
     private const NPS_AGRADECIMENTO_PADRAO = 'Muito obrigado pela sua avaliação, {nome}!';
+    private const NPS_TIMEOUT_MINUTOS_PADRAO = 10;
 
     public function tipoIntegracao(): string
     {
@@ -214,9 +220,19 @@ class WhatsAppConfigService
         return ['success' => true, 'message' => 'Horário de expediente salvo.'];
     }
 
-    public function npsPergunta(): string
+    public function npsMensagemEspera(): string
     {
-        return (string)(ConfigService::get(self::CHAVE_NPS_PERGUNTA, self::NPS_PERGUNTA_PADRAO) ?: self::NPS_PERGUNTA_PADRAO);
+        return (string)(ConfigService::get(self::CHAVE_NPS_MENSAGEM_ESPERA, self::NPS_MENSAGEM_ESPERA_PADRAO) ?: self::NPS_MENSAGEM_ESPERA_PADRAO);
+    }
+
+    public function npsPerguntaAtendente(): string
+    {
+        return (string)(ConfigService::get(self::CHAVE_NPS_PERGUNTA_ATENDENTE, self::NPS_PERGUNTA_ATENDENTE_PADRAO) ?: self::NPS_PERGUNTA_ATENDENTE_PADRAO);
+    }
+
+    public function npsPerguntaResolucao(): string
+    {
+        return (string)(ConfigService::get(self::CHAVE_NPS_PERGUNTA_RESOLUCAO, self::NPS_PERGUNTA_RESOLUCAO_PADRAO) ?: self::NPS_PERGUNTA_RESOLUCAO_PADRAO);
     }
 
     public function npsAgradecimento(): string
@@ -224,20 +240,36 @@ class WhatsAppConfigService
         return (string)(ConfigService::get(self::CHAVE_NPS_AGRADECIMENTO, self::NPS_AGRADECIMENTO_PADRAO) ?: self::NPS_AGRADECIMENTO_PADRAO);
     }
 
+    public function npsTimeoutMinutos(): int
+    {
+        $valor = (int)(ConfigService::get(self::CHAVE_NPS_TIMEOUT_MINUTOS, (string)self::NPS_TIMEOUT_MINUTOS_PADRAO) ?: self::NPS_TIMEOUT_MINUTOS_PADRAO);
+
+        return $valor > 0 ? $valor : self::NPS_TIMEOUT_MINUTOS_PADRAO;
+    }
+
     /**
      * @return array{success: bool, message: string}
      */
-    public function salvarNps(string $pergunta, string $agradecimento): array
+    public function salvarNps(string $mensagemEspera, string $perguntaAtendente, string $perguntaResolucao, string $agradecimento, int $timeoutMinutos): array
     {
-        $pergunta = trim($pergunta);
+        $mensagemEspera = trim($mensagemEspera);
+        $perguntaAtendente = trim($perguntaAtendente);
+        $perguntaResolucao = trim($perguntaResolucao);
         $agradecimento = trim($agradecimento);
 
-        if ($pergunta === '' || $agradecimento === '') {
-            return ['success' => false, 'message' => 'Preencha a pergunta e a mensagem de agradecimento.'];
+        if ($mensagemEspera === '' || $perguntaAtendente === '' || $perguntaResolucao === '' || $agradecimento === '') {
+            return ['success' => false, 'message' => 'Preencha todas as mensagens do NPS.'];
         }
 
-        ConfigService::set(self::CHAVE_NPS_PERGUNTA, $pergunta);
+        if ($timeoutMinutos < 1 || $timeoutMinutos > 1440) {
+            return ['success' => false, 'message' => 'Informe um tempo limite entre 1 e 1440 minutos.'];
+        }
+
+        ConfigService::set(self::CHAVE_NPS_MENSAGEM_ESPERA, $mensagemEspera);
+        ConfigService::set(self::CHAVE_NPS_PERGUNTA_ATENDENTE, $perguntaAtendente);
+        ConfigService::set(self::CHAVE_NPS_PERGUNTA_RESOLUCAO, $perguntaResolucao);
         ConfigService::set(self::CHAVE_NPS_AGRADECIMENTO, $agradecimento);
+        ConfigService::set(self::CHAVE_NPS_TIMEOUT_MINUTOS, (string)$timeoutMinutos);
 
         return ['success' => true, 'message' => 'Mensagens de NPS salvas.'];
     }

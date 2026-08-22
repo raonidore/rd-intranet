@@ -42,7 +42,7 @@ use App\Controllers\WhatsAppChatbotController;
 use App\Controllers\WhatsAppMensagemRapidaController;
 use App\Controllers\WhatsAppIntegracaoController;
 use App\Controllers\WhatsAppWebhookController;
-use App\Controllers\WhatsAppNpsController;
+use App\Controllers\WhatsAppEstatisticaController;
 use App\Controllers\IntegracoesController;
 use App\Controllers\DependenciaController;
 use App\Controllers\SpeedtestController;
@@ -270,6 +270,7 @@ $router->get('/whatsapp/atendimentos/ver', [WhatsAppAtendimentoController::class
 $router->post('/whatsapp/atendimentos/responder', [WhatsAppAtendimentoController::class, 'responder']);
 $router->get('/whatsapp/atendimentos/mensagens', [WhatsAppAtendimentoController::class, 'mensagensApi']);
 $router->post('/whatsapp/atendimentos/encerrar', [WhatsAppAtendimentoController::class, 'encerrar']);
+$router->post('/whatsapp/atendimentos/transferir', [WhatsAppAtendimentoController::class, 'transferir']);
 
 $router->get('/whatsapp/chatbot', [WhatsAppChatbotController::class, 'index']);
 $router->post('/whatsapp/chatbot/boas-vindas', [WhatsAppChatbotController::class, 'salvarRaiz']);
@@ -278,8 +279,8 @@ $router->post('/whatsapp/chatbot/finalizacao', [WhatsAppChatbotController::class
 $router->post('/whatsapp/chatbot/atender', [WhatsAppChatbotController::class, 'atender']);
 $router->post('/whatsapp/chatbot/expediente', [WhatsAppChatbotController::class, 'salvarExpediente']);
 
-$router->get('/whatsapp/nps', [WhatsAppNpsController::class, 'index']);
-$router->post('/whatsapp/nps/mensagens', [WhatsAppNpsController::class, 'salvarMensagens']);
+$router->get('/whatsapp/estatisticas', [WhatsAppEstatisticaController::class, 'index']);
+$router->post('/whatsapp/estatisticas/nps', [WhatsAppEstatisticaController::class, 'salvarNps']);
 
 $router->post('/whatsapp/mensagens-rapidas/criar', [WhatsAppMensagemRapidaController::class, 'criar']);
 $router->post('/whatsapp/mensagens-rapidas/atualizar', [WhatsAppMensagemRapidaController::class, 'atualizar']);

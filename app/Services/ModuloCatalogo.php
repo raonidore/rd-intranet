@@ -67,7 +67,7 @@ class ModuloCatalogo
         'whatsapp_fila' => ['label' => 'WhatsApp - Fila', 'grupo' => 'WhatsApp'],
         'whatsapp_chatbot' => ['label' => 'WhatsApp - Chatbot', 'grupo' => 'WhatsApp'],
         'whatsapp_setores' => ['label' => 'WhatsApp - Setores', 'grupo' => 'WhatsApp'],
-        'whatsapp_nps' => ['label' => 'WhatsApp - NPS', 'grupo' => 'WhatsApp'],
+        'whatsapp_estatisticas' => ['label' => 'WhatsApp - Estatísticas', 'grupo' => 'WhatsApp'],
     ];
 
     public static function chaves(): array

@@ -40,6 +40,11 @@ function renderizarBolha(array $m): string
         <a href="<?= url('/whatsapp/atendimentos') ?>" class="btn btn-sm btn-outline-secondary">
             <i class="bi bi-arrow-left"></i> Atendimentos
         </a>
+        <?php if (!empty($setoresAtivos)): ?>
+            <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalTransferir">
+                <i class="bi bi-arrow-left-right"></i> Transferir
+            </button>
+        <?php endif; ?>
         <form method="post" action="<?= url('/whatsapp/atendimentos/encerrar') ?>" class="d-inline" onsubmit="return confirm('Encerrar este atendimento?');">
             <input type="hidden" name="id" value="<?= (int)$atendimento['id'] ?>">
             <button type="submit" class="btn btn-sm btn-outline-danger">
@@ -313,6 +318,39 @@ function renderizarBolha(array $m): string
     });
 })();
 </script>
+
+<?php if (!empty($setoresAtivos)): ?>
+<div class="modal fade" id="modalTransferir" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="<?= url('/whatsapp/atendimentos/transferir') ?>">
+                <input type="hidden" name="id" value="<?= (int)$atendimento['id'] ?>">
+                <div class="modal-header">
+                    <h5 class="modal-title">Transferir atendimento</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small">
+                        Volta pra fila do setor escolhido, sem dono -- deixa de ser seu, qualquer atendente daquele setor
+                        pode assumir.
+                    </p>
+                    <label class="form-label">Setor de destino</label>
+                    <select name="setor_id" class="form-select" required>
+                        <option value="">Selecione...</option>
+                        <?php foreach ($setoresAtivos as $setor): ?>
+                            <option value="<?= (int)$setor['id'] ?>"><?= htmlspecialchars($setor['nome']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-arrow-left-right"></i> Transferir</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <?php
 $conteudo = ob_get_clean();

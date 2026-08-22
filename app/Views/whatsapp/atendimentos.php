@@ -16,30 +16,72 @@ use App\Components\Alert;
     </button>
 </div>
 
-<?php if (empty($atendimentos)): ?>
-    <div class="card border-0 shadow-sm">
-        <div class="card-body text-center text-muted py-4">
-            <i class="bi bi-chat" style="font-size:2rem;"></i>
-            <p class="mb-0 mt-2">Você não tem nenhum atendimento em andamento.</p>
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <a class="nav-link <?= $aba === 'andamento' ? 'active' : '' ?>" href="<?= url('/whatsapp/atendimentos?aba=andamento') ?>">Em andamento</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link <?= $aba === 'encerrados' ? 'active' : '' ?>" href="<?= url('/whatsapp/atendimentos?aba=encerrados') ?>">Encerrados</a>
+    </li>
+</ul>
+
+<?php if ($aba === 'encerrados'): ?>
+
+    <?php if (empty($encerrados)): ?>
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center text-muted py-4">
+                <i class="bi bi-check2-circle" style="font-size:2rem;"></i>
+                <p class="mb-0 mt-2">Nenhum atendimento encerrado ainda.</p>
+            </div>
         </div>
-    </div>
-<?php else: ?>
-    <?php foreach ($atendimentos as $item): ?>
-        <a href="<?= url('/whatsapp/atendimentos/ver?id=' . (int)$item['id']) ?>" class="text-decoration-none text-reset">
+    <?php else: ?>
+        <?php foreach ($encerrados as $item): ?>
             <div class="card border-0 shadow-sm mb-2">
                 <div class="card-body d-flex justify-content-between align-items-center">
-                    <div>
+                    <div style="min-width:0">
                         <strong><?= htmlspecialchars($item['contato_nome'] ?: '(sem nome)') ?></strong>
                         <span class="text-muted small ms-1"><?= htmlspecialchars(telefone_br($item['numero'])) ?></span>
+                        <?php if ($item['setor_nome']): ?>
+                            <span class="badge text-bg-light border ms-1"><?= htmlspecialchars($item['setor_nome']) ?></span>
+                        <?php endif; ?>
                         <div class="text-muted small text-truncate" style="max-width:480px">
                             <?= $item['ultima_mensagem'] !== null ? htmlspecialchars($item['ultima_mensagem']) : '(sem mensagens)' ?>
                         </div>
                     </div>
-                    <small class="text-muted text-nowrap"><?= data_br($item['ultima_mensagem_em']) ?></small>
+                    <small class="text-muted text-nowrap">Encerrado em <?= data_br($item['encerrado_em']) ?></small>
                 </div>
             </div>
-        </a>
-    <?php endforeach; ?>
+        <?php endforeach; ?>
+    <?php endif; ?>
+
+<?php else: ?>
+
+    <?php if (empty($atendimentos)): ?>
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center text-muted py-4">
+                <i class="bi bi-chat" style="font-size:2rem;"></i>
+                <p class="mb-0 mt-2">Você não tem nenhum atendimento em andamento.</p>
+            </div>
+        </div>
+    <?php else: ?>
+        <?php foreach ($atendimentos as $item): ?>
+            <a href="<?= url('/whatsapp/atendimentos/ver?id=' . (int)$item['id']) ?>" class="text-decoration-none text-reset">
+                <div class="card border-0 shadow-sm mb-2">
+                    <div class="card-body d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong><?= htmlspecialchars($item['contato_nome'] ?: '(sem nome)') ?></strong>
+                            <span class="text-muted small ms-1"><?= htmlspecialchars(telefone_br($item['numero'])) ?></span>
+                            <div class="text-muted small text-truncate" style="max-width:480px">
+                                <?= $item['ultima_mensagem'] !== null ? htmlspecialchars($item['ultima_mensagem']) : '(sem mensagens)' ?>
+                            </div>
+                        </div>
+                        <small class="text-muted text-nowrap"><?= data_br($item['ultima_mensagem_em']) ?></small>
+                    </div>
+                </div>
+            </a>
+        <?php endforeach; ?>
+    <?php endif; ?>
+
 <?php endif; ?>
 
 <div class="modal fade" id="modalIniciarAtendimento" tabindex="-1">

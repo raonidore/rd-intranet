@@ -7,14 +7,28 @@ use PDO;
 
 /**
  * Pesquisa de satisfação (NPS) pós-atendimento -- só entra em ação se o
- * setor do atendimento tiver `nps_ativo`. Fluxo: WhatsAppAtendimentoService::encerrar()
- * chama perguntar() em vez de fechar na hora (atendimento fica em
- * 'aguardando_nps'); a próxima mensagem do cliente é interceptada por
- * receberMensagem() e passa por processarResposta() em vez do chatbot
- * normal -- só aí o atendimento fecha de verdade.
+ * setor do atendimento tiver `nps_ativo`. Fluxo em 2 perguntas (cada
+ * uma um status próprio, igual ao motor do chatbot):
+ *
+ *   encerrar() -> perguntar() -> 'aguardando_nps_atendente'
+ *   -> resposta 1-5 -> 'aguardando_nps_resolucao'
+ *   -> resposta 1/2 -> agradecimento -> 'encerrado'
+ *
+ * A pergunta em si (texto) é configurável pelo usuário; a legenda das
+ * notas e das opções de sim/não é fixa (WPP_NPS_LEGENDA_*) porque
+ * alimenta as estatísticas -- mudar o significado das notas quebraria
+ * a comparação histórica.
  */
 class WhatsAppNpsService
 {
+    private const LEGENDA_ATENDENTE = "\n\n5 - Muito satisfeito. O atendimento superou as expectativas, foi rápido e eficiente."
+        . "\n4 - Satisfeito. O problema foi resolvido de forma correta e sem grandes transtornos."
+        . "\n3 - Neutro ou indiferente. Um atendimento mediano, que não comprometeu mas também não encantou."
+        . "\n2 - Insatisfeito. Houve demora, falha na comunicação ou o problema não foi totalmente resolvido."
+        . "\n1 - Muito insatisfeito. Experiência ruim, atendimento rude ou solução ausente.";
+
+    private const LEGENDA_RESOLUCAO = "\nDigite:\n1 - Para Sim!\n2 - Para Não!";
+
     private PDO $pdo;
 
     public function __construct()
@@ -26,44 +40,86 @@ class WhatsAppNpsService
     {
         $config = new WhatsAppConfigService();
         $chatbot = new WhatsAppChatbotService();
-
-        $pergunta = $chatbot->renderizarTemplate($config->npsPergunta(), ['nome' => $atendimentoComContato['contato_nome']]);
-
-        (new WhatsAppMensagemService())->enviar($atendimentoComContato['numero'], $pergunta);
-
+        $mensageiro = new WhatsAppMensagemService();
         $atendimentoService = new WhatsAppAtendimentoService();
-        $atendimentoService->registrarMensagemSaida((int)$atendimentoComContato['id'], $pergunta, 'bot');
 
-        $this->pdo->prepare("UPDATE whatsapp_atendimentos SET status = 'aguardando_nps' WHERE id = ?")
+        $nome = $atendimentoComContato['contato_nome'];
+        $numero = $atendimentoComContato['numero'];
+
+        $mensagemEspera = $chatbot->renderizarTemplate($config->npsMensagemEspera(), ['nome' => $nome]);
+        $mensageiro->enviar($numero, $mensagemEspera);
+        $atendimentoService->registrarMensagemSaida((int)$atendimentoComContato['id'], $mensagemEspera, 'bot');
+
+        $perguntaAtendente = $chatbot->renderizarTemplate($config->npsPerguntaAtendente(), ['nome' => $nome]) . self::LEGENDA_ATENDENTE;
+        $mensageiro->enviar($numero, $perguntaAtendente);
+        $atendimentoService->registrarMensagemSaida((int)$atendimentoComContato['id'], $perguntaAtendente, 'bot');
+
+        $this->pdo->prepare("UPDATE whatsapp_atendimentos SET status = 'aguardando_nps_atendente' WHERE id = ?")
             ->execute([$atendimentoComContato['id']]);
     }
 
     /**
-     * @param array $atendimento precisa ter pelo menos id, contato_id, setor_id, usuario_id, numero, contato_nome
+     * @param array $atendimento precisa ter id, contato_id, setor_id, usuario_id, status, numero, contato_nome
      */
     public function processarResposta(array $atendimento, string $texto): void
     {
-        $atendimentoService = new WhatsAppAtendimentoService();
-        $config = new WhatsAppConfigService();
-        $chatbot = new WhatsAppChatbotService();
+        if ($atendimento['status'] === 'aguardando_nps_atendente') {
+            $this->processarNotaAtendente($atendimento, $texto);
+            return;
+        }
 
+        if ($atendimento['status'] === 'aguardando_nps_resolucao') {
+            $this->processarResolucao($atendimento, $texto);
+        }
+    }
+
+    private function processarNotaAtendente(array $atendimento, string $texto): void
+    {
+        $atendimentoService = new WhatsAppAtendimentoService();
         $texto = trim($texto);
 
-        if (!preg_match('/^\d{1,2}$/', $texto) || (int)$texto < 0 || (int)$texto > 10) {
-            $mensagemErro = 'Não entendi -- responda só com um número de 0 a 10, por favor.';
+        if (!preg_match('/^[1-5]$/', $texto)) {
+            $mensagemErro = 'Não entendi -- responda só com um número de 1 a 5, por favor.';
             (new WhatsAppMensagemService())->enviar($atendimento['numero'], $mensagemErro);
             $atendimentoService->registrarMensagemSaida((int)$atendimento['id'], $mensagemErro, 'bot');
             return;
         }
 
-        $nota = (int)$texto;
-
         $this->pdo->prepare(
-            "INSERT INTO whatsapp_nps_respostas (atendimento_id, contato_id, setor_id, usuario_id, nota)
+            "INSERT INTO whatsapp_nps_respostas (atendimento_id, contato_id, setor_id, usuario_id, nota_atendente)
              VALUES (?, ?, ?, ?, ?)"
-        )->execute([$atendimento['id'], $atendimento['contato_id'], $atendimento['setor_id'], $atendimento['usuario_id'], $nota]);
+        )->execute([$atendimento['id'], $atendimento['contato_id'], $atendimento['setor_id'], $atendimento['usuario_id'], (int)$texto]);
 
+        $config = new WhatsAppConfigService();
+        $chatbot = new WhatsAppChatbotService();
+        $perguntaResolucao = $chatbot->renderizarTemplate($config->npsPerguntaResolucao(), ['nome' => $atendimento['contato_nome']]) . self::LEGENDA_RESOLUCAO;
+
+        (new WhatsAppMensagemService())->enviar($atendimento['numero'], $perguntaResolucao);
+        $atendimentoService->registrarMensagemSaida((int)$atendimento['id'], $perguntaResolucao, 'bot');
+
+        $this->pdo->prepare("UPDATE whatsapp_atendimentos SET status = 'aguardando_nps_resolucao' WHERE id = ?")
+            ->execute([$atendimento['id']]);
+    }
+
+    private function processarResolucao(array $atendimento, string $texto): void
+    {
+        $atendimentoService = new WhatsAppAtendimentoService();
+        $texto = trim($texto);
+
+        if ($texto !== '1' && $texto !== '2') {
+            $mensagemErro = 'Não entendi -- digite 1 para Sim ou 2 para Não, por favor.';
+            (new WhatsAppMensagemService())->enviar($atendimento['numero'], $mensagemErro);
+            $atendimentoService->registrarMensagemSaida((int)$atendimento['id'], $mensagemErro, 'bot');
+            return;
+        }
+
+        $this->pdo->prepare("UPDATE whatsapp_nps_respostas SET resolvido = ? WHERE atendimento_id = ?")
+            ->execute([$texto === '1' ? 1 : 0, $atendimento['id']]);
+
+        $config = new WhatsAppConfigService();
+        $chatbot = new WhatsAppChatbotService();
         $agradecimento = $chatbot->renderizarTemplate($config->npsAgradecimento(), ['nome' => $atendimento['contato_nome']]);
+
         (new WhatsAppMensagemService())->enviar($atendimento['numero'], $agradecimento);
         $atendimentoService->registrarMensagemSaida((int)$atendimento['id'], $agradecimento, 'bot');
 
@@ -72,13 +128,13 @@ class WhatsAppNpsService
     }
 
     /**
-     * Resumo (total, média, distribuição 0-10 e o score NPS clássico:
-     * % promotores [9-10] menos % detratores [0-6], de -100 a 100) --
-     * $setorId null = todos os setores.
+     * Resumo do período: total de respostas com nota, média (1-5), %
+     * de resolução (entre quem já respondeu a 2ª pergunta) e
+     * distribuição das notas -- $setorId null = todos os setores.
      */
     public function resumo(?int $setorId = null, int $dias = 90): array
     {
-        $sql = "SELECT nota FROM whatsapp_nps_respostas WHERE criado_em >= (NOW() - INTERVAL ? DAY)";
+        $sql = "SELECT nota_atendente, resolvido FROM whatsapp_nps_respostas WHERE criado_em >= (NOW() - INTERVAL ? DAY)";
         $params = [$dias];
 
         if ($setorId !== null) {
@@ -88,32 +144,28 @@ class WhatsAppNpsService
 
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
-        $notas = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+        $linhas = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        $total = count($notas);
-        $distribuicao = array_fill(0, 11, 0);
+        $notas = array_values(array_filter(array_map(
+            fn (array $l) => $l['nota_atendente'] !== null ? (int)$l['nota_atendente'] : null,
+            $linhas
+        ), fn ($n) => $n !== null));
+
+        $resolucoes = array_values(array_filter(array_map(
+            fn (array $l) => $l['resolvido'] !== null ? (int)$l['resolvido'] : null,
+            $linhas
+        ), fn ($n) => $n !== null));
+
+        $distribuicao = array_fill(1, 5, 0);
         foreach ($notas as $nota) {
             $distribuicao[$nota]++;
         }
 
-        if ($total === 0) {
-            return ['total' => 0, 'media' => null, 'score' => null, 'distribuicao' => $distribuicao];
-        }
-
-        $promotores = 0;
-        $detratores = 0;
-        foreach ($notas as $nota) {
-            if ($nota >= 9) {
-                $promotores++;
-            } elseif ($nota <= 6) {
-                $detratores++;
-            }
-        }
-
         return [
-            'total' => $total,
-            'media' => round(array_sum($notas) / $total, 1),
-            'score' => (int)round((($promotores - $detratores) / $total) * 100),
+            'total' => count($linhas),
+            'media' => $notas ? round(array_sum($notas) / count($notas), 1) : null,
+            'indice_satisfacao' => $notas ? (int)round((array_sum($notas) / (count($notas) * 5)) * 100) : null,
+            'pct_resolvido' => $resolucoes ? (int)round((array_sum($resolucoes) / count($resolucoes)) * 100) : null,
             'distribuicao' => $distribuicao,
         ];
     }
@@ -137,5 +189,29 @@ class WhatsAppNpsService
         $stmt->execute();
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Índice de satisfação médio (0-100) por atendente, num período --
+     * usado no ranking. $usuarioIds vazio = ninguém tem resposta ainda.
+     *
+     * @return array<int, float> usuario_id => índice (0-100)
+     */
+    public function indicePorAtendente(string $desde): array
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT usuario_id, AVG(nota_atendente) AS media
+             FROM whatsapp_nps_respostas
+             WHERE usuario_id IS NOT NULL AND nota_atendente IS NOT NULL AND criado_em >= ?
+             GROUP BY usuario_id"
+        );
+        $stmt->execute([$desde]);
+
+        $indices = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $linha) {
+            $indices[(int)$linha['usuario_id']] = round(((float)$linha['media'] / 5) * 100, 1);
+        }
+
+        return $indices;
     }
 }

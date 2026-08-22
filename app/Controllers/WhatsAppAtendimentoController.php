@@ -9,6 +9,7 @@ use App\Services\NotificationService;
 use App\Services\WhatsAppAtendimentoService;
 use App\Services\WhatsAppContatoService;
 use App\Services\WhatsAppMensagemService;
+use App\Services\WhatsAppSetorService;
 
 class WhatsAppAtendimentoController extends Controller
 {
@@ -16,8 +17,13 @@ class WhatsAppAtendimentoController extends Controller
     {
         AuthMiddleware::checkModulo('whatsapp_atendimentos');
 
+        $service = new WhatsAppAtendimentoService();
+        $usuarioId = (int)$_SESSION['usuario']['id'];
+
         $this->view('whatsapp/atendimentos', [
-            'atendimentos' => (new WhatsAppAtendimentoService())->listarDoUsuario((int)$_SESSION['usuario']['id']),
+            'aba' => $_GET['aba'] ?? 'andamento',
+            'atendimentos' => $service->listarDoUsuario($usuarioId),
+            'encerrados' => $service->listarEncerradosDoUsuario($usuarioId),
         ]);
     }
 
@@ -71,9 +77,15 @@ class WhatsAppAtendimentoController extends Controller
             exit;
         }
 
+        $setoresAtivos = array_values(array_filter(
+            (new WhatsAppSetorService())->listar(),
+            fn (array $s) => (bool)$s['ativo'] && (int)$s['id'] !== (int)$atendimento['setor_id']
+        ));
+
         $this->view('whatsapp/atendimento_chat', [
             'atendimento' => $atendimento,
             'mensagens' => $service->mensagens($id),
+            'setoresAtivos' => $setoresAtivos,
         ]);
     }
 
@@ -148,6 +160,35 @@ class WhatsAppAtendimentoController extends Controller
         AuditService::registrar('WhatsApp', 'Encerrar atendimento', "Atendimento #{$id} encerrado.");
 
         NotificationService::success($resultado['message']);
+        header('Location: ' . url('/whatsapp/atendimentos'));
+        exit;
+    }
+
+    public function transferir(): void
+    {
+        AuthMiddleware::checkModulo('whatsapp_atendimentos');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $setorId = (int)($_POST['setor_id'] ?? 0);
+        $service = new WhatsAppAtendimentoService();
+        $atendimento = $service->buscar($id);
+
+        if (!$this->pertenceAoUsuarioLogado($atendimento)) {
+            NotificationService::error('Atendimento não encontrado ou não é seu.');
+            header('Location: ' . url('/whatsapp/atendimentos'));
+            exit;
+        }
+
+        $resultado = $service->transferir($id, $setorId);
+
+        AuditService::registrar('WhatsApp', 'Transferir atendimento', "Atendimento #{$id}: {$resultado['message']}");
+
+        if ($resultado['success']) {
+            NotificationService::success($resultado['message']);
+        } else {
+            NotificationService::error($resultado['message']);
+        }
+
         header('Location: ' . url('/whatsapp/atendimentos'));
         exit;
     }
