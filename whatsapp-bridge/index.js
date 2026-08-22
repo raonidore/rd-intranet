@@ -21,6 +21,30 @@ const pino = require('pino');
 const QRCode = require('qrcode');
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, jidDecode, isLidUser, downloadMediaMessage } = require('@whiskeysockets/baileys');
 
+// libsignal-node (dependência do Baileys pro protocolo Signal) despeja a
+// sessão inteira -- incluindo chaves privadas de verdade -- via
+// console.info()/console.warn() sempre que fecha/rotaciona uma sessão
+// (session_record.js, closeSession()), sem respeitar o `logger` que
+// passamos pro makeWASocket() -- bug/decisão de debug da lib, não tem
+// opção de configuração pra desligar. Filtra só essas duas mensagens
+// específicas antes de chegarem no journal do systemd; não usamos
+// console.info/console.warn em nada nosso, mas deixa passar qualquer
+// outra coisa por segurança (não é um "silenciar tudo").
+const consoleInfoOriginal = console.info.bind(console);
+const consoleWarnOriginal = console.warn.bind(console);
+console.info = (...args) => {
+    if (typeof args[0] === 'string' && args[0].startsWith('Closing session')) {
+        return;
+    }
+    consoleInfoOriginal(...args);
+};
+console.warn = (...args) => {
+    if (typeof args[0] === 'string' && args[0].startsWith('Session already closed')) {
+        return;
+    }
+    consoleWarnOriginal(...args);
+};
+
 // Chave do objeto de mensagem do Baileys -> tipo usado do lado do PHP
 // (mesmos valores do enum `tipo` de whatsapp_mensagens). Vídeo e
 // sticker ficam fora por enquanto -- só os 3 tipos que o painel sabe
