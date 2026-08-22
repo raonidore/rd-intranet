@@ -210,12 +210,16 @@ async function iniciarSessaoWhatsapp() {
             // atras de um LID (identidade opaca, "...@lid") em vez do JID
             // classico ("numero@s.whatsapp.net") em remoteJid -- se for o
             // caso, o numero de telefone de verdade vem à parte em
-            // key.senderPn. Sem isso, a gente salvava os digitos do LID como
-            // se fossem o numero do contato, e a resposta que mandavamos
-            // depois pra "<digitos do lid>@s.whatsapp.net" nao chegava em
-            // lugar nenhum (nao existe conta nenhuma nesse endereco).
-            const jidOrigem = isLidUser(msg.key.remoteJid) && msg.key.senderPn
-                ? msg.key.senderPn
+            // key.remoteJidAlt (chamava key.senderPn na Baileys 6.x; o campo
+            // mudou de nome na 7.x -- WAMessageKey nao tem mais senderPn,
+            // então aquele valor era sempre undefined e a gente caia sempre
+            // no fallback errado). Sem isso, a gente salvava os digitos do
+            // LID como se fossem o numero do contato, e a resposta que
+            // mandavamos depois pra "<digitos do lid>@s.whatsapp.net" nao
+            // chegava em lugar nenhum (nao existe conta nenhuma nesse
+            // endereco).
+            const jidOrigem = isLidUser(msg.key.remoteJid) && msg.key.remoteJidAlt
+                ? msg.key.remoteJidAlt
                 : msg.key.remoteJid;
             const numero = jidDecode(jidOrigem)?.user || '';
 
