@@ -169,6 +169,10 @@ class ChamadoExternoService
         $id = (int)$this->pdo->lastInsertId();
         $this->registrarSistema($id, 'Chamado aberto.', $dados['usuario_id'] ?? null);
 
+        if (!empty($dados['ativo_id'])) {
+            (new AtivoStatusAutomacaoService())->aoAbrirChamadoExterno((int)$dados['ativo_id']);
+        }
+
         return ['success' => true, 'message' => 'Chamado externo criado.', 'id' => $id];
     }
 
@@ -236,6 +240,18 @@ class ChamadoExternoService
             sprintf('Status alterado de "%s" para "%s".', self::statusLabel($chamado['status']), self::statusLabel($novoStatus)),
             $usuarioId
         );
+
+        if ($chamado['ativo_id']) {
+            $automacao = new AtivoStatusAutomacaoService();
+            $eraAberto = !in_array($chamado['status'], ['resolvido', 'fechado'], true);
+            $ficaAberto = !in_array($novoStatus, ['resolvido', 'fechado'], true);
+
+            if ($eraAberto && !$ficaAberto) {
+                $automacao->aoFecharChamadoExterno((int)$chamado['ativo_id']);
+            } elseif (!$eraAberto && $ficaAberto) {
+                $automacao->aoAbrirChamadoExterno((int)$chamado['ativo_id']);
+            }
+        }
 
         return ['success' => true, 'message' => 'Status atualizado.'];
     }

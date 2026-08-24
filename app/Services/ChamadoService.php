@@ -137,6 +137,15 @@ class ChamadoService
         return $item ?: null;
     }
 
+    /** Histórico de chamados internos abertos sobre um ativo -- usado no card "Histórico de Chamados" da tela do Ativo. */
+    public function listarPorAtivo(int $ativoId): array
+    {
+        $stmt = $this->pdo->prepare(self::SELECT_ENRIQUECIDO . ' WHERE c.ativo_id = ? ORDER BY c.aberto_em DESC');
+        $stmt->execute([$ativoId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     /** @param int[]|null $setorIds null = vê tudo (admin); [] = só a fila geral (sem setor); senão, os setores do usuário + fila geral. */
     public function listarFila(?array $setorIds): array
     {

@@ -8,6 +8,8 @@ use App\Services\AtivoCatalogoService;
 use App\Services\AtivoService;
 use App\Services\AtivoTipoService;
 use App\Services\AuditService;
+use App\Services\ChamadoExternoEstatisticaService;
+use App\Services\ChamadoService;
 use App\Services\CronService;
 use App\Services\EtiquetaService;
 use App\Services\NotificationService;
@@ -125,6 +127,10 @@ class AtivoController extends Controller
             'estadoPoliticas' => PermissionService::temAcesso('ativos_politicas') ? (new PoliticaService())->estadoMaquina($id) : [],
             'scriptMapeamentoSetor' => PermissionService::temAcesso('ativos_politicas') ? (new PoliticaService())->scriptMapearRecursosSetor(isset($ativo['setor_id']) ? (int)$ativo['setor_id'] : null) : null,
             'scriptAtualizacoesWindows' => PermissionService::temAcesso('ativos_politicas') ? (new PoliticaService())->scriptAplicarAtualizacoesWindows() : null,
+            'temAcessoChamadosInternos' => PermissionService::temAcesso('chamados_atendimentos'),
+            'temAcessoChamadosExternos' => PermissionService::temAcesso('chamados_externos_atendimentos'),
+            'historicoChamadosInternos' => PermissionService::temAcesso('chamados_atendimentos') ? (new ChamadoService())->listarPorAtivo($id) : [],
+            'historicoChamadosExternos' => PermissionService::temAcesso('chamados_externos_atendimentos') ? (new ChamadoExternoEstatisticaService())->porAtivo($id) : [],
         ]);
     }
 

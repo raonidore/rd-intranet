@@ -243,6 +243,14 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaProcessos" type="button"><i class="bi bi-cpu"></i> Processos</button>
     </li>
     <?php endif; ?>
+    <?php if ($temAcessoChamadosInternos || $temAcessoChamadosExternos): ?>
+    <li class="nav-item" role="presentation">
+        <?php $totalChamados = count($historicoChamadosInternos) + count($historicoChamadosExternos); ?>
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaChamados" type="button">
+            <i class="bi bi-ticket-perforated"></i> Chamados <?= $totalChamados > 0 ? '<span class="badge text-bg-secondary ms-1">' . $totalChamados . '</span>' : '' ?>
+        </button>
+    </li>
+    <?php endif; ?>
 </ul>
 
 <div class="tab-content">
@@ -324,6 +332,71 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             </div>
         </div>
     </div>
+
+    <?php if ($temAcessoChamadosInternos || $temAcessoChamadosExternos): ?>
+    <!-- Chamados -->
+    <div class="tab-pane fade" id="abaChamados">
+        <?php if ($temAcessoChamadosExternos): ?>
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white"><strong><i class="bi bi-building-gear"></i> Chamados Externos (com fornecedor)</strong></div>
+            <div class="card-body p-0">
+                <?php if (empty($historicoChamadosExternos)): ?>
+                    <p class="text-muted small mb-0 p-3">Nenhum chamado externo sobre este ativo ainda.</p>
+                <?php else: ?>
+                    <?php
+                    $statusExternoClasses = [
+                        'aberto' => 'text-bg-primary', 'aguardando_fornecedor' => 'text-bg-warning',
+                        'em_andamento' => 'text-bg-info', 'resolvido' => 'text-bg-success', 'fechado' => 'text-bg-secondary',
+                    ];
+                    ?>
+                    <table class="table align-middle mb-0">
+                        <thead><tr><th>Título</th><th>Fornecedor</th><th>Status</th><th>Aberto em</th></tr></thead>
+                        <tbody>
+                            <?php foreach ($historicoChamadosExternos as $ce): ?>
+                                <tr style="cursor:pointer" onclick="location.href='<?= url('/chamados-externos/ver?id=' . (int)$ce['id']) ?>'">
+                                    <td><?= htmlspecialchars($ce['titulo']) ?></td>
+                                    <td><?= htmlspecialchars($ce['fornecedor_nome']) ?></td>
+                                    <td><span class="badge <?= $statusExternoClasses[$ce['status']] ?? '' ?>"><?= \App\Services\ChamadoExternoService::statusLabel($ce['status']) ?></span></td>
+                                    <td class="text-muted small"><?= date('d/m/Y', strtotime($ce['aberto_em'])) ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                <?php endif; ?>
+                <div class="p-3 pt-0">
+                    <a href="<?= url('/chamados-externos/novo?ativo_id=' . (int)$ativo['id']) ?>" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-plus-lg"></i> Abrir chamado externo sobre este ativo
+                    </a>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <?php if ($temAcessoChamadosInternos): ?>
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white"><strong><i class="bi bi-ticket-perforated"></i> Chamados Internos (Help Desk)</strong></div>
+            <div class="card-body p-0">
+                <?php if (empty($historicoChamadosInternos)): ?>
+                    <p class="text-muted small mb-0 p-3">Nenhum chamado interno sobre este ativo ainda.</p>
+                <?php else: ?>
+                    <table class="table align-middle mb-0">
+                        <thead><tr><th>Título</th><th>Status</th><th>Aberto em</th></tr></thead>
+                        <tbody>
+                            <?php foreach ($historicoChamadosInternos as $ci): ?>
+                                <tr style="cursor:pointer" onclick="location.href='<?= url('/chamados/atendimentos/ver?id=' . (int)$ci['id']) ?>'">
+                                    <td><?= htmlspecialchars($ci['titulo']) ?></td>
+                                    <td><span class="badge text-bg-light border"><?= htmlspecialchars($ci['status']) ?></span></td>
+                                    <td class="text-muted small"><?= date('d/m/Y', strtotime($ci['aberto_em'])) ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                <?php endif; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+    </div>
+    <?php endif; ?>
 
     <!-- Componentes -->
     <div class="tab-pane fade" id="abaComponentes">
