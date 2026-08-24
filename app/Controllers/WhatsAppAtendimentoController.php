@@ -13,6 +13,7 @@ use App\Services\WhatsAppMensagemService;
 use App\Services\WhatsAppMidiaService;
 use App\Services\WhatsAppPermissaoService;
 use App\Services\WhatsAppSetorService;
+use App\Services\UsuarioOnlineService;
 
 class WhatsAppAtendimentoController extends Controller
 {
@@ -34,7 +35,8 @@ class WhatsAppAtendimentoController extends Controller
 
         $this->view('whatsapp/atendimentos', [
             'aba' => $aba,
-            'atendimentos' => $service->listarDoUsuario($usuarioId),
+            'usuarioId' => $usuarioId,
+            'atendimentos' => $service->listarVisiveis($usuarioId),
             'encerrados' => $podeVerEncerrados ? $service->listarEncerradosDoUsuario($usuarioId, !$podeVerNps) : [],
             'podeVerEncerrados' => $podeVerEncerrados,
         ]);
@@ -85,8 +87,8 @@ class WhatsAppAtendimentoController extends Controller
         $service = new WhatsAppAtendimentoService();
         $atendimento = $service->buscarComContato($id);
 
-        if (!$this->pertenceAoUsuarioLogado($atendimento)) {
-            NotificationService::error('Atendimento não encontrado ou não é seu.');
+        if (!$this->podeVer($atendimento)) {
+            NotificationService::error('Atendimento não encontrado ou você não tem acesso a ele.');
             header('Location: ' . url('/whatsapp/atendimentos'));
             exit;
         }
@@ -101,10 +103,32 @@ class WhatsAppAtendimentoController extends Controller
 
         $podeVerNps = $permissao->usuarioPodeVerNps($_SESSION['usuario']);
 
+        $usuarioId = (int)$_SESSION['usuario']['id'];
+        $souDono = (int)($atendimento['usuario_id'] ?? 0) === $usuarioId;
+        $setorService = new WhatsAppSetorService();
+        $souSupervisorDoSetor = !empty($atendimento['setor_id'])
+            && $setorService->ehSupervisorDoSetor($usuarioId, (int)$atendimento['setor_id']);
+
         $setoresAtivos = array_values(array_filter(
-            (new WhatsAppSetorService())->listar(),
+            $setorService->listar(),
             fn (array $s) => (bool)$s['ativo'] && (int)$s['id'] !== (int)$atendimento['setor_id']
         ));
+
+        // Só o dono pode transferir -- a lista de colegas (pra
+        // transferência direta) só faz sentido montar nesse caso.
+        $colegasSetor = [];
+        if ($souDono && !empty($atendimento['setor_id'])) {
+            $membros = $setorService->usuariosDoSetor((int)$atendimento['setor_id']);
+            $onlineIds = (new UsuarioOnlineService())->idsOnline(array_column($membros, 'id'));
+
+            foreach ($membros as $membro) {
+                if ((int)$membro['id'] === $usuarioId) {
+                    continue;
+                }
+                $membro['online'] = in_array((int)$membro['id'], $onlineIds, true);
+                $colegasSetor[] = $membro;
+            }
+        }
 
         $config = new WhatsAppConfigService();
 
@@ -112,6 +136,9 @@ class WhatsAppAtendimentoController extends Controller
             'atendimento' => $atendimento,
             'mensagens' => $service->mensagens($id, 0, !$podeVerNps),
             'setoresAtivos' => $setoresAtivos,
+            'colegasSetor' => $colegasSetor,
+            'souDono' => $souDono,
+            'souSupervisorDoSetor' => $souSupervisorDoSetor,
             'anexosAtivos' => $config->anexosAtivos(),
         ]);
     }
@@ -261,7 +288,7 @@ class WhatsAppAtendimentoController extends Controller
 
         $atendimento = $service->buscar((int)$mensagem['atendimento_id']);
 
-        if (!$this->pertenceAoUsuarioLogado($atendimento)) {
+        if (!$this->podeVer($atendimento)) {
             http_response_code(403);
             return;
         }
@@ -290,8 +317,8 @@ class WhatsAppAtendimentoController extends Controller
         $service = new WhatsAppAtendimentoService();
         $atendimento = $service->buscar($id);
 
-        if (!$this->pertenceAoUsuarioLogado($atendimento)) {
-            echo json_encode(['success' => false, 'message' => 'Atendimento não encontrado ou não é seu.']);
+        if (!$this->podeVer($atendimento)) {
+            echo json_encode(['success' => false, 'message' => 'Atendimento não encontrado ou você não tem acesso a ele.']);
             return;
         }
 
@@ -368,9 +395,106 @@ class WhatsAppAtendimentoController extends Controller
         exit;
     }
 
+    /** Transferência direta pra um colega específico do mesmo setor (em vez de voltar pra fila do setor sem dono). */
+    public function transferirParaUsuario(): void
+    {
+        AuthMiddleware::checkModulo('whatsapp_atendimentos');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $novoUsuarioId = (int)($_POST['usuario_id'] ?? 0);
+        $service = new WhatsAppAtendimentoService();
+        $atendimento = $service->buscar($id);
+
+        if (!$this->pertenceAoUsuarioLogado($atendimento)) {
+            NotificationService::error('Atendimento não encontrado ou não é seu.');
+            header('Location: ' . url('/whatsapp/atendimentos'));
+            exit;
+        }
+
+        $resultado = $service->transferirParaUsuario($id, $novoUsuarioId, (int)($atendimento['setor_id'] ?? 0));
+
+        AuditService::registrar('WhatsApp', 'Transferir atendimento (usuário)', "Atendimento #{$id}: {$resultado['message']}");
+
+        if ($resultado['success']) {
+            NotificationService::success($resultado['message']);
+        } else {
+            NotificationService::error($resultado['message']);
+        }
+
+        header('Location: ' . url('/whatsapp/atendimentos'));
+        exit;
+    }
+
+    /**
+     * Supervisor do setor assume o atendimento de um colega -- gate
+     * próprio (não é AuthMiddleware::checkModulo comum): além do
+     * módulo, precisa ser supervisor cadastrado no setor desse
+     * atendimento especificamente, conferido direto no banco a cada
+     * chamada (nunca confia em campo escondido de formulário pra isso).
+     */
+    public function assumirSupervisor(): void
+    {
+        AuthMiddleware::checkModulo('whatsapp_atendimentos');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $service = new WhatsAppAtendimentoService();
+        $atendimento = $service->buscar($id);
+        $usuarioId = (int)$_SESSION['usuario']['id'];
+
+        $ehSupervisor = $atendimento
+            && !empty($atendimento['setor_id'])
+            && (new WhatsAppSetorService())->ehSupervisorDoSetor($usuarioId, (int)$atendimento['setor_id']);
+
+        if (!$ehSupervisor) {
+            NotificationService::error('Você não tem permissão de supervisor nesse setor.');
+            header('Location: ' . url('/whatsapp/atendimentos'));
+            exit;
+        }
+
+        $resultado = $service->assumirComoSupervisor($id, $usuarioId);
+
+        AuditService::registrar('WhatsApp', 'Assumir atendimento (supervisor)', "Atendimento #{$id}: {$resultado['message']}");
+
+        if ($resultado['success']) {
+            NotificationService::success($resultado['message']);
+        } else {
+            NotificationService::error($resultado['message']);
+        }
+
+        header('Location: ' . url('/whatsapp/atendimentos/ver?id=' . $id));
+        exit;
+    }
+
     private function pertenceAoUsuarioLogado(?array $atendimento): bool
     {
         return $atendimento !== null
             && (int)($atendimento['usuario_id'] ?? 0) === (int)($_SESSION['usuario']['id'] ?? 0);
+    }
+
+    /**
+     * Dono do atendimento, sempre pode ver; senão, supervisor do setor
+     * (precisa ver pra poder assumir); senão, colega do mesmo setor só
+     * se o setor estiver marcado como "visível para a equipe".
+     */
+    private function podeVer(?array $atendimento): bool
+    {
+        if ($this->pertenceAoUsuarioLogado($atendimento)) {
+            return true;
+        }
+
+        if (!$atendimento || empty($atendimento['setor_id'])) {
+            return false;
+        }
+
+        $usuarioId = (int)($_SESSION['usuario']['id'] ?? 0);
+        $setorService = new WhatsAppSetorService();
+
+        if ($setorService->ehSupervisorDoSetor($usuarioId, (int)$atendimento['setor_id'])) {
+            return true;
+        }
+
+        $setor = $setorService->buscar((int)$atendimento['setor_id']);
+
+        return (bool)($setor['visivel_equipe'] ?? false) && $setorService->ehMembroDoSetor($usuarioId, (int)$atendimento['setor_id']);
     }
 }

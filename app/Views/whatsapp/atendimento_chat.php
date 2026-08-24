@@ -63,7 +63,9 @@ function renderizarBolha(array $m): string
         . '</div></div>';
 }
 
-$somenteLeitura = $atendimento['status'] === 'encerrado';
+$ehEncerrado = $atendimento['status'] === 'encerrado';
+$somenteLeitura = $ehEncerrado || !$souDono;
+$podeAssumirComoSupervisor = !$ehEncerrado && !$souDono && $souSupervisorDoSetor && $atendimento['status'] === 'em_atendimento';
 ?>
 
 <?= Alert::flash() ?>
@@ -75,6 +77,9 @@ $somenteLeitura = $atendimento['status'] === 'encerrado';
             <?= htmlspecialchars(telefone_br($atendimento['numero'])) ?>
             <?php if (!empty($atendimento['setor_nome'])): ?>
                 &middot; Setor: <?= htmlspecialchars($atendimento['setor_nome']) ?>
+            <?php endif; ?>
+            <?php if (!$souDono && !empty($atendimento['usuario_nome'])): ?>
+                &middot; Atendido por: <?= htmlspecialchars($atendimento['usuario_nome']) ?>
             <?php endif; ?>
         </small>
     </div>
@@ -91,7 +96,7 @@ $somenteLeitura = $atendimento['status'] === 'encerrado';
             <i class="bi bi-file-earmark-pdf"></i> Exportar PDF
         </button>
         <?php if (!$somenteLeitura): ?>
-            <?php if (!empty($setoresAtivos)): ?>
+            <?php if (!empty($setoresAtivos) || !empty($colegasSetor)): ?>
                 <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalTransferir">
                     <i class="bi bi-arrow-left-right"></i> Transferir
                 </button>
@@ -106,9 +111,25 @@ $somenteLeitura = $atendimento['status'] === 'encerrado';
     </div>
 </div>
 
-<?php if ($somenteLeitura): ?>
+<?php if ($ehEncerrado): ?>
     <div class="alert alert-secondary py-2 small">
         <i class="bi bi-lock"></i> Atendimento encerrado em <?= data_br($atendimento['encerrado_em']) ?> -- só consulta, não é possível responder por aqui.
+    </div>
+<?php elseif (!$souDono): ?>
+    <div class="alert alert-info py-2 small d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span>
+            <i class="bi bi-eye"></i> Você está vendo esse atendimento porque faz parte do setor
+            <?= htmlspecialchars($atendimento['setor_nome'] ?? '') ?> -- só quem está atendendo
+            <?= $podeAssumirComoSupervisor ? 'ou um supervisor' : '' ?> pode responder.
+        </span>
+        <?php if ($podeAssumirComoSupervisor): ?>
+            <form method="post" action="<?= url('/whatsapp/atendimentos/assumir-supervisor') ?>" class="d-inline" onsubmit="return confirm('Assumir este atendimento? Ele deixa de ser do atendente atual.');">
+                <input type="hidden" name="id" value="<?= (int)$atendimento['id'] ?>">
+                <button type="submit" class="btn btn-sm btn-warning">
+                    <i class="bi bi-person-check"></i> Assumir atendimento
+                </button>
+            </form>
+        <?php endif; ?>
     </div>
 <?php endif; ?>
 
@@ -556,34 +577,60 @@ $somenteLeitura = $atendimento['status'] === 'encerrado';
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
 
-<?php if (!empty($setoresAtivos)): ?>
+<?php if (!empty($setoresAtivos) || !empty($colegasSetor)): ?>
 <div class="modal fade" id="modalTransferir" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <form method="post" action="<?= url('/whatsapp/atendimentos/transferir') ?>">
-                <input type="hidden" name="id" value="<?= (int)$atendimento['id'] ?>">
-                <div class="modal-header">
-                    <h5 class="modal-title">Transferir atendimento</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
+            <div class="modal-header">
+                <h5 class="modal-title">Transferir atendimento</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <?php if (!empty($colegasSetor)): ?>
+                    <h6 class="small text-uppercase text-muted mb-2">Transferir direto para um colega</h6>
+                    <p class="text-muted small">
+                        Continua em atendimento, só troca o dono na hora -- só aparecem colegas do setor
+                        <?= htmlspecialchars($atendimento['setor_nome'] ?? '') ?> que estão online agora.
+                    </p>
+                    <form method="post" action="<?= url('/whatsapp/atendimentos/transferir-usuario') ?>" class="mb-4">
+                        <input type="hidden" name="id" value="<?= (int)$atendimento['id'] ?>">
+                        <div class="input-group">
+                            <select name="usuario_id" class="form-select" required>
+                                <option value="">Selecione um colega online...</option>
+                                <?php foreach ($colegasSetor as $colega): ?>
+                                    <option value="<?= (int)$colega['id'] ?>" <?= $colega['online'] ? '' : 'disabled' ?>>
+                                        <?= $colega['online'] ? '🟢' : '⚪' ?> <?= htmlspecialchars($colega['nome']) ?><?= $colega['online'] ? '' : ' (offline)' ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <button type="submit" class="btn btn-primary"><i class="bi bi-person-check"></i> Transferir</button>
+                        </div>
+                    </form>
+                <?php endif; ?>
+
+                <?php if (!empty($setoresAtivos)): ?>
+                    <h6 class="small text-uppercase text-muted mb-2">Transferir para outro setor</h6>
                     <p class="text-muted small">
                         Volta pra fila do setor escolhido, sem dono -- deixa de ser seu, qualquer atendente daquele setor
                         pode assumir.
                     </p>
-                    <label class="form-label">Setor de destino</label>
-                    <select name="setor_id" class="form-select" required>
-                        <option value="">Selecione...</option>
-                        <?php foreach ($setoresAtivos as $setor): ?>
-                            <option value="<?= (int)$setor['id'] ?>"><?= htmlspecialchars($setor['nome']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary"><i class="bi bi-arrow-left-right"></i> Transferir</button>
-                </div>
-            </form>
+                    <form method="post" action="<?= url('/whatsapp/atendimentos/transferir') ?>">
+                        <input type="hidden" name="id" value="<?= (int)$atendimento['id'] ?>">
+                        <div class="input-group">
+                            <select name="setor_id" class="form-select" required>
+                                <option value="">Selecione...</option>
+                                <?php foreach ($setoresAtivos as $setor): ?>
+                                    <option value="<?= (int)$setor['id'] ?>"><?= htmlspecialchars($setor['nome']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <button type="submit" class="btn btn-outline-primary"><i class="bi bi-arrow-left-right"></i> Transferir</button>
+                        </div>
+                    </form>
+                <?php endif; ?>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+            </div>
         </div>
     </div>
 </div>

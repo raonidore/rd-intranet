@@ -196,10 +196,11 @@ class WhatsAppAtendimentoService
     public function buscarComContato(int $id): ?array
     {
         $stmt = $this->pdo->prepare(
-            "SELECT a.*, c.numero, c.nome AS contato_nome, s.nome AS setor_nome, s.nps_ativo
+            "SELECT a.*, c.numero, c.nome AS contato_nome, s.nome AS setor_nome, s.nps_ativo, u.nome AS usuario_nome
              FROM whatsapp_atendimentos a
              JOIN whatsapp_contatos c ON c.id = a.contato_id
              LEFT JOIN whatsapp_setores s ON s.id = a.setor_id
+             LEFT JOIN usuarios u ON u.id = a.usuario_id
              WHERE a.id = ?"
         );
         $stmt->execute([$id]);
@@ -310,19 +311,36 @@ class WhatsAppAtendimentoService
     }
 
     /**
-     * Conversas abertas do próprio usuário, com prévia da última mensagem.
+     * Conversas abertas que o usuário pode ver na tela de Atendimentos:
+     * as suas próprias + as de colegas do mesmo setor, só quando o
+     * setor está marcado como "visível para a equipe" (senão continua
+     * igual sempre foi -- cada um só vê o que já assumiu pra si).
+     * usuario_nome vem junto pra identificar de quem é a conversa
+     * quando não é a do próprio usuário.
      */
-    public function listarDoUsuario(int $usuarioId): array
+    public function listarVisiveis(int $usuarioId): array
     {
         $stmt = $this->pdo->prepare(
-            "SELECT a.*, c.numero, c.nome AS contato_nome,
+            "SELECT a.*, c.numero, c.nome AS contato_nome, u.nome AS usuario_nome,
                     (SELECT conteudo FROM whatsapp_mensagens m WHERE m.atendimento_id = a.id ORDER BY m.id DESC LIMIT 1) AS ultima_mensagem
              FROM whatsapp_atendimentos a
              JOIN whatsapp_contatos c ON c.id = a.contato_id
-             WHERE a.status = 'em_atendimento' AND a.usuario_id = ?
+             LEFT JOIN usuarios u ON u.id = a.usuario_id
+             WHERE a.status = 'em_atendimento'
+               AND (
+                    a.usuario_id = ?
+                    OR (
+                        a.usuario_id IS NOT NULL AND a.usuario_id != ?
+                        AND a.setor_id IN (
+                            SELECT su.setor_id FROM whatsapp_setor_usuarios su
+                            JOIN whatsapp_setores s ON s.id = su.setor_id AND s.visivel_equipe = 1
+                            WHERE su.usuario_id = ?
+                        )
+                    )
+               )
              ORDER BY a.ultima_mensagem_em DESC"
         );
-        $stmt->execute([$usuarioId]);
+        $stmt->execute([$usuarioId, $usuarioId, $usuarioId]);
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
@@ -451,6 +469,78 @@ class WhatsAppAtendimentoService
         $this->registrarMensagemSaida($atendimentoId, "Atendimento transferido para o setor \"{$setor['nome']}\".", 'bot');
 
         return ['success' => true, 'message' => "Atendimento transferido para \"{$setor['nome']}\"."];
+    }
+
+    /**
+     * Transferência direta pra um colega específico do mesmo setor
+     * (continua 'em_atendimento', só troca o dono -- diferente de
+     * transferir() pra setor, que volta pra fila sem dono). Só aceita
+     * quem realmente atende nesse setor e está online agora -- evita
+     * empurrar a conversa pra alguém que não vai ver.
+     *
+     * @return array{success: bool, message: string}
+     */
+    public function transferirParaUsuario(int $atendimentoId, int $novoUsuarioId, int $setorId): array
+    {
+        if (!$setorId) {
+            return ['success' => false, 'message' => 'Esse atendimento não tem setor definido -- transfira pra um setor primeiro.'];
+        }
+
+        $setorService = new WhatsAppSetorService();
+        if (!$setorService->ehMembroDoSetor($novoUsuarioId, $setorId)) {
+            return ['success' => false, 'message' => 'Esse usuário não atende nesse setor.'];
+        }
+
+        if (!(new UsuarioOnlineService())->estaOnline($novoUsuarioId)) {
+            return ['success' => false, 'message' => 'Esse colega não está online no momento -- escolha outro ou transfira pro setor.'];
+        }
+
+        $stmt = $this->pdo->prepare('SELECT nome FROM usuarios WHERE id = ? AND ativo = 1');
+        $stmt->execute([$novoUsuarioId]);
+        $nomeUsuario = $stmt->fetchColumn();
+
+        if (!$nomeUsuario) {
+            return ['success' => false, 'message' => 'Usuário não encontrado.'];
+        }
+
+        $stmt = $this->pdo->prepare(
+            "UPDATE whatsapp_atendimentos SET usuario_id = ?, atribuido_em = NOW() WHERE id = ? AND status = 'em_atendimento'"
+        );
+        $stmt->execute([$novoUsuarioId, $atendimentoId]);
+
+        if ($stmt->rowCount() === 0) {
+            return ['success' => false, 'message' => 'Esse atendimento não está mais em andamento.'];
+        }
+
+        $this->registrarMensagemSaida($atendimentoId, "Atendimento transferido para {$nomeUsuario}.", 'bot');
+
+        return ['success' => true, 'message' => "Atendimento transferido para {$nomeUsuario}."];
+    }
+
+    /**
+     * Supervisor do setor assume o atendimento de um colega -- mesma
+     * troca de dono da transferência direta, mas sem precisar que o
+     * dono atual faça nada (é uma sobreposição, não um pedido). O
+     * controller já confere se quem chamou é supervisor do setor antes
+     * de chegar aqui; o "AND status = 'em_atendimento'" evita assumir
+     * algo que acabou de ser encerrado.
+     *
+     * @return array{success: bool, message: string}
+     */
+    public function assumirComoSupervisor(int $atendimentoId, int $usuarioId): array
+    {
+        $stmt = $this->pdo->prepare(
+            "UPDATE whatsapp_atendimentos SET usuario_id = ?, atribuido_em = NOW() WHERE id = ? AND status = 'em_atendimento'"
+        );
+        $stmt->execute([$usuarioId, $atendimentoId]);
+
+        if ($stmt->rowCount() === 0) {
+            return ['success' => false, 'message' => 'Não foi possível assumir -- esse atendimento pode já ter sido encerrado.'];
+        }
+
+        $this->registrarMensagemSaida($atendimentoId, 'Atendimento assumido por supervisão.', 'bot');
+
+        return ['success' => true, 'message' => 'Você assumiu o atendimento.'];
     }
 
     /**

@@ -30,14 +30,17 @@ class WhatsAppSetorController extends Controller
         ));
 
         $usuariosPorSetor = [];
+        $supervisoresPorSetor = [];
         foreach ($setores as $setor) {
             $usuariosPorSetor[$setor['id']] = $this->service->idsUsuariosDoSetor((int)$setor['id']);
+            $supervisoresPorSetor[$setor['id']] = $this->service->idsSupervisoresDoSetor((int)$setor['id']);
         }
 
         $this->view('whatsapp/setores', [
             'setores' => $setores,
             'usuariosAtivos' => $usuariosAtivos,
             'usuariosPorSetor' => $usuariosPorSetor,
+            'supervisoresPorSetor' => $supervisoresPorSetor,
         ]);
     }
 
@@ -59,7 +62,7 @@ class WhatsAppSetorController extends Controller
 
         $id = (int)($_POST['id'] ?? 0);
         $nome = trim($_POST['nome'] ?? '');
-        $resultado = $this->service->atualizar($id, $nome, isset($_POST['ativo']), isset($_POST['nps_ativo']));
+        $resultado = $this->service->atualizar($id, $nome, isset($_POST['ativo']), isset($_POST['nps_ativo']), isset($_POST['visivel_equipe']));
 
         AuditService::registrar('WhatsApp', 'Atualizar setor', "Setor #{$id}: {$resultado['message']}");
 
@@ -84,7 +87,12 @@ class WhatsAppSetorController extends Controller
 
         $setorId = (int)($_POST['setor_id'] ?? 0);
         $usuarios = $_POST['usuarios'] ?? [];
-        $resultado = $this->service->salvarUsuariosDoSetor($setorId, is_array($usuarios) ? $usuarios : []);
+        $supervisores = $_POST['supervisores'] ?? [];
+        $resultado = $this->service->salvarUsuariosDoSetor(
+            $setorId,
+            is_array($usuarios) ? $usuarios : [],
+            is_array($supervisores) ? $supervisores : []
+        );
 
         AuditService::registrar('WhatsApp', 'Usuários do setor', "Setor #{$setorId}: {$resultado['message']}");
 

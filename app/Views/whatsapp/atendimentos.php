@@ -74,12 +74,16 @@ use App\Components\Alert;
         </div>
     <?php else: ?>
         <?php foreach ($atendimentos as $item): ?>
+            <?php $ehDeColega = (int)($item['usuario_id'] ?? 0) !== (int)$usuarioId; ?>
             <a href="<?= url('/whatsapp/atendimentos/ver?id=' . (int)$item['id']) ?>" class="text-decoration-none text-reset">
                 <div class="card border-0 shadow-sm mb-2">
                     <div class="card-body d-flex justify-content-between align-items-center">
                         <div>
                             <strong><?= htmlspecialchars($item['contato_nome'] ?: '(sem nome)') ?></strong>
                             <span class="text-muted small ms-1"><?= htmlspecialchars(telefone_br($item['numero'])) ?></span>
+                            <?php if ($ehDeColega): ?>
+                                <span class="badge text-bg-light border ms-1"><i class="bi bi-eye"></i> <?= htmlspecialchars($item['usuario_nome'] ?? '?') ?></span>
+                            <?php endif; ?>
                             <div class="text-muted small text-truncate" style="max-width:480px">
                                 <?= $item['ultima_mensagem'] !== null ? htmlspecialchars($item['ultima_mensagem']) : '(sem mensagens)' ?>
                             </div>

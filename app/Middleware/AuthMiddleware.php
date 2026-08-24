@@ -3,6 +3,7 @@
 namespace App\Middleware;
 
 use App\Services\PermissionService;
+use App\Services\UsuarioOnlineService;
 
 class AuthMiddleware
 {
@@ -12,6 +13,8 @@ class AuthMiddleware
             header('Location: ' . url('/login'));
             exit;
         }
+
+        (new UsuarioOnlineService())->registrarAcesso((int)$_SESSION['usuario']['id']);
     }
 
     public static function checkModulo(string $modulo): void

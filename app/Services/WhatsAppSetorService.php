@@ -60,7 +60,7 @@ class WhatsAppSetorService
     /**
      * @return array{success: bool, message: string}
      */
-    public function atualizar(int $id, string $nome, bool $ativo, bool $npsAtivo = false): array
+    public function atualizar(int $id, string $nome, bool $ativo, bool $npsAtivo = false, bool $visivelEquipe = false): array
     {
         $nome = trim($nome);
 
@@ -72,8 +72,8 @@ class WhatsAppSetorService
             return ['success' => false, 'message' => 'Já existe um setor com esse nome.'];
         }
 
-        $stmt = $this->pdo->prepare('UPDATE whatsapp_setores SET nome = ?, ativo = ?, nps_ativo = ? WHERE id = ?');
-        $stmt->execute([$nome, $ativo ? 1 : 0, $npsAtivo ? 1 : 0, $id]);
+        $stmt = $this->pdo->prepare('UPDATE whatsapp_setores SET nome = ?, ativo = ?, nps_ativo = ?, visivel_equipe = ? WHERE id = ?');
+        $stmt->execute([$nome, $ativo ? 1 : 0, $npsAtivo ? 1 : 0, $visivelEquipe ? 1 : 0, $id]);
 
         return ['success' => true, 'message' => 'Setor atualizado com sucesso.'];
     }
@@ -118,15 +118,69 @@ class WhatsAppSetorService
     }
 
     /**
-     * Substitui a lista de usuários do setor pelo array informado
-     * (delete + insert numa transação -- lista costuma ter poucos
-     * usuários, não vale a pena calcular diff incremental).
+     * IDs dos usuários do setor marcados como supervisor -- usado pra
+     * marcar os checkboxes já selecionados na tela.
+     *
+     * @return int[]
+     */
+    public function idsSupervisoresDoSetor(int $setorId): array
+    {
+        $stmt = $this->pdo->prepare('SELECT usuario_id FROM whatsapp_setor_usuarios WHERE setor_id = ? AND supervisor = 1');
+        $stmt->execute([$setorId]);
+
+        return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    public function ehMembroDoSetor(int $usuarioId, int $setorId): bool
+    {
+        $stmt = $this->pdo->prepare('SELECT 1 FROM whatsapp_setor_usuarios WHERE setor_id = ? AND usuario_id = ?');
+        $stmt->execute([$setorId, $usuarioId]);
+
+        return (bool)$stmt->fetchColumn();
+    }
+
+    public function ehSupervisorDoSetor(int $usuarioId, int $setorId): bool
+    {
+        $stmt = $this->pdo->prepare('SELECT supervisor FROM whatsapp_setor_usuarios WHERE setor_id = ? AND usuario_id = ?');
+        $stmt->execute([$setorId, $usuarioId]);
+
+        return (bool)$stmt->fetchColumn();
+    }
+
+    /**
+     * Usuários vinculados ao setor, com nome -- base pra montar a lista
+     * de "transferir direto pro colega" (o chamador filtra quem está
+     * online e tira o próprio usuário da lista).
+     *
+     * @return array<int, array{id: int, nome: string}>
+     */
+    public function usuariosDoSetor(int $setorId): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT u.id, u.nome
+             FROM whatsapp_setor_usuarios su
+             JOIN usuarios u ON u.id = su.usuario_id
+             WHERE su.setor_id = ? AND u.ativo = 1
+             ORDER BY u.nome'
+        );
+        $stmt->execute([$setorId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Substitui a lista de usuários do setor pelo array informado, com
+     * quem é supervisor (delete + insert numa transação -- lista
+     * costuma ter poucos usuários, não vale a pena calcular diff
+     * incremental). $supervisorIds fora de $usuarioIds é ignorado --
+     * não faz sentido marcar supervisor quem não é nem membro.
      *
      * @return array{success: bool, message: string}
      */
-    public function salvarUsuariosDoSetor(int $setorId, array $usuarioIds): array
+    public function salvarUsuariosDoSetor(int $setorId, array $usuarioIds, array $supervisorIds = []): array
     {
         $usuarioIds = array_values(array_unique(array_map('intval', $usuarioIds)));
+        $supervisorIds = array_values(array_intersect(array_map('intval', $supervisorIds), $usuarioIds));
 
         $this->pdo->beginTransaction();
 
@@ -135,9 +189,9 @@ class WhatsAppSetorService
             $del->execute([$setorId]);
 
             if ($usuarioIds) {
-                $ins = $this->pdo->prepare('INSERT INTO whatsapp_setor_usuarios (setor_id, usuario_id) VALUES (?, ?)');
+                $ins = $this->pdo->prepare('INSERT INTO whatsapp_setor_usuarios (setor_id, usuario_id, supervisor) VALUES (?, ?, ?)');
                 foreach ($usuarioIds as $usuarioId) {
-                    $ins->execute([$setorId, $usuarioId]);
+                    $ins->execute([$setorId, $usuarioId, in_array($usuarioId, $supervisorIds, true) ? 1 : 0]);
                 }
             }
 
