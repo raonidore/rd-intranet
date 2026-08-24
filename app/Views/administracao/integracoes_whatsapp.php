@@ -61,7 +61,7 @@ use App\Components\Alert;
         <span id="badgeStatusWpp" class="badge text-bg-secondary">verificando...</span>
     </div>
     <div class="card-body text-center" id="corpoStatusWpp">
-        <p class="text-muted small">
+        <p class="text-muted small d-flex align-items-center justify-content-center gap-2" id="textoStatusWpp">
             <?= $bridgeInstalado
                 ? 'Bridge já instalado. Verificando status da conexão...'
                 : 'O bridge (processo que fala com o WhatsApp) ainda não foi instalado neste servidor.' ?>
@@ -87,11 +87,22 @@ use App\Components\Alert;
 <script>
 (function () {
     const badge = document.getElementById('badgeStatusWpp');
+    const texto = document.getElementById('textoStatusWpp');
     const botaoInstalar = document.getElementById('botaoInstalarWpp');
     const areaQrcode = document.getElementById('areaQrcodeWpp');
     const imgQrcode = document.getElementById('imgQrcodeWpp');
     const areaConectado = document.getElementById('areaConectadoWpp');
     const numeroConectado = document.getElementById('numeroConectadoWpp');
+
+    // "npm install" do bridge pode legitimamente levar quase um minuto
+    // num servidor mais lento -- durante essa janela, o /status ainda
+    // não responde (porta nem subiu), o que sem esse controle parecia
+    // erro ("bridge não respondeu") mesmo estando tudo normal. Depois
+    // da janela, troca só o texto (sem virar "erro" sozinho -- não dá
+    // pra saber se travou ou só está demorando mais que o normal).
+    const JANELA_INSTALACAO_MS = 70000;
+    let instalando = false;
+    let inicioInstalacao = null;
 
     let timerStatus = null;
     let timerQrcode = null;
@@ -113,27 +124,50 @@ use App\Components\Alert;
             .catch(() => {});
     }
 
+    function marcarInstalando(demorando) {
+        badge.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Instalando...';
+        badge.className = 'badge text-bg-info';
+        texto.textContent = demorando
+            ? 'Ainda instalando o bridge... está demorando mais que o normal, mas pode ser só um servidor mais lento. Continue aguardando.'
+            : 'Instalando o bridge no servidor -- isso pode levar até 1 minuto. Esta página atualiza sozinha, não precisa recarregar.';
+        pararQrcode();
+        areaConectado.style.display = 'none';
+    }
+
     function atualizarStatus() {
         fetch(<?= json_encode(url('/administracao/integracoes/whatsapp/status')) ?>)
             .then(r => r.json())
             .then(dados => {
                 if (!dados.success) {
+                    if (instalando) {
+                        const decorrido = Date.now() - inicioInstalacao;
+                        marcarInstalando(decorrido > JANELA_INSTALACAO_MS);
+                        return;
+                    }
+
                     badge.textContent = 'bridge não respondeu';
                     badge.className = 'badge text-bg-secondary';
+                    texto.textContent = 'O bridge não respondeu. Se ainda não foi instalado neste servidor, clique em "Instalar bridge" acima.';
                     pararQrcode();
                     areaConectado.style.display = 'none';
                     return;
                 }
 
+                // Qualquer resposta válida do bridge confirma que ele já
+                // subiu -- a partir daqui os status abaixo é que mandam.
+                instalando = false;
+
                 if (dados.status === 'conectado') {
                     badge.textContent = 'Conectado';
                     badge.className = 'badge text-bg-success';
+                    texto.textContent = 'Bridge conectado e funcionando.';
                     pararQrcode();
                     areaConectado.style.display = '';
                     numeroConectado.textContent = dados.numero || '-';
                 } else if (dados.status === 'aguardando_qrcode') {
                     badge.textContent = 'Aguardando leitura do QR Code';
                     badge.className = 'badge text-bg-warning';
+                    texto.textContent = 'Bridge instalado e rodando -- escaneie o QR Code abaixo para conectar.';
                     areaConectado.style.display = 'none';
                     if (!timerQrcode) {
                         buscarQrcode();
@@ -142,11 +176,17 @@ use App\Components\Alert;
                 } else {
                     badge.textContent = 'Desconectado';
                     badge.className = 'badge text-bg-secondary';
+                    texto.textContent = 'Bridge instalado, mas desconectado do WhatsApp. Clique em "Reinstalar bridge" para gerar um novo QR Code.';
                     pararQrcode();
                     areaConectado.style.display = 'none';
                 }
             })
             .catch(() => {
+                if (instalando) {
+                    marcarInstalando(Date.now() - inicioInstalacao > JANELA_INSTALACAO_MS);
+                    return;
+                }
+
                 badge.textContent = 'bridge não respondeu';
                 badge.className = 'badge text-bg-secondary';
             });
@@ -158,10 +198,15 @@ use App\Components\Alert;
 
         fetch(<?= json_encode(url('/administracao/integracoes/whatsapp/instalar')) ?>, { method: 'POST' })
             .then(r => r.json())
-            .then(dados => {
-                alert(dados.message || 'Instalação iniciada.');
+            .then(() => {
+                instalando = true;
+                inicioInstalacao = Date.now();
+                marcarInstalando(false);
+                atualizarStatus();
             })
-            .catch(() => alert('Erro ao comunicar com o servidor.'))
+            .catch(() => {
+                texto.textContent = 'Erro ao comunicar com o servidor -- tente novamente.';
+            })
             .finally(() => {
                 botaoInstalar.disabled = false;
                 botaoInstalar.innerHTML = '<i class="bi bi-cloud-download"></i> Reinstalar bridge';
