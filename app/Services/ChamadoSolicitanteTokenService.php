@@ -37,15 +37,10 @@ class ChamadoSolicitanteTokenService
             return;
         }
 
-        $this->invalidarPendentes((int)$solicitante['id']);
-
-        $token = bin2hex(random_bytes(32));
-        $expiraEm = date('Y-m-d H:i:s', time() + self::VALIDADE_HORAS * 3600);
-
-        $stmt = $this->pdo->prepare('INSERT INTO chamados_solicitante_tokens (solicitante_id, token_hash, expira_em) VALUES (?, ?, ?)');
-        $stmt->execute([$solicitante['id'], hash('sha256', $token), $expiraEm]);
-
-        $link = rtrim($urlBase, '/') . url('/portal/chamados/acessar?token=' . $token);
+        $link = $this->emitirLink((int)$solicitante['id'], $urlBase);
+        if ($link === null) {
+            return;
+        }
 
         $this->email->enviar(
             $email,
@@ -55,6 +50,32 @@ class ChamadoSolicitanteTokenService
             . '<p><a href="' . htmlspecialchars($link) . '">Ver meus chamados</a></p>'
             . '<p>Esse link expira em ' . self::VALIDADE_HORAS . ' hora(s) e só pode ser usado uma vez.</p>'
         );
+    }
+
+    /**
+     * Gera um token pra um solicitante já conhecido e devolve o link
+     * pronto (sem enviar e-mail) -- usado por solicitar() e também por
+     * quem precisa convidar o solicitante pra voltar ao portal por outro
+     * motivo (ex: ChamadoAvaliacaoService, pedindo avaliação ao resolver
+     * o chamado). Invalida qualquer token pendente do solicitante, mesma
+     * regra de token único de sempre. Null se SMTP não está configurado
+     * (nesse caso não faz sentido gerar um link que ninguém vai receber).
+     */
+    public function emitirLink(int $solicitanteId, string $urlBase): ?string
+    {
+        if (!$this->email->configurado()) {
+            return null;
+        }
+
+        $this->invalidarPendentes($solicitanteId);
+
+        $token = bin2hex(random_bytes(32));
+        $expiraEm = date('Y-m-d H:i:s', time() + self::VALIDADE_HORAS * 3600);
+
+        $stmt = $this->pdo->prepare('INSERT INTO chamados_solicitante_tokens (solicitante_id, token_hash, expira_em) VALUES (?, ?, ?)');
+        $stmt->execute([$solicitanteId, hash('sha256', $token), $expiraEm]);
+
+        return rtrim($urlBase, '/') . url('/portal/chamados/acessar?token=' . $token);
     }
 
     /** @return array{id: int, solicitante_id: int}|null */

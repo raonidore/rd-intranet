@@ -72,7 +72,72 @@ $corStatus = ['fila' => 'secondary', 'em_atendimento' => 'primary', 'aguardando_
             <?php endif; ?>
         </div>
     </div>
+
+    <?php if ($somenteLeitura): ?>
+        <div class="card border-0 shadow-sm mt-3">
+            <div class="card-body">
+                <?php if ($avaliacao): ?>
+                    <div class="text-muted small mb-1">Sua avaliação</div>
+                    <div class="fs-4 mb-1">
+                        <?php for ($i = 1; $i <= 5; $i++): ?>
+                            <i class="bi bi-star<?= $i <= (int)$avaliacao['nota'] ? '-fill text-warning' : ' text-muted' ?>"></i>
+                        <?php endfor; ?>
+                    </div>
+                    <?php if ($avaliacao['resolvido'] !== null): ?>
+                        <div class="small text-muted mb-1">Problema resolvido: <?= $avaliacao['resolvido'] ? 'Sim' : 'Não' ?></div>
+                    <?php endif; ?>
+                    <?php if (!empty($avaliacao['comentario'])): ?>
+                        <div class="small mt-2" style="white-space:pre-wrap"><?= htmlspecialchars($avaliacao['comentario']) ?></div>
+                    <?php endif; ?>
+                    <div class="small text-muted mt-2">Obrigado pelo retorno!</div>
+                <?php else: ?>
+                    <strong class="d-block mb-2">Como foi o atendimento?</strong>
+                    <form method="post" action="<?= url('/portal/chamados/avaliar') ?>">
+                        <input type="hidden" name="id" value="<?= (int)$chamado['id'] ?>">
+                        <div class="mb-3 fs-3 portal-estrelas">
+                            <?php for ($i = 1; $i <= 5; $i++): ?>
+                                <label class="portal-estrela">
+                                    <input type="radio" name="nota" value="<?= $i ?>" required class="d-none">
+                                    <i class="bi bi-star"></i>
+                                </label>
+                            <?php endfor; ?>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small">O problema foi resolvido?</label>
+                            <div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="resolvido" value="1" id="resolvidoSim">
+                                    <label class="form-check-label" for="resolvidoSim">Sim</label>
+                                </div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="resolvido" value="0" id="resolvidoNao">
+                                    <label class="form-check-label" for="resolvidoNao">Não</label>
+                                </div>
+                            </div>
+                        </div>
+                        <textarea name="comentario" class="form-control mb-2" rows="2" placeholder="Algum comentário? (opcional)"></textarea>
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-send"></i> Enviar avaliação</button>
+                    </form>
+                <?php endif; ?>
+            </div>
+        </div>
+    <?php endif; ?>
 </div>
+
+<script>
+document.querySelectorAll('.portal-estrelas .portal-estrela input').forEach(function (input) {
+    input.addEventListener('change', function () {
+        const nota = parseInt(this.value, 10);
+        document.querySelectorAll('.portal-estrelas .portal-estrela').forEach(function (label, idx) {
+            const icone = label.querySelector('i');
+            icone.className = (idx + 1) <= nota ? 'bi bi-star-fill text-warning' : 'bi bi-star';
+        });
+    });
+});
+</script>
+<style>
+.portal-estrela { cursor: pointer; margin-right: 4px; }
+</style>
 
 </body>
 </html>

@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
+use App\Services\ChamadoAvaliacaoService;
 use App\Services\ChamadoEstatisticaService;
 
 class ChamadoEstatisticaController extends Controller
@@ -27,6 +28,7 @@ class ChamadoEstatisticaController extends Controller
             'geral' => $estatistica->geral($periodoGeral),
             'ranking' => $estatistica->ranking($periodoRanking),
             'tempoReal' => $estatistica->tempoReal(),
+            'avaliacoes' => (new ChamadoAvaliacaoService())->resumo(),
         ]);
     }
 

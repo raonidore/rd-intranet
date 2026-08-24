@@ -347,6 +347,7 @@ $router->get('/portal/chamados/sair', [PortalChamadoController::class, 'sair']);
 $router->get('/portal/chamados/meus', [PortalChamadoController::class, 'meus']);
 $router->get('/portal/chamados/ver', [PortalChamadoController::class, 'ver']);
 $router->post('/portal/chamados/responder', [PortalChamadoController::class, 'responder']);
+$router->post('/portal/chamados/avaliar', [PortalChamadoController::class, 'avaliar']);
 
 $router->get('/administracao/integracoes', [IntegracoesController::class, 'index']);
 $router->get('/administracao/integracoes/base-conhecimento', [IntegracoesController::class, 'baseConhecimentoForm']);

@@ -235,6 +235,10 @@ class ChamadoService
 
         $this->registrarHistorico($chamadoId, 'status', $chamado['status'], $novoStatus, $usuarioId);
 
+        if ($novoStatus === 'resolvido' && $chamado['status'] !== 'resolvido') {
+            (new ChamadoAvaliacaoService())->perguntar($chamado);
+        }
+
         return ['success' => true, 'message' => 'Status atualizado para "' . self::STATUS[$novoStatus] . '".'];
     }
 

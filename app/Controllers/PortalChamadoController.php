@@ -3,6 +3,7 @@
 namespace App\Controllers;
 
 use App\Core\Controller;
+use App\Services\ChamadoAvaliacaoService;
 use App\Services\ChamadoService;
 use App\Services\ChamadoSolicitanteService;
 use App\Services\ChamadoSolicitanteTokenService;
@@ -98,11 +99,14 @@ class PortalChamadoController extends Controller
             exit;
         }
 
+        $somenteLeitura = in_array($chamado['status'], ['resolvido', 'fechado'], true);
+
         $this->view('portal/ver', [
             'solicitante' => $solicitante,
             'chamado' => $chamado,
             'comentarios' => $service->comentarios($id, false),
-            'somenteLeitura' => in_array($chamado['status'], ['resolvido', 'fechado'], true),
+            'somenteLeitura' => $somenteLeitura,
+            'avaliacao' => $somenteLeitura ? (new ChamadoAvaliacaoService())->buscar($id) : null,
         ]);
     }
 
@@ -116,6 +120,35 @@ class PortalChamadoController extends Controller
 
         if ($chamado && (int)$chamado['solicitante_id'] === (int)$solicitante['id']) {
             $service->responderComoSolicitante($id, $_POST['conteudo'] ?? '');
+        }
+
+        header('Location: ' . url('/portal/chamados/ver?id=' . $id));
+        exit;
+    }
+
+    public function avaliar(): void
+    {
+        $solicitante = $this->exigirSolicitante();
+
+        $id = (int)($_POST['id'] ?? 0);
+        $chamado = (new ChamadoService())->buscar($id);
+
+        if ($chamado
+            && (int)$chamado['solicitante_id'] === (int)$solicitante['id']
+            && in_array($chamado['status'], ['resolvido', 'fechado'], true)
+        ) {
+            $resolvidoRaw = $_POST['resolvido'] ?? '';
+            $resolvido = $resolvidoRaw === '' ? null : ($resolvidoRaw === '1');
+
+            $resultado = (new ChamadoAvaliacaoService())->registrar(
+                $id,
+                (int)$solicitante['id'],
+                (int)($_POST['nota'] ?? 0),
+                $resolvido,
+                trim($_POST['comentario'] ?? '')
+            );
+
+            $resultado['success'] ? NotificationService::success($resultado['message']) : NotificationService::error($resultado['message']);
         }
 
         header('Location: ' . url('/portal/chamados/ver?id=' . $id));

@@ -195,6 +195,33 @@ $rotulosPeriodoRanking = ['geral' => 'Histórico geral', 'mes' => 'Este mês', '
         </div>
     </div>
 
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm h-100"><div class="card-body text-center">
+                <div class="text-muted small">Satisfação (avaliações -- 90d)</div>
+                <div class="fs-2"><?= $avaliacoes['media'] !== null ? $avaliacoes['media'] . ' <small class="fs-6 text-muted">/5</small>' : '—' ?></div>
+            </div></div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm h-100"><div class="card-body text-center">
+                <div class="text-muted small">Índice de satisfação</div>
+                <div class="fs-2"><?= $avaliacoes['indice_satisfacao'] !== null ? $avaliacoes['indice_satisfacao'] . '%' : '—' ?></div>
+            </div></div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm h-100"><div class="card-body text-center">
+                <div class="text-muted small">Resolvido de primeira</div>
+                <div class="fs-2"><?= $avaliacoes['pct_resolvido'] !== null ? $avaliacoes['pct_resolvido'] . '%' : '—' ?></div>
+            </div></div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm h-100"><div class="card-body text-center">
+                <div class="text-muted small">Avaliações recebidas</div>
+                <div class="fs-2"><?= (int)$avaliacoes['total'] ?></div>
+            </div></div>
+        </div>
+    </div>
+
     <div class="card border-0 shadow-sm">
         <div class="card-body p-0">
             <?php if (empty($geral['linhas'])): ?>
