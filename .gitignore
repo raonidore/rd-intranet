@@ -9,6 +9,7 @@
 /storage/config_backup_status/*
 /storage/config_restore_status/*
 /storage/whatsapp/*
+/storage/chat/*
 .env
 /app/Config/database.php
 *.log

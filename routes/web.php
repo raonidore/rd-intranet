@@ -360,6 +360,11 @@ $router->get('/chat/mensagens', [ChatController::class, 'mensagensApi']);
 $router->get('/chat/contador', [ChatController::class, 'contadorApi']);
 $router->get('/chat/conversas', [ChatController::class, 'conversasApi']);
 $router->get('/chat/socket-token', [ChatController::class, 'socketTokenApi']);
+$router->post('/chat/anexo', [ChatController::class, 'anexoApi']);
+$router->get('/chat/midia', [ChatController::class, 'midiaApi']);
+$router->post('/chat/reagir', [ChatController::class, 'reagirApi']);
+$router->get('/chat/reacoes', [ChatController::class, 'reacoesApi']);
+$router->get('/chat/buscar', [ChatController::class, 'buscarApi']);
 $router->get('/api/chat/validar-socket-token', [ChatController::class, 'validarSocketTokenApi']);
 
 $router->get('/administracao/integracoes', [IntegracoesController::class, 'index']);

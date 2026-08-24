@@ -36,7 +36,13 @@ class ChatService
             "SELECT c.*,
                     CASE WHEN c.tipo = 'grupo' THEN c.nome ELSE ou.nome END AS nome_exibicao,
                     CASE WHEN c.tipo = 'direta' THEN ou.id ELSE NULL END AS outro_usuario_id,
-                    (SELECT conteudo FROM chat_mensagens m WHERE m.conversa_id = c.id ORDER BY m.id DESC LIMIT 1) AS ultima_mensagem,
+                    (SELECT CASE
+                                WHEN m.tipo = 'imagem' THEN '📷 Imagem'
+                                WHEN m.tipo = 'audio' THEN '🎤 Áudio'
+                                WHEN m.tipo = 'documento' THEN CONCAT('📎 ', COALESCE(NULLIF(m.conteudo, ''), 'Documento'))
+                                ELSE m.conteudo
+                            END
+                     FROM chat_mensagens m WHERE m.conversa_id = c.id ORDER BY m.id DESC LIMIT 1) AS ultima_mensagem,
                     (SELECT COUNT(*) FROM chat_mensagens m2
                      WHERE m2.conversa_id = c.id AND m2.usuario_id != ?
                        AND (p.ultima_leitura_em IS NULL OR m2.criado_em > p.ultima_leitura_em)) AS nao_lidas
@@ -69,11 +75,11 @@ class ChatService
         return (bool)$stmt->fetchColumn();
     }
 
-    /** @return array<int, array{id:int, nome:string, ultimo_acesso:?string}> */
+    /** @return array<int, array{id:int, nome:string, login:string, ultimo_acesso:?string}> */
     public function participantes(int $conversaId): array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT u.id, u.nome, u.ultimo_acesso
+            'SELECT u.id, u.nome, u.login, u.ultimo_acesso
              FROM chat_participantes p
              JOIN usuarios u ON u.id = p.usuario_id
              WHERE p.conversa_id = ?
@@ -177,11 +183,20 @@ class ChatService
         return ['success' => true, 'id' => $conversaId];
     }
 
-    /** @return array{success: bool, message?: string, id?: int} */
-    public function enviar(int $conversaId, int $usuarioId, string $conteudo): array
+    /**
+     * $tipo/$midiaPath só quando a mensagem é um anexo (imagem/áudio/
+     * documento) -- nesse caso $conteudo é a legenda, pode vir vazia.
+     * Menção (@login de alguém que participa desta conversa) é
+     * extraída do texto e gravada em chat_mencoes -- só quem já está
+     * na conversa pode ser mencionado, não dá pra "invocar" gente de
+     * fora por engano.
+     *
+     * @return array{success: bool, message?: string, id?: int}
+     */
+    public function enviar(int $conversaId, int $usuarioId, string $conteudo, string $tipo = 'texto', ?string $midiaPath = null): array
     {
         $conteudo = trim($conteudo);
-        if ($conteudo === '') {
+        if ($conteudo === '' && $tipo === 'texto') {
             return ['success' => false, 'message' => 'Escreva alguma coisa antes de enviar.'];
         }
 
@@ -189,8 +204,8 @@ class ChatService
             return ['success' => false, 'message' => 'Conversa não encontrada.'];
         }
 
-        $stmt = $this->pdo->prepare('INSERT INTO chat_mensagens (conversa_id, usuario_id, conteudo) VALUES (?, ?, ?)');
-        $stmt->execute([$conversaId, $usuarioId, $conteudo]);
+        $stmt = $this->pdo->prepare('INSERT INTO chat_mensagens (conversa_id, usuario_id, conteudo, tipo, midia_path) VALUES (?, ?, ?, ?, ?)');
+        $stmt->execute([$conversaId, $usuarioId, $conteudo, $tipo, $midiaPath]);
         $id = (int)$this->pdo->lastInsertId();
 
         $this->pdo->prepare('UPDATE chat_conversas SET ultima_mensagem_em = NOW() WHERE id = ?')->execute([$conversaId]);
@@ -198,7 +213,33 @@ class ChatService
         // A própria mensagem não conta como "não lida" pra quem mandou.
         $this->marcarComoLida($conversaId, $usuarioId);
 
+        if ($conteudo !== '') {
+            $this->registrarMencoes($id, $conversaId, $usuarioId, $conteudo);
+        }
+
         return ['success' => true, 'id' => $id];
+    }
+
+    private function registrarMencoes(int $mensagemId, int $conversaId, int $autorId, string $conteudo): void
+    {
+        if (!preg_match_all('/@([a-zA-Z0-9._-]+)/', $conteudo, $encontrados)) {
+            return;
+        }
+
+        $loginsMencionados = array_unique(array_map('mb_strtolower', $encontrados[1]));
+        if (empty($loginsMencionados)) {
+            return;
+        }
+
+        $stmt = $this->pdo->prepare('INSERT INTO chat_mencoes (mensagem_id, usuario_id) VALUES (?, ?)');
+        foreach ($this->participantes($conversaId) as $participante) {
+            if ((int)$participante['id'] === $autorId) {
+                continue;
+            }
+            if (in_array(mb_strtolower($participante['login']), $loginsMencionados, true)) {
+                $stmt->execute([$mensagemId, $participante['id']]);
+            }
+        }
     }
 
     public function marcarComoLida(int $conversaId, int $usuarioId): void
@@ -207,13 +248,15 @@ class ChatService
             ->execute([$conversaId, $usuarioId]);
     }
 
-    public function mensagens(int $conversaId, int $desde = 0): array
+    /** @param int $paraUsuarioId usado só pra marcar "mencionadoEu" em cada mensagem */
+    public function mensagens(int $conversaId, int $desde = 0, int $paraUsuarioId = 0): array
     {
-        $sql = "SELECT m.*, u.nome AS usuario_nome
+        $sql = "SELECT m.*, u.nome AS usuario_nome,
+                       EXISTS(SELECT 1 FROM chat_mencoes cm WHERE cm.mensagem_id = m.id AND cm.usuario_id = ?) AS mencionado_eu
                 FROM chat_mensagens m
                 JOIN usuarios u ON u.id = m.usuario_id
                 WHERE m.conversa_id = ?";
-        $params = [$conversaId];
+        $params = [$paraUsuarioId, $conversaId];
 
         if ($desde > 0) {
             $sql .= ' AND m.id > ?';
@@ -224,6 +267,108 @@ class ChatService
 
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
+
+        $linhas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($linhas as &$linha) {
+            $linha['mencionado_eu'] = (bool)$linha['mencionado_eu'];
+        }
+
+        return $linhas;
+    }
+
+    public function buscarMensagem(int $id): ?array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM chat_mensagens WHERE id = ?');
+        $stmt->execute([$id]);
+
+        $mensagem = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $mensagem ?: null;
+    }
+
+    /**
+     * Liga/desliga a reação do usuário -- clicar de novo no mesmo emoji
+     * remove (toggle), igual todo reagir-a-mensagem de app de chat.
+     *
+     * @return array{success: bool, message?: string, ligou?: bool}
+     */
+    public function reagir(int $mensagemId, int $usuarioId, string $emoji): array
+    {
+        $mensagem = $this->buscarMensagem($mensagemId);
+        if (!$mensagem || !$this->ehParticipante((int)$mensagem['conversa_id'], $usuarioId)) {
+            return ['success' => false, 'message' => 'Mensagem não encontrada.'];
+        }
+
+        $stmt = $this->pdo->prepare('SELECT id FROM chat_reacoes WHERE mensagem_id = ? AND usuario_id = ? AND emoji = ?');
+        $stmt->execute([$mensagemId, $usuarioId, $emoji]);
+        $existente = $stmt->fetchColumn();
+
+        if ($existente) {
+            $this->pdo->prepare('DELETE FROM chat_reacoes WHERE id = ?')->execute([$existente]);
+            return ['success' => true, 'ligou' => false];
+        }
+
+        $this->pdo->prepare('INSERT INTO chat_reacoes (mensagem_id, usuario_id, emoji) VALUES (?, ?, ?)')
+            ->execute([$mensagemId, $usuarioId, $emoji]);
+
+        return ['success' => true, 'ligou' => true];
+    }
+
+    /** @return array<int, array<int, array{emoji: string, total: int, reagiuEu: bool}>> mensagem_id => [reação, ...] */
+    public function reacoesPorConversa(int $conversaId, int $usuarioId): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT r.mensagem_id, r.emoji, COUNT(*) AS total, SUM(r.usuario_id = ?) AS reagiu_eu
+             FROM chat_reacoes r
+             JOIN chat_mensagens m ON m.id = r.mensagem_id
+             WHERE m.conversa_id = ?
+             GROUP BY r.mensagem_id, r.emoji
+             ORDER BY r.mensagem_id, MIN(r.id)'
+        );
+        $stmt->execute([$usuarioId, $conversaId]);
+
+        $porMensagem = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $linha) {
+            $porMensagem[(int)$linha['mensagem_id']][] = [
+                'emoji' => $linha['emoji'],
+                'total' => (int)$linha['total'],
+                'reagiuEu' => (bool)$linha['reagiu_eu'],
+            ];
+        }
+
+        return $porMensagem;
+    }
+
+    /**
+     * Busca por texto nas conversas do usuário -- só nas que ele
+     * participa (sem exceção pra admin: histórico de conversa é
+     * privado mesmo pra quem administra o sistema).
+     */
+    public function buscarMensagensDoUsuario(int $usuarioId, string $termo, int $limite = 50): array
+    {
+        $termo = trim($termo);
+        if ($termo === '') {
+            return [];
+        }
+
+        $stmt = $this->pdo->prepare(
+            "SELECT m.*, u.nome AS usuario_nome,
+                    CASE WHEN c.tipo = 'grupo' THEN c.nome ELSE ou.nome END AS conversa_nome_exibicao
+             FROM chat_mensagens m
+             JOIN chat_participantes p ON p.conversa_id = m.conversa_id AND p.usuario_id = ?
+             JOIN chat_conversas c ON c.id = m.conversa_id
+             JOIN usuarios u ON u.id = m.usuario_id
+             LEFT JOIN chat_participantes op ON op.conversa_id = c.id AND op.usuario_id != ? AND c.tipo = 'direta'
+             LEFT JOIN usuarios ou ON ou.id = op.usuario_id
+             WHERE m.conteudo LIKE ?
+             ORDER BY m.id DESC
+             LIMIT ?"
+        );
+        $stmt->bindValue(1, $usuarioId, PDO::PARAM_INT);
+        $stmt->bindValue(2, $usuarioId, PDO::PARAM_INT);
+        $stmt->bindValue(3, '%' . str_replace(['%', '_'], ['\%', '\_'], $termo) . '%');
+        $stmt->bindValue(4, $limite, PDO::PARAM_INT);
+        $stmt->execute();
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }

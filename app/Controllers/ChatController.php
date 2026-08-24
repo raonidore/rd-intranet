@@ -7,6 +7,7 @@ use App\Middleware\AuthMiddleware;
 use App\Services\AuditService;
 use App\Services\ChatBridgeService;
 use App\Services\ChatConfigService;
+use App\Services\ChatMidiaService;
 use App\Services\ChatService;
 use App\Services\ChatSocketTokenService;
 use App\Services\NotificationService;
@@ -32,10 +33,13 @@ class ChatController extends Controller
         $tituloConversa = null;
         $outroOnline = false;
 
+        $reacoes = [];
+
         if ($conversaId && $service->ehParticipante($conversaId, $usuarioId)) {
             $conversaSelecionada = $service->buscarConversa($conversaId);
-            $mensagens = $service->mensagens($conversaId);
+            $mensagens = $service->mensagens($conversaId, 0, $usuarioId);
             $participantes = $service->participantes($conversaId);
+            $reacoes = $service->reacoesPorConversa($conversaId, $usuarioId);
             $service->marcarComoLida($conversaId, $usuarioId);
 
             if ($conversaSelecionada['tipo'] === 'grupo') {
@@ -62,6 +66,7 @@ class ChatController extends Controller
             'conversaSelecionada' => $conversaSelecionada,
             'mensagens' => $mensagens,
             'participantes' => $participantes,
+            'reacoes' => $reacoes,
             'tituloConversa' => $tituloConversa,
             'outroOnline' => $outroOnline,
             'usuarioId' => $usuarioId,
@@ -130,6 +135,153 @@ class ChatController extends Controller
         echo json_encode($resultado);
     }
 
+    public function anexoApi(): void
+    {
+        AuthMiddleware::checkModulo('chat_conversas');
+        header('Content-Type: application/json');
+
+        $usuarioId = (int)$_SESSION['usuario']['id'];
+        $conversaId = (int)($_POST['conversa_id'] ?? 0);
+        $legenda = (string)($_POST['legenda'] ?? '');
+
+        if (empty($_FILES['arquivo']) || ($_FILES['arquivo']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            echo json_encode(['success' => false, 'message' => 'Selecione um arquivo.']);
+            return;
+        }
+
+        $arquivo = $_FILES['arquivo'];
+
+        if ((int)$arquivo['size'] > ChatMidiaService::TAMANHO_MAXIMO) {
+            echo json_encode(['success' => false, 'message' => 'Arquivo maior que 16MB.']);
+            return;
+        }
+
+        $mimetype = mime_content_type($arquivo['tmp_name']) ?: 'application/octet-stream';
+        $tipo = ChatMidiaService::tipoPorMimetype($mimetype);
+
+        if ($tipo === null) {
+            echo json_encode(['success' => false, 'message' => 'Tipo de arquivo não suportado.']);
+            return;
+        }
+
+        $service = new ChatService();
+        if (!$service->ehParticipante($conversaId, $usuarioId)) {
+            echo json_encode(['success' => false, 'message' => 'Conversa não encontrada.']);
+            return;
+        }
+
+        $nomeArquivo = ChatMidiaService::gerarNomeArquivo($mimetype);
+        $caminhoCompleto = ChatMidiaService::caminhoCompleto($nomeArquivo);
+
+        if (!move_uploaded_file($arquivo['tmp_name'], $caminhoCompleto)) {
+            echo json_encode(['success' => false, 'message' => 'Falha ao salvar o arquivo.']);
+            return;
+        }
+
+        $resultado = $service->enviar($conversaId, $usuarioId, $legenda, $tipo, $nomeArquivo);
+
+        if ($resultado['success']) {
+            $this->notificarTempoReal($service, $conversaId, $usuarioId, (int)$resultado['id']);
+        } else {
+            unlink($caminhoCompleto);
+        }
+
+        echo json_encode($resultado);
+    }
+
+    /**
+     * Serve o anexo -- nunca por URL direta (storage/ fica fora de
+     * public/), só depois de confirmar que quem pede participa da
+     * conversa da mensagem.
+     */
+    public function midiaApi(): void
+    {
+        AuthMiddleware::checkModulo('chat_conversas');
+
+        $usuarioId = (int)$_SESSION['usuario']['id'];
+        $mensagemId = (int)($_GET['id'] ?? 0);
+
+        $service = new ChatService();
+        $mensagem = $service->buscarMensagem($mensagemId);
+
+        if (!$mensagem || !$mensagem['midia_path']) {
+            http_response_code(404);
+            return;
+        }
+
+        if (!$service->ehParticipante((int)$mensagem['conversa_id'], $usuarioId)) {
+            http_response_code(403);
+            return;
+        }
+
+        $caminho = ChatMidiaService::caminhoCompleto($mensagem['midia_path']);
+
+        if (!is_file($caminho)) {
+            http_response_code(404);
+            return;
+        }
+
+        header('Content-Type: ' . (mime_content_type($caminho) ?: 'application/octet-stream'));
+        header('Content-Length: ' . filesize($caminho));
+        header('Content-Disposition: inline; filename="' . basename($mensagem['midia_path']) . '"');
+        readfile($caminho);
+    }
+
+    public function reagirApi(): void
+    {
+        AuthMiddleware::checkModulo('chat_conversas');
+        header('Content-Type: application/json');
+
+        $usuarioId = (int)$_SESSION['usuario']['id'];
+        $mensagemId = (int)($_POST['mensagem_id'] ?? 0);
+        $emoji = (string)($_POST['emoji'] ?? '');
+
+        $service = new ChatService();
+        $mensagem = $service->buscarMensagem($mensagemId);
+        $resultado = $service->reagir($mensagemId, $usuarioId, $emoji);
+
+        if ($resultado['success'] && $mensagem) {
+            $outrosParticipantes = array_values(array_filter(
+                array_column($service->participantes((int)$mensagem['conversa_id']), 'id'),
+                fn (int $id) => $id !== $usuarioId
+            ));
+
+            (new ChatBridgeService())->notificar($outrosParticipantes, 'reacao_atualizada', [
+                'conversaId' => (int)$mensagem['conversa_id'],
+            ]);
+        }
+
+        echo json_encode($resultado);
+    }
+
+    public function reacoesApi(): void
+    {
+        AuthMiddleware::checkModulo('chat_conversas');
+        header('Content-Type: application/json');
+
+        $usuarioId = (int)$_SESSION['usuario']['id'];
+        $conversaId = (int)($_GET['conversa_id'] ?? 0);
+
+        $service = new ChatService();
+        if (!$service->ehParticipante($conversaId, $usuarioId)) {
+            echo json_encode(['success' => false, 'message' => 'Conversa não encontrada.']);
+            return;
+        }
+
+        echo json_encode(['success' => true, 'reacoes' => $service->reacoesPorConversa($conversaId, $usuarioId)]);
+    }
+
+    public function buscarApi(): void
+    {
+        AuthMiddleware::checkModulo('chat_conversas');
+        header('Content-Type: application/json');
+
+        $usuarioId = (int)$_SESSION['usuario']['id'];
+        $termo = (string)($_GET['q'] ?? '');
+
+        echo json_encode(['success' => true, 'resultados' => (new ChatService())->buscarMensagensDoUsuario($usuarioId, $termo)]);
+    }
+
     /**
      * Empurra a mensagem recém-salva pro chat-bridge (Fase 2), pros
      * outros participantes que estiverem com socket aberto -- silencioso
@@ -139,7 +291,7 @@ class ChatController extends Controller
      */
     private function notificarTempoReal(ChatService $service, int $conversaId, int $usuarioId, int $mensagemId): void
     {
-        $mensagem = $service->mensagens($conversaId, $mensagemId - 1);
+        $mensagem = $service->mensagens($conversaId, $mensagemId - 1, $usuarioId);
         if (empty($mensagem)) {
             return;
         }
@@ -173,7 +325,7 @@ class ChatController extends Controller
 
         $service->marcarComoLida($conversaId, $usuarioId);
 
-        echo json_encode(['success' => true, 'mensagens' => $service->mensagens($conversaId, $desde)]);
+        echo json_encode(['success' => true, 'mensagens' => $service->mensagens($conversaId, $desde, $usuarioId)]);
     }
 
     /** Contador de não lidas -- badge do menu/widget flutuante, mesmo padrão do WhatsApp/Chamados. */
