@@ -921,7 +921,7 @@ class AtivoRepository
 
         $marcadores = implode(',', array_fill(0, count($nomes), '?'));
         $stmt = $this->pdo->prepare("
-            SELECT id, codigo_patrimonio, nome, tipo, ip, agente_versao, machine_guid, ultimo_heartbeat, ultimo_checkin, criado_em
+            SELECT id, codigo_patrimonio, nome, ip, agente_versao, machine_guid, ultimo_heartbeat, ultimo_checkin, criado_em
             FROM ativos
             WHERE nome IN ({$marcadores})
             ORDER BY nome, criado_em
