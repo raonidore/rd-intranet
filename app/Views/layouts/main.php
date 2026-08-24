@@ -1134,6 +1134,36 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
 
     verificarChat();
     setInterval(verificarChat, 15000);
+
+    // Fase 2 -- acelerador via WebSocket (chat-bridge), puramente em
+    // cima do polling acima: se o bridge não estiver instalado, ou o
+    // proxy do Apache não estiver ativo, esta conexão nunca abre e nada
+    // muda -- o polling de 15s continua entregando tudo normalmente,
+    // exatamente como já funcionava antes da Fase 2 existir.
+    async function conectarSocketChat() {
+        try {
+            const resp = await fetch('<?= url('/chat/socket-token') ?>');
+            const dados = await resp.json();
+            if (!dados.success) {
+                return;
+            }
+
+            const protocolo = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const ws = new WebSocket(protocolo + '//' + location.host + '/chat-ws?token=' + encodeURIComponent(dados.token));
+
+            ws.addEventListener('message', function () {
+                verificarChat();
+            });
+
+            ws.addEventListener('close', function () {
+                setTimeout(conectarSocketChat, 10000);
+            });
+        } catch (e) {
+            // sem bridge/proxy disponível -- o polling acima cobre normalmente
+        }
+    }
+
+    conectarSocketChat();
 })();
 </script>
 <?php endif; ?>

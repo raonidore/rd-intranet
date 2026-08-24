@@ -359,6 +359,8 @@ $router->post('/chat/enviar', [ChatController::class, 'enviarApi']);
 $router->get('/chat/mensagens', [ChatController::class, 'mensagensApi']);
 $router->get('/chat/contador', [ChatController::class, 'contadorApi']);
 $router->get('/chat/conversas', [ChatController::class, 'conversasApi']);
+$router->get('/chat/socket-token', [ChatController::class, 'socketTokenApi']);
+$router->get('/api/chat/validar-socket-token', [ChatController::class, 'validarSocketTokenApi']);
 
 $router->get('/administracao/integracoes', [IntegracoesController::class, 'index']);
 $router->get('/administracao/integracoes/base-conhecimento', [IntegracoesController::class, 'baseConhecimentoForm']);

@@ -5,7 +5,10 @@ namespace App\Controllers;
 use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
 use App\Services\AuditService;
+use App\Services\ChatBridgeService;
+use App\Services\ChatConfigService;
 use App\Services\ChatService;
+use App\Services\ChatSocketTokenService;
 use App\Services\NotificationService;
 use App\Services\UsuarioOnlineService;
 
@@ -117,9 +120,39 @@ class ChatController extends Controller
         $conversaId = (int)($_POST['conversa_id'] ?? 0);
         $texto = (string)($_POST['texto'] ?? '');
 
-        $resultado = (new ChatService())->enviar($conversaId, $usuarioId, $texto);
+        $service = new ChatService();
+        $resultado = $service->enviar($conversaId, $usuarioId, $texto);
+
+        if ($resultado['success']) {
+            $this->notificarTempoReal($service, $conversaId, $usuarioId, (int)$resultado['id']);
+        }
 
         echo json_encode($resultado);
+    }
+
+    /**
+     * Empurra a mensagem recém-salva pro chat-bridge (Fase 2), pros
+     * outros participantes que estiverem com socket aberto -- silencioso
+     * se o bridge não estiver instalado/rodando, a mensagem já está
+     * salva no banco de qualquer forma, o polling da Fase 1 continua
+     * entregando normalmente.
+     */
+    private function notificarTempoReal(ChatService $service, int $conversaId, int $usuarioId, int $mensagemId): void
+    {
+        $mensagem = $service->mensagens($conversaId, $mensagemId - 1);
+        if (empty($mensagem)) {
+            return;
+        }
+
+        $outrosParticipantes = array_values(array_filter(
+            array_column($service->participantes($conversaId), 'id'),
+            fn (int $id) => $id !== $usuarioId
+        ));
+
+        (new ChatBridgeService())->notificar($outrosParticipantes, 'mensagem_nova', [
+            'conversaId' => $conversaId,
+            'mensagem' => $mensagem[0],
+        ]);
     }
 
     public function mensagensApi(): void
@@ -176,5 +209,53 @@ class ChatController extends Controller
         }
 
         echo json_encode(['success' => true, 'conversas' => $conversas]);
+    }
+
+    /**
+     * Token de 60s/uso único pro navegador abrir o WebSocket com o
+     * chat-bridge (Fase 2) -- autenticado por sessão normal, igual
+     * qualquer outra tela. Se o bridge não estiver instalado, o
+     * navegador simplesmente não consegue abrir o socket e continua no
+     * polling de sempre -- por isso não faz sentido nenhuma checagem de
+     * "bridge instalado" aqui, o pior caso já é inofensivo.
+     */
+    public function socketTokenApi(): void
+    {
+        AuthMiddleware::checkModulo('chat_conversas');
+        header('Content-Type: application/json');
+
+        $usuarioId = (int)$_SESSION['usuario']['id'];
+        $token = (new ChatSocketTokenService())->emitir($usuarioId);
+
+        echo json_encode(['success' => true, 'token' => $token]);
+    }
+
+    /**
+     * Endpoint interno -- quem chama é o processo chat-bridge (Node),
+     * nunca o navegador diretamente, por isso a autenticação aqui é
+     * X-Api-Key (a mesma que o PHP usa pra chamar o bridge), não sessão.
+     */
+    public function validarSocketTokenApi(): void
+    {
+        header('Content-Type: application/json');
+
+        $chaveRecebida = $_SERVER['HTTP_X_API_KEY'] ?? '';
+        $chaveEsperada = (new ChatConfigService())->bridgeApiKey();
+
+        if (!hash_equals($chaveEsperada, $chaveRecebida)) {
+            http_response_code(403);
+            echo json_encode(['success' => false]);
+            return;
+        }
+
+        $token = (string)($_GET['token'] ?? '');
+        $usuarioId = (new ChatSocketTokenService())->validar($token);
+
+        if ($usuarioId === null) {
+            echo json_encode(['success' => false]);
+            return;
+        }
+
+        echo json_encode(['success' => true, 'usuarioId' => $usuarioId]);
     }
 }

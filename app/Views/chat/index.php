@@ -229,6 +229,39 @@ document.getElementById('buscaConversas').addEventListener('input', function () 
     });
 
     setInterval(buscarNovas, 3000);
+
+    // Fase 2 -- acelerador via WebSocket, só pra ESTA conversa aberta
+    // (o acelerador do badge sitewide já roda via layouts/main.php).
+    // Puramente em cima do polling acima -- se não conectar, nada muda.
+    async function conectarSocketConversa() {
+        try {
+            const resp = await fetch(<?= json_encode(url('/chat/socket-token')) ?>);
+            const dados = await resp.json();
+            if (!dados.success) {
+                return;
+            }
+
+            const protocolo = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const ws = new WebSocket(protocolo + '//' + location.host + '/chat-ws?token=' + encodeURIComponent(dados.token));
+
+            ws.addEventListener('message', function (evento) {
+                try {
+                    const evento2 = JSON.parse(evento.data);
+                    if (evento2.evento === 'mensagem_nova' && String(evento2.dados.conversaId) === String(conversaId)) {
+                        buscarNovas();
+                    }
+                } catch (e) {}
+            });
+
+            ws.addEventListener('close', function () {
+                setTimeout(conectarSocketConversa, 10000);
+            });
+        } catch (e) {
+            // sem bridge/proxy disponível -- o polling acima cobre normalmente
+        }
+    }
+
+    conectarSocketConversa();
 })();
 </script>
 <?php endif; ?>
