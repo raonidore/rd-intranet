@@ -18,6 +18,8 @@ use App\Controllers\SambaMonitorController;
 use App\Controllers\SambaArquivosController;
 use App\Controllers\UserController;
 use App\Controllers\GrupoController;
+use App\Controllers\DocumentoCategoriaController;
+use App\Controllers\DocumentoController;
 use App\Controllers\FornecedorController;
 use App\Controllers\ContratoController;
 use App\Controllers\PerfilController;
@@ -564,6 +566,24 @@ $router->get('/fornecedores/tipos-servico', [FornecedorController::class, 'tipos
 $router->post('/fornecedores/tipos-servico/criar', [FornecedorController::class, 'tiposServicoCriar']);
 $router->post('/fornecedores/tipos-servico/atualizar', [FornecedorController::class, 'tiposServicoAtualizar']);
 $router->post('/fornecedores/tipos-servico/excluir', [FornecedorController::class, 'tiposServicoExcluir']);
+
+$router->get('/documentos', [DocumentoController::class, 'index']);
+$router->get('/documentos/categoria', [DocumentoController::class, 'categoria']);
+$router->get('/documentos/ver', [DocumentoController::class, 'ver']);
+$router->post('/documentos/novo', [DocumentoController::class, 'novo']);
+$router->post('/documentos/editar', [DocumentoController::class, 'editar']);
+$router->post('/documentos/excluir', [DocumentoController::class, 'excluir']);
+$router->post('/documentos/anexo-upload', [DocumentoController::class, 'anexoUpload']);
+$router->post('/documentos/anexo-samba', [DocumentoController::class, 'anexoSamba']);
+$router->get('/documentos/anexo', [DocumentoController::class, 'anexoBaixar']);
+$router->get('/documentos/samba-compartilhamentos', [DocumentoController::class, 'sambaCompartilhamentosApi']);
+$router->get('/documentos/samba-listar', [DocumentoController::class, 'sambaListarApi']);
+
+$router->get('/documentos/categorias', [DocumentoCategoriaController::class, 'index']);
+$router->post('/documentos/categorias/criar', [DocumentoCategoriaController::class, 'criar']);
+$router->post('/documentos/categorias/atualizar', [DocumentoCategoriaController::class, 'atualizar']);
+$router->post('/documentos/categorias/excluir', [DocumentoCategoriaController::class, 'excluir']);
+$router->post('/documentos/categorias/permissoes', [DocumentoCategoriaController::class, 'salvarPermissoes']);
 
 $router->post('/contratos/criar', [ContratoController::class, 'criar']);
 $router->post('/contratos/atualizar', [ContratoController::class, 'atualizar']);

@@ -393,6 +393,12 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
     </a>
     <?php endif; ?>
 
+    <?php if (PermissionService::temAcesso('documentos_acessar') || PermissionService::temAcesso('documentos_categorias')): ?>
+    <a href="<?= url('/documentos') ?>" class="<?= str_starts_with($uriAtual, '/documentos') ? 'active' : '' ?>">
+        <i class="bi bi-folder2-open me-2"></i> Documentos
+    </a>
+    <?php endif; ?>
+
     <?php if (PermissionService::temAcesso('fornecedores_gerenciar')): ?>
     <a href="<?= url('/fornecedores') ?>" class="<?= str_starts_with($uriAtual, '/fornecedores') ? 'active' : '' ?>">
         <i class="bi bi-truck me-2"></i> Fornecedores
