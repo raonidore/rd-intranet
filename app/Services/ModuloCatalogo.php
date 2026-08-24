@@ -75,6 +75,7 @@ class ModuloCatalogo
         'chamados_setores' => ['label' => 'Chamados - Setores', 'grupo' => 'Chamados'],
         'chamados_estatisticas' => ['label' => 'Chamados - Estatísticas', 'grupo' => 'Chamados'],
         'chamados_configuracoes' => ['label' => 'Chamados - Configurações', 'grupo' => 'Chamados'],
+        'chat_conversas' => ['label' => 'Chat Interno', 'grupo' => 'Chat'],
     ];
 
     public static function chaves(): array
@@ -108,6 +109,7 @@ class ModuloCatalogo
         'Banco de Dados' => 'bi-database',
         'Base de Conhecimento' => 'bi-journal-text',
         'Chamados' => 'bi-ticket-perforated',
+        'Chat' => 'bi-chat-dots-fill',
         'Infraestrutura' => 'bi-diagram-3',
         'Microsoft Entra' => 'bi-microsoft',
         'Samba' => 'bi-hdd-network-fill',
@@ -134,7 +136,7 @@ class ModuloCatalogo
      */
 
     public const GRUPOS_TOGGLEAVEIS = [
-        'Apache', 'Banco de Dados', 'Ativos', 'Infraestrutura', 'VPN', 'Samba', 'Segurança', 'Microsoft Entra', 'Backup', 'SSH', 'Base de Conhecimento', 'WhatsApp', 'Chamados',
+        'Apache', 'Banco de Dados', 'Ativos', 'Infraestrutura', 'VPN', 'Samba', 'Segurança', 'Microsoft Entra', 'Backup', 'SSH', 'Base de Conhecimento', 'WhatsApp', 'Chamados', 'Chat',
     ];
 
     /** Grupos que nascem desligados em instalações novas -- opt-in, não fazem parte do uso típico. */

@@ -4,6 +4,7 @@ use App\Services\AtivoService;
 use App\Services\PermissionService;
 use App\Services\WhatsAppAtendimentoService;
 use App\Services\ChamadoService;
+use App\Services\ChatService;
 
 $usuarioLogado = $_SESSION['usuario'] ?? ['nome' => 'Usuário'];
 $ativoServiceMenu = new AtivoService();
@@ -377,6 +378,19 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         </a>
         <?php endif; ?>
     </div>
+    <?php endif; ?>
+
+    <?php
+    $chatNaoLidas = 0;
+    if (PermissionService::temAcesso('chat_conversas') && isset($_SESSION['usuario']['id'])) {
+        $chatNaoLidas = (new ChatService())->contarNaoLidas((int)$_SESSION['usuario']['id']);
+    }
+    ?>
+    <?php if (PermissionService::temAcesso('chat_conversas')): ?>
+    <a href="<?= url('/chat') ?>" class="rd-menu-item-badge <?= str_starts_with($uriAtual, '/chat') ? 'active' : '' ?>">
+        <span><i class="bi bi-chat-dots-fill me-2"></i> Chat</span>
+        <span class="rd-menu-badge" id="rdChatBadge" style="<?= $chatNaoLidas > 0 ? '' : 'display:none' ?>"><?= $chatNaoLidas ?></span>
+    </a>
     <?php endif; ?>
 
     <?php
@@ -1073,6 +1087,53 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
 
     verificarChamados();
     setInterval(verificarChamados, 15000);
+})();
+</script>
+<?php endif; ?>
+
+<?php if (PermissionService::temAcesso('chat_conversas') && isset($_SESSION['usuario']['id'])): ?>
+<script>
+(function () {
+    // Mesmo esquema do WhatsApp/Chamados acima -- reaproveita o motor de
+    // áudio compartilhado (window.rdTocarBip) e o mesmo raciocínio de id
+    // crescente (detecta mensagem nova mesmo repetida na mesma conversa).
+    const CHAVE_SOM = 'chatSomAtivo';
+    const CHAVE_ULTIMO_ID = 'chatUltimoId';
+
+    function somAtivo() {
+        return localStorage.getItem(CHAVE_SOM) === '1';
+    }
+
+    let ultimoId = sessionStorage.getItem(CHAVE_ULTIMO_ID);
+    ultimoId = ultimoId === null ? null : parseInt(ultimoId, 10);
+
+    const badgeMenu = document.getElementById('rdChatBadge');
+
+    async function verificarChat() {
+        try {
+            const resp = await fetch('<?= url('/chat/contador') ?>');
+            const dados = await resp.json();
+            if (!dados.success) {
+                return;
+            }
+
+            if (ultimoId !== null && dados.ultimaMensagemId > ultimoId && somAtivo() && typeof window.rdTocarBip === 'function') {
+                window.rdTocarBip();
+            }
+            ultimoId = dados.ultimaMensagemId;
+            sessionStorage.setItem(CHAVE_ULTIMO_ID, String(ultimoId));
+
+            if (badgeMenu) {
+                badgeMenu.textContent = dados.naoLidas;
+                badgeMenu.style.display = dados.naoLidas > 0 ? '' : 'none';
+            }
+        } catch (e) {
+            // rede instável -- tenta de novo no próximo ciclo
+        }
+    }
+
+    verificarChat();
+    setInterval(verificarChat, 15000);
 })();
 </script>
 <?php endif; ?>

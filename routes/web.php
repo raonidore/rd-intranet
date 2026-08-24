@@ -51,6 +51,7 @@ use App\Controllers\ChamadoCategoriaController;
 use App\Controllers\ChamadoEstatisticaController;
 use App\Controllers\ChamadoConfiguracaoController;
 use App\Controllers\PortalChamadoController;
+use App\Controllers\ChatController;
 use App\Controllers\IntegracoesController;
 use App\Controllers\DependenciaController;
 use App\Controllers\SpeedtestController;
@@ -350,6 +351,14 @@ $router->get('/portal/chamados/meus', [PortalChamadoController::class, 'meus']);
 $router->get('/portal/chamados/ver', [PortalChamadoController::class, 'ver']);
 $router->post('/portal/chamados/responder', [PortalChamadoController::class, 'responder']);
 $router->post('/portal/chamados/avaliar', [PortalChamadoController::class, 'avaliar']);
+
+$router->get('/chat', [ChatController::class, 'index']);
+$router->post('/chat/nova-direta', [ChatController::class, 'novaDireta']);
+$router->post('/chat/novo-grupo', [ChatController::class, 'novoGrupo']);
+$router->post('/chat/enviar', [ChatController::class, 'enviarApi']);
+$router->get('/chat/mensagens', [ChatController::class, 'mensagensApi']);
+$router->get('/chat/contador', [ChatController::class, 'contadorApi']);
+$router->get('/chat/conversas', [ChatController::class, 'conversasApi']);
 
 $router->get('/administracao/integracoes', [IntegracoesController::class, 'index']);
 $router->get('/administracao/integracoes/base-conhecimento', [IntegracoesController::class, 'baseConhecimentoForm']);
