@@ -105,16 +105,25 @@ function thOrdenavel(string $coluna, string $label, ?string $ordenarChave, array
 <form method="get" action="<?= url('/ativos/lista') ?>" class="card border-0 shadow-sm mb-4">
     <div class="card-body">
         <div class="row g-3 align-items-end">
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label class="form-label">Tipo</label>
-                <select name="tipo" class="form-select">
+                <select name="tipo_id" class="form-select">
                     <option value="">Todos</option>
-                    <?php foreach (AtivoService::TIPOS as $chave => $info): ?>
-                        <option value="<?= $chave ?>" <?= $filtros['tipo'] === $chave ? 'selected' : '' ?>><?= htmlspecialchars($info['label']) ?></option>
+                    <?php foreach ($tipos as $t): ?>
+                        <option value="<?= (int)$t['id'] ?>" <?= (string)$filtros['tipo_id'] === (string)$t['id'] ? 'selected' : '' ?>><?= htmlspecialchars($t['nome']) ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
+                <label class="form-label">Unidade</label>
+                <select name="unidade_id" class="form-select">
+                    <option value="">Todas</option>
+                    <?php foreach ($unidades as $u): ?>
+                        <option value="<?= (int)$u['id'] ?>" <?= (string)$filtros['unidade_id'] === (string)$u['id'] ? 'selected' : '' ?>><?= htmlspecialchars($u['nome']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-2">
                 <label class="form-label">Status</label>
                 <select name="status" class="form-select">
                     <option value="">Todos</option>
@@ -180,7 +189,7 @@ function thOrdenavel(string $coluna, string $label, ?string $ordenarChave, array
                                     <?php endif; ?>
                                 </td>
                                 <td data-col="apelido"><?= htmlspecialchars($a['apelido'] ?: '—') ?></td>
-                                <td data-col="tipo"><i class="bi <?= AtivoService::TIPOS[$a['tipo']]['icone'] ?>"></i> <?= htmlspecialchars(AtivoService::TIPOS[$a['tipo']]['label']) ?></td>
+                                <td data-col="tipo"><i class="bi <?= htmlspecialchars($a['tipo_icone']) ?>"></i> <?= htmlspecialchars($a['tipo_nome']) ?></td>
                                 <td data-col="status"><?= Badge::make(htmlspecialchars(AtivoService::STATUS[$a['status']] ?? $a['status']), $statusCores[$a['status']] ?? 'secondary') ?></td>
                                 <td data-col="condicao">
                                     <?php if ($a['origem'] === 'agente'): ?>
@@ -204,6 +213,7 @@ function thOrdenavel(string $coluna, string $label, ?string $ordenarChave, array
                                 </td>
                                 <td class="small text-muted" data-col="setor"><?= htmlspecialchars($a['setor_nome'] ?? '—') ?></td>
                                 <td class="small text-muted" data-col="localizacao"><?= htmlspecialchars($a['localizacao_nome'] ?? '—') ?></td>
+                                <td class="small text-muted" data-col="unidade"><?= htmlspecialchars($a['unidade_nome']) ?></td>
                                 <td class="small text-muted" data-col="responsavel"><?= htmlspecialchars($a['responsavel'] ?: '—') ?></td>
                                 <td class="small" data-col="versao_agente">
                                     <?php if (empty($a['agente_versao'])): ?>

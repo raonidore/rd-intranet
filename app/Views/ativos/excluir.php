@@ -1,7 +1,5 @@
 <?php
 ob_start();
-
-use App\Services\AtivoService;
 ?>
 
 <div class="card border-0 shadow-sm">
@@ -13,7 +11,7 @@ use App\Services\AtivoService;
         <p>Você está prestes a remover o ativo:</p>
 
         <h4><?= htmlspecialchars($ativo['nome']) ?></h4>
-        <p class="text-muted font-monospace"><?= htmlspecialchars($ativo['codigo_patrimonio']) ?> · <?= htmlspecialchars(AtivoService::TIPOS[$ativo['tipo']]['label']) ?></p>
+        <p class="text-muted font-monospace"><?= htmlspecialchars($ativo['codigo_patrimonio']) ?> · <?= htmlspecialchars($ativo['tipo_nome']) ?></p>
 
         <div class="alert alert-warning">
             Esta ação remove o ativo do cadastro, junto com o histórico de programas e alertas coletados. Não afeta o equipamento físico.

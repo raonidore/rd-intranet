@@ -14,7 +14,7 @@ $statusCores = [
 ];
 
 $detalhes = $ativo['detalhes'] ?? [];
-$camposTipo = AtivoService::CAMPOS_DETALHES[$ativo['tipo']] ?? [];
+$camposTipo = AtivoService::CAMPOS_DETALHES[$ativo['tipo_slug'] ?? ''] ?? [];
 
 // Explorador de arquivos/processos depende do heartbeat (poucos segundos
 // de ida e volta) -- o script .ps1 roda como Tarefa Agendada (sem
@@ -126,13 +126,14 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     <div>
         <small class="text-muted"><a href="<?= url('/ativos/lista') ?>"><i class="bi bi-arrow-left"></i> Lista de Ativos</a></small>
         <h4 class="mb-1 mt-1">
-            <i class="bi <?= AtivoService::TIPOS[$ativo['tipo']]['icone'] ?> me-1"></i>
+            <i class="bi <?= htmlspecialchars($ativo['tipo_icone']) ?> me-1"></i>
             <?= htmlspecialchars($ativo['apelido'] ?: $ativo['nome']) ?>
         </h4>
         <?php if (!empty($ativo['apelido'])): ?>
             <div class="text-muted small mb-1">Nome: <?= htmlspecialchars($ativo['nome']) ?></div>
         <?php endif; ?>
         <span class="font-monospace text-muted"><?= htmlspecialchars($ativo['codigo_patrimonio']) ?></span>
+        <span class="badge text-bg-light border"><?= htmlspecialchars($ativo['unidade_nome']) ?></span>
         <?= Badge::make(htmlspecialchars(AtivoService::STATUS[$ativo['status']] ?? $ativo['status']), $statusCores[$ativo['status']] ?? 'secondary') ?>
         <?php if ($ativo['origem'] === 'agente'): ?>
             <?= Badge::make($estaLigada ? '<i class="bi bi-circle-fill" style="font-size:8px"></i> Ligado' : 'Desligado', $estaLigada ? 'success' : 'secondary') ?>
@@ -144,7 +145,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                 <i class="bi bi-display"></i> Tela remota
             </button>
         <?php endif; ?>
-        <?php if (in_array($ativo['tipo'], ['computador', 'servidor'], true) && PermissionService::temAcesso('ativos_rdp')): ?>
+        <?php if (in_array($ativo['tipo_slug'] ?? '', ['computador', 'servidor'], true) && PermissionService::temAcesso('ativos_rdp')): ?>
             <button type="button" class="btn btn-outline-primary" id="botaoRdp" data-id="<?= (int)$ativo['id'] ?>">
                 <i class="bi bi-pc-display-horizontal"></i> RDP
             </button>

@@ -489,6 +489,9 @@ $router->get('/administracao/empresa/logo', [EmpresaController::class, 'logo']);
 $router->post('/administracao/empresa/logo-sistema/upload', [EmpresaController::class, 'logoSistemaUpload']);
 $router->post('/administracao/empresa/logo-sistema/remover', [EmpresaController::class, 'logoSistemaRemover']);
 $router->get('/administracao/empresa/logo-sistema', [EmpresaController::class, 'logoSistema']);
+$router->post('/administracao/empresa/unidade-novo', [EmpresaController::class, 'unidadeNovo']);
+$router->post('/administracao/empresa/unidade-editar', [EmpresaController::class, 'unidadeEditar']);
+$router->post('/administracao/empresa/unidade-excluir', [EmpresaController::class, 'unidadeExcluir']);
 
 $router->get('/administracao/email', [EmailConfigController::class, 'index']);
 $router->post('/administracao/email/salvar', [EmailConfigController::class, 'salvar']);
@@ -657,6 +660,9 @@ $router->get('/ativos/cadastros', [AtivoController::class, 'cadastros']);
 $router->post('/ativos/cadastros/novo', [AtivoController::class, 'cadastroNovo']);
 $router->post('/ativos/cadastros/editar', [AtivoController::class, 'cadastroEditar']);
 $router->post('/ativos/cadastros/excluir', [AtivoController::class, 'cadastroExcluir']);
+$router->post('/ativos/cadastros/tipo-novo', [AtivoController::class, 'tipoNovo']);
+$router->post('/ativos/cadastros/tipo-editar', [AtivoController::class, 'tipoEditar']);
+$router->post('/ativos/cadastros/tipo-excluir', [AtivoController::class, 'tipoExcluir']);
 
 $router->get('/ativos/acesso-remoto', [AcessoRemotoController::class, 'index']);
 $router->post('/ativos/acesso-remoto/instalar', [AcessoRemotoController::class, 'instalar']);

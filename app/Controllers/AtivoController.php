@@ -6,22 +6,28 @@ use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
 use App\Services\AtivoCatalogoService;
 use App\Services\AtivoService;
+use App\Services\AtivoTipoService;
 use App\Services\AuditService;
 use App\Services\CronService;
 use App\Services\EtiquetaService;
 use App\Services\NotificationService;
 use App\Services\PermissionService;
 use App\Services\PoliticaService;
+use App\Services\UnidadeService;
 
 class AtivoController extends Controller
 {
     private AtivoService $service;
     private AtivoCatalogoService $catalogoService;
+    private AtivoTipoService $tipoService;
+    private UnidadeService $unidadeService;
 
     public function __construct()
     {
         $this->service = new AtivoService();
         $this->catalogoService = new AtivoCatalogoService();
+        $this->tipoService = new AtivoTipoService();
+        $this->unidadeService = new UnidadeService();
     }
 
     public function dashboard(): void
@@ -29,6 +35,7 @@ class AtivoController extends Controller
         AuthMiddleware::checkModulo('ativos_dashboard');
 
         $this->view('ativos/dashboard', array_merge($this->service->dashboard(), [
+            'tipos' => $this->tipoService->listarAtivos(),
             'comunidadePadrao' => $this->service->comunidadePadrao(),
             'coletaSnmpAtiva' => $this->coletaSnmpAtiva(),
             'chaveAgente' => $this->service->chaveAgente(),
@@ -47,7 +54,8 @@ class AtivoController extends Controller
         AuthMiddleware::checkModulo('ativos_lista');
 
         $filtros = [
-            'tipo' => $_GET['tipo'] ?? '',
+            'tipo_id' => $_GET['tipo_id'] ?? '',
+            'unidade_id' => $_GET['unidade_id'] ?? '',
             'status' => $_GET['status'] ?? '',
             'busca' => trim($_GET['busca'] ?? ''),
             'ordenar' => $_GET['ordenar'] ?? '',
@@ -57,6 +65,8 @@ class AtivoController extends Controller
         $this->view('ativos/lista', [
             'ativos' => $this->service->listar($filtros),
             'filtros' => $filtros,
+            'tipos' => $this->tipoService->listarAtivos(),
+            'unidades' => $this->unidadeService->listarAtivas(),
             'versaoAgenteExeAtual' => $this->service->versaoAgenteExe(),
             'discosCriticos' => $this->service->volumesCriticos(),
         ]);
@@ -122,9 +132,13 @@ class AtivoController extends Controller
     {
         AuthMiddleware::checkModulo('ativos_novo');
 
+        $tipoPadrao = $this->tipoService->buscarPorSlug('computador');
+
         $this->view('ativos/form', [
             'ativo' => null,
-            'tipoSelecionado' => $_GET['tipo'] ?? 'computador',
+            'tipoIdSelecionado' => (int)($_GET['tipo_id'] ?? $tipoPadrao['id'] ?? 0),
+            'tipos' => $this->tipoService->listarAtivos(),
+            'unidades' => $this->unidadeService->listarAtivas(),
             'setores' => $this->catalogoService->listarSetores(),
             'localizacoes' => $this->catalogoService->listarLocalizacoes(),
         ]);
@@ -154,7 +168,9 @@ class AtivoController extends Controller
 
         $this->view('ativos/form', [
             'ativo' => $ativo,
-            'tipoSelecionado' => $ativo['tipo'],
+            'tipoIdSelecionado' => (int)$ativo['tipo_id'],
+            'tipos' => $this->tipoService->listarAtivos(),
+            'unidades' => $this->unidadeService->listarAtivas(),
             'setores' => $this->catalogoService->listarSetores(),
             'localizacoes' => $this->catalogoService->listarLocalizacoes(),
         ]);
@@ -477,6 +493,8 @@ class AtivoController extends Controller
         $this->view('ativos/cadastros', [
             'setores' => $this->catalogoService->listarSetores(),
             'localizacoes' => $this->catalogoService->listarLocalizacoes(),
+            'tiposAtivo' => $this->tipoService->listar(),
+            'iconesDisponiveis' => AtivoTipoService::ICONES_DISPONIVEIS,
         ]);
     }
 
@@ -511,6 +529,47 @@ class AtivoController extends Controller
         AuthMiddleware::checkModulo('ativos_cadastros');
 
         $this->catalogoService->excluir((int)($_POST['id'] ?? 0));
+
+        header('Location: ' . url('/ativos/cadastros'));
+        exit;
+    }
+
+    public function tipoNovo(): void
+    {
+        AuthMiddleware::checkModulo('ativos_cadastros');
+
+        $this->tipoService->criar(
+            $_POST['nome'] ?? '',
+            $_POST['sigla'] ?? '',
+            $_POST['icone'] ?? '',
+            isset($_POST['snmp_elegivel'])
+        );
+
+        header('Location: ' . url('/ativos/cadastros'));
+        exit;
+    }
+
+    public function tipoEditar(): void
+    {
+        AuthMiddleware::checkModulo('ativos_cadastros');
+
+        $this->tipoService->atualizar(
+            (int)($_POST['id'] ?? 0),
+            $_POST['nome'] ?? '',
+            $_POST['sigla'] ?? '',
+            $_POST['icone'] ?? '',
+            isset($_POST['snmp_elegivel'])
+        );
+
+        header('Location: ' . url('/ativos/cadastros'));
+        exit;
+    }
+
+    public function tipoExcluir(): void
+    {
+        AuthMiddleware::checkModulo('ativos_cadastros');
+
+        $this->tipoService->excluir((int)($_POST['id'] ?? 0));
 
         header('Location: ' . url('/ativos/cadastros'));
         exit;

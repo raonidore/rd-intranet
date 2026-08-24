@@ -8,7 +8,7 @@ use App\Components\Alert;
 
 <div class="mb-4">
     <h4 class="mb-1"><i class="bi bi-building me-1"></i> Dados da Empresa</h4>
-    <small class="text-muted">Usados no código de patrimônio dos ativos (ex: <code>SIGLA-PC-000001</code>) e no rodapé das etiquetas impressas.</small>
+    <small class="text-muted">Usados no código de patrimônio dos ativos (ex: <code>SIGLA-UNIDADE-PC-000001</code>) e no rodapé das etiquetas impressas.</small>
 </div>
 
 <div class="card border-0 shadow-sm" style="max-width:560px">
@@ -30,6 +30,84 @@ use App\Components\Alert;
         </form>
     </div>
 </div>
+
+<div class="card border-0 shadow-sm mt-3" style="max-width:560px">
+    <div class="card-body">
+        <strong class="d-block mb-1">Unidades Existentes</strong>
+        <div class="form-text mb-3">
+            Filiais/sites da empresa -- entram no código do patrimônio (<code>SIGLA-UNIDADE-TIPO-000001</code>) e, mais adiante, na
+            abertura de chamados. Empresa com uma sede só precisa de 1 unidade cadastrada; quem tem várias filiais cadastra uma linha por filial.
+        </div>
+
+        <form method="post" action="<?= url('/administracao/empresa/unidade-novo') ?>" class="d-flex gap-2 mb-3">
+            <input type="text" name="nome" class="form-control form-control-sm" placeholder="Ex: Filial Nordeste" required>
+            <input type="text" name="sigla" class="form-control form-control-sm font-monospace text-uppercase" style="max-width:110px" maxlength="6" placeholder="NE" required>
+            <button class="btn btn-sm btn-primary text-nowrap"><i class="bi bi-plus-lg"></i> Adicionar</button>
+        </form>
+
+        <?php if (empty($unidades)): ?>
+            <p class="text-muted small mb-0">Nenhuma unidade cadastrada ainda.</p>
+        <?php else: ?>
+            <ul class="list-group list-group-flush">
+                <?php foreach ($unidades as $u): ?>
+                    <li class="list-group-item px-0">
+                        <div class="d-flex justify-content-between align-items-center linha-view-unidade">
+                            <span>
+                                <?= htmlspecialchars($u['nome']) ?>
+                                <span class="badge text-bg-light border font-monospace ms-1"><?= htmlspecialchars($u['sigla']) ?></span>
+                                <?php if ($u['padrao']): ?>
+                                    <span class="badge text-bg-light border ms-1">Padrão</span>
+                                <?php endif; ?>
+                            </span>
+                            <div class="d-flex gap-1">
+                                <button type="button" class="btn btn-sm btn-outline-secondary botao-editar-unidade"><i class="bi bi-pencil"></i></button>
+                                <?php if (!$u['padrao']): ?>
+                                    <form method="post" action="<?= url('/administracao/empresa/unidade-excluir') ?>"
+                                          onsubmit="return confirm('Excluir a unidade &quot;<?= htmlspecialchars(addslashes($u['nome'])) ?>&quot;?');">
+                                        <input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
+                                        <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        <form method="post" action="<?= url('/administracao/empresa/unidade-editar') ?>" class="linha-edit-unidade d-none gap-2 mt-1">
+                            <input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
+                            <input type="text" name="nome" class="form-control form-control-sm" value="<?= htmlspecialchars($u['nome']) ?>" required>
+                            <input type="text" name="sigla" class="form-control form-control-sm font-monospace text-uppercase" style="max-width:110px" maxlength="6" value="<?= htmlspecialchars($u['sigla']) ?>" required>
+                            <button class="btn btn-sm btn-primary text-nowrap">Salvar</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary botao-cancelar-edicao-unidade">Cancelar</button>
+                        </form>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
+        <?php endif; ?>
+    </div>
+</div>
+
+<script>
+(function () {
+    document.querySelectorAll('.botao-editar-unidade').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+            const li = botao.closest('li');
+            li.querySelector('.linha-view-unidade').classList.add('d-none');
+            const edicao = li.querySelector('.linha-edit-unidade');
+            edicao.classList.remove('d-none');
+            edicao.classList.add('d-flex');
+            edicao.querySelector('input[name="nome"]').focus();
+        });
+    });
+
+    document.querySelectorAll('.botao-cancelar-edicao-unidade').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+            const li = botao.closest('li');
+            const edicao = li.querySelector('.linha-edit-unidade');
+            edicao.classList.add('d-none');
+            edicao.classList.remove('d-flex');
+            li.querySelector('.linha-view-unidade').classList.remove('d-none');
+        });
+    });
+})();
+</script>
 
 <div class="card border-0 shadow-sm mt-3" style="max-width:560px">
     <div class="card-body">

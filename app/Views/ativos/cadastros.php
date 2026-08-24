@@ -98,6 +98,98 @@ use App\Components\Alert;
     </div>
 </div>
 
+<div class="row g-3 mt-1">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white"><strong>Tipos de Ativo</strong></div>
+            <div class="card-body">
+                <form method="post" action="<?= url('/ativos/cadastros/tipo-novo') ?>" class="row g-2 align-items-end mb-3">
+                    <div class="col-md-3">
+                        <label class="form-label small mb-1">Nome</label>
+                        <input type="text" name="nome" class="form-control form-control-sm" placeholder="Ex: Roteador" required>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small mb-1">Sigla</label>
+                        <input type="text" name="sigla" class="form-control form-control-sm font-monospace text-uppercase" maxlength="6" placeholder="RTR" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small mb-1">Ícone</label>
+                        <select name="icone" class="form-select form-select-sm">
+                            <?php foreach ($iconesDisponiveis as $classe => $label): ?>
+                                <option value="<?= htmlspecialchars($classe) ?>"><?= htmlspecialchars($label) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="snmp_elegivel" id="snmpNovoTipo">
+                            <label class="form-check-label small" for="snmpNovoTipo">Elegível a SNMP</label>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-sm btn-primary w-100 text-nowrap"><i class="bi bi-plus-lg"></i> Adicionar</button>
+                    </div>
+                </form>
+
+                <?php if (empty($tiposAtivo)): ?>
+                    <p class="text-muted small mb-0">Nenhum tipo de ativo cadastrado ainda.</p>
+                <?php else: ?>
+                    <ul class="list-group list-group-flush">
+                        <?php foreach ($tiposAtivo as $t): ?>
+                            <li class="list-group-item px-0">
+                                <div class="d-flex justify-content-between align-items-center linha-view">
+                                    <span>
+                                        <i class="bi <?= htmlspecialchars($t['icone']) ?> me-1"></i>
+                                        <?= htmlspecialchars($t['nome']) ?>
+                                        <span class="badge text-bg-light border font-monospace ms-1"><?= htmlspecialchars($t['sigla']) ?></span>
+                                        <?php if ($t['snmp_elegivel']): ?>
+                                            <span class="badge text-bg-light border ms-1">SNMP</span>
+                                        <?php endif; ?>
+                                    </span>
+                                    <div class="d-flex gap-1">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary botao-editar-cadastro"><i class="bi bi-pencil"></i></button>
+                                        <form method="post" action="<?= url('/ativos/cadastros/tipo-excluir') ?>"
+                                              onsubmit="return confirm('Excluir o tipo de ativo &quot;<?= htmlspecialchars(addslashes($t['nome'])) ?>&quot;?');">
+                                            <input type="hidden" name="id" value="<?= (int)$t['id'] ?>">
+                                            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                        </form>
+                                    </div>
+                                </div>
+                                <form method="post" action="<?= url('/ativos/cadastros/tipo-editar') ?>" class="linha-edit d-none row g-2 align-items-end mt-1">
+                                    <input type="hidden" name="id" value="<?= (int)$t['id'] ?>">
+                                    <div class="col-md-3">
+                                        <input type="text" name="nome" class="form-control form-control-sm" value="<?= htmlspecialchars($t['nome']) ?>" required>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <input type="text" name="sigla" class="form-control form-control-sm font-monospace text-uppercase" maxlength="6" value="<?= htmlspecialchars($t['sigla']) ?>" required>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <select name="icone" class="form-select form-select-sm">
+                                            <?php foreach ($iconesDisponiveis as $classe => $label): ?>
+                                                <option value="<?= htmlspecialchars($classe) ?>" <?= $t['icone'] === $classe ? 'selected' : '' ?>><?= htmlspecialchars($label) ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="snmp_elegivel" id="snmpEditar<?= (int)$t['id'] ?>" <?= $t['snmp_elegivel'] ? 'checked' : '' ?>>
+                                            <label class="form-check-label small" for="snmpEditar<?= (int)$t['id'] ?>">SNMP</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-2 d-flex gap-2">
+                                        <button class="btn btn-sm btn-primary text-nowrap">Salvar</button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary botao-cancelar-edicao">Cancelar</button>
+                                    </div>
+                                </form>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 (function () {
     document.querySelectorAll('.botao-editar-cadastro').forEach(function (botao) {

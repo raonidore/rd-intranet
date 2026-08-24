@@ -6,14 +6,17 @@ use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
 use App\Services\AtivoService;
 use App\Services\NotificationService;
+use App\Services\UnidadeService;
 
 class EmpresaController extends Controller
 {
     private AtivoService $ativoService;
+    private UnidadeService $unidadeService;
 
     public function __construct()
     {
         $this->ativoService = new AtivoService();
+        $this->unidadeService = new UnidadeService();
     }
 
     public function index(): void
@@ -25,6 +28,7 @@ class EmpresaController extends Controller
             'sigla' => $this->ativoService->siglaEmpresa(),
             'logoConfigurada' => $this->ativoService->logoEmpresaConfigurada(),
             'logoSistemaConfigurada' => $this->ativoService->logoSistemaConfigurada(),
+            'unidades' => $this->unidadeService->listar(),
         ]);
     }
 
@@ -36,6 +40,36 @@ class EmpresaController extends Controller
             trim($_POST['nome'] ?? ''),
             trim($_POST['sigla'] ?? '')
         );
+
+        header('Location: ' . url('/administracao/empresa'));
+        exit;
+    }
+
+    public function unidadeNovo(): void
+    {
+        AuthMiddleware::checkAdmin();
+
+        $this->unidadeService->criar($_POST['nome'] ?? '', $_POST['sigla'] ?? '');
+
+        header('Location: ' . url('/administracao/empresa'));
+        exit;
+    }
+
+    public function unidadeEditar(): void
+    {
+        AuthMiddleware::checkAdmin();
+
+        $this->unidadeService->atualizar((int)($_POST['id'] ?? 0), $_POST['nome'] ?? '', $_POST['sigla'] ?? '');
+
+        header('Location: ' . url('/administracao/empresa'));
+        exit;
+    }
+
+    public function unidadeExcluir(): void
+    {
+        AuthMiddleware::checkAdmin();
+
+        $this->unidadeService->excluir((int)($_POST['id'] ?? 0));
 
         header('Location: ' . url('/administracao/empresa'));
         exit;

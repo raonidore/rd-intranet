@@ -163,7 +163,7 @@ class EtiquetaService
 
         $valores = [
             'codigo' => $ativo['codigo_patrimonio'] ?? '',
-            'tipo' => AtivoService::TIPOS[$ativo['tipo']]['label'] ?? (string)($ativo['tipo'] ?? ''),
+            'tipo' => (string)($ativo['tipo_nome'] ?? ''),
             'nome' => $ativo['apelido'] ?? '' ?: ($ativo['nome'] ?? ''),
             'setor' => $ativo['setor_nome'] ?? '',
             'localizacao' => $ativo['localizacao_nome'] ?? '',

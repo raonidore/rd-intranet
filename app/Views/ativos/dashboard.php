@@ -56,13 +56,13 @@ $statusCores = [
 </div>
 
 <div class="row g-3 mb-4">
-    <?php foreach (AtivoService::TIPOS as $chave => $info): ?>
+    <?php foreach ($tipos as $t): ?>
         <div class="col-md-4" style="flex:1 1 200px">
-            <a href="<?= url('/ativos/lista?tipo=' . $chave) ?>" class="card border-0 shadow-sm text-decoration-none h-100">
+            <a href="<?= url('/ativos/lista?tipo_id=' . (int)$t['id']) ?>" class="card border-0 shadow-sm text-decoration-none h-100">
                 <div class="card-body text-center">
-                    <i class="bi <?= $info['icone'] ?> display-6 text-primary"></i>
-                    <div class="fs-3 fw-bold mt-2"><?= (int)($por_tipo[$chave] ?? 0) ?></div>
-                    <div class="text-muted small"><?= htmlspecialchars($info['label']) ?></div>
+                    <i class="bi <?= htmlspecialchars($t['icone']) ?> display-6 text-primary"></i>
+                    <div class="fs-3 fw-bold mt-2"><?= (int)($por_tipo[$t['id']] ?? 0) ?></div>
+                    <div class="text-muted small"><?= htmlspecialchars($t['nome']) ?></div>
                 </div>
             </a>
         </div>
@@ -363,7 +363,7 @@ $statusCores = [
                                 <tr>
                                     <td class="font-monospace small"><?= htmlspecialchars($a['codigo_patrimonio']) ?></td>
                                     <td><?= htmlspecialchars($a['nome']) ?></td>
-                                    <td class="text-muted small"><?= htmlspecialchars(AtivoService::TIPOS[$a['tipo']]['label']) ?></td>
+                                    <td class="text-muted small"><?= htmlspecialchars($a['tipo_nome']) ?></td>
                                     <td class="text-end">
                                         <a href="<?= url('/ativos/ver?id=' . $a['id']) ?>" class="btn btn-sm btn-outline-secondary"><i class="bi bi-eye"></i></a>
                                     </td>

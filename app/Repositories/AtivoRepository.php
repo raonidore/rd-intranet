@@ -16,10 +16,14 @@ class AtivoRepository
 
     private const SELECT_COM_CATALOGOS = "
         SELECT a.*, cs.nome AS setor_nome, cl.nome AS localizacao_nome,
+            t.nome AS tipo_nome, t.sigla AS tipo_sigla, t.icone AS tipo_icone, t.slug AS tipo_slug, t.snmp_elegivel AS tipo_snmp_elegivel,
+            u.nome AS unidade_nome, u.sigla AS unidade_sigla,
             EXISTS(SELECT 1 FROM ativos_rdp_credenciais r WHERE r.ativo_id = a.id) AS rdp_configurado
         FROM ativos a
         LEFT JOIN ativos_catalogos cs ON cs.id = a.setor_id
         LEFT JOIN ativos_catalogos cl ON cl.id = a.localizacao_id
+        JOIN ativos_tipos t ON t.id = a.tipo_id
+        JOIN unidades u ON u.id = a.unidade_id
     ";
 
     /**
@@ -31,10 +35,11 @@ class AtivoRepository
         'codigo_patrimonio' => 'a.codigo_patrimonio',
         'nome' => 'a.nome',
         'apelido' => 'a.apelido',
-        'tipo' => 'a.tipo',
+        'tipo' => 't.nome',
         'status' => 'a.status',
         'setor_nome' => 'cs.nome',
         'localizacao_nome' => 'cl.nome',
+        'unidade_nome' => 'u.nome',
         'agente_versao' => 'a.agente_versao',
         'responsavel' => 'a.responsavel',
         'ip' => 'a.ip',
@@ -46,9 +51,14 @@ class AtivoRepository
         $sql = self::SELECT_COM_CATALOGOS . " WHERE 1=1";
         $params = [];
 
-        if (!empty($filtros['tipo'])) {
-            $sql .= " AND a.tipo = :tipo";
-            $params['tipo'] = $filtros['tipo'];
+        if (!empty($filtros['tipo_id'])) {
+            $sql .= " AND a.tipo_id = :tipo_id";
+            $params['tipo_id'] = $filtros['tipo_id'];
+        }
+
+        if (!empty($filtros['unidade_id'])) {
+            $sql .= " AND a.unidade_id = :unidade_id";
+            $params['unidade_id'] = $filtros['unidade_id'];
         }
 
         if (!empty($filtros['status'])) {
@@ -91,7 +101,7 @@ class AtivoRepository
         }
 
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
-        $stmt = $this->pdo->prepare(self::SELECT_COM_CATALOGOS . " WHERE a.id IN ($placeholders) ORDER BY a.tipo, a.nome");
+        $stmt = $this->pdo->prepare(self::SELECT_COM_CATALOGOS . " WHERE a.id IN ($placeholders) ORDER BY t.nome, a.nome");
         $stmt->execute($ids);
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -101,13 +111,14 @@ class AtivoRepository
     {
         $stmt = $this->pdo->prepare("
             INSERT INTO ativos
-            (tipo, codigo_patrimonio, nome, apelido, marca, modelo, numero_serie, setor_id, localizacao_id, responsavel, status, ip, snmp_habilitado, snmp_community, observacoes, detalhes)
+            (tipo_id, unidade_id, codigo_patrimonio, nome, apelido, marca, modelo, numero_serie, setor_id, localizacao_id, responsavel, status, ip, snmp_habilitado, snmp_community, observacoes, detalhes)
             VALUES
-            (:tipo, :codigo_patrimonio, :nome, :apelido, :marca, :modelo, :numero_serie, :setor_id, :localizacao_id, :responsavel, :status, :ip, :snmp_habilitado, :snmp_community, :observacoes, :detalhes)
+            (:tipo_id, :unidade_id, :codigo_patrimonio, :nome, :apelido, :marca, :modelo, :numero_serie, :setor_id, :localizacao_id, :responsavel, :status, :ip, :snmp_habilitado, :snmp_community, :observacoes, :detalhes)
         ");
 
         $stmt->execute([
-            'tipo' => $dados['tipo'],
+            'tipo_id' => $dados['tipo_id'],
+            'unidade_id' => $dados['unidade_id'],
             'codigo_patrimonio' => $dados['codigo_patrimonio'],
             'nome' => $dados['nome'],
             'apelido' => $dados['apelido'],
@@ -139,6 +150,7 @@ class AtivoRepository
                    numero_serie = :numero_serie,
                    setor_id = :setor_id,
                    localizacao_id = :localizacao_id,
+                   unidade_id = :unidade_id,
                    responsavel = :responsavel,
                    status = :status,
                    ip = :ip,
@@ -159,6 +171,7 @@ class AtivoRepository
             'numero_serie' => $dados['numero_serie'],
             'setor_id' => $dados['setor_id'],
             'localizacao_id' => $dados['localizacao_id'],
+            'unidade_id' => $dados['unidade_id'],
             'responsavel' => $dados['responsavel'],
             'status' => $dados['status'],
             'ip' => $dados['ip'],
@@ -260,13 +273,14 @@ class AtivoRepository
     {
         $stmt = $this->pdo->prepare("
             INSERT INTO ativos
-            (tipo, codigo_patrimonio, nome, marca, modelo, numero_serie, ip, status, machine_guid, origem, agente_versao, ultimo_checkin, detalhes)
+            (tipo_id, unidade_id, codigo_patrimonio, nome, marca, modelo, numero_serie, ip, status, machine_guid, origem, agente_versao, ultimo_checkin, detalhes)
             VALUES
-            (:tipo, :codigo_patrimonio, :nome, :marca, :modelo, :numero_serie, :ip, 'ativo', :machine_guid, 'agente', :agente_versao, NOW(), :detalhes)
+            (:tipo_id, :unidade_id, :codigo_patrimonio, :nome, :marca, :modelo, :numero_serie, :ip, 'ativo', :machine_guid, 'agente', :agente_versao, NOW(), :detalhes)
         ");
 
         $stmt->execute([
-            'tipo' => $dados['tipo'],
+            'tipo_id' => $dados['tipo_id'],
+            'unidade_id' => $dados['unidade_id'],
             'codigo_patrimonio' => $dados['codigo_patrimonio'],
             'nome' => $dados['nome'],
             'marca' => $dados['marca'],
@@ -697,10 +711,10 @@ class AtivoRepository
     }
 
     /** `detalhes` (JSON) de todos os ativos de um tipo -- pra bucketizar RAM/CPU/SO no Panorama da Frota. */
-    public function detalhesPorTipo(string $tipo): array
+    public function detalhesPorTipo(int $tipoId): array
     {
-        $stmt = $this->pdo->prepare("SELECT id, detalhes FROM ativos WHERE tipo = ?");
-        $stmt->execute([$tipo]);
+        $stmt = $this->pdo->prepare("SELECT id, detalhes FROM ativos WHERE tipo_id = ?");
+        $stmt->execute([$tipoId]);
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
@@ -806,30 +820,37 @@ class AtivoRepository
         return $stmt->execute([$id]);
     }
 
-    public function ultimoCodigoPorTipo(string $tipo): ?string
+    /**
+     * Incrementa e devolve o próximo número sequencial pro par
+     * tipo+unidade, de forma atômica -- MySQL garante que o
+     * INSERT..ON DUPLICATE KEY UPDATE inteiro é uma operação só, sem
+     * corrida possível entre duas gravações simultâneas (diferente da
+     * lógica antiga, que lia o último código e somava 1 em dois passos).
+     */
+    public function proximoNumeroContador(int $tipoId, int $unidadeId): int
     {
+        // LAST_INSERT_ID(1) também na primeira gravação (não só no
+        // ON DUPLICATE KEY UPDATE) -- sem isso, quando o par tipo+unidade
+        // é novo (INSERT puro, sem conflito nenhum), LAST_INSERT_ID() fica
+        // parado no valor de antes (a tabela não tem AUTO_INCREMENT) e
+        // lastInsertId() devolve 0 em vez de 1.
         $stmt = $this->pdo->prepare("
-            SELECT codigo_patrimonio
-            FROM ativos
-            WHERE tipo = ?
-            ORDER BY id DESC
-            LIMIT 1
+            INSERT INTO ativos_contadores (tipo_id, unidade_id, ultimo_numero)
+            VALUES (:tipo_id, :unidade_id, LAST_INSERT_ID(1))
+            ON DUPLICATE KEY UPDATE ultimo_numero = LAST_INSERT_ID(ultimo_numero + 1)
         ");
+        $stmt->execute(['tipo_id' => $tipoId, 'unidade_id' => $unidadeId]);
 
-        $stmt->execute([$tipo]);
-
-        $codigo = $stmt->fetchColumn();
-
-        return $codigo !== false ? $codigo : null;
+        return (int)$this->pdo->lastInsertId();
     }
 
     public function contarPorTipo(): array
     {
-        $stmt = $this->pdo->query("SELECT tipo, COUNT(*) AS total FROM ativos GROUP BY tipo");
+        $stmt = $this->pdo->query("SELECT tipo_id, COUNT(*) AS total FROM ativos GROUP BY tipo_id");
 
         $resultado = [];
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $linha) {
-            $resultado[$linha['tipo']] = (int)$linha['total'];
+            $resultado[(int)$linha['tipo_id']] = (int)$linha['total'];
         }
 
         return $resultado;
@@ -855,7 +876,11 @@ class AtivoRepository
     /** Só as colunas que AtivoService::estaLigada() precisa -- pro card do dashboard, sem trazer a linha inteira de cada computador. */
     public function computadoresParaResumo(): array
     {
-        $stmt = $this->pdo->query("SELECT status, ultimo_heartbeat, ultimo_checkin FROM ativos WHERE tipo = 'computador'");
+        $stmt = $this->pdo->query("
+            SELECT status, ultimo_heartbeat, ultimo_checkin
+            FROM ativos
+            WHERE tipo_id = (SELECT id FROM ativos_tipos WHERE slug = 'computador')
+        ");
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }

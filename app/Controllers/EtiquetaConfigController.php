@@ -69,8 +69,8 @@ class EtiquetaConfigController extends Controller
 
         return [
             'id' => 0,
-            'codigo_patrimonio' => 'RD-PC-000001',
-            'tipo' => 'computador',
+            'codigo_patrimonio' => 'RD-UN-PC-000001',
+            'tipo_nome' => 'Computador',
             'nome' => 'EXEMPLO-PC',
             'apelido' => 'Notebook de Exemplo',
             'setor_nome' => 'TI',

@@ -9,14 +9,6 @@ class AtivoService
     private AtivoRepository $repository;
     private LinuxService $linux;
 
-    public const TIPOS = [
-        'computador' => ['label' => 'Computador', 'prefixo' => 'PC', 'icone' => 'bi-pc-display'],
-        'servidor' => ['label' => 'Servidor', 'prefixo' => 'SRV', 'icone' => 'bi-hdd-rack'],
-        'monitor' => ['label' => 'Monitor', 'prefixo' => 'MON', 'icone' => 'bi-display'],
-        'impressora' => ['label' => 'Impressora', 'prefixo' => 'IMP', 'icone' => 'bi-printer'],
-        'switch' => ['label' => 'Switch', 'prefixo' => 'SW', 'icone' => 'bi-hdd-network'],
-    ];
-
     public const STATUS = [
         'ativo' => 'Em uso',
         'manutencao' => 'Em manutenção',
@@ -43,6 +35,7 @@ class AtivoService
         'condicao' => ['label' => 'Condição', 'ordenar' => null, 'padrao' => true],
         'setor' => ['label' => 'Setor', 'ordenar' => 'setor_nome', 'padrao' => true],
         'localizacao' => ['label' => 'Localização', 'ordenar' => 'localizacao_nome', 'padrao' => true],
+        'unidade' => ['label' => 'Unidade', 'ordenar' => 'unidade_nome', 'padrao' => true],
         'responsavel' => ['label' => 'Responsável', 'ordenar' => 'responsavel', 'padrao' => false],
         'versao_agente' => ['label' => 'Versão do Agente', 'ordenar' => 'agente_versao', 'padrao' => true],
         'ip' => ['label' => 'IP Principal', 'ordenar' => 'ip', 'padrao' => false],
@@ -115,12 +108,6 @@ class AtivoService
         ],
     ];
 
-    /**
-     * Tipos que fazem sentido pra coleta SNMP (dispositivos de rede) --
-     * monitor fica de fora, não é um dispositivo endereçável na rede.
-     */
-    public const TIPOS_COM_SNMP = ['computador', 'servidor', 'impressora', 'switch'];
-
     private const NOME_JOB_CRON_SNMP = 'Coleta SNMP de Ativos de TI';
 
     public function __construct()
@@ -176,16 +163,24 @@ class AtivoService
 
     public function criar(array $post): ?int
     {
-        $tipo = $post['tipo'] ?? '';
+        $tipo = (new AtivoTipoService())->buscar((int)($post['tipo_id'] ?? 0));
 
-        if (!isset(self::TIPOS[$tipo])) {
+        if (!$tipo) {
             NotificationService::error('Tipo de ativo inválido.');
             return null;
         }
 
+        $unidade = (new UnidadeService())->buscar((int)($post['unidade_id'] ?? 0));
+
+        if (!$unidade) {
+            NotificationService::error('Unidade inválida.');
+            return null;
+        }
+
         $dados = [
-            'tipo' => $tipo,
-            'codigo_patrimonio' => $this->proximoCodigo($tipo),
+            'tipo_id' => (int)$tipo['id'],
+            'unidade_id' => (int)$unidade['id'],
+            'codigo_patrimonio' => $this->proximoCodigo($tipo, $unidade),
             'nome' => trim($post['nome'] ?? ''),
             'apelido' => trim($post['apelido'] ?? '') ?: null,
             'marca' => trim($post['marca'] ?? '') ?: null,
@@ -199,7 +194,7 @@ class AtivoService
             'snmp_habilitado' => isset($post['snmp_habilitado']) ? 1 : 0,
             'snmp_community' => trim($post['snmp_community'] ?? '') ?: null,
             'observacoes' => trim($post['observacoes'] ?? '') ?: null,
-            'detalhes' => json_encode($this->extrairDetalhes($tipo, $post), JSON_UNESCAPED_UNICODE),
+            'detalhes' => json_encode($this->extrairDetalhes($tipo['slug'] ?? '', $post), JSON_UNESCAPED_UNICODE),
         ];
 
         if ($dados['nome'] === '') {
@@ -225,6 +220,12 @@ class AtivoService
             return false;
         }
 
+        $unidadeId = !empty($post['unidade_id']) ? (int)$post['unidade_id'] : (int)$ativo['unidade_id'];
+        if (!(new UnidadeService())->buscar($unidadeId)) {
+            NotificationService::error('Unidade inválida.');
+            return false;
+        }
+
         $dados = [
             'nome' => trim($post['nome'] ?? ''),
             'apelido' => trim($post['apelido'] ?? '') ?: null,
@@ -233,13 +234,14 @@ class AtivoService
             'numero_serie' => trim($post['numero_serie'] ?? '') ?: null,
             'setor_id' => !empty($post['setor_id']) ? (int)$post['setor_id'] : null,
             'localizacao_id' => !empty($post['localizacao_id']) ? (int)$post['localizacao_id'] : null,
+            'unidade_id' => $unidadeId,
             'responsavel' => trim($post['responsavel'] ?? '') ?: null,
             'status' => isset(self::STATUS[$post['status'] ?? '']) ? $post['status'] : $ativo['status'],
             'ip' => trim($post['ip'] ?? '') ?: null,
             'snmp_habilitado' => isset($post['snmp_habilitado']) ? 1 : 0,
             'snmp_community' => trim($post['snmp_community'] ?? '') ?: null,
             'observacoes' => trim($post['observacoes'] ?? '') ?: null,
-            'detalhes' => json_encode($this->extrairDetalhes($ativo['tipo'], $post), JSON_UNESCAPED_UNICODE),
+            'detalhes' => json_encode($this->extrairDetalhes($ativo['tipo_slug'] ?? '', $post), JSON_UNESCAPED_UNICODE),
             'machine_guid' => $ativo['machine_guid'] ?? null,
         ];
 
@@ -366,7 +368,9 @@ class AtivoService
         $soPorBucket = [];
         $total = 0;
 
-        foreach ($this->repository->detalhesPorTipo('computador') as $ativo) {
+        $tipoComputador = (new AtivoTipoService())->buscarPorSlug('computador');
+
+        foreach ($this->repository->detalhesPorTipo((int)$tipoComputador['id']) as $ativo) {
             $total++;
             $detalhes = json_decode($ativo['detalhes'] ?? '', true) ?: [];
 
@@ -524,17 +528,18 @@ class AtivoService
         return $this->repository->listarPortasRede($ativoId);
     }
 
-    private function proximoCodigo(string $tipo): string
+    /** @param array $tipo linha de ativos_tipos; @param array $unidade linha de unidades */
+    private function proximoCodigo(array $tipo, array $unidade): string
     {
-        $prefixo = self::TIPOS[$tipo]['prefixo'];
-        $ultimo = $this->repository->ultimoCodigoPorTipo($tipo);
+        $numero = $this->repository->proximoNumeroContador((int)$tipo['id'], (int)$unidade['id']);
 
-        $numero = 0;
-        if ($ultimo && preg_match('/(\d+)$/', $ultimo, $m)) {
-            $numero = (int)$m[1];
-        }
-
-        return sprintf('%s-%s-%0' . $this->codigoDigitos() . 'd', $this->siglaEmpresa(), $prefixo, $numero + 1);
+        return sprintf(
+            '%s-%s-%s-%0' . $this->codigoDigitos() . 'd',
+            $this->siglaEmpresa(),
+            $unidade['sigla'],
+            $tipo['sigla'],
+            $numero
+        );
     }
 
     /** Quantidade de dígitos do número sequencial do código de patrimônio (ex: 4 dígitos -> RD-PC-0001). Só vale pra códigos novos -- não reescreve os já existentes. */
@@ -866,7 +871,7 @@ class AtivoService
 
         $community = $ativo['snmp_community'] ?: $this->comunidadePadrao();
 
-        $coletado = (new SnmpService())->coletar($ativo['ip'], $community, $ativo['tipo']);
+        $coletado = (new SnmpService())->coletar($ativo['ip'], $community, $ativo['tipo_slug'] ?? '');
 
         if (empty($coletado)) {
             return [
@@ -1380,7 +1385,7 @@ class AtivoService
             return ['success' => false, 'message' => 'machine_guid é obrigatório.'];
         }
 
-        $tipo = in_array($payload['tipo'] ?? '', ['computador', 'servidor'], true) ? $payload['tipo'] : 'computador';
+        $slugTipo = in_array($payload['tipo'] ?? '', ['computador', 'servidor'], true) ? $payload['tipo'] : 'computador';
 
         $existente = $this->repository->buscarPorMachineGuid($machineGuid);
 
@@ -1393,7 +1398,7 @@ class AtivoService
             'agente_versao' => trim((string)($payload['versao_agente'] ?? '')) ?: null,
         ];
 
-        $camposTecnicos = $this->extrairDetalhes($tipo, $payload);
+        $camposTecnicos = $this->extrairDetalhes($slugTipo, $payload);
 
         if ($existente) {
             $id = (int)$existente['id'];
@@ -1402,9 +1407,15 @@ class AtivoService
 
             $this->repository->atualizarViaAgente($id, $camposBase, json_encode($detalhesNovos, JSON_UNESCAPED_UNICODE));
         } else {
+            // O agente não sabe em qual unidade física a máquina está --
+            // entra na unidade padrão até um admin reatribuir manualmente.
+            $tipo = (new AtivoTipoService())->buscarPorSlug($slugTipo);
+            $unidade = (new UnidadeService())->padrao();
+
             $id = $this->repository->criarViaAgente(array_merge($camposBase, [
-                'tipo' => $tipo,
-                'codigo_patrimonio' => $this->proximoCodigo($tipo),
+                'tipo_id' => (int)$tipo['id'],
+                'unidade_id' => (int)$unidade['id'],
+                'codigo_patrimonio' => $this->proximoCodigo($tipo, $unidade),
                 'machine_guid' => $machineGuid,
                 'detalhes' => json_encode($camposTecnicos, JSON_UNESCAPED_UNICODE),
             ]));

@@ -6,7 +6,10 @@ use App\Services\AtivoService;
 
 $editando = $ativo !== null;
 $detalhes = $ativo['detalhes'] ?? [];
-$tipoAtual = $ativo['tipo'] ?? $tipoSelecionado;
+$tipoIdAtual = (int)($ativo['tipo_id'] ?? $tipoIdSelecionado);
+$tipoAtualNome = $ativo['tipo_nome'] ?? '';
+$tipoAtualSlug = $ativo['tipo_slug'] ?? '';
+$idsTiposComSnmp = array_column(array_filter($tipos, fn (array $t) => (bool)$t['snmp_elegivel']), 'id');
 ?>
 
 <?= Alert::flash() ?>
@@ -28,11 +31,11 @@ $tipoAtual = $ativo['tipo'] ?? $tipoSelecionado;
                 <div class="col-md-3">
                     <label class="form-label">Tipo</label>
                     <?php if ($editando): ?>
-                        <input type="text" class="form-control" value="<?= htmlspecialchars(AtivoService::TIPOS[$tipoAtual]['label']) ?>" disabled>
+                        <input type="text" class="form-control" value="<?= htmlspecialchars($tipoAtualNome) ?>" disabled>
                     <?php else: ?>
-                        <select name="tipo" id="campoTipo" class="form-select" required>
-                            <?php foreach (AtivoService::TIPOS as $chave => $info): ?>
-                                <option value="<?= $chave ?>" <?= $tipoAtual === $chave ? 'selected' : '' ?>><?= htmlspecialchars($info['label']) ?></option>
+                        <select name="tipo_id" id="campoTipo" class="form-select" required>
+                            <?php foreach ($tipos as $t): ?>
+                                <option value="<?= (int)$t['id'] ?>" <?= $tipoIdAtual === (int)$t['id'] ? 'selected' : '' ?>><?= htmlspecialchars($t['nome']) ?></option>
                             <?php endforeach; ?>
                         </select>
                     <?php endif; ?>
@@ -43,6 +46,14 @@ $tipoAtual = $ativo['tipo'] ?? $tipoSelecionado;
                         <input type="text" class="form-control font-monospace" value="<?= htmlspecialchars($ativo['codigo_patrimonio']) ?>" disabled>
                     </div>
                 <?php endif; ?>
+                <div class="col-md-3">
+                    <label class="form-label">Unidade</label>
+                    <select name="unidade_id" class="form-select" required>
+                        <?php foreach ($unidades as $u): ?>
+                            <option value="<?= (int)$u['id'] ?>" <?= (int)($ativo['unidade_id'] ?? 0) === (int)$u['id'] ? 'selected' : '' ?>><?= htmlspecialchars($u['nome']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
                 <div class="col-md-3">
                     <label class="form-label">Status</label>
                     <select name="status" class="form-select">
@@ -137,7 +148,7 @@ $tipoAtual = $ativo['tipo'] ?? $tipoSelecionado;
         </div>
     </div>
 
-    <div class="card border-0 shadow-sm mb-3" id="cardSnmp" style="<?= in_array($tipoAtual, AtivoService::TIPOS_COM_SNMP, true) ? '' : 'display:none' ?>">
+    <div class="card border-0 shadow-sm mb-3" id="cardSnmp" style="<?= in_array($tipoIdAtual, $idsTiposComSnmp, true) ? '' : 'display:none' ?>">
         <div class="card-header bg-white"><strong>Coleta via SNMP</strong></div>
         <div class="card-body">
             <div class="form-check form-switch mb-3">
@@ -158,8 +169,10 @@ $tipoAtual = $ativo['tipo'] ?? $tipoSelecionado;
     <div class="card border-0 shadow-sm mb-3">
         <div class="card-header bg-white"><strong>Detalhes técnicos</strong></div>
         <div class="card-body">
-            <?php foreach (AtivoService::CAMPOS_DETALHES as $tipo => $campos): ?>
-                <div class="row g-3 bloco-detalhes" data-tipo="<?= $tipo ?>" style="<?= $tipoAtual === $tipo ? '' : 'display:none' ?>">
+            <?php foreach ($tipos as $t): ?>
+                <?php $campos = AtivoService::CAMPOS_DETALHES[$t['slug'] ?? ''] ?? []; ?>
+                <?php if (empty($campos)): continue; endif; ?>
+                <div class="row g-3 bloco-detalhes" data-tipo-id="<?= (int)$t['id'] ?>" style="<?= $tipoIdAtual === (int)$t['id'] ? '' : 'display:none' ?>">
                     <?php foreach ($campos as $campo => $label): ?>
                         <div class="col-md-4">
                             <label class="form-label"><?= htmlspecialchars($label) ?></label>
@@ -180,16 +193,16 @@ $tipoAtual = $ativo['tipo'] ?? $tipoSelecionado;
     const campoTipo = document.getElementById('campoTipo');
     if (!campoTipo) return;
 
-    const tiposComSnmp = <?= json_encode(AtivoService::TIPOS_COM_SNMP) ?>;
+    const idsTiposComSnmp = <?= json_encode(array_values($idsTiposComSnmp)) ?>;
     const cardSnmp = document.getElementById('cardSnmp');
 
     function atualizarBlocos() {
         document.querySelectorAll('.bloco-detalhes').forEach(function (bloco) {
-            bloco.style.display = bloco.dataset.tipo === campoTipo.value ? '' : 'none';
+            bloco.style.display = bloco.dataset.tipoId === campoTipo.value ? '' : 'none';
         });
 
         if (cardSnmp) {
-            cardSnmp.style.display = tiposComSnmp.includes(campoTipo.value) ? '' : 'none';
+            cardSnmp.style.display = idsTiposComSnmp.includes(parseInt(campoTipo.value, 10)) ? '' : 'none';
         }
     }
 
