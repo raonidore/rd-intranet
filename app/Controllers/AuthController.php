@@ -41,8 +41,19 @@ class AuthController extends Controller
 
         if ($usuario && password_verify($senha, $usuario['senha_hash'])) {
 
-            $stmtModulos = $pdo->prepare("SELECT modulo FROM usuario_modulos WHERE usuario_id = ?");
-            $stmtModulos->execute([$usuario['id']]);
+            // UNION com grupo_modulos -- quem está num grupo com módulo
+            // concedido ganha o mesmo acesso de quem tem concessão
+            // individual, resolvido aqui (na sessão) igual sempre foi
+            // feito com usuario_modulos -- por isso um módulo novo
+            // concedido ao grupo só passa a valer no próximo login.
+            $stmtModulos = $pdo->prepare("
+                SELECT modulo FROM usuario_modulos WHERE usuario_id = ?
+                UNION
+                SELECT gm.modulo FROM grupo_modulos gm
+                JOIN grupo_usuarios gu ON gu.grupo_id = gm.grupo_id
+                WHERE gu.usuario_id = ?
+            ");
+            $stmtModulos->execute([$usuario['id'], $usuario['id']]);
 
             $_SESSION['usuario'] = [
                 'id'      => $usuario['id'],

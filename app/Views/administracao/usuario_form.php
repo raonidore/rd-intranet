@@ -114,6 +114,41 @@ $perfilAtual = $usuario['perfil'] ?? 'ti';
         </div>
     </div>
 
+    <div id="blocoGrupos">
+        <div class="card uf-card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-people-fill me-1"></i> Grupos</span>
+                <small class="text-muted fw-normal">Herda os módulos concedidos a cada grupo, além do que estiver marcado abaixo</small>
+            </div>
+            <div class="card-body">
+                <?php if (empty($gruposDisponiveis)): ?>
+                    <p class="text-muted small mb-0">
+                        Nenhum grupo cadastrado ainda -- crie em
+                        <a href="<?= url('/administracao/grupos') ?>">Administração &gt; Grupos</a>.
+                    </p>
+                <?php else: ?>
+                    <div class="row g-2">
+                        <?php foreach ($gruposDisponiveis as $grupoItem): ?>
+                            <div class="col-md-4">
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input" name="grupos[]"
+                                           id="grupo_<?= (int)$grupoItem['id'] ?>" value="<?= (int)$grupoItem['id'] ?>"
+                                           <?= in_array((int)$grupoItem['id'], $gruposDoUsuario, true) ? 'checked' : '' ?>>
+                                    <label class="form-check-label small" for="grupo_<?= (int)$grupoItem['id'] ?>">
+                                        <?= htmlspecialchars($grupoItem['nome']) ?>
+                                        <?php if (!empty($grupoItem['descricao'])): ?>
+                                            <span class="text-muted">-- <?= htmlspecialchars($grupoItem['descricao']) ?></span>
+                                        <?php endif; ?>
+                                    </label>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
     <div id="blocoModulos">
         <div class="card uf-card mb-3">
             <div class="card-header d-flex justify-content-between align-items-center">
@@ -162,6 +197,8 @@ $perfilAtual = $usuario['perfil'] ?? 'ti';
 function atualizarBlocoModulos() {
     const perfil = document.querySelector('input[name="perfil"]:checked')?.value;
     document.getElementById('blocoModulos').style.display = perfil === 'admin' ? 'none' : '';
+    const blocoGrupos = document.getElementById('blocoGrupos');
+    if (blocoGrupos) blocoGrupos.style.display = perfil === 'admin' ? 'none' : '';
 }
 
 document.querySelectorAll('input[name="perfil"]').forEach(function (radio) {

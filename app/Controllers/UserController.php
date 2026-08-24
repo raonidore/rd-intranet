@@ -5,6 +5,7 @@ namespace App\Controllers;
 use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
 use App\Services\AuditService;
+use App\Services\GrupoService;
 use App\Services\ModuloCatalogo;
 use App\Services\NotificationService;
 use App\Services\UserService;
@@ -35,6 +36,8 @@ class UserController extends Controller
             'usuario' => null,
             'modulosAgrupados' => ModuloCatalogo::agrupados(),
             'modulosSelecionados' => [],
+            'gruposDisponiveis' => (new GrupoService())->listar(),
+            'gruposDoUsuario' => [],
         ]);
     }
 
@@ -54,6 +57,14 @@ class UserController extends Controller
         ]);
 
         if ($ok) {
+            $stmt = \App\Core\Database::connection()->prepare('SELECT id FROM usuarios WHERE login = ?');
+            $stmt->execute([$login]);
+            $novoId = $stmt->fetchColumn();
+
+            if ($novoId) {
+                (new GrupoService())->salvarGruposDoUsuario((int)$novoId, is_array($_POST['grupos'] ?? null) ? $_POST['grupos'] : []);
+            }
+
             AuditService::registrar('Usuários', 'Criar', "Usuário {$login} criado.");
             NotificationService::success('Usuário criado com sucesso.');
         }
@@ -78,6 +89,8 @@ class UserController extends Controller
             'usuario' => $usuario,
             'modulosAgrupados' => ModuloCatalogo::agrupados(),
             'modulosSelecionados' => $this->service->modulosDoUsuario($id),
+            'gruposDisponiveis' => (new GrupoService())->listar(),
+            'gruposDoUsuario' => (new GrupoService())->idsGruposDoUsuario($id),
         ]);
     }
 
@@ -95,6 +108,8 @@ class UserController extends Controller
         ]);
 
         if ($ok) {
+            (new GrupoService())->salvarGruposDoUsuario($id, is_array($_POST['grupos'] ?? null) ? $_POST['grupos'] : []);
+
             AuditService::registrar('Usuários', 'Editar', "Usuário #{$id} atualizado.");
             NotificationService::success('Usuário atualizado com sucesso.');
         }

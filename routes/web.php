@@ -17,6 +17,7 @@ use App\Controllers\SambaDashboardController;
 use App\Controllers\SambaMonitorController;
 use App\Controllers\SambaArquivosController;
 use App\Controllers\UserController;
+use App\Controllers\GrupoController;
 use App\Controllers\PerfilController;
 use App\Controllers\PasswordResetController;
 use App\Controllers\PoliticaSenhaController;
@@ -541,6 +542,13 @@ $router->get('/administracao/usuarios/excluir', [UserController::class, 'excluir
 $router->post('/administracao/usuarios/excluir', [UserController::class, 'excluir']);
 $router->get('/administracao/usuarios/politica-senha', [PoliticaSenhaController::class, 'index']);
 $router->post('/administracao/usuarios/politica-senha', [PoliticaSenhaController::class, 'salvar']);
+
+$router->get('/administracao/grupos', [GrupoController::class, 'index']);
+$router->post('/administracao/grupos/criar', [GrupoController::class, 'criar']);
+$router->post('/administracao/grupos/atualizar', [GrupoController::class, 'atualizar']);
+$router->post('/administracao/grupos/excluir', [GrupoController::class, 'excluir']);
+$router->post('/administracao/grupos/usuarios', [GrupoController::class, 'salvarUsuarios']);
+$router->post('/administracao/grupos/modulos', [GrupoController::class, 'salvarModulos']);
 
 $router->get('/administracao/atualizacoes', [AtualizacaoController::class, 'index']);
 $router->get('/administracao/atualizacoes/descricao', [AtualizacaoController::class, 'descricao']);

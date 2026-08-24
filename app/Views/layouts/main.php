@@ -698,6 +698,10 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         <a href="<?= url('/administracao/usuarios') ?>" class="<?= str_starts_with($uriAtual, '/administracao/usuarios') ? 'active' : '' ?>">
             <i class="bi bi-person-gear me-2"></i> Usuários do Sistema
         </a>
+
+        <a href="<?= url('/administracao/grupos') ?>" class="<?= str_starts_with($uriAtual, '/administracao/grupos') ? 'active' : '' ?>">
+            <i class="bi bi-people-fill me-2"></i> Grupos
+        </a>
     </div>
     <?php endif; ?>
 
