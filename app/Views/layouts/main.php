@@ -325,6 +325,61 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
     <?php endif; ?>
 
     <?php
+    $temChamados = PermissionService::temAcesso('chamados_atendimentos')
+        || PermissionService::temAcesso('chamados_fila')
+        || PermissionService::temAcesso('chamados_categorias')
+        || PermissionService::temAcesso('chamados_setores')
+        || PermissionService::temAcesso('chamados_estatisticas')
+        || PermissionService::temAcesso('chamados_configuracoes');
+    ?>
+    <?php
+    $chamadosAguardando = 0;
+    if (PermissionService::temAcesso('chamados_atendimentos') && isset($_SESSION['usuario']['id'])) {
+        $chamadosAguardando = (new ChamadoService())->contarAguardandoResposta((int)$_SESSION['usuario']['id']);
+    }
+    ?>
+    <?php if ($temChamados): ?>
+    <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuChamados"
+            aria-expanded="<?= $abrirChamados ? 'true' : 'false' ?>">
+        <span><i class="bi bi-ticket-perforated me-2"></i>Chamados</span>
+        <i class="bi bi-chevron-right chevron"></i>
+    </button>
+    <div class="collapse <?= $abrirChamados ? 'show' : '' ?>" id="menuChamados">
+        <?php if (PermissionService::temAcesso('chamados_atendimentos')): ?>
+        <a href="<?= url('/chamados/atendimentos') ?>" class="rd-menu-item-badge <?= str_starts_with($uriAtual, '/chamados/atendimentos') ? 'active' : '' ?>">
+            <span><i class="bi bi-ticket-detailed me-2"></i> Atendimentos</span>
+            <span class="rd-menu-badge" id="rdChamadosBadgeAtendimentos" style="<?= $chamadosAguardando > 0 ? '' : 'display:none' ?>"><?= $chamadosAguardando ?></span>
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('chamados_fila')): ?>
+        <a href="<?= url('/chamados/fila') ?>" class="<?= $uriAtual === '/chamados/fila' ? 'active' : '' ?>">
+            <i class="bi bi-hourglass-split me-2"></i> Fila
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('chamados_categorias')): ?>
+        <a href="<?= url('/chamados/categorias') ?>" class="<?= $uriAtual === '/chamados/categorias' ? 'active' : '' ?>">
+            <i class="bi bi-tags me-2"></i> Categorias
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('chamados_setores')): ?>
+        <a href="<?= url('/chamados/setores') ?>" class="<?= $uriAtual === '/chamados/setores' ? 'active' : '' ?>">
+            <i class="bi bi-diagram-3 me-2"></i> Setores
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('chamados_estatisticas')): ?>
+        <a href="<?= url('/chamados/estatisticas') ?>" class="<?= $uriAtual === '/chamados/estatisticas' ? 'active' : '' ?>">
+            <i class="bi bi-bar-chart-line me-2"></i> Estatísticas
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('chamados_configuracoes')): ?>
+        <a href="<?= url('/chamados/configuracoes') ?>" class="<?= $uriAtual === '/chamados/configuracoes' ? 'active' : '' ?>">
+            <i class="bi bi-gear me-2"></i> Configurações
+        </a>
+        <?php endif; ?>
+    </div>
+    <?php endif; ?>
+
+    <?php
     $temInfra = PermissionService::temAcesso('infra_servidor')
         || PermissionService::temAcesso('infra_hardware')
         || PermissionService::temAcesso('infra_rede')
@@ -814,61 +869,6 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         <?php endif; ?>
         <?php if (PermissionService::temAcesso('whatsapp_configuracoes')): ?>
         <a href="<?= url('/whatsapp/configuracoes') ?>" class="<?= $uriAtual === '/whatsapp/configuracoes' ? 'active' : '' ?>">
-            <i class="bi bi-gear me-2"></i> Configurações
-        </a>
-        <?php endif; ?>
-    </div>
-    <?php endif; ?>
-
-    <?php
-    $temChamados = PermissionService::temAcesso('chamados_atendimentos')
-        || PermissionService::temAcesso('chamados_fila')
-        || PermissionService::temAcesso('chamados_categorias')
-        || PermissionService::temAcesso('chamados_setores')
-        || PermissionService::temAcesso('chamados_estatisticas')
-        || PermissionService::temAcesso('chamados_configuracoes');
-    ?>
-    <?php
-    $chamadosAguardando = 0;
-    if (PermissionService::temAcesso('chamados_atendimentos') && isset($_SESSION['usuario']['id'])) {
-        $chamadosAguardando = (new ChamadoService())->contarAguardandoResposta((int)$_SESSION['usuario']['id']);
-    }
-    ?>
-    <?php if ($temChamados): ?>
-    <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuChamados"
-            aria-expanded="<?= $abrirChamados ? 'true' : 'false' ?>">
-        <span><i class="bi bi-ticket-perforated me-2"></i>Chamados</span>
-        <i class="bi bi-chevron-right chevron"></i>
-    </button>
-    <div class="collapse <?= $abrirChamados ? 'show' : '' ?>" id="menuChamados">
-        <?php if (PermissionService::temAcesso('chamados_atendimentos')): ?>
-        <a href="<?= url('/chamados/atendimentos') ?>" class="rd-menu-item-badge <?= str_starts_with($uriAtual, '/chamados/atendimentos') ? 'active' : '' ?>">
-            <span><i class="bi bi-ticket-detailed me-2"></i> Atendimentos</span>
-            <span class="rd-menu-badge" id="rdChamadosBadgeAtendimentos" style="<?= $chamadosAguardando > 0 ? '' : 'display:none' ?>"><?= $chamadosAguardando ?></span>
-        </a>
-        <?php endif; ?>
-        <?php if (PermissionService::temAcesso('chamados_fila')): ?>
-        <a href="<?= url('/chamados/fila') ?>" class="<?= $uriAtual === '/chamados/fila' ? 'active' : '' ?>">
-            <i class="bi bi-hourglass-split me-2"></i> Fila
-        </a>
-        <?php endif; ?>
-        <?php if (PermissionService::temAcesso('chamados_categorias')): ?>
-        <a href="<?= url('/chamados/categorias') ?>" class="<?= $uriAtual === '/chamados/categorias' ? 'active' : '' ?>">
-            <i class="bi bi-tags me-2"></i> Categorias
-        </a>
-        <?php endif; ?>
-        <?php if (PermissionService::temAcesso('chamados_setores')): ?>
-        <a href="<?= url('/chamados/setores') ?>" class="<?= $uriAtual === '/chamados/setores' ? 'active' : '' ?>">
-            <i class="bi bi-diagram-3 me-2"></i> Setores
-        </a>
-        <?php endif; ?>
-        <?php if (PermissionService::temAcesso('chamados_estatisticas')): ?>
-        <a href="<?= url('/chamados/estatisticas') ?>" class="<?= $uriAtual === '/chamados/estatisticas' ? 'active' : '' ?>">
-            <i class="bi bi-bar-chart-line me-2"></i> Estatísticas
-        </a>
-        <?php endif; ?>
-        <?php if (PermissionService::temAcesso('chamados_configuracoes')): ?>
-        <a href="<?= url('/chamados/configuracoes') ?>" class="<?= $uriAtual === '/chamados/configuracoes' ? 'active' : '' ?>">
             <i class="bi bi-gear me-2"></i> Configurações
         </a>
         <?php endif; ?>
