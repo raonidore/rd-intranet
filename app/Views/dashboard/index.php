@@ -169,6 +169,8 @@ if ($servidor) {
     </div>
 </div>
 
+<?php include __DIR__ . '/_avisos_widget.php'; ?>
+
 <?php if (!$temAlgumModulo): ?>
     <div class="card border-0 shadow-sm">
         <div class="card-body text-center py-5">

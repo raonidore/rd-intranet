@@ -1,10 +1,12 @@
 <?php
 
 use App\Services\AtivoService;
+use App\Services\AvisoService;
 use App\Services\PermissionService;
 use App\Services\WhatsAppAtendimentoService;
 use App\Services\ChamadoService;
 use App\Services\ChatService;
+use App\Services\ModuloCatalogo;
 
 $usuarioLogado = $_SESSION['usuario'] ?? ['nome' => 'Usuário'];
 $ativoServiceMenu = new AtivoService();
@@ -393,6 +395,19 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         </a>
         <?php endif; ?>
     </div>
+    <?php endif; ?>
+
+    <?php
+    $avisosNaoLidos = 0;
+    if (ModuloCatalogo::grupoHabilitado('Avisos') && isset($_SESSION['usuario']['id'])) {
+        $avisosNaoLidos = (new AvisoService())->contarNaoLidos((int)$_SESSION['usuario']['id']);
+    }
+    ?>
+    <?php if (ModuloCatalogo::grupoHabilitado('Avisos') && isset($_SESSION['usuario']['id'])): ?>
+    <a href="<?= url('/avisos') ?>" class="menu-single rd-menu-item-badge <?= str_starts_with($uriAtual, '/avisos') ? 'active' : '' ?>">
+        <span><i class="bi bi-megaphone-fill me-2"></i> Avisos</span>
+        <span class="rd-menu-badge" id="rdAvisosBadge" style="<?= $avisosNaoLidos > 0 ? '' : 'display:none' ?>"><?= $avisosNaoLidos ?></span>
+    </a>
     <?php endif; ?>
 
     <?php
@@ -1195,6 +1210,29 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
     }
 
     conectarSocketChat();
+})();
+</script>
+<?php endif; ?>
+
+<?php if (ModuloCatalogo::grupoHabilitado('Avisos') && isset($_SESSION['usuario']['id'])): ?>
+<script>
+(function () {
+    const badgeAvisos = document.getElementById('rdAvisosBadge');
+
+    async function verificarAvisos() {
+        try {
+            const resp = await fetch('<?= url('/avisos/contador') ?>');
+            const dados = await resp.json();
+            if (!dados.success || !badgeAvisos) return;
+
+            badgeAvisos.textContent = dados.nao_lidos;
+            badgeAvisos.style.display = dados.nao_lidos > 0 ? '' : 'none';
+        } catch (e) {
+            // rede instável -- tenta de novo no próximo ciclo
+        }
+    }
+
+    setInterval(verificarAvisos, 30000);
 })();
 </script>
 <?php endif; ?>

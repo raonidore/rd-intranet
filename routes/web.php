@@ -18,6 +18,7 @@ use App\Controllers\SambaMonitorController;
 use App\Controllers\SambaArquivosController;
 use App\Controllers\UserController;
 use App\Controllers\GrupoController;
+use App\Controllers\AvisoController;
 use App\Controllers\ChamadoExternoCategoriaController;
 use App\Controllers\ChamadoExternoController;
 use App\Controllers\DocumentoCategoriaController;
@@ -608,6 +609,17 @@ $router->get('/chamados-externos/categorias', [ChamadoExternoCategoriaController
 $router->post('/chamados-externos/categorias/criar', [ChamadoExternoCategoriaController::class, 'criar']);
 $router->post('/chamados-externos/categorias/atualizar', [ChamadoExternoCategoriaController::class, 'atualizar']);
 $router->post('/chamados-externos/categorias/excluir', [ChamadoExternoCategoriaController::class, 'excluir']);
+
+$router->get('/avisos', [AvisoController::class, 'mural']);
+$router->post('/avisos/marcar-visto', [AvisoController::class, 'marcarVisto']);
+$router->post('/avisos/confirmar', [AvisoController::class, 'confirmar']);
+$router->get('/avisos/contador', [AvisoController::class, 'contadorApi']);
+$router->get('/avisos/gerenciar', [AvisoController::class, 'gerenciar']);
+$router->post('/avisos/gerenciar/criar', [AvisoController::class, 'criar']);
+$router->post('/avisos/gerenciar/atualizar', [AvisoController::class, 'atualizar']);
+$router->post('/avisos/gerenciar/excluir', [AvisoController::class, 'excluir']);
+$router->get('/avisos/gerenciar/destinatarios', [AvisoController::class, 'destinatariosApi']);
+$router->get('/avisos/gerenciar/relatorio', [AvisoController::class, 'relatorioApi']);
 
 $router->post('/contratos/criar', [ContratoController::class, 'criar']);
 $router->post('/contratos/atualizar', [ContratoController::class, 'atualizar']);

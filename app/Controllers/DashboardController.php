@@ -4,8 +4,10 @@ namespace App\Controllers;
 
 use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
+use App\Services\AvisoService;
 use App\Services\SambaService;
 use App\Services\ApacheStatusService;
+use App\Services\ModuloCatalogo;
 use App\Services\ServerInfoService;
 use App\Services\SpeedtestService;
 use App\Services\AtivoService;
@@ -29,7 +31,17 @@ class DashboardController extends Controller
             'backup' => null,
             'whatsapp' => null,
             'chamados' => null,
+            'avisos' => null,
         ];
+
+        if (ModuloCatalogo::grupoHabilitado('Avisos')) {
+            $avisoService = new AvisoService();
+            $usuarioId = (int)$_SESSION['usuario']['id'];
+            $dados['avisos'] = [
+                'itens' => $avisoService->listarVisiveisParaUsuario($usuarioId, 5),
+                'nao_lidos' => $avisoService->contarNaoLidos($usuarioId),
+            ];
+        }
 
         if (
             PermissionService::temAcesso('samba_usuarios')

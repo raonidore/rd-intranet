@@ -82,6 +82,7 @@ class ModuloCatalogo
         'fornecedores_gerenciar' => ['label' => 'Fornecedores e Contratos', 'grupo' => 'Fornecedores'],
         'documentos_acessar' => ['label' => 'Documentos - Acessar', 'grupo' => 'Documentos'],
         'documentos_categorias' => ['label' => 'Documentos - Categorias e Permissões', 'grupo' => 'Documentos'],
+        'avisos_gerenciar' => ['label' => 'Avisos - Publicar e Gerenciar', 'grupo' => 'Avisos'],
     ];
 
     public static function chaves(): array
@@ -115,6 +116,7 @@ class ModuloCatalogo
         'Banco de Dados' => 'bi-database',
         'Base de Conhecimento' => 'bi-journal-text',
         'Chamados' => 'bi-ticket-perforated',
+        'Avisos' => 'bi-megaphone-fill',
         'Chat' => 'bi-chat-dots-fill',
         'Documentos' => 'bi-folder2-open',
         'Fornecedores' => 'bi-truck',
@@ -144,7 +146,7 @@ class ModuloCatalogo
      */
 
     public const GRUPOS_TOGGLEAVEIS = [
-        'Apache', 'Banco de Dados', 'Ativos', 'Infraestrutura', 'VPN', 'Samba', 'Segurança', 'Microsoft Entra', 'Backup', 'SSH', 'Base de Conhecimento', 'WhatsApp', 'Chamados', 'Chat', 'Fornecedores', 'Documentos',
+        'Apache', 'Banco de Dados', 'Ativos', 'Infraestrutura', 'VPN', 'Samba', 'Segurança', 'Microsoft Entra', 'Backup', 'SSH', 'Base de Conhecimento', 'WhatsApp', 'Chamados', 'Chat', 'Fornecedores', 'Documentos', 'Avisos',
     ];
 
     /** Grupos que nascem desligados em instalações novas -- opt-in, não fazem parte do uso típico. */
