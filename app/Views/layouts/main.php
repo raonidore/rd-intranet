@@ -134,6 +134,16 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         .menu-toggle[aria-expanded="true"] { color:#fff; }
         .menu-toggle .chevron { transition:transform .2s ease; font-size:10px; }
         .menu-toggle[aria-expanded="true"] .chevron { transform:rotate(90deg); }
+        /* Item único de topo (sem submenu) que precisa ficar do mesmo tamanho/estilo dos cabeçalhos de grupo (.menu-toggle) -- Chat, Documentos, Fornecedores. */
+        .sidebar a.menu-single {
+            font-size:11px;
+            font-weight:700;
+            letter-spacing:.08em;
+            text-transform:uppercase;
+            color:#9ca3af;
+        }
+        .sidebar a.menu-single:hover, .sidebar a.menu-single.active { color:#fff; }
+        .sidebar a.menu-single i { font-size:14px; }
         .menu-toggle-sub {
             font-size:10px;
             padding:8px 12px 8px 22px;
@@ -392,20 +402,20 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
     }
     ?>
     <?php if (PermissionService::temAcesso('chat_conversas')): ?>
-    <a href="<?= url('/chat') ?>" class="rd-menu-item-badge <?= str_starts_with($uriAtual, '/chat') ? 'active' : '' ?>">
+    <a href="<?= url('/chat') ?>" class="menu-single rd-menu-item-badge <?= str_starts_with($uriAtual, '/chat') ? 'active' : '' ?>">
         <span><i class="bi bi-chat-dots-fill me-2"></i> Chat</span>
         <span class="rd-menu-badge" id="rdChatBadge" style="<?= $chatNaoLidas > 0 ? '' : 'display:none' ?>"><?= $chatNaoLidas ?></span>
     </a>
     <?php endif; ?>
 
     <?php if (PermissionService::temAcesso('documentos_acessar') || PermissionService::temAcesso('documentos_categorias')): ?>
-    <a href="<?= url('/documentos') ?>" class="<?= str_starts_with($uriAtual, '/documentos') ? 'active' : '' ?>">
+    <a href="<?= url('/documentos') ?>" class="menu-single <?= str_starts_with($uriAtual, '/documentos') ? 'active' : '' ?>">
         <i class="bi bi-folder2-open me-2"></i> Documentos
     </a>
     <?php endif; ?>
 
     <?php if (PermissionService::temAcesso('fornecedores_gerenciar')): ?>
-    <a href="<?= url('/fornecedores') ?>" class="<?= str_starts_with($uriAtual, '/fornecedores') ? 'active' : '' ?>">
+    <a href="<?= url('/fornecedores') ?>" class="menu-single <?= str_starts_with($uriAtual, '/fornecedores') ? 'active' : '' ?>">
         <i class="bi bi-truck me-2"></i> Fornecedores
     </a>
     <?php endif; ?>
