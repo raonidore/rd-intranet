@@ -336,6 +336,7 @@ $router->get('/chamados/estatisticas/tempo-real-api', [ChamadoEstatisticaControl
 
 $router->get('/chamados/configuracoes', [ChamadoConfiguracaoController::class, 'index']);
 $router->post('/chamados/configuracoes/expediente', [ChamadoConfiguracaoController::class, 'salvarExpediente']);
+$router->post('/chamados/configuracoes/distribuicao', [ChamadoConfiguracaoController::class, 'salvarDistribuicao']);
 
 $router->get('/administracao/integracoes', [IntegracoesController::class, 'index']);
 $router->get('/administracao/integracoes/base-conhecimento', [IntegracoesController::class, 'baseConhecimentoForm']);

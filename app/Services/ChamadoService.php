@@ -347,4 +347,69 @@ class ChamadoService
 
         return (int)$stmt->fetchColumn();
     }
+
+    /**
+     * Round-robin por carga: chamado parado na fila há mais tempo que
+     * o configurado vai pro atendente do setor com MENOS chamados em
+     * atendimento agora -- chamado("rd chamados:distribuir", cron
+     * a cada 5min). Não mexe em setor sem nenhum atendente vinculado
+     * (nada pra distribuir) nem quando a distribuição automática está
+     * desligada em Configurações.
+     *
+     * @return array{total: int, atribuidos: int}
+     */
+    public function distribuirAutomaticamente(): array
+    {
+        $config = new ChamadoConfigService();
+
+        if (!$config->distribuicaoAutomaticaAtiva()) {
+            return ['total' => 0, 'atribuidos' => 0];
+        }
+
+        $minutos = $config->distribuicaoAutomaticaMinutos();
+
+        $stmt = $this->pdo->prepare(
+            "SELECT id, setor_id FROM chamados WHERE status = 'fila' AND setor_id IS NOT NULL AND aberto_em <= DATE_SUB(NOW(), INTERVAL ? MINUTE)"
+        );
+        $stmt->execute([$minutos]);
+        $pendentes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $setorService = new ChamadoSetorService();
+        $atribuidos = 0;
+
+        foreach ($pendentes as $item) {
+            $usuarioIds = $setorService->idsUsuariosDoSetor((int)$item['setor_id']);
+            if (empty($usuarioIds)) {
+                continue;
+            }
+
+            $usuarioEscolhido = $this->usuarioComMenosCarga($usuarioIds);
+            $resultado = $this->assumir((int)$item['id'], $usuarioEscolhido);
+
+            if ($resultado['success']) {
+                $atribuidos++;
+                $this->registrarHistorico((int)$item['id'], 'distribuicao_automatica', null, (string)$usuarioEscolhido, null);
+            }
+        }
+
+        return ['total' => count($pendentes), 'atribuidos' => $atribuidos];
+    }
+
+    /** @param int[] $usuarioIds */
+    private function usuarioComMenosCarga(array $usuarioIds): int
+    {
+        $marcadores = implode(',', array_fill(0, count($usuarioIds), '?'));
+        $stmt = $this->pdo->prepare(
+            "SELECT u.id, COUNT(c.id) AS carga
+             FROM usuarios u
+             LEFT JOIN chamados c ON c.usuario_id = u.id AND c.status = 'em_atendimento'
+             WHERE u.id IN ({$marcadores})
+             GROUP BY u.id
+             ORDER BY carga ASC, u.id ASC
+             LIMIT 1"
+        );
+        $stmt->execute($usuarioIds);
+
+        return (int)$stmt->fetchColumn();
+    }
 }

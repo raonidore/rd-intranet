@@ -20,6 +20,8 @@ class ChamadoConfiguracaoController extends Controller
             'expedienteAtivo' => $config->expedienteAtivo(),
             'expedienteInicio' => $config->expedienteInicio(),
             'expedienteFim' => $config->expedienteFim(),
+            'distribuicaoAtiva' => $config->distribuicaoAutomaticaAtiva(),
+            'distribuicaoMinutos' => $config->distribuicaoAutomaticaMinutos(),
         ]);
     }
 
@@ -34,6 +36,27 @@ class ChamadoConfiguracaoController extends Controller
         );
 
         AuditService::registrar('Chamados', 'Configurações - Expediente', $resultado['message']);
+
+        if ($resultado['success']) {
+            NotificationService::success($resultado['message']);
+        } else {
+            NotificationService::error($resultado['message']);
+        }
+
+        header('Location: ' . url('/chamados/configuracoes'));
+        exit;
+    }
+
+    public function salvarDistribuicao(): void
+    {
+        AuthMiddleware::checkModulo('chamados_configuracoes');
+
+        $resultado = (new ChamadoConfigService())->salvarDistribuicaoAutomatica(
+            isset($_POST['ativo']),
+            (int)($_POST['minutos'] ?? 0)
+        );
+
+        AuditService::registrar('Chamados', 'Configurações - Distribuição automática', $resultado['message']);
 
         if ($resultado['success']) {
             NotificationService::success($resultado['message']);

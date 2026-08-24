@@ -35,6 +35,25 @@ use App\Components\Alert;
     </div>
 </div>
 
+<div class="card border-0 shadow-sm mt-3" style="max-width:560px">
+    <div class="card-header bg-white"><strong>Distribuição automática da fila</strong></div>
+    <div class="card-body">
+        <div class="form-text mb-3">Chamado parado na fila (sem ninguém assumir) há mais tempo que o prazo abaixo é atribuído sozinho ao atendente com menos chamados em atendimento no setor -- só funciona pra chamado que já tem um setor definido.</div>
+
+        <form method="post" action="<?= url('/chamados/configuracoes/distribuicao') ?>">
+            <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" role="switch" name="ativo" id="campoDistribuicaoAtiva" <?= $distribuicaoAtiva ? 'checked' : '' ?>>
+                <label class="form-check-label" for="campoDistribuicaoAtiva">Distribuir automaticamente</label>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Depois de quantos minutos na fila</label>
+                <input type="number" name="minutos" class="form-control" style="max-width:120px" min="1" value="<?= (int)$distribuicaoMinutos ?>">
+            </div>
+            <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Salvar</button>
+        </form>
+    </div>
+</div>
+
 <?php
 $conteudo = ob_get_clean();
 $titulo = 'Chamados - Configurações';

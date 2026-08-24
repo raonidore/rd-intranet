@@ -19,6 +19,10 @@ class ChamadoConfigService
     private const EXPEDIENTE_INICIO_PADRAO = '08:00';
     private const EXPEDIENTE_FIM_PADRAO = '18:00';
 
+    private const CHAVE_DISTRIBUICAO_ATIVA = 'chamados_distribuicao_automatica_ativa';
+    private const CHAVE_DISTRIBUICAO_MINUTOS = 'chamados_distribuicao_automatica_minutos';
+    private const DISTRIBUICAO_MINUTOS_PADRAO = 15;
+
     public function expedienteAtivo(): bool
     {
         return ConfigService::get(self::CHAVE_EXPEDIENTE_ATIVO, '') === '1';
@@ -64,5 +68,28 @@ class ChamadoConfigService
         ConfigService::set(self::CHAVE_EXPEDIENTE_FIM, $fim);
 
         return ['success' => true, 'message' => 'Horário de expediente salvo.'];
+    }
+
+    public function distribuicaoAutomaticaAtiva(): bool
+    {
+        return ConfigService::get(self::CHAVE_DISTRIBUICAO_ATIVA, '') === '1';
+    }
+
+    public function distribuicaoAutomaticaMinutos(): int
+    {
+        return (int)(ConfigService::get(self::CHAVE_DISTRIBUICAO_MINUTOS, (string)self::DISTRIBUICAO_MINUTOS_PADRAO) ?: self::DISTRIBUICAO_MINUTOS_PADRAO);
+    }
+
+    /** @return array{success: bool, message: string} */
+    public function salvarDistribuicaoAutomatica(bool $ativa, int $minutos): array
+    {
+        if ($minutos < 1) {
+            return ['success' => false, 'message' => 'Informe um número de minutos maior que zero.'];
+        }
+
+        ConfigService::set(self::CHAVE_DISTRIBUICAO_ATIVA, $ativa ? '1' : '0');
+        ConfigService::set(self::CHAVE_DISTRIBUICAO_MINUTOS, (string)$minutos);
+
+        return ['success' => true, 'message' => 'Distribuição automática salva.'];
     }
 }

@@ -182,6 +182,7 @@ class AtualizacaoService
             $this->garantirCronCertificado();
             $this->garantirCronBaseConhecimento();
             $this->garantirCronWhatsappInatividade();
+            $this->garantirCronChamadosDistribuicao();
         }
 
         $commitDepois = $this->commitAtual();
@@ -334,6 +335,20 @@ class AtualizacaoService
             'Encerra automaticamente conversas do módulo WhatsApp sem mensagem há mais tempo que o configurado em WhatsApp > Chatbot > Finalização.',
             '*/5 * * * *',
             'php ' . $this->repoDir() . '/rd whatsapp:encerrar-inativos'
+        );
+    }
+
+    /**
+     * Roda mesmo com a distribuição automática desligada -- só não faz
+     * nada nesse caso (checado dentro de ChamadoService::distribuirAutomaticamente()).
+     */
+    public function garantirCronChamadosDistribuicao(): void
+    {
+        $this->garantirCronJob(
+            'Distribuir chamados parados na fila',
+            'Atribui automaticamente chamados sem atendente há mais tempo que o configurado em Chamados > Configurações.',
+            '*/5 * * * *',
+            'php ' . $this->repoDir() . '/rd chamados:distribuir'
         );
     }
 

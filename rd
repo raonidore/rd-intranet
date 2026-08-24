@@ -21,6 +21,7 @@ if (!$comando) {
     echo "  certificado:verificar   Manda e-mail se o certificado HTTPS estiver perto de vencer/vencido\n";
     echo "  kb:sincronizar          Atualiza o cache local da Base de Conhecimento pública e confere status dos artigos propostos\n";
     echo "  whatsapp:encerrar-inativos  Encerra atendimentos sem mensagem há mais tempo que o configurado em Chatbot > Finalização\n";
+    echo "  chamados:distribuir     Atribui automaticamente chamados parados na fila (Chamados > Configurações)\n";
     exit;
 }
 
@@ -268,6 +269,12 @@ switch ($comando) {
     case 'whatsapp:encerrar-inativos':
         $resultado = (new \App\Services\WhatsAppAtendimentoService())->encerrarInativos();
         echo "OK: {$resultado['encerrados']} atendimento(s) encerrado(s) por inatividade.\n";
+
+        break;
+
+    case 'chamados:distribuir':
+        $resultado = (new \App\Services\ChamadoService())->distribuirAutomaticamente();
+        echo "OK: {$resultado['atribuidos']}/{$resultado['total']} chamado(s) parado(s) na fila distribuído(s) automaticamente.\n";
 
         break;
 
