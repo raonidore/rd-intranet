@@ -3,6 +3,7 @@
 use App\Services\AtivoService;
 use App\Services\PermissionService;
 use App\Services\WhatsAppAtendimentoService;
+use App\Services\ChamadoService;
 
 $usuarioLogado = $_SESSION['usuario'] ?? ['nome' => 'Usuário'];
 $ativoServiceMenu = new AtivoService();
@@ -37,6 +38,7 @@ $abrirSistema = $rdSecaoAtiva(['/administracao', '/auditoria']);
 $abrirEntra = $rdSecaoAtiva(['/entra']);
 $abrirBaseConhecimento = $rdSecaoAtiva(['/base-conhecimento']);
 $abrirWhatsapp = $rdSecaoAtiva(['/whatsapp']);
+$abrirChamados = $rdSecaoAtiva(['/chamados']);
 
 $abrirHardware = $rdSecaoAtiva(['/infraestrutura/hardware']);
 $abrirRede = $rdSecaoAtiva(['/infraestrutura/rede', '/infraestrutura/servidor/rede']);
@@ -818,6 +820,61 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
     </div>
     <?php endif; ?>
 
+    <?php
+    $temChamados = PermissionService::temAcesso('chamados_atendimentos')
+        || PermissionService::temAcesso('chamados_fila')
+        || PermissionService::temAcesso('chamados_categorias')
+        || PermissionService::temAcesso('chamados_setores')
+        || PermissionService::temAcesso('chamados_estatisticas')
+        || PermissionService::temAcesso('chamados_configuracoes');
+    ?>
+    <?php
+    $chamadosAguardando = 0;
+    if (PermissionService::temAcesso('chamados_atendimentos') && isset($_SESSION['usuario']['id'])) {
+        $chamadosAguardando = (new ChamadoService())->contarAguardandoResposta((int)$_SESSION['usuario']['id']);
+    }
+    ?>
+    <?php if ($temChamados): ?>
+    <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuChamados"
+            aria-expanded="<?= $abrirChamados ? 'true' : 'false' ?>">
+        <span><i class="bi bi-ticket-perforated me-2"></i>Chamados</span>
+        <i class="bi bi-chevron-right chevron"></i>
+    </button>
+    <div class="collapse <?= $abrirChamados ? 'show' : '' ?>" id="menuChamados">
+        <?php if (PermissionService::temAcesso('chamados_atendimentos')): ?>
+        <a href="<?= url('/chamados/atendimentos') ?>" class="rd-menu-item-badge <?= str_starts_with($uriAtual, '/chamados/atendimentos') ? 'active' : '' ?>">
+            <span><i class="bi bi-ticket-detailed me-2"></i> Atendimentos</span>
+            <span class="rd-menu-badge" id="rdChamadosBadgeAtendimentos" style="<?= $chamadosAguardando > 0 ? '' : 'display:none' ?>"><?= $chamadosAguardando ?></span>
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('chamados_fila')): ?>
+        <a href="<?= url('/chamados/fila') ?>" class="<?= $uriAtual === '/chamados/fila' ? 'active' : '' ?>">
+            <i class="bi bi-hourglass-split me-2"></i> Fila
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('chamados_categorias')): ?>
+        <a href="<?= url('/chamados/categorias') ?>" class="<?= $uriAtual === '/chamados/categorias' ? 'active' : '' ?>">
+            <i class="bi bi-tags me-2"></i> Categorias
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('chamados_setores')): ?>
+        <a href="<?= url('/chamados/setores') ?>" class="<?= $uriAtual === '/chamados/setores' ? 'active' : '' ?>">
+            <i class="bi bi-diagram-3 me-2"></i> Setores
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('chamados_estatisticas')): ?>
+        <a href="<?= url('/chamados/estatisticas') ?>" class="<?= $uriAtual === '/chamados/estatisticas' ? 'active' : '' ?>">
+            <i class="bi bi-bar-chart-line me-2"></i> Estatísticas
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('chamados_configuracoes')): ?>
+        <a href="<?= url('/chamados/configuracoes') ?>" class="<?= $uriAtual === '/chamados/configuracoes' ? 'active' : '' ?>">
+            <i class="bi bi-gear me-2"></i> Configurações
+        </a>
+        <?php endif; ?>
+    </div>
+    <?php endif; ?>
+
     <a href="<?= url('/logout') ?>" class="mt-3">
         <i class="bi bi-box-arrow-right me-2"></i> Sair
     </a>
@@ -920,11 +977,13 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         }
     }
 
-    // Exposto pro botão liga/desliga (em atendimentos.php) poder tocar
-    // um bip de teste na hora, dentro do próprio clique -- prova direta
-    // pro usuário (e pra gente) se o áudio funciona nesse navegador,
-    // sem depender de esperar uma mensagem nova chegar.
-    window.wppTocarBip = tocarBipWpp;
+    // Exposto globalmente (não só "Wpp" no nome por acaso -- é o mesmo
+    // motor de áudio compartilhado por qualquer módulo com fila/pendência,
+    // Chamados incluso mais abaixo) pro botão liga/desliga de cada módulo
+    // poder tocar um bip de teste na hora, dentro do próprio clique --
+    // prova direta pro usuário (e pra gente) se o áudio funciona nesse
+    // navegador, sem depender de esperar uma mensagem nova chegar.
+    window.rdTocarBip = tocarBipWpp;
 
     // Guardado em sessionStorage (sobrevive a navegar entre páginas na
     // mesma aba, mas não a fechar/reabrir) pra não perder o "antes" só
@@ -967,6 +1026,53 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
 
     verificarNovasMensagens();
     setInterval(verificarNovasMensagens, 15000);
+})();
+</script>
+<?php endif; ?>
+
+<?php if (PermissionService::temAcesso('chamados_atendimentos') && isset($_SESSION['usuario']['id'])): ?>
+<script>
+(function () {
+    // Mesmo esquema do WhatsApp acima (contador + som), reaproveitando o
+    // motor de áudio compartilhado (window.rdTocarBip) -- um contexto só,
+    // já destravado pelo primeiro clique/tecla, tocando pros dois módulos.
+    const CHAVE_SOM = 'chamadosSomAtivo';
+    const CHAVE_ULTIMO_ID = 'chamadosUltimoId';
+
+    function somAtivo() {
+        return localStorage.getItem(CHAVE_SOM) === '1';
+    }
+
+    let ultimoId = sessionStorage.getItem(CHAVE_ULTIMO_ID);
+    ultimoId = ultimoId === null ? null : parseInt(ultimoId, 10);
+
+    const badgeMenu = document.getElementById('rdChamadosBadgeAtendimentos');
+
+    async function verificarChamados() {
+        try {
+            const resp = await fetch('<?= url('/chamados/atendimentos/contador') ?>');
+            const dados = await resp.json();
+            if (!dados.success) {
+                return;
+            }
+
+            if (ultimoId !== null && dados.ultimoId > ultimoId && somAtivo() && typeof window.rdTocarBip === 'function') {
+                window.rdTocarBip();
+            }
+            ultimoId = dados.ultimoId;
+            sessionStorage.setItem(CHAVE_ULTIMO_ID, String(ultimoId));
+
+            if (badgeMenu) {
+                badgeMenu.textContent = dados.aguardando;
+                badgeMenu.style.display = dados.aguardando > 0 ? '' : 'none';
+            }
+        } catch (e) {
+            // rede instável -- tenta de novo no próximo ciclo
+        }
+    }
+
+    verificarChamados();
+    setInterval(verificarChamados, 15000);
 })();
 </script>
 <?php endif; ?>

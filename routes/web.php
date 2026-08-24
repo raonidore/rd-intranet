@@ -44,6 +44,12 @@ use App\Controllers\WhatsAppIntegracaoController;
 use App\Controllers\WhatsAppWebhookController;
 use App\Controllers\WhatsAppEstatisticaController;
 use App\Controllers\WhatsAppConfiguracaoController;
+use App\Controllers\ChamadoSetorController;
+use App\Controllers\ChamadoFilaController;
+use App\Controllers\ChamadoController;
+use App\Controllers\ChamadoCategoriaController;
+use App\Controllers\ChamadoEstatisticaController;
+use App\Controllers\ChamadoConfiguracaoController;
 use App\Controllers\IntegracoesController;
 use App\Controllers\DependenciaController;
 use App\Controllers\SpeedtestController;
@@ -296,6 +302,35 @@ $router->post('/whatsapp/mensagens-rapidas/criar', [WhatsAppMensagemRapidaContro
 $router->post('/whatsapp/mensagens-rapidas/atualizar', [WhatsAppMensagemRapidaController::class, 'atualizar']);
 $router->post('/whatsapp/mensagens-rapidas/excluir', [WhatsAppMensagemRapidaController::class, 'excluir']);
 $router->get('/whatsapp/mensagens-rapidas/buscar', [WhatsAppMensagemRapidaController::class, 'buscar']);
+
+$router->get('/chamados/setores', [ChamadoSetorController::class, 'index']);
+$router->post('/chamados/setores/criar', [ChamadoSetorController::class, 'criar']);
+$router->post('/chamados/setores/atualizar', [ChamadoSetorController::class, 'atualizar']);
+$router->post('/chamados/setores/excluir', [ChamadoSetorController::class, 'excluir']);
+$router->post('/chamados/setores/usuarios', [ChamadoSetorController::class, 'salvarUsuarios']);
+
+$router->get('/chamados/fila', [ChamadoFilaController::class, 'index']);
+$router->post('/chamados/fila/assumir', [ChamadoFilaController::class, 'assumir']);
+
+$router->get('/chamados/atendimentos', [ChamadoController::class, 'index']);
+$router->get('/chamados/atendimentos/novo', [ChamadoController::class, 'novoForm']);
+$router->post('/chamados/atendimentos/novo', [ChamadoController::class, 'novo']);
+$router->get('/chamados/atendimentos/ver', [ChamadoController::class, 'ver']);
+$router->post('/chamados/atendimentos/responder', [ChamadoController::class, 'responder']);
+$router->post('/chamados/atendimentos/status', [ChamadoController::class, 'mudarStatus']);
+$router->get('/chamados/atendimentos/contador', [ChamadoController::class, 'contadorApi']);
+
+$router->get('/chamados/categorias', [ChamadoCategoriaController::class, 'index']);
+$router->post('/chamados/categorias/criar', [ChamadoCategoriaController::class, 'criar']);
+$router->post('/chamados/categorias/atualizar', [ChamadoCategoriaController::class, 'atualizar']);
+$router->post('/chamados/categorias/excluir', [ChamadoCategoriaController::class, 'excluir']);
+$router->post('/chamados/categorias/sla', [ChamadoCategoriaController::class, 'salvarSla']);
+
+$router->get('/chamados/estatisticas', [ChamadoEstatisticaController::class, 'index']);
+$router->get('/chamados/estatisticas/tempo-real-api', [ChamadoEstatisticaController::class, 'tempoRealApi']);
+
+$router->get('/chamados/configuracoes', [ChamadoConfiguracaoController::class, 'index']);
+$router->post('/chamados/configuracoes/expediente', [ChamadoConfiguracaoController::class, 'salvarExpediente']);
 
 $router->get('/administracao/integracoes', [IntegracoesController::class, 'index']);
 $router->get('/administracao/integracoes/base-conhecimento', [IntegracoesController::class, 'baseConhecimentoForm']);

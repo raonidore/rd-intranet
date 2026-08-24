@@ -6,7 +6,7 @@ use App\Services\PermissionService;
 $hora = date('H:i');
 $dataExtenso = date('d/m/Y');
 
-$temAlgumModulo = $samba !== null || $apache !== null || $servidor !== null || $ativos !== null || $backup !== null || $whatsapp !== null;
+$temAlgumModulo = $samba !== null || $apache !== null || $servidor !== null || $ativos !== null || $backup !== null || $whatsapp !== null || $chamados !== null;
 
 function techCorPercentual(float $p): string {
     if ($p >= 90) return '#ef4444';
@@ -37,6 +37,7 @@ $cardsDisponiveis = [
     'ativos' => ['label' => 'Ativos', 'padrao' => true],
     'backup' => ['label' => 'Backup em Nuvem', 'padrao' => true],
     'whatsapp' => ['label' => 'Módulo WhatsApp', 'padrao' => true],
+    'chamados' => ['label' => 'Módulo Chamados', 'padrao' => true],
     'hardware' => ['label' => 'Hardware', 'padrao' => false],
     'rede' => ['label' => 'Network', 'padrao' => false],
     'servicos' => ['label' => 'Serviços', 'padrao' => false],
@@ -392,6 +393,36 @@ if ($servidor) {
                 <div class="stat-mini-row">
                     <span class="tech-label mb-0">Atendentes ativos</span>
                     <span class="tech-mini"><?= (int)$whatsapp['atendentes_ativos'] ?></span>
+                </div>
+            </div>
+        </a>
+    </div>
+    <?php endif; ?>
+
+    <?php if ($chamados): ?>
+    <div class="col-md-4" data-card="chamados">
+        <a href="<?= url('/chamados/atendimentos') ?>" class="tech-card">
+            <div class="accent" style="background:#0d7d84"></div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <div>
+                        <div class="tech-label">Módulo</div>
+                        <h5 class="mb-0"><i class="bi bi-ticket-perforated me-1"></i> Chamados</h5>
+                    </div>
+                    <span class="pulse-dot <?= $chamados['sla_estourado'] > 0 ? 'offline' : 'online' ?>"></span>
+                </div>
+
+                <div class="stat-mini-row">
+                    <span class="tech-label mb-0">Na fila</span>
+                    <span class="tech-num" style="font-size:18px"><?= (int)$chamados['fila'] ?></span>
+                </div>
+                <div class="stat-mini-row">
+                    <span class="tech-label mb-0">Em atendimento</span>
+                    <span class="tech-mini"><?= (int)$chamados['em_atendimento'] ?></span>
+                </div>
+                <div class="stat-mini-row">
+                    <span class="tech-label mb-0">SLA estourado</span>
+                    <span class="tech-mini" style="<?= $chamados['sla_estourado'] > 0 ? 'color:#e08674' : '' ?>"><?= (int)$chamados['sla_estourado'] ?></span>
                 </div>
             </div>
         </a>

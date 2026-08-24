@@ -12,6 +12,7 @@ use App\Services\AtivoService;
 use App\Services\BackupService;
 use App\Services\PermissionService;
 use App\Services\WhatsAppEstatisticaService;
+use App\Services\ChamadoEstatisticaService;
 
 class DashboardController extends Controller
 {
@@ -27,6 +28,7 @@ class DashboardController extends Controller
             'speedtest' => null,
             'backup' => null,
             'whatsapp' => null,
+            'chamados' => null,
         ];
 
         if (
@@ -73,6 +75,17 @@ class DashboardController extends Controller
             || PermissionService::temAcesso('whatsapp_configuracoes')
         ) {
             $dados['whatsapp'] = (new WhatsAppEstatisticaService())->tempoReal();
+        }
+
+        if (
+            PermissionService::temAcesso('chamados_atendimentos')
+            || PermissionService::temAcesso('chamados_fila')
+            || PermissionService::temAcesso('chamados_categorias')
+            || PermissionService::temAcesso('chamados_setores')
+            || PermissionService::temAcesso('chamados_estatisticas')
+            || PermissionService::temAcesso('chamados_configuracoes')
+        ) {
+            $dados['chamados'] = (new ChamadoEstatisticaService())->tempoReal();
         }
 
         $this->view('dashboard/index', $dados);

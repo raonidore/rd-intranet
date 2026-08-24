@@ -155,8 +155,8 @@ use App\Components\Alert;
         // do computador estiver ok isso TEM que tocar. Se não tocar
         // aqui, o problema não é do nosso alerta -- é volume/saída de
         // áudio/aba silenciada no navegador.
-        if (vaiLigar && typeof window.wppTocarBip === 'function') {
-            window.wppTocarBip();
+        if (vaiLigar && typeof window.rdTocarBip === 'function') {
+            window.rdTocarBip();
         }
     });
 
