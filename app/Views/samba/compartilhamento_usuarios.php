@@ -5,6 +5,8 @@ $mapa = [];
 foreach ($autorizados as $a) {
     $mapa[$a['usuario_id']] = $a;
 }
+
+$autorizadosPortalMap = array_flip($autorizadosPortal ?? []);
 ?>
 
 <div class="card border-0 shadow-sm">
@@ -50,6 +52,43 @@ foreach ($autorizados as $a) {
                 <button type="submit" class="btn btn-primary" id="botaoSalvarUsuarios"><i class="bi bi-save"></i> Salvar usuários</button>
                 <a href="<?= url('/samba/compartilhamentos') ?>" class="btn btn-secondary">Voltar</a>
             </div>
+        </form>
+
+        <hr class="mt-4">
+
+        <h6 class="mb-1"><i class="bi bi-paperclip"></i> Seletor de anexo (portal)</h6>
+        <small class="text-muted d-block mb-3">
+            Quem tem acesso liberado aqui pode escolher um arquivo já existente deste compartilhamento
+            na hora de anexar (em Contratos e módulos futuros), sem duplicar upload. Isso é independente
+            das contas de rede acima -- é sobre o login do sistema (portal).
+        </small>
+
+        <form id="formUsuariosPortal">
+            <input type="hidden" name="id" value="<?= htmlspecialchars($compartilhamento['id']) ?>">
+
+            <table class="table align-middle">
+                <thead>
+                    <tr>
+                        <th>Usuário</th>
+                        <th>Login</th>
+                        <th>Pode escolher arquivos daqui</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($usuariosPortal as $u): ?>
+                        <tr>
+                            <td><?= htmlspecialchars($u['nome']) ?></td>
+                            <td><?= htmlspecialchars($u['login']) ?></td>
+                            <td>
+                                <input type="checkbox" name="usuarios_portal[]" value="<?= (int)$u['id'] ?>"
+                                       <?= isset($autorizadosPortalMap[$u['id']]) ? 'checked' : '' ?>>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+
+            <button type="submit" class="btn btn-primary" id="botaoSalvarUsuariosPortal"><i class="bi bi-save"></i> Salvar acesso ao seletor</button>
         </form>
 
         <div class="mt-4 d-none" id="painelAplicacaoAcl">
@@ -173,6 +212,25 @@ foreach ($autorizados as $a) {
             alertaErro.classList.remove('d-none');
         } finally {
             botao.disabled = false;
+        }
+    });
+
+    const formPortal = document.getElementById('formUsuariosPortal');
+    const botaoPortal = document.getElementById('botaoSalvarUsuariosPortal');
+    const urlSalvarPortal = <?= json_encode(url('/samba/compartilhamentos/usuarios-portal')) ?>;
+
+    formPortal.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        botaoPortal.disabled = true;
+
+        try {
+            const res = await fetch(urlSalvarPortal, { method: 'POST', body: new FormData(formPortal) });
+            const dados = await res.json();
+            alert(dados.message || (dados.success ? 'Salvo.' : 'Erro ao salvar.'));
+        } catch (e) {
+            alert('Erro de rede ao salvar.');
+        } finally {
+            botaoPortal.disabled = false;
         }
     });
 })();

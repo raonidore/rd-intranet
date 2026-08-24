@@ -18,6 +18,8 @@ use App\Controllers\SambaMonitorController;
 use App\Controllers\SambaArquivosController;
 use App\Controllers\UserController;
 use App\Controllers\GrupoController;
+use App\Controllers\FornecedorController;
+use App\Controllers\ContratoController;
 use App\Controllers\PerfilController;
 use App\Controllers\PasswordResetController;
 use App\Controllers\PoliticaSenhaController;
@@ -118,6 +120,7 @@ $router->get('/samba/compartilhamentos/editar', [SambaCompartilhamentoController
 $router->post('/samba/compartilhamentos/editar', [SambaCompartilhamentoController::class, 'editar']);
 $router->get('/samba/compartilhamentos/usuarios', [SambaCompartilhamentoController::class, 'usuariosForm']);
 $router->post('/samba/compartilhamentos/usuarios', [SambaCompartilhamentoController::class, 'usuariosSalvar']);
+$router->post('/samba/compartilhamentos/usuarios-portal', [SambaCompartilhamentoController::class, 'usuariosPortalSalvar']);
 $router->get('/samba/compartilhamentos/usuarios/status', [SambaCompartilhamentoController::class, 'usuariosStatus']);
 $router->get('/samba/compartilhamentos/seguranca', [SambaCompartilhamentoController::class, 'segurancaForm']);
 $router->post('/samba/compartilhamentos/seguranca', [SambaCompartilhamentoController::class, 'segurancaSalvar']);
@@ -549,6 +552,27 @@ $router->post('/administracao/grupos/atualizar', [GrupoController::class, 'atual
 $router->post('/administracao/grupos/excluir', [GrupoController::class, 'excluir']);
 $router->post('/administracao/grupos/usuarios', [GrupoController::class, 'salvarUsuarios']);
 $router->post('/administracao/grupos/modulos', [GrupoController::class, 'salvarModulos']);
+
+$router->get('/fornecedores', [FornecedorController::class, 'index']);
+$router->get('/fornecedores/novo', [FornecedorController::class, 'novoForm']);
+$router->post('/fornecedores/novo', [FornecedorController::class, 'novo']);
+$router->get('/fornecedores/editar', [FornecedorController::class, 'editarForm']);
+$router->post('/fornecedores/editar', [FornecedorController::class, 'editar']);
+$router->post('/fornecedores/excluir', [FornecedorController::class, 'excluir']);
+$router->get('/fornecedores/ver', [FornecedorController::class, 'ver']);
+$router->get('/fornecedores/tipos-servico', [FornecedorController::class, 'tiposServicoApi']);
+$router->post('/fornecedores/tipos-servico/criar', [FornecedorController::class, 'tiposServicoCriar']);
+$router->post('/fornecedores/tipos-servico/atualizar', [FornecedorController::class, 'tiposServicoAtualizar']);
+$router->post('/fornecedores/tipos-servico/excluir', [FornecedorController::class, 'tiposServicoExcluir']);
+
+$router->post('/contratos/criar', [ContratoController::class, 'criar']);
+$router->post('/contratos/atualizar', [ContratoController::class, 'atualizar']);
+$router->post('/contratos/excluir', [ContratoController::class, 'excluir']);
+$router->post('/contratos/anexo-upload', [ContratoController::class, 'anexoUpload']);
+$router->post('/contratos/anexo-samba', [ContratoController::class, 'anexoSamba']);
+$router->get('/contratos/anexo', [ContratoController::class, 'anexoBaixar']);
+$router->get('/contratos/samba-compartilhamentos', [ContratoController::class, 'sambaCompartilhamentosApi']);
+$router->get('/contratos/samba-listar', [ContratoController::class, 'sambaListarApi']);
 
 $router->get('/administracao/atualizacoes', [AtualizacaoController::class, 'index']);
 $router->get('/administracao/atualizacoes/descricao', [AtualizacaoController::class, 'descricao']);

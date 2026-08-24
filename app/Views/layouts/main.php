@@ -393,6 +393,12 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
     </a>
     <?php endif; ?>
 
+    <?php if (PermissionService::temAcesso('fornecedores_gerenciar')): ?>
+    <a href="<?= url('/fornecedores') ?>" class="<?= str_starts_with($uriAtual, '/fornecedores') ? 'active' : '' ?>">
+        <i class="bi bi-truck me-2"></i> Fornecedores
+    </a>
+    <?php endif; ?>
+
     <?php
     $temInfra = PermissionService::temAcesso('infra_servidor')
         || PermissionService::temAcesso('infra_hardware')

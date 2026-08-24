@@ -4,18 +4,22 @@ namespace App\Controllers;
 
 use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
+use App\Services\SambaAnexoService;
 use App\Services\SambaCompartilhamentoService;
 use App\Services\SambaGrupoService;
+use App\Services\UserService;
 
 class SambaCompartilhamentoController extends Controller
 {
     private SambaCompartilhamentoService $service;
     private SambaGrupoService $grupoService;
+    private SambaAnexoService $anexoService;
 
     public function __construct()
     {
         $this->service = new SambaCompartilhamentoService();
         $this->grupoService = new SambaGrupoService();
+        $this->anexoService = new SambaAnexoService();
     }
 
     public function index(): void
@@ -147,8 +151,24 @@ class SambaCompartilhamentoController extends Controller
         $this->view('samba/compartilhamento_usuarios', [
             'compartilhamento' => $compartilhamento,
             'usuarios' => $this->service->usuariosDisponiveis(),
-            'autorizados' => $this->service->usuariosAutorizados($id)
+            'autorizados' => $this->service->usuariosAutorizados($id),
+            'usuariosPortal' => (new UserService())->listar(),
+            'autorizadosPortal' => $this->anexoService->usuariosPortalAutorizados($id),
         ]);
+    }
+
+    /** Quem, no portal (login do sistema), pode escolher arquivos deste compartilhamento como anexo (Contratos, Documentos etc). */
+    public function usuariosPortalSalvar(): void
+    {
+        AuthMiddleware::checkModulo('samba_compartilhamentos');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $usuarioIds = array_map('intval', $_POST['usuarios_portal'] ?? []);
+
+        $this->anexoService->salvarUsuariosPortal($id, $usuarioIds);
+
+        echo json_encode(['success' => true, 'message' => 'Acesso ao seletor de anexo atualizado.']);
     }
 
     public function usuariosSalvar(): void
