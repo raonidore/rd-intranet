@@ -118,9 +118,14 @@ $podeAssumirComoSupervisor = !$ehEncerrado && !$souDono && $souSupervisorDoSetor
 <?php elseif (!$souDono): ?>
     <div class="alert alert-info py-2 small d-flex justify-content-between align-items-center flex-wrap gap-2">
         <span>
-            <i class="bi bi-eye"></i> Você está vendo esse atendimento porque faz parte do setor
-            <?= htmlspecialchars($atendimento['setor_nome'] ?? '') ?> -- só quem está atendendo
-            <?= $podeAssumirComoSupervisor ? 'ou um supervisor' : '' ?> pode responder.
+            <i class="bi bi-eye"></i>
+            <?php if ($souSupervisorDoSetor): ?>
+                Você está vendo esse atendimento porque é supervisor do setor <?= htmlspecialchars($atendimento['setor_nome'] ?? '') ?> --
+                só quem está atendendo ou um supervisor pode responder.
+            <?php else: ?>
+                Você está vendo esse atendimento porque faz parte do setor <?= htmlspecialchars($atendimento['setor_nome'] ?? '') ?> --
+                só quem está atendendo pode responder.
+            <?php endif; ?>
         </span>
         <?php if ($podeAssumirComoSupervisor): ?>
             <form method="post" action="<?= url('/whatsapp/atendimentos/assumir-supervisor') ?>" class="d-inline" onsubmit="return confirm('Assumir este atendimento? Ele deixa de ser do atendente atual.');">

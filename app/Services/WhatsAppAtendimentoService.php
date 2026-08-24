@@ -312,9 +312,11 @@ class WhatsAppAtendimentoService
 
     /**
      * Conversas abertas que o usuário pode ver na tela de Atendimentos:
-     * as suas próprias + as de colegas do mesmo setor, só quando o
-     * setor está marcado como "visível para a equipe" (senão continua
-     * igual sempre foi -- cada um só vê o que já assumiu pra si).
+     * as suas próprias + as de colegas do mesmo setor, quando o setor
+     * está marcado como "visível para a equipe" OU quando o usuário é
+     * supervisor daquele setor (supervisor vê o setor inteiro sempre,
+     * visibilidade de equipe é só pra membro comum -- são dois motivos
+     * independentes de entrar na lista, não um depende do outro).
      * usuario_nome vem junto pra identificar de quem é a conversa
      * quando não é a do próprio usuário.
      */
@@ -333,8 +335,8 @@ class WhatsAppAtendimentoService
                         a.usuario_id IS NOT NULL AND a.usuario_id != ?
                         AND a.setor_id IN (
                             SELECT su.setor_id FROM whatsapp_setor_usuarios su
-                            JOIN whatsapp_setores s ON s.id = su.setor_id AND s.visivel_equipe = 1
-                            WHERE su.usuario_id = ?
+                            JOIN whatsapp_setores s ON s.id = su.setor_id
+                            WHERE su.usuario_id = ? AND (s.visivel_equipe = 1 OR su.supervisor = 1)
                         )
                     )
                )
