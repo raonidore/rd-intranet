@@ -50,6 +50,7 @@ use App\Controllers\ChamadoController;
 use App\Controllers\ChamadoCategoriaController;
 use App\Controllers\ChamadoEstatisticaController;
 use App\Controllers\ChamadoConfiguracaoController;
+use App\Controllers\PortalChamadoController;
 use App\Controllers\IntegracoesController;
 use App\Controllers\DependenciaController;
 use App\Controllers\SpeedtestController;
@@ -337,6 +338,15 @@ $router->get('/chamados/estatisticas/tempo-real-api', [ChamadoEstatisticaControl
 $router->get('/chamados/configuracoes', [ChamadoConfiguracaoController::class, 'index']);
 $router->post('/chamados/configuracoes/expediente', [ChamadoConfiguracaoController::class, 'salvarExpediente']);
 $router->post('/chamados/configuracoes/distribuicao', [ChamadoConfiguracaoController::class, 'salvarDistribuicao']);
+
+// Portal do Solicitante -- publico, sem AuthMiddleware (quem acessa nao tem conta de usuario).
+$router->get('/portal/chamados', [PortalChamadoController::class, 'loginForm']);
+$router->post('/portal/chamados/entrar', [PortalChamadoController::class, 'login']);
+$router->get('/portal/chamados/acessar', [PortalChamadoController::class, 'acessar']);
+$router->get('/portal/chamados/sair', [PortalChamadoController::class, 'sair']);
+$router->get('/portal/chamados/meus', [PortalChamadoController::class, 'meus']);
+$router->get('/portal/chamados/ver', [PortalChamadoController::class, 'ver']);
+$router->post('/portal/chamados/responder', [PortalChamadoController::class, 'responder']);
 
 $router->get('/administracao/integracoes', [IntegracoesController::class, 'index']);
 $router->get('/administracao/integracoes/base-conhecimento', [IntegracoesController::class, 'baseConhecimentoForm']);

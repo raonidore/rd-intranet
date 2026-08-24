@@ -276,6 +276,52 @@ class ChamadoService
         return ['success' => true, 'message' => 'Enviado.'];
     }
 
+    /**
+     * Resposta vinda do Portal do Solicitante -- sempre pública (quem
+     * não é da equipe não tem como mandar nota interna) e sempre marca
+     * aguardando_resposta=1 de novo (é a equipe que fica devendo
+     * resposta agora, o oposto de quando um atendente responde). Sai
+     * de "aguardando cliente" pra "em atendimento" sozinho, já que
+     * quem estava faltando responder acabou de fazer isso.
+     *
+     * @return array{success: bool, message: string}
+     */
+    public function responderComoSolicitante(int $chamadoId, string $conteudo): array
+    {
+        $conteudo = trim($conteudo);
+        if ($conteudo === '') {
+            return ['success' => false, 'message' => 'Escreva alguma coisa antes de enviar.'];
+        }
+
+        $chamado = $this->buscar($chamadoId);
+        if (!$chamado) {
+            return ['success' => false, 'message' => 'Chamado não encontrado.'];
+        }
+        if (in_array($chamado['status'], ['resolvido', 'fechado'], true)) {
+            return ['success' => false, 'message' => 'Esse chamado já foi encerrado -- abra um novo chamado se precisar.'];
+        }
+
+        $stmt = $this->pdo->prepare("INSERT INTO chamados_comentarios (chamado_id, usuario_id, tipo, conteudo) VALUES (?, NULL, 'publica', ?)");
+        $stmt->execute([$chamadoId, $conteudo]);
+
+        $campos = ['ultima_mensagem_em = NOW()', 'aguardando_resposta = 1'];
+        if ($chamado['status'] === 'aguardando_cliente') {
+            $campos[] = "status = 'em_atendimento'";
+        }
+
+        $this->pdo->prepare('UPDATE chamados SET ' . implode(', ', $campos) . ' WHERE id = ?')->execute([$chamadoId]);
+
+        return ['success' => true, 'message' => 'Resposta enviada.'];
+    }
+
+    public function listarDoSolicitante(int $solicitanteId): array
+    {
+        $stmt = $this->pdo->prepare(self::SELECT_ENRIQUECIDO . ' WHERE c.solicitante_id = ? ORDER BY c.aberto_em DESC');
+        $stmt->execute([$solicitanteId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     private function notificarSolicitantePorEmail(array $chamado, string $conteudo): void
     {
         $assunto = 'Chamado #' . $chamado['id'] . ' -- ' . $chamado['titulo'];
