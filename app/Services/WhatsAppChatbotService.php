@@ -19,7 +19,7 @@ use Throwable;
  */
 class WhatsAppChatbotService
 {
-    private const TIPOS_VALIDOS = ['menu', 'resposta_final', 'encaminhar_setor'];
+    private const TIPOS_VALIDOS = ['menu', 'resposta_final', 'encaminhar_setor', 'abrir_chamado'];
     private const MAX_TENTATIVAS_INVALIDAS = 3;
 
     private PDO $pdo;
@@ -185,18 +185,33 @@ class WhatsAppChatbotService
                 if ($tipo === 'encaminhar_setor' && !$setorDestinoId) {
                     throw new RuntimeException("Escolha o setor de destino da opção \"{$rotulo}\".");
                 }
-                if ($tipo !== 'encaminhar_setor') {
+                if (!in_array($tipo, ['encaminhar_setor', 'abrir_chamado'], true)) {
                     $setorDestinoId = null;
+                }
+
+                // "Abre chamado" precisa saber em qual categoria do
+                // módulo Chamados registrar o ticket -- setor_destino_id
+                // (whatsapp_setores) continua sendo só pra onde a
+                // conversa é encaminhada depois, cadastro diferente.
+                $categoriaChamadoId = !empty($linha['categoria_chamado_id']) ? (int)$linha['categoria_chamado_id'] : null;
+                if ($tipo === 'abrir_chamado' && !$categoriaChamadoId) {
+                    throw new RuntimeException("Escolha a categoria de chamado da opção \"{$rotulo}\".");
+                }
+                if ($tipo !== 'abrir_chamado') {
+                    $categoriaChamadoId = null;
                 }
 
                 $mensagem = trim((string)($linha['mensagem'] ?? ''));
                 if ($mensagem === '') {
-                    if ($tipo !== 'encaminhar_setor') {
+                    if ($tipo === 'encaminhar_setor') {
+                        // pra "encaminha pro setor" a mensagem é opcional --
+                        // sem ela, manda um texto padrão de transferência
+                        $mensagem = "Encaminhando você para o setor {$rotulo}. Aguarde um instante.";
+                    } elseif ($tipo === 'abrir_chamado') {
+                        $mensagem = "Chamado aberto! Nossa equipe vai continuar por aqui.";
+                    } else {
                         throw new RuntimeException("Escreva a mensagem da opção \"{$rotulo}\".");
                     }
-                    // pra "encaminha pro setor" a mensagem é opcional --
-                    // sem ela, manda um texto padrão de transferência
-                    $mensagem = "Encaminhando você para o setor {$rotulo}. Aguarde um instante.";
                 }
 
                 $id = !empty($linha['id']) ? (int)$linha['id'] : null;
@@ -209,15 +224,15 @@ class WhatsAppChatbotService
                         // ficou ativo=0 (criada pela tela antiga, com
                         // formulário por nó) aparecer no editor mas ser
                         // pulada pelo motor sem nenhum jeito de corrigir.
-                        'UPDATE whatsapp_chatbot_nos SET rotulo = ?, mensagem = ?, tipo = ?, setor_destino_id = ?, ordem = ?, ativo = 1 WHERE id = ?'
+                        'UPDATE whatsapp_chatbot_nos SET rotulo = ?, mensagem = ?, tipo = ?, setor_destino_id = ?, categoria_chamado_id = ?, ordem = ?, ativo = 1 WHERE id = ?'
                     );
-                    $upd->execute([$rotulo, $mensagem, $tipo, $setorDestinoId, $ordem, $id]);
+                    $upd->execute([$rotulo, $mensagem, $tipo, $setorDestinoId, $categoriaChamadoId, $ordem, $id]);
                     $idsMantidos[] = $id;
                 } else {
                     $ins = $this->pdo->prepare(
-                        'INSERT INTO whatsapp_chatbot_nos (no_pai_id, ordem, rotulo, mensagem, tipo, setor_destino_id) VALUES (?, ?, ?, ?, ?, ?)'
+                        'INSERT INTO whatsapp_chatbot_nos (no_pai_id, ordem, rotulo, mensagem, tipo, setor_destino_id, categoria_chamado_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
                     );
-                    $ins->execute([$noPaiId, $ordem, $rotulo, $mensagem, $tipo, $setorDestinoId]);
+                    $ins->execute([$noPaiId, $ordem, $rotulo, $mensagem, $tipo, $setorDestinoId, $categoriaChamadoId]);
                     $idsMantidos[] = (int)$this->pdo->lastInsertId();
                 }
 
@@ -326,10 +341,62 @@ class WhatsAppChatbotService
             return;
         }
 
+        if ($no['tipo'] === 'abrir_chamado') {
+            $this->criarChamadoDoAtendimento($atendimentoId, $no, $contato, $numero);
+
+            $stmt = $this->pdo->prepare(
+                "UPDATE whatsapp_atendimentos SET status = 'fila', setor_id = ?, no_bot_atual_id = ? WHERE id = ?"
+            );
+            $stmt->execute([$no['setor_destino_id'], $no['id'], $atendimentoId]);
+            return;
+        }
+
         $sql = 'UPDATE whatsapp_atendimentos SET no_bot_atual_id = ?'
             . ($reiniciaTentativas ? ', tentativas_invalidas_bot = 0' : '')
             . ' WHERE id = ?';
         $this->pdo->prepare($sql)->execute([$no['id'], $atendimentoId]);
+    }
+
+    /**
+     * Abre um chamado a partir da escolha "abrir_chamado" no bot --
+     * unidade sempre a padrão (quem fala pelo WhatsApp não escolhe
+     * unidade no menu, isso ficaria complexo demais pro bot; dá pra
+     * corrigir depois no painel). Não trava o atendimento se algo
+     * falhar (nó mal configurado, sem unidade padrão cadastrada) --
+     * o cliente é encaminhado pro setor normalmente de qualquer jeito.
+     */
+    private function criarChamadoDoAtendimento(int $atendimentoId, array $no, array $contato, string $numero): void
+    {
+        if (empty($no['categoria_chamado_id'])) {
+            return;
+        }
+
+        $stmt = $this->pdo->prepare('SELECT chamado_id FROM whatsapp_atendimentos WHERE id = ?');
+        $stmt->execute([$atendimentoId]);
+        if ($stmt->fetchColumn()) {
+            return; // já tem chamado vinculado -- não abre outro
+        }
+
+        $unidade = (new UnidadeService())->padrao();
+        if (!$unidade) {
+            return;
+        }
+
+        $nome = trim((string)($contato['nome'] ?? '')) ?: $numero;
+
+        $resultado = (new ChamadoService())->abrir([
+            'titulo' => 'Chamado via WhatsApp -- ' . $nome,
+            'descricao' => "Aberto pelo chatbot do WhatsApp. Acompanhe a conversa completa em WhatsApp > Atendimentos (atendimento #{$atendimentoId}).",
+            'categoria_id' => $no['categoria_chamado_id'],
+            'unidade_id' => $unidade['id'],
+            'solicitante_nome' => $nome,
+            'solicitante_telefone' => $numero,
+        ], 'whatsapp');
+
+        if (!empty($resultado['success']) && !empty($resultado['id'])) {
+            $this->pdo->prepare('UPDATE whatsapp_atendimentos SET chamado_id = ? WHERE id = ?')
+                ->execute([$resultado['id'], $atendimentoId]);
+        }
     }
 
     private function irParaFilaGeral(int $atendimentoId): void

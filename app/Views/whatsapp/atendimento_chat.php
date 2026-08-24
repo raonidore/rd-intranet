@@ -79,6 +79,11 @@ $somenteLeitura = $atendimento['status'] === 'encerrado';
         </small>
     </div>
     <div>
+        <?php if (!empty($atendimento['chamado_id'])): ?>
+            <a href="<?= url('/chamados/atendimentos/ver?id=' . (int)$atendimento['chamado_id']) ?>" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-ticket-perforated"></i> Chamado #<?= (int)$atendimento['chamado_id'] ?>
+            </a>
+        <?php endif; ?>
         <a href="<?= url('/whatsapp/atendimentos') ?>" class="btn btn-sm btn-outline-secondary">
             <i class="bi bi-arrow-left"></i> Atendimentos
         </a>

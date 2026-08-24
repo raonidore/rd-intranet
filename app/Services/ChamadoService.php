@@ -49,8 +49,12 @@ class ChamadoService
     }
 
     /** @return array{success: bool, message: string, id?: int} */
-    public function abrir(array $post): array
+    public function abrir(array $post, string $canal = 'painel'): array
     {
+        if (!in_array($canal, ['painel', 'email', 'whatsapp', 'portal'], true)) {
+            $canal = 'painel';
+        }
+
         $titulo = trim($post['titulo'] ?? '');
         $descricao = trim($post['descricao'] ?? '');
         $categoriaId = (int)($post['categoria_id'] ?? 0);
@@ -94,10 +98,10 @@ class ChamadoService
         $stmt = $this->pdo->prepare(
             "INSERT INTO chamados
              (titulo, descricao, categoria_id, setor_id, unidade_id, ativo_id, solicitante_id, prioridade, canal_abertura, aguardando_resposta, sla_resposta_prazo, sla_resolucao_prazo)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'painel', 1, ?, ?)"
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)"
         );
         $stmt->execute([
-            $titulo, $descricao, $categoriaId, $setorId, $unidadeId, $ativoId, $solicitante['id'], $prioridade, $slaResposta, $slaResolucao,
+            $titulo, $descricao, $categoriaId, $setorId, $unidadeId, $ativoId, $solicitante['id'], $prioridade, $canal, $slaResposta, $slaResolucao,
         ]);
 
         $id = (int)$this->pdo->lastInsertId();

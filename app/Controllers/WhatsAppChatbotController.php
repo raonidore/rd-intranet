@@ -5,6 +5,7 @@ namespace App\Controllers;
 use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
 use App\Services\AuditService;
+use App\Services\ChamadoCategoriaService;
 use App\Services\NotificationService;
 use App\Services\WhatsAppAtendimentoService;
 use App\Services\WhatsAppChatbotService;
@@ -42,6 +43,8 @@ class WhatsAppChatbotController extends Controller
             fn (array $s) => (bool)$s['ativo']
         ));
 
+        $categoriasChamado = (new ChamadoCategoriaService())->listarAtivas();
+
         $config = new WhatsAppConfigService();
         $atendimentoService = new WhatsAppAtendimentoService();
 
@@ -69,6 +72,7 @@ class WhatsAppChatbotController extends Controller
             'caminho' => $caminho,
             'opcoes' => $opcoes,
             'setoresAtivos' => $setoresAtivos,
+            'categoriasChamado' => $categoriasChamado,
             'timeoutMinutos' => $config->timeoutMinutos(),
             'encerramentoNormal' => $config->encerramentoNormal(),
             'encerramentoInatividade' => $config->encerramentoInatividade(),
@@ -127,6 +131,7 @@ class WhatsAppChatbotController extends Controller
         $rotulos = $_POST['rotulo'] ?? [];
         $tipos = $_POST['tipo'] ?? [];
         $setores = $_POST['setor_destino_id'] ?? [];
+        $categoriasChamado = $_POST['categoria_chamado_id'] ?? [];
         $mensagens = $_POST['mensagem'] ?? [];
         $ids = $_POST['id'] ?? [];
 
@@ -137,6 +142,7 @@ class WhatsAppChatbotController extends Controller
                 'rotulo' => (string)$rotulo,
                 'tipo' => (string)($tipos[$indice] ?? ''),
                 'setor_destino_id' => $setores[$indice] ?? null,
+                'categoria_chamado_id' => $categoriasChamado[$indice] ?? null,
                 'mensagem' => (string)($mensagens[$indice] ?? ''),
             ];
         }

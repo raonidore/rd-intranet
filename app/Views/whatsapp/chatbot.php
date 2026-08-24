@@ -7,6 +7,7 @@ const WPP_TIPOS_OPCAO = [
     'menu' => 'Abre submenu',
     'resposta_final' => 'Responde e encerra',
     'encaminhar_setor' => 'Encaminha pro setor',
+    'abrir_chamado' => 'Abre chamado',
 ];
 
 /** Emojis mais usados em atendimento -- clique insere no cursor, mesmo mecanismo dos chips de {nome}/{periodo}. */
@@ -22,6 +23,17 @@ function wppOpcoesSetor(array $setoresAtivos, ?int $selecionadoId = null): strin
     foreach ($setoresAtivos as $s) {
         $sel = $selecionadoId !== null && $selecionadoId === (int)$s['id'] ? 'selected' : '';
         $html .= '<option value="' . (int)$s['id'] . '" ' . $sel . '>' . htmlspecialchars($s['nome']) . '</option>';
+    }
+    return $html;
+}
+
+/** <option>s de categoria do módulo Chamados -- opção "Abre chamado". */
+function wppOpcoesCategoriaChamado(array $categoriasChamado, ?int $selecionadoId = null): string
+{
+    $html = '<option value="">Categoria do chamado...</option>';
+    foreach ($categoriasChamado as $c) {
+        $sel = $selecionadoId !== null && $selecionadoId === (int)$c['id'] ? 'selected' : '';
+        $html .= '<option value="' . (int)$c['id'] . '" ' . $sel . '>' . htmlspecialchars($c['nome']) . '</option>';
     }
     return $html;
 }
@@ -93,7 +105,7 @@ function wppCampoMensagem(string $nomeCampo, string $valor, string $modo, int $r
     <?php
 }
 
-function wppLinhaOpcao(array $opcao, array $setoresAtivos): void
+function wppLinhaOpcao(array $opcao, array $setoresAtivos, array $categoriasChamado): void
 {
     $ehExistente = !empty($opcao['id']);
     ?>
@@ -103,17 +115,23 @@ function wppLinhaOpcao(array $opcao, array $setoresAtivos): void
         <div class="col-md-3">
             <input type="text" name="rotulo[]" class="form-control form-control-sm" placeholder="Rótulo (ex: Suporte Técnico)" value="<?= htmlspecialchars($opcao['rotulo'] ?? '') ?>">
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
             <select name="tipo[]" class="form-select form-select-sm campo-tipo">
                 <?php foreach (WPP_TIPOS_OPCAO as $valor => $rotulo): ?>
                     <option value="<?= $valor ?>" <?= ($opcao['tipo'] ?? 'encaminhar_setor') === $valor ? 'selected' : '' ?>><?= htmlspecialchars($rotulo) ?></option>
                 <?php endforeach; ?>
             </select>
         </div>
-        <div class="col-md-3 campo-setor">
+        <div class="col-md-2 campo-setor">
             <select name="setor_destino_id[]" class="form-select form-select-sm">
                 <?= wppOpcoesSetor($setoresAtivos, isset($opcao['setor_destino_id']) ? (int)$opcao['setor_destino_id'] : null) ?>
             </select>
+        </div>
+        <div class="col-md-3 campo-categoria-chamado">
+            <select name="categoria_chamado_id[]" class="form-select form-select-sm">
+                <?= wppOpcoesCategoriaChamado($categoriasChamado, isset($opcao['categoria_chamado_id']) ? (int)$opcao['categoria_chamado_id'] : null) ?>
+            </select>
+            <small class="text-muted">Setor = fila do WhatsApp depois de abrir</small>
         </div>
         <div class="col-md-1 pt-1 text-end">
             <?php if ($ehExistente && ($opcao['tipo'] ?? '') === 'menu'): ?>
@@ -126,7 +144,7 @@ function wppLinhaOpcao(array $opcao, array $setoresAtivos): void
             </button>
         </div>
         <div class="col-md-11 offset-md-1">
-            <?php wppCampoMensagem('mensagem[]', $opcao['mensagem'] ?? '', 'compacto', 2, 'Mensagem enviada ao cliente ao escolher/entrar aqui (opcional pra "Encaminha pro setor")', false); ?>
+            <?php wppCampoMensagem('mensagem[]', $opcao['mensagem'] ?? '', 'compacto', 2, 'Mensagem enviada ao cliente ao escolher/entrar aqui (opcional pra "Encaminha pro setor"/"Abre chamado")', false); ?>
         </div>
     </div>
     <?php
@@ -333,7 +351,7 @@ function wppLinhaOpcao(array $opcao, array $setoresAtivos): void
 
                     <div id="listaOpcoes">
                         <?php foreach ($opcoes as $opcao): ?>
-                            <?php wppLinhaOpcao($opcao, $setoresAtivos); ?>
+                            <?php wppLinhaOpcao($opcao, $setoresAtivos, $categoriasChamado); ?>
                         <?php endforeach; ?>
                     </div>
 
@@ -347,7 +365,7 @@ function wppLinhaOpcao(array $opcao, array $setoresAtivos): void
         </div>
 
         <template id="templateLinhaOpcao">
-            <?php wppLinhaOpcao([], $setoresAtivos); ?>
+            <?php wppLinhaOpcao([], $setoresAtivos, $categoriasChamado); ?>
         </template>
 
         <script>
@@ -358,9 +376,11 @@ function wppLinhaOpcao(array $opcao, array $setoresAtivos): void
             function ligarLinha(linha) {
                 const campoTipo = linha.querySelector('.campo-tipo');
                 const campoSetor = linha.querySelector('.campo-setor');
+                const campoCategoriaChamado = linha.querySelector('.campo-categoria-chamado');
 
                 function atualizar() {
-                    campoSetor.style.display = campoTipo.value === 'encaminhar_setor' ? '' : 'none';
+                    campoSetor.style.display = (campoTipo.value === 'encaminhar_setor' || campoTipo.value === 'abrir_chamado') ? '' : 'none';
+                    campoCategoriaChamado.style.display = campoTipo.value === 'abrir_chamado' ? '' : 'none';
                 }
 
                 campoTipo.addEventListener('change', atualizar);
