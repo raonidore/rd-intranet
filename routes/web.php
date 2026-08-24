@@ -18,6 +18,8 @@ use App\Controllers\SambaMonitorController;
 use App\Controllers\SambaArquivosController;
 use App\Controllers\UserController;
 use App\Controllers\GrupoController;
+use App\Controllers\ChamadoExternoCategoriaController;
+use App\Controllers\ChamadoExternoController;
 use App\Controllers\DocumentoCategoriaController;
 use App\Controllers\DocumentoController;
 use App\Controllers\FornecedorController;
@@ -584,6 +586,28 @@ $router->post('/documentos/categorias/criar', [DocumentoCategoriaController::cla
 $router->post('/documentos/categorias/atualizar', [DocumentoCategoriaController::class, 'atualizar']);
 $router->post('/documentos/categorias/excluir', [DocumentoCategoriaController::class, 'excluir']);
 $router->post('/documentos/categorias/permissoes', [DocumentoCategoriaController::class, 'salvarPermissoes']);
+
+$router->get('/chamados-externos', [ChamadoExternoController::class, 'index']);
+$router->get('/chamados-externos/novo', [ChamadoExternoController::class, 'novoForm']);
+$router->post('/chamados-externos/novo', [ChamadoExternoController::class, 'novo']);
+$router->get('/chamados-externos/ver', [ChamadoExternoController::class, 'ver']);
+$router->post('/chamados-externos/editar', [ChamadoExternoController::class, 'editar']);
+$router->post('/chamados-externos/status', [ChamadoExternoController::class, 'mudarStatus']);
+$router->post('/chamados-externos/excluir', [ChamadoExternoController::class, 'excluir']);
+$router->post('/chamados-externos/comentar', [ChamadoExternoController::class, 'comentar']);
+$router->post('/chamados-externos/anexo-upload', [ChamadoExternoController::class, 'anexoUpload']);
+$router->post('/chamados-externos/anexo-samba', [ChamadoExternoController::class, 'anexoSamba']);
+$router->post('/chamados-externos/anexo-excluir', [ChamadoExternoController::class, 'anexoExcluir']);
+$router->get('/chamados-externos/anexo', [ChamadoExternoController::class, 'anexoBaixar']);
+$router->get('/chamados-externos/samba-compartilhamentos', [ChamadoExternoController::class, 'sambaCompartilhamentosApi']);
+$router->get('/chamados-externos/samba-listar', [ChamadoExternoController::class, 'sambaListarApi']);
+$router->get('/chamados-externos/estatisticas', [ChamadoExternoController::class, 'estatisticas']);
+$router->get('/chamados-externos/ativos-api', [ChamadoExternoController::class, 'ativosApi']);
+
+$router->get('/chamados-externos/categorias', [ChamadoExternoCategoriaController::class, 'index']);
+$router->post('/chamados-externos/categorias/criar', [ChamadoExternoCategoriaController::class, 'criar']);
+$router->post('/chamados-externos/categorias/atualizar', [ChamadoExternoCategoriaController::class, 'atualizar']);
+$router->post('/chamados-externos/categorias/excluir', [ChamadoExternoCategoriaController::class, 'excluir']);
 
 $router->post('/contratos/criar', [ContratoController::class, 'criar']);
 $router->post('/contratos/atualizar', [ContratoController::class, 'atualizar']);

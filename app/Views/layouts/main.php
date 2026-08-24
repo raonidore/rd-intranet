@@ -357,6 +357,11 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
             <i class="bi bi-hourglass-split me-2"></i> Fila
         </a>
         <?php endif; ?>
+        <?php if (PermissionService::temAcesso('chamados_externos_atendimentos')): ?>
+        <a href="<?= url('/chamados-externos') ?>" class="<?= str_starts_with($uriAtual, '/chamados-externos') ? 'active' : '' ?>">
+            <i class="bi bi-building-gear me-2"></i> Chamados Externos
+        </a>
+        <?php endif; ?>
         <?php if (PermissionService::temAcesso('chamados_categorias')): ?>
         <a href="<?= url('/chamados/categorias') ?>" class="<?= $uriAtual === '/chamados/categorias' ? 'active' : '' ?>">
             <i class="bi bi-tags me-2"></i> Categorias
