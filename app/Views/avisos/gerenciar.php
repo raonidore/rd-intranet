@@ -188,8 +188,11 @@ $severidadeInfo = [
 
 <script>
 const modalAvisoEl = document.getElementById('modalAviso');
-const modalAviso = new bootstrap.Modal(modalAvisoEl);
 const formAviso = document.getElementById('formAviso');
+
+function obterModalAviso() {
+    return bootstrap.Modal.getOrCreateInstance(modalAvisoEl);
+}
 const urlDestinatarios = <?= json_encode(url('/avisos/gerenciar/destinatarios')) ?>;
 const urlCriar = <?= json_encode(url('/avisos/gerenciar/criar')) ?>;
 const urlAtualizar = <?= json_encode(url('/avisos/gerenciar/atualizar')) ?>;
@@ -214,7 +217,7 @@ function abrirModalNovo() {
     document.getElementById('tituloModalAviso').textContent = 'Novo aviso';
     document.getElementById('blocoAtivo').style.display = 'none';
     formAviso.action = urlCriar;
-    modalAviso.show();
+    obterModalAviso().show();
 }
 
 function abrirModalEditar(aviso) {
@@ -231,7 +234,7 @@ function abrirModalEditar(aviso) {
     document.getElementById('campoConfirmacao').checked = aviso.confirmacao_obrigatoria == 1;
     document.getElementById('campoAtivo').checked = aviso.ativo == 1;
 
-    modalAviso.show();
+    obterModalAviso().show();
 
     fetch(urlDestinatarios + '?id=' + aviso.id)
         .then(r => r.json())
