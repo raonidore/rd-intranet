@@ -11,14 +11,28 @@
 # limpa.
 #
 # Depois de instalar o serviço, garante o proxy reverso WebSocket no
-# Apache (mesma técnica de rdp_proxy_ativar_web.sh): sem isso o
-# navegador não tem como abrir o socket, já que o chat-bridge só ouve
-# em 127.0.0.1 (nunca exposto direto na rede, nenhuma regra de
-# firewall nova precisa existir). Adiciona em rd-intranet.conf (porta
-# 80 -- é o vhost que o site de fato usa hoje) um bloco marcado,
-# idempotente, e só recarrega o Apache depois de "apache2ctl
-# configtest" confirmar que o arquivo ficou válido -- nunca aplica uma
-# config potencialmente quebrada no Apache rodando.
+# Apache: sem isso o navegador não tem como abrir o socket, já que o
+# chat-bridge só ouve em 127.0.0.1 (nunca exposto direto na rede,
+# nenhuma regra de firewall nova precisa existir).
+#
+# IMPORTANTE: o proxy vai num conf-available GLOBAL (mesmo mecanismo de
+# /etc/apache2/conf-available/rd-intranet-alias.conf, que é como
+# "/rd.intranet" funciona pra QUALQUER Host: recebido -- essa alias é
+# um Alias solto em conf-enabled/, não dentro de nenhum <VirtualHost>).
+# Este servidor tem NameVirtualHost com dois vhosts na porta 80
+# (000-default.conf sem ServerName -- é o "last resort" pra Host não
+# reconhecido -- e rd-intranet.conf com ServerName "enzilabprime"), e o
+# Host: que o navegador de verdade manda (o IP/domínio que ele digitou
+# pra acessar o site) não bate com nenhum ServerName configurado --
+# cai sempre no vhost "last resort". Um ProxyPass dentro do
+# <VirtualHost> de rd-intranet.conf (como rdp_proxy_ativar_web.sh faz
+# pro RDP, mas ali dentro do vhost SSL) só seria alcançado se o Host:
+# batesse com "enzilabprime", o que não acontece na prática -- por
+# isso aqui o proxy entra como conf global, do jeito que já funciona
+# comprovadamente pra "/rd.intranet". Idempotente, e só recarrega o
+# Apache depois de "apache2ctl configtest" confirmar que a config ficou
+# válida -- nunca aplica uma config potencialmente quebrada no Apache
+# rodando.
 
 set -u
 
@@ -122,48 +136,42 @@ if ! systemctl is-active --quiet chat-bridge; then
   exit 1
 fi
 
-# --- Proxy reverso WebSocket no Apache -----------------------------
-VHOST="/etc/apache2/sites-available/rd-intranet.conf"
-MARCA="# RD Intranet - proxy do chat em tempo real"
-
-if [ ! -f "$VHOST" ]; then
-  echo "{\"success\":true,\"message\":\"Chat-bridge instalado e rodando na porta ${PORTA} (127.0.0.1), mas não encontrei ${VHOST} pra configurar o proxy -- o tempo real não vai funcionar até isso ser resolvido manualmente. Mensagens continuam entregues por atualização automática (polling).\"}"
-  exit 0
-fi
+# --- Proxy reverso WebSocket no Apache (conf global, não dentro de
+#     nenhum <VirtualHost> -- ver explicação no topo do arquivo) ------
+CONF_DISPONIVEL="/etc/apache2/conf-available/rd-chat-ws-proxy.conf"
+CONF_NOME="rd-chat-ws-proxy"
 
 a2enmod proxy >/dev/null 2>&1
 a2enmod proxy_wstunnel >/dev/null 2>&1
 
-if ! grep -qF "$MARCA" "$VHOST"; then
-  TMP="$(mktemp)"
-  awk -v marca="$MARCA" -v porta="$PORTA" '
-    /<\/VirtualHost>/ && !inserido {
-      print "    " marca
-      print "    ProxyPass \"/chat-ws\" \"ws://127.0.0.1:" porta "/\""
-      print "    ProxyPassReverse \"/chat-ws\" \"ws://127.0.0.1:" porta "/\""
-      inserido = 1
-    }
-    { print }
-  ' "$VHOST" > "$TMP"
-
-  if ! grep -qF "$MARCA" "$TMP"; then
-    rm -f "$TMP"
-    echo "{\"success\":true,\"message\":\"Chat-bridge instalado e rodando na porta ${PORTA}, mas não encontrei </VirtualHost> em rd-intranet.conf pra inserir o proxy -- confira manualmente. Mensagens continuam entregues por polling.\"}"
-    exit 0
-  fi
-
-  cp "$VHOST" "${VHOST}.bak-chat-bridge"
-  cp "$TMP" "$VHOST"
-  rm -f "$TMP"
-  chmod 644 "$VHOST"
+if [ -f "$CONF_DISPONIVEL" ]; then
+  cp "$CONF_DISPONIVEL" "${CONF_DISPONIVEL}.bak-chat-bridge"
 fi
+
+cat > "$CONF_DISPONIVEL" <<EOF
+# RD Intranet - proxy do chat em tempo real (conf global -- alcança
+# qualquer Host: recebido, mesmo mecanismo de rd-intranet-alias.conf).
+# Gerado por chat_bridge_instalar_web.sh -- reinstalar reescreve este
+# arquivo inteiro, não edite manualmente.
+ProxyPass "/chat-ws" "ws://127.0.0.1:${PORTA}/"
+ProxyPassReverse "/chat-ws" "ws://127.0.0.1:${PORTA}/"
+EOF
+chmod 644 "$CONF_DISPONIVEL"
+
+a2enconf "$CONF_NOME" >/dev/null 2>&1
 
 if ! apache2ctl configtest >/dev/null 2>&1; then
   ERRO="$(apache2ctl configtest 2>&1 | tr '\n' ' ' | sed 's/"/\\"/g')"
-  echo "{\"success\":true,\"message\":\"Chat-bridge instalado e rodando, mas a configuração do Apache ficou inválida depois de adicionar o proxy -- nada foi recarregado, o arquivo original está em ${VHOST}.bak-chat-bridge. Saída: ${ERRO}\"}"
+  a2disconf "$CONF_NOME" >/dev/null 2>&1
+  if [ -f "${CONF_DISPONIVEL}.bak-chat-bridge" ]; then
+    cp "${CONF_DISPONIVEL}.bak-chat-bridge" "$CONF_DISPONIVEL"
+  else
+    rm -f "$CONF_DISPONIVEL"
+  fi
+  echo "{\"success\":true,\"message\":\"Chat-bridge instalado e rodando, mas a configuração do Apache ficou inválida depois de adicionar o proxy -- nada foi recarregado, o conf novo foi desfeito. Saída: ${ERRO}\"}"
   exit 0
 fi
 
 systemctl reload apache2
 
-echo "{\"success\":true,\"message\":\"Chat-bridge instalado e rodando na porta ${PORTA} (127.0.0.1), com proxy WebSocket ativo em /chat-ws (mesma porta do site).\"}"
+echo "{\"success\":true,\"message\":\"Chat-bridge instalado e rodando na porta ${PORTA} (127.0.0.1), com proxy WebSocket ativo em /chat-ws (mesma porta do site, alcançável de qualquer host).\"}"
