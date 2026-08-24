@@ -138,8 +138,13 @@ $podeAssumirComoSupervisor = !$ehEncerrado && !$souDono && $souSupervisorDoSetor
     </div>
 <?php endif; ?>
 
+<div id="avisoTravaWpp" class="alert alert-warning py-2 small mb-2" style="display:none">
+    <i class="bi bi-exclamation-triangle-fill"></i> <span id="textoTravaWpp"></span>
+    <a href="#" onclick="location.reload(); return false;">Atualizar a página</a>.
+</div>
+
 <div class="card border-0 shadow-sm">
-    <div class="card-body" id="listaMensagens" data-atendimento-id="<?= (int)$atendimento['id'] ?>"
+    <div class="card-body" id="listaMensagens" data-atendimento-id="<?= (int)$atendimento['id'] ?>" data-sou-dono="<?= $souDono ? '1' : '0' ?>"
          style="height:420px; overflow-y:auto; background:#f5f7fb;">
         <?php foreach ($mensagens as $m): ?>
             <?= renderizarBolha($m) ?>
@@ -177,8 +182,34 @@ $podeAssumirComoSupervisor = !$ehEncerrado && !$souDono && $souSupervisorDoSetor
     const form = document.getElementById('formResponder');
     const campo = document.getElementById('campoTexto');
     const atendimentoId = lista.dataset.atendimentoId;
+    const avisoTrava = document.getElementById('avisoTravaWpp');
+    const textoTrava = document.getElementById('textoTravaWpp');
+    let souDonoAtual = lista.dataset.souDono === '1';
+    let travado = false;
 
     lista.scrollTop = lista.scrollHeight;
+
+    /**
+     * Chamado assim que o polling detecta que esse atendimento não é
+     * mais (ou nunca foi) do usuário logado -- trava a caixa de
+     * resposta na hora, sem esperar um clique em "Enviar" esbarrar no
+     * bloqueio do servidor (que já existia, só sem nenhum aviso visível
+     * até então -- essa tela podia ficar aberta com a resposta parecendo
+     * disponível mesmo depois do atendimento ter mudado de dono).
+     */
+    function travarPorMudancaDeDono(mensagem) {
+        if (travado) return;
+        travado = true;
+
+        if (form) {
+            form.querySelectorAll('input, button, textarea').forEach(function (el) { el.disabled = true; });
+        }
+
+        if (avisoTrava && textoTrava) {
+            textoTrava.textContent = mensagem;
+            avisoTrava.style.display = '';
+        }
+    }
 
     function ultimoIdRenderizado() {
         const bolhas = lista.querySelectorAll('[data-msg-id]');
@@ -306,8 +337,18 @@ $podeAssumirComoSupervisor = !$ehEncerrado && !$souDono && $souSupervisorDoSetor
             .then(function (r) { return r.json(); })
             .then(function (dados) {
                 if (!dados.success) {
+                    if (souDonoAtual) {
+                        travarPorMudancaDeDono('Você perdeu acesso a este atendimento -- pode ter sido reatribuído ou encerrado.');
+                    }
                     return;
                 }
+
+                if (souDonoAtual && !dados.souDono) {
+                    const quem = dados.donoAtualNome ? ('para ' + dados.donoAtualNome) : 'para outro atendente';
+                    travarPorMudancaDeDono('Este atendimento foi transferido ' + quem + ' -- não é mais possível responder por aqui.');
+                }
+                souDonoAtual = dados.souDono;
+
                 let chegouAlgo = false;
                 dados.mensagens.forEach(function (m) {
                     lista.appendChild(montarBolha(m));
@@ -319,6 +360,13 @@ $podeAssumirComoSupervisor = !$ehEncerrado && !$souDono && $souSupervisorDoSetor
             })
             .catch(function () {});
     }
+
+    // Roda pra qualquer um com acesso de leitura (dono, colega vendo
+    // por "visível para equipe" ou supervisor), não só quem tem a
+    // caixa de resposta -- senão quem só está acompanhando a conversa
+    // de um colega ficaria parado, sem ver mensagem nova chegar, até
+    // dar F5 na página.
+    setInterval(buscarNovas, 3000);
 
     if (form) {
     form.addEventListener('submit', function (evento) {
@@ -356,8 +404,6 @@ $podeAssumirComoSupervisor = !$ehEncerrado && !$souDono && $souSupervisorDoSetor
                 campo.focus();
             });
     });
-
-    setInterval(buscarNovas, 3000);
 
     // -- Anexo: pega o que tiver digitado no campo como legenda (fica
     // vazio se não digitou nada), sobe o arquivo e limpa o campo --

@@ -315,7 +315,7 @@ class WhatsAppAtendimentoController extends Controller
         $desde = (int)($_GET['desde'] ?? 0);
 
         $service = new WhatsAppAtendimentoService();
-        $atendimento = $service->buscar($id);
+        $atendimento = $service->buscarComContato($id);
 
         if (!$this->podeVer($atendimento)) {
             echo json_encode(['success' => false, 'message' => 'Atendimento não encontrado ou você não tem acesso a ele.']);
@@ -324,7 +324,20 @@ class WhatsAppAtendimentoController extends Controller
 
         $podeVerNps = (new WhatsAppPermissaoService())->usuarioPodeVerNps($_SESSION['usuario']);
 
-        echo json_encode(['success' => true, 'mensagens' => $service->mensagens($id, $desde, !$podeVerNps)]);
+        // souDono/status vão junto do polling normal -- é como a tela já
+        // aberta detecta, sem precisar de F5, que o atendimento mudou de
+        // dono (supervisor assumiu, transferência) ou foi encerrado
+        // enquanto essa aba estava parada nela: trava a caixa de resposta
+        // na hora, em vez de deixar parecendo ativa até um clique em
+        // "Enviar" esbarrar no bloqueio do servidor (que já existia, mas
+        // sem nenhum aviso visível até esse momento).
+        echo json_encode([
+            'success' => true,
+            'mensagens' => $service->mensagens($id, $desde, !$podeVerNps),
+            'souDono' => (int)($atendimento['usuario_id'] ?? 0) === (int)$_SESSION['usuario']['id'],
+            'status' => $atendimento['status'],
+            'donoAtualNome' => $atendimento['usuario_nome'] ?? null,
+        ]);
     }
 
     /** Contagem de "aguardando resposta" -- badge do menu e alerta sonoro em Atendimentos. */
