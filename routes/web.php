@@ -319,6 +319,11 @@ $router->get('/chamados/atendimentos/ver', [ChamadoController::class, 'ver']);
 $router->post('/chamados/atendimentos/responder', [ChamadoController::class, 'responder']);
 $router->post('/chamados/atendimentos/status', [ChamadoController::class, 'mudarStatus']);
 $router->get('/chamados/atendimentos/contador', [ChamadoController::class, 'contadorApi']);
+$router->get('/chamados/atendimentos/ativos-buscar', [ChamadoController::class, 'ativosBuscarApi']);
+$router->get('/chamados/atendimentos/kb-sugestoes', [ChamadoController::class, 'kbSugestoesApi']);
+$router->post('/chamados/atendimentos/kb-criar', [ChamadoController::class, 'criarArtigoKb']);
+$router->post('/chamados/atendimentos/anexo', [ChamadoController::class, 'anexo']);
+$router->get('/chamados/atendimentos/anexo', [ChamadoController::class, 'anexoBaixar']);
 
 $router->get('/chamados/categorias', [ChamadoCategoriaController::class, 'index']);
 $router->post('/chamados/categorias/criar', [ChamadoCategoriaController::class, 'criar']);

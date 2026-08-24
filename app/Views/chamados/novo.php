@@ -60,9 +60,17 @@ use App\Services\ChamadoService;
                 </div>
             </div>
 
-            <div class="mb-0">
+            <div class="mb-3 position-relative">
+                <label class="form-label">Ativo relacionado <span class="text-muted fw-normal">(opcional -- se o chamado for sobre um equipamento)</span></label>
+                <input type="hidden" name="ativo_id" id="campoAtivoId">
+                <input type="text" id="campoAtivoBusca" class="form-control" autocomplete="off" placeholder="Busque por código, nome ou nº de série...">
+                <div id="listaAtivosSugeridos" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:10; max-height:220px; overflow-y:auto"></div>
+            </div>
+
+            <div class="mb-0 position-relative">
                 <label class="form-label">Descrição</label>
-                <textarea name="descricao" class="form-control" rows="4" required placeholder="Descreva o problema com o máximo de detalhe possível."></textarea>
+                <textarea name="descricao" id="campoDescricao" class="form-control" rows="4" required placeholder="Descreva o problema com o máximo de detalhe possível."></textarea>
+                <div id="listaKbSugerida" class="mt-2"></div>
             </div>
         </div>
     </div>
@@ -91,6 +99,98 @@ use App\Services\ChamadoService;
     <button type="submit" class="btn btn-primary"><i class="bi bi-send"></i> Abrir chamado</button>
     <a href="<?= url('/chamados/atendimentos') ?>" class="btn btn-secondary">Cancelar</a>
 </form>
+
+<script>
+(function () {
+    // --- Ativo relacionado: autocomplete simples (debounce + fetch) ---
+    const campoBusca = document.getElementById('campoAtivoBusca');
+    const campoId = document.getElementById('campoAtivoId');
+    const lista = document.getElementById('listaAtivosSugeridos');
+    let timerBusca = null;
+
+    campoBusca.addEventListener('input', () => {
+        campoId.value = '';
+        clearTimeout(timerBusca);
+        const termo = campoBusca.value.trim();
+        if (termo.length < 2) {
+            lista.classList.add('d-none');
+            return;
+        }
+        timerBusca = setTimeout(() => buscarAtivos(termo), 300);
+    });
+
+    async function buscarAtivos(termo) {
+        try {
+            const resp = await fetch('<?= url('/chamados/atendimentos/ativos-buscar') ?>?q=' + encodeURIComponent(termo));
+            const dados = await resp.json();
+            if (!dados.success || dados.ativos.length === 0) {
+                lista.classList.add('d-none');
+                return;
+            }
+            lista.innerHTML = dados.ativos.map((a) =>
+                '<button type="button" class="list-group-item list-group-item-action opcao-ativo" data-id="' + a.id + '" data-texto="' + escapeAttr(a.codigo + ' -- ' + a.nome) + '">'
+                + '<span class="font-monospace small">' + escapeHtml(a.codigo) + '</span> ' + escapeHtml(a.nome)
+                + ' <span class="text-muted small">(' + escapeHtml(a.tipo) + ')</span></button>'
+            ).join('');
+            lista.classList.remove('d-none');
+        } catch (e) { /* rede instável -- só não sugere nada */ }
+    }
+
+    lista.addEventListener('click', (ev) => {
+        const botao = ev.target.closest('.opcao-ativo');
+        if (!botao) return;
+        campoId.value = botao.dataset.id;
+        campoBusca.value = botao.dataset.texto;
+        lista.classList.add('d-none');
+    });
+
+    document.addEventListener('click', (ev) => {
+        if (!lista.contains(ev.target) && ev.target !== campoBusca) {
+            lista.classList.add('d-none');
+        }
+    });
+
+    function escapeHtml(texto) {
+        const div = document.createElement('div');
+        div.textContent = texto;
+        return div.innerHTML;
+    }
+    function escapeAttr(texto) {
+        return escapeHtml(texto).replace(/"/g, '&quot;');
+    }
+
+    // --- Base de Conhecimento: sugestão enquanto descreve o problema ---
+    const campoDescricao = document.getElementById('campoDescricao');
+    const listaKb = document.getElementById('listaKbSugerida');
+    let timerKb = null;
+
+    campoDescricao.addEventListener('input', () => {
+        clearTimeout(timerKb);
+        const termo = campoDescricao.value.trim();
+        if (termo.length < 8) {
+            listaKb.innerHTML = '';
+            return;
+        }
+        timerKb = setTimeout(() => buscarKb(termo), 500);
+    });
+
+    async function buscarKb(termo) {
+        try {
+            const resp = await fetch('<?= url('/chamados/atendimentos/kb-sugestoes') ?>?q=' + encodeURIComponent(termo));
+            const dados = await resp.json();
+            if (!dados.success || dados.artigos.length === 0) {
+                listaKb.innerHTML = '';
+                return;
+            }
+            listaKb.innerHTML = '<div class="small text-muted mb-1">💡 Talvez isso já esteja resolvido na Base de Conhecimento:</div>'
+                + dados.artigos.map((a) =>
+                    '<div class="small"><i class="bi bi-journal-text"></i> ' + escapeHtml(a.titulo)
+                    + (a.categoria ? ' <span class="text-muted">(' + escapeHtml(a.categoria) + ')</span>' : '') + '</div>'
+                ).join('');
+        } catch (e) { /* rede instável -- só não sugere nada */ }
+    }
+})();
+</script>
 
 <?php
 $conteudo = ob_get_clean();

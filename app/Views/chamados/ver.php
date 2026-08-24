@@ -58,6 +58,9 @@ $corStatus = ['fila' => 'secondary', 'em_atendimento' => 'primary', 'aguardando_
                 <input type="hidden" name="status" value="em_atendimento">
                 <button type="submit" class="btn btn-outline-secondary"><i class="bi bi-arrow-counterclockwise"></i> Reabrir</button>
             </form>
+            <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalCriarArtigoKb">
+                <i class="bi bi-journal-plus"></i> Criar artigo da Base de Conhecimento
+            </button>
         <?php endif; ?>
     </div>
 </div>
@@ -131,6 +134,32 @@ $corStatus = ['fila' => 'secondary', 'em_atendimento' => 'primary', 'aguardando_
             </div>
         </div>
 
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white"><strong>Anexos</strong></div>
+            <div class="card-body small">
+                <?php if (empty($anexos)): ?>
+                    <p class="text-muted mb-2">Nenhum anexo ainda.</p>
+                <?php else: ?>
+                    <ul class="list-unstyled mb-2">
+                        <?php foreach ($anexos as $anexo): ?>
+                            <li class="mb-1">
+                                <a href="<?= url('/chamados/atendimentos/anexo?id=' . (int)$anexo['id']) ?>" target="_blank">
+                                    <i class="bi bi-paperclip"></i> <?= htmlspecialchars($anexo['nome_original']) ?>
+                                </a>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                <?php endif; ?>
+                <?php if (!$somenteLeitura): ?>
+                    <form method="post" action="<?= url('/chamados/atendimentos/anexo') ?>" enctype="multipart/form-data" class="d-flex gap-2">
+                        <input type="hidden" name="id" value="<?= (int)$chamado['id'] ?>">
+                        <input type="file" name="arquivo" class="form-control form-control-sm" required>
+                        <button type="submit" class="btn btn-sm btn-outline-secondary text-nowrap"><i class="bi bi-upload"></i></button>
+                    </form>
+                <?php endif; ?>
+            </div>
+        </div>
+
         <?php if ($chamado['ativo_id']): ?>
         <div class="card border-0 shadow-sm mb-3">
             <div class="card-header bg-white"><strong>Ativo vinculado</strong></div>
@@ -157,6 +186,43 @@ $corStatus = ['fila' => 'secondary', 'em_atendimento' => 'primary', 'aguardando_
         </div>
     </div>
 </div>
+
+<?php if (in_array($chamado['status'], ['resolvido', 'fechado'], true)): ?>
+<?php
+    $ultimaPublica = '';
+    foreach (array_reverse($comentarios) as $c) {
+        if ($c['tipo'] === 'publica') { $ultimaPublica = $c['conteudo']; break; }
+    }
+?>
+<div class="modal fade" id="modalCriarArtigoKb" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="post" action="<?= url('/chamados/atendimentos/kb-criar') ?>">
+                <input type="hidden" name="id" value="<?= (int)$chamado['id'] ?>">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-journal-plus"></i> Criar artigo da Base de Conhecimento</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small">O problema (descrição do chamado) já entra preenchido; revise a solução antes de salvar -- vira um artigo privado desta instalação.</p>
+                    <div class="mb-3">
+                        <label class="form-label">Título</label>
+                        <input type="text" name="titulo" class="form-control" value="<?= htmlspecialchars($chamado['titulo']) ?>" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Solução</label>
+                        <textarea name="solucao" class="form-control" rows="6" required><?= htmlspecialchars($ultimaPublica) ?></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Criar artigo</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <?php
 $conteudo = ob_get_clean();
