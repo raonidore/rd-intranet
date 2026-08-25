@@ -78,18 +78,24 @@ use App\Services\ChamadoService;
     <div class="card border-0 shadow-sm mb-3">
         <div class="card-header bg-white"><strong>Solicitante</strong></div>
         <div class="card-body">
+            <div class="mb-3 position-relative">
+                <label class="form-label">Buscar usuário cadastrado <span class="text-muted fw-normal">(opcional -- preenche os campos abaixo automaticamente)</span></label>
+                <input type="text" id="campoUsuarioBusca" class="form-control" autocomplete="off" placeholder="Busque por nome, login ou e-mail...">
+                <div id="listaUsuariosSugeridos" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:10; max-height:220px; overflow-y:auto"></div>
+            </div>
+
             <div class="row g-3">
                 <div class="col-md-4">
                     <label class="form-label">Nome</label>
-                    <input type="text" name="solicitante_nome" class="form-control" required maxlength="150">
+                    <input type="text" name="solicitante_nome" id="campoSolicitanteNome" class="form-control" required maxlength="150">
                 </div>
                 <div class="col-md-4">
                     <label class="form-label">E-mail</label>
-                    <input type="email" name="solicitante_email" class="form-control" maxlength="150">
+                    <input type="email" name="solicitante_email" id="campoSolicitanteEmail" class="form-control" maxlength="150">
                 </div>
                 <div class="col-md-4">
                     <label class="form-label">Telefone</label>
-                    <input type="text" name="solicitante_telefone" class="form-control" maxlength="30" placeholder="(83) 99104-3598">
+                    <input type="text" name="solicitante_telefone" id="campoSolicitanteTelefone" class="form-control" maxlength="30" placeholder="(83) 99104-3598">
                 </div>
             </div>
             <div class="form-text mt-2">Informe pelo menos um contato (e-mail ou telefone) -- é por ele que o solicitante recebe as atualizações do chamado.</div>
@@ -158,6 +164,53 @@ use App\Services\ChamadoService;
     function escapeAttr(texto) {
         return escapeHtml(texto).replace(/"/g, '&quot;');
     }
+
+    // --- Solicitante: busca usuário cadastrado no sistema (mesmo raciocínio do Ativo relacionado) ---
+    const campoUsuarioBusca = document.getElementById('campoUsuarioBusca');
+    const listaUsuarios = document.getElementById('listaUsuariosSugeridos');
+    let timerUsuarioBusca = null;
+
+    campoUsuarioBusca.addEventListener('input', () => {
+        clearTimeout(timerUsuarioBusca);
+        const termo = campoUsuarioBusca.value.trim();
+        if (termo.length < 2) {
+            listaUsuarios.classList.add('d-none');
+            return;
+        }
+        timerUsuarioBusca = setTimeout(() => buscarUsuarios(termo), 300);
+    });
+
+    async function buscarUsuarios(termo) {
+        try {
+            const resp = await fetch('<?= url('/chamados/atendimentos/usuarios-buscar') ?>?q=' + encodeURIComponent(termo));
+            const dados = await resp.json();
+            if (!dados.success || dados.usuarios.length === 0) {
+                listaUsuarios.classList.add('d-none');
+                return;
+            }
+            listaUsuarios.innerHTML = dados.usuarios.map((u) =>
+                '<button type="button" class="list-group-item list-group-item-action opcao-usuario" data-nome="' + escapeAttr(u.nome) + '" data-email="' + escapeAttr(u.email || '') + '">'
+                + escapeHtml(u.nome) + (u.email ? ' <span class="text-muted small">(' + escapeHtml(u.email) + ')</span>' : '')
+                + '</button>'
+            ).join('');
+            listaUsuarios.classList.remove('d-none');
+        } catch (e) { /* rede instável -- só não sugere nada */ }
+    }
+
+    listaUsuarios.addEventListener('click', (ev) => {
+        const botao = ev.target.closest('.opcao-usuario');
+        if (!botao) return;
+        document.getElementById('campoSolicitanteNome').value = botao.dataset.nome;
+        document.getElementById('campoSolicitanteEmail').value = botao.dataset.email;
+        campoUsuarioBusca.value = botao.dataset.nome;
+        listaUsuarios.classList.add('d-none');
+    });
+
+    document.addEventListener('click', (ev) => {
+        if (!listaUsuarios.contains(ev.target) && ev.target !== campoUsuarioBusca) {
+            listaUsuarios.classList.add('d-none');
+        }
+    });
 
     // --- Base de Conhecimento: sugestão enquanto descreve o problema ---
     const campoDescricao = document.getElementById('campoDescricao');

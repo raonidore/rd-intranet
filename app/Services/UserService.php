@@ -20,6 +20,11 @@ class UserService
         return $this->repository->listar();
     }
 
+    public function buscarPorTermo(string $termo): array
+    {
+        return $this->repository->buscar($termo);
+    }
+
     public function buscar(int $id): ?array
     {
         return $this->repository->buscarPorId($id);

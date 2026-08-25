@@ -13,6 +13,7 @@ use App\Services\ChamadoSetorService;
 use App\Services\KbService;
 use App\Services\NotificationService;
 use App\Services\UnidadeService;
+use App\Services\UserService;
 
 class ChamadoController extends Controller
 {
@@ -159,6 +160,30 @@ class ChamadoController extends Controller
                 'nome' => $a['nome'],
                 'tipo' => $a['tipo_nome'],
             ], $ativos),
+        ]);
+    }
+
+    /** Busca de usuário cadastrado no sistema -- mesmo raciocínio do autocomplete de Ativo relacionado, pra preencher o Solicitante sem redigitar. */
+    public function usuariosBuscarApi(): void
+    {
+        AuthMiddleware::checkModulo('chamados_atendimentos');
+        header('Content-Type: application/json');
+
+        $termo = trim($_GET['q'] ?? '');
+        if (strlen($termo) < 2) {
+            echo json_encode(['success' => true, 'usuarios' => []]);
+            return;
+        }
+
+        $usuarios = (new UserService())->buscarPorTermo($termo);
+
+        echo json_encode([
+            'success' => true,
+            'usuarios' => array_map(fn (array $u) => [
+                'id' => (int)$u['id'],
+                'nome' => $u['nome'],
+                'email' => $u['email'],
+            ], $usuarios),
         ]);
     }
 

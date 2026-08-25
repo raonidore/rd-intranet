@@ -25,6 +25,21 @@ class UserRepository
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /** Busca por nome, login ou e-mail -- usada pelo autocomplete de "usuário cadastrado" (ex: solicitante de chamado). */
+    public function buscar(string $termo): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT id, nome, login, email
+            FROM usuarios
+            WHERE ativo = 1 AND (nome LIKE :termo OR login LIKE :termo OR email LIKE :termo)
+            ORDER BY nome
+            LIMIT 10
+        ");
+        $stmt->execute(['termo' => '%' . $termo . '%']);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function buscarPorId(int $id): ?array
     {
         $stmt = $this->pdo->prepare("
