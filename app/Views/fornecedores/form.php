@@ -26,19 +26,26 @@ $editando = $fornecedor !== null;
             <div class="row g-3 mb-4">
                 <div class="col-md-7">
                     <label class="form-label">Razão social *</label>
-                    <input type="text" name="razao_social" class="form-control" required maxlength="200"
+                    <input type="text" name="razao_social" id="campoRazaoSocial" class="form-control" required maxlength="200"
                            value="<?= htmlspecialchars($fornecedor['razao_social'] ?? '') ?>">
                 </div>
                 <div class="col-md-5">
                     <label class="form-label">Nome fantasia *</label>
-                    <input type="text" name="nome_fantasia" class="form-control" required maxlength="150"
+                    <input type="text" name="nome_fantasia" id="campoNomeFantasia" class="form-control" required maxlength="150"
                            value="<?= htmlspecialchars($fornecedor['nome_fantasia'] ?? '') ?>">
                 </div>
 
                 <div class="col-md-4">
                     <label class="form-label">CNPJ / CPF</label>
-                    <input type="text" name="cnpj_cpf" class="form-control" maxlength="20"
-                           value="<?= htmlspecialchars($fornecedor['cnpj_cpf'] ?? '') ?>">
+                    <div class="input-group">
+                        <input type="text" name="cnpj_cpf" id="campoCnpjCpf" class="form-control" maxlength="18"
+                               placeholder="00.000.000/0000-00"
+                               value="<?= htmlspecialchars($fornecedor['cnpj_cpf'] ?? '') ?>">
+                        <button type="button" class="btn btn-outline-secondary" id="botaoBuscarCnpj" title="Buscar dados na Receita pelo CNPJ">
+                            <i class="bi bi-search"></i>
+                        </button>
+                    </div>
+                    <small class="text-muted" id="statusCnpj">Busca automática funciona só pra CNPJ (14 dígitos) -- não existe consulta pública de dados por CPF.</small>
                 </div>
                 <div class="col-md-4">
                     <label class="form-label">Inscrição estadual</label>
@@ -101,13 +108,13 @@ $editando = $fornecedor !== null;
                 </div>
                 <div class="col-md-2">
                     <label class="form-label">Número</label>
-                    <input type="text" name="numero" class="form-control" maxlength="20"
+                    <input type="text" name="numero" id="campoNumero" class="form-control" maxlength="20"
                            value="<?= htmlspecialchars($fornecedor['numero'] ?? '') ?>">
                 </div>
 
                 <div class="col-md-4">
                     <label class="form-label">Complemento</label>
-                    <input type="text" name="complemento" class="form-control" maxlength="100"
+                    <input type="text" name="complemento" id="campoComplemento" class="form-control" maxlength="100"
                            value="<?= htmlspecialchars($fornecedor['complemento'] ?? '') ?>">
                 </div>
                 <div class="col-md-4">
@@ -141,12 +148,12 @@ $editando = $fornecedor !== null;
                 </div>
                 <div class="col-md-4">
                     <label class="form-label">E-mail comercial / financeiro</label>
-                    <input type="email" name="email" class="form-control" maxlength="190"
+                    <input type="email" name="email" id="campoEmail" class="form-control" maxlength="190"
                            value="<?= htmlspecialchars($fornecedor['email'] ?? '') ?>">
                 </div>
                 <div class="col-md-4">
                     <label class="form-label">Telefone / celular</label>
-                    <input type="text" name="telefone" class="form-control" maxlength="30"
+                    <input type="text" name="telefone" id="campoTelefone" class="form-control" maxlength="30"
                            value="<?= htmlspecialchars($fornecedor['telefone'] ?? '') ?>">
                 </div>
 
@@ -236,6 +243,74 @@ $editando = $fornecedor !== null;
             statusCep.textContent = '';
         } catch (e) {
             statusCep.textContent = 'Não foi possível buscar o CEP agora -- preencha manualmente.';
+        }
+    });
+
+    // --- CNPJ/CPF: mascara enquanto digita (00.000.000/0000-00 ou 000.000.000-00) ---
+    const campoCnpjCpf = document.getElementById('campoCnpjCpf');
+    const statusCnpj = document.getElementById('statusCnpj');
+    const textoAjudaCnpj = statusCnpj.textContent;
+
+    function mascararCnpjCpf(digitos) {
+        if (digitos.length <= 11) {
+            return digitos
+                .replace(/(\d{3})(\d)/, '$1.$2')
+                .replace(/(\d{3})(\d)/, '$1.$2')
+                .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+        }
+        return digitos
+            .replace(/(\d{2})(\d)/, '$1.$2')
+            .replace(/(\d{3})(\d)/, '$1.$2')
+            .replace(/(\d{3})(\d)/, '$1/$2')
+            .replace(/(\d{4})(\d{1,2})$/, '$1-$2');
+    }
+
+    campoCnpjCpf.addEventListener('input', function () {
+        const digitos = campoCnpjCpf.value.replace(/\D/g, '').slice(0, 14);
+        campoCnpjCpf.value = mascararCnpjCpf(digitos);
+    });
+
+    // --- Busca automática dos dados do CNPJ na Receita (via BrasilAPI, pública e gratuita) ---
+    async function buscarCnpj() {
+        const digitos = campoCnpjCpf.value.replace(/\D/g, '');
+        if (digitos.length !== 14) {
+            statusCnpj.textContent = 'Informe um CNPJ completo (14 dígitos) pra buscar -- CPF não tem consulta pública.';
+            return;
+        }
+
+        statusCnpj.textContent = 'Buscando na Receita...';
+        try {
+            const res = await fetch('https://brasilapi.com.br/api/cnpj/v1/' + digitos);
+            if (!res.ok) {
+                statusCnpj.textContent = 'CNPJ não encontrado.';
+                return;
+            }
+            const dados = await res.json();
+
+            document.getElementById('campoRazaoSocial').value = dados.razao_social || '';
+            document.getElementById('campoNomeFantasia').value = dados.nome_fantasia || dados.razao_social || '';
+            document.getElementById('campoCep').value = dados.cep || '';
+            document.getElementById('campoLogradouro').value = [dados.descricao_tipo_de_logradouro, dados.logradouro].filter(Boolean).join(' ');
+            document.getElementById('campoNumero').value = dados.numero || '';
+            document.getElementById('campoComplemento').value = dados.complemento || '';
+            document.getElementById('campoBairro').value = dados.bairro || '';
+            document.getElementById('campoCidade').value = dados.municipio || '';
+            document.getElementById('campoUf').value = dados.uf || '';
+            if (dados.email) document.getElementById('campoEmail').value = dados.email;
+            if (dados.ddd_telefone_1) document.getElementById('campoTelefone').value = dados.ddd_telefone_1;
+
+            statusCnpj.textContent = 'Dados preenchidos a partir da Receita Federal.';
+        } catch (e) {
+            statusCnpj.textContent = 'Não foi possível buscar o CNPJ agora -- preencha manualmente.';
+        }
+    }
+
+    document.getElementById('botaoBuscarCnpj').addEventListener('click', buscarCnpj);
+    campoCnpjCpf.addEventListener('blur', function () {
+        if (campoCnpjCpf.value.replace(/\D/g, '').length === 14) {
+            buscarCnpj();
+        } else {
+            statusCnpj.textContent = textoAjudaCnpj;
         }
     });
 
