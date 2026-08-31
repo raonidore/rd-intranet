@@ -98,7 +98,7 @@ use App\Services\ChamadoService;
                     <input type="text" name="solicitante_telefone" id="campoSolicitanteTelefone" class="form-control" maxlength="30" placeholder="(83) 99104-3598">
                 </div>
             </div>
-            <div class="form-text mt-2">Informe pelo menos um contato (e-mail ou telefone) -- é por ele que o solicitante recebe as atualizações do chamado.</div>
+            <div id="avisoContato" class="form-text mt-2">Informe pelo menos um contato (e-mail ou telefone) -- é por ele que o solicitante recebe as atualizações do chamado.</div>
         </div>
     </div>
 
@@ -108,6 +108,34 @@ use App\Services\ChamadoService;
 
 <script>
 (function () {
+    // --- Solicitante: exige e-mail ou telefone sem perder o restante do formulário preenchido ---
+    const formChamado = document.querySelector('form[action="<?= url('/chamados/atendimentos/novo') ?>"]');
+    const campoEmail = document.getElementById('campoSolicitanteEmail');
+    const campoTelefone = document.getElementById('campoSolicitanteTelefone');
+    const avisoContato = document.getElementById('avisoContato');
+
+    function limparAvisoContato() {
+        campoEmail.classList.remove('is-invalid');
+        campoTelefone.classList.remove('is-invalid');
+        avisoContato.classList.remove('text-danger', 'fw-semibold');
+    }
+
+    campoEmail.addEventListener('input', limparAvisoContato);
+    campoTelefone.addEventListener('input', limparAvisoContato);
+
+    formChamado.addEventListener('submit', (ev) => {
+        if (campoEmail.value.trim() !== '' || campoTelefone.value.trim() !== '') {
+            limparAvisoContato();
+            return;
+        }
+        ev.preventDefault();
+        campoEmail.classList.add('is-invalid');
+        campoTelefone.classList.add('is-invalid');
+        avisoContato.classList.add('text-danger', 'fw-semibold');
+        campoEmail.focus();
+        campoEmail.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+
     // --- Ativo relacionado: autocomplete simples (debounce + fetch) ---
     const campoBusca = document.getElementById('campoAtivoBusca');
     const campoId = document.getElementById('campoAtivoId');
