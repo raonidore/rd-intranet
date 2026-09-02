@@ -46,12 +46,14 @@ class WhatsAppNpsService
         $nome = $atendimentoComContato['contato_nome'];
         $numero = $atendimentoComContato['numero'];
 
+        $conexaoId = $atendimentoComContato['conexao_id'] ?? null;
+
         $mensagemEspera = $chatbot->renderizarTemplate($config->npsMensagemEspera(), ['nome' => $nome]);
-        $envio1 = $mensageiro->enviar($numero, $mensagemEspera);
+        $envio1 = $mensageiro->enviar($numero, $mensagemEspera, $conexaoId);
         $atendimentoService->registrarMensagemSaida((int)$atendimentoComContato['id'], $mensagemEspera, 'bot', null, 'texto', null, 'nps', $envio1['success'] ? 'enviado' : 'falhou');
 
         $perguntaAtendente = $chatbot->renderizarTemplate($config->npsPerguntaAtendente(), ['nome' => $nome]) . self::LEGENDA_ATENDENTE;
-        $envio2 = $mensageiro->enviar($numero, $perguntaAtendente);
+        $envio2 = $mensageiro->enviar($numero, $perguntaAtendente, $conexaoId);
         $atendimentoService->registrarMensagemSaida((int)$atendimentoComContato['id'], $perguntaAtendente, 'bot', null, 'texto', null, 'nps', $envio2['success'] ? 'enviado' : 'falhou');
 
         $this->pdo->prepare("UPDATE whatsapp_atendimentos SET status = 'aguardando_nps_atendente' WHERE id = ?")
@@ -78,9 +80,11 @@ class WhatsAppNpsService
         $atendimentoService = new WhatsAppAtendimentoService();
         $texto = trim($texto);
 
+        $conexaoId = $atendimento['conexao_id'] ?? null;
+
         if (!preg_match('/^[1-5]$/', $texto)) {
             $mensagemErro = 'Não entendi -- responda só com um número de 1 a 5, por favor.';
-            $envio = (new WhatsAppMensagemService())->enviar($atendimento['numero'], $mensagemErro);
+            $envio = (new WhatsAppMensagemService())->enviar($atendimento['numero'], $mensagemErro, $conexaoId);
             $atendimentoService->registrarMensagemSaida((int)$atendimento['id'], $mensagemErro, 'bot', null, 'texto', null, 'nps', $envio['success'] ? 'enviado' : 'falhou');
             return;
         }
@@ -94,7 +98,7 @@ class WhatsAppNpsService
         $chatbot = new WhatsAppChatbotService();
         $perguntaResolucao = $chatbot->renderizarTemplate($config->npsPerguntaResolucao(), ['nome' => $atendimento['contato_nome']]) . self::LEGENDA_RESOLUCAO;
 
-        $envio = (new WhatsAppMensagemService())->enviar($atendimento['numero'], $perguntaResolucao);
+        $envio = (new WhatsAppMensagemService())->enviar($atendimento['numero'], $perguntaResolucao, $conexaoId);
         $atendimentoService->registrarMensagemSaida((int)$atendimento['id'], $perguntaResolucao, 'bot', null, 'texto', null, 'nps', $envio['success'] ? 'enviado' : 'falhou');
 
         $this->pdo->prepare("UPDATE whatsapp_atendimentos SET status = 'aguardando_nps_resolucao' WHERE id = ?")
@@ -106,9 +110,11 @@ class WhatsAppNpsService
         $atendimentoService = new WhatsAppAtendimentoService();
         $texto = trim($texto);
 
+        $conexaoId = $atendimento['conexao_id'] ?? null;
+
         if ($texto !== '1' && $texto !== '2') {
             $mensagemErro = 'Não entendi -- digite 1 para Sim ou 2 para Não, por favor.';
-            $envio = (new WhatsAppMensagemService())->enviar($atendimento['numero'], $mensagemErro);
+            $envio = (new WhatsAppMensagemService())->enviar($atendimento['numero'], $mensagemErro, $conexaoId);
             $atendimentoService->registrarMensagemSaida((int)$atendimento['id'], $mensagemErro, 'bot', null, 'texto', null, 'nps', $envio['success'] ? 'enviado' : 'falhou');
             return;
         }
@@ -120,7 +126,7 @@ class WhatsAppNpsService
         $chatbot = new WhatsAppChatbotService();
         $agradecimento = $chatbot->renderizarTemplate($config->npsAgradecimento(), ['nome' => $atendimento['contato_nome']]);
 
-        $envio = (new WhatsAppMensagemService())->enviar($atendimento['numero'], $agradecimento);
+        $envio = (new WhatsAppMensagemService())->enviar($atendimento['numero'], $agradecimento, $conexaoId);
         $atendimentoService->registrarMensagemSaida((int)$atendimento['id'], $agradecimento, 'bot', null, 'texto', null, 'nps', $envio['success'] ? 'enviado' : 'falhou');
 
         $this->pdo->prepare("UPDATE whatsapp_atendimentos SET status = 'encerrado', encerrado_em = NOW() WHERE id = ?")

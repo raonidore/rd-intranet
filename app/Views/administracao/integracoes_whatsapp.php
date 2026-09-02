@@ -55,30 +55,68 @@ use App\Components\Alert;
 </div>
 
 <?php if ($tipoAtual === 'qrcode'): ?>
-<div class="card border-0 shadow-sm" style="max-width:720px">
-    <div class="card-header bg-white d-flex justify-content-between align-items-center">
-        <span>Conexão via QR Code</span>
-        <span id="badgeStatusWpp" class="badge text-bg-secondary">verificando...</span>
+<div style="max-width:720px">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h6 class="mb-0">Conexões via QR Code</h6>
     </div>
-    <div class="card-body text-center" id="corpoStatusWpp">
-        <p class="text-muted small d-flex align-items-center justify-content-center gap-2" id="textoStatusWpp">
-            <?= $bridgeInstalado
-                ? 'Bridge já instalado. Verificando status da conexão...'
-                : 'O bridge (processo que fala com o WhatsApp) ainda não foi instalado neste servidor.' ?>
-        </p>
-        <button type="button" class="btn btn-primary" id="botaoInstalarWpp">
-            <i class="bi bi-cloud-download"></i> <?= $bridgeInstalado ? 'Reinstalar bridge' : 'Instalar bridge' ?>
-        </button>
-        <div id="areaQrcodeWpp" class="mt-3" style="display:none">
-            <img id="imgQrcodeWpp" src="" alt="QR Code do WhatsApp" style="max-width:260px; border:1px solid #e2e8f0; border-radius:8px;">
-            <p class="text-muted small mt-2">Abra o WhatsApp no celular &gt; Aparelhos conectados &gt; Conectar um aparelho, e escaneie o código acima.</p>
-        </div>
-        <div id="areaConectadoWpp" class="mt-3" style="display:none">
-            <p class="mb-2">Conectado como <strong id="numeroConectadoWpp"></strong></p>
-            <form method="post" action="<?= url('/administracao/integracoes/whatsapp/desconectar') ?>" onsubmit="return confirm('Desconectar o WhatsApp deste servidor?');">
-                <button type="submit" class="btn btn-sm btn-outline-danger">
-                    <i class="bi bi-x-circle"></i> Desconectar
+    <p class="text-muted small">Um cartão por número conectado -- cada um pode ser vinculado aos setores que atende, pra só mostrar essas opções no menu do bot desse número.</p>
+
+    <?php foreach ($conexoes as $conexao): ?>
+        <div class="card border-0 shadow-sm mb-3" data-conexao-id="<?= (int)$conexao['id'] ?>">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-whatsapp me-1"></i> <?= htmlspecialchars($conexao['nome']) ?></span>
+                <span class="badge-status-wpp badge text-bg-secondary">verificando...</span>
+            </div>
+            <div class="card-body text-center corpo-status-wpp">
+                <p class="text-muted small d-flex align-items-center justify-content-center gap-2 texto-status-wpp">
+                    <?= $conexao['instalado']
+                        ? 'Bridge já instalado. Verificando status da conexão...'
+                        : 'O bridge (processo que fala com o WhatsApp) ainda não foi instalado neste servidor.' ?>
+                </p>
+                <button type="button" class="btn btn-primary botao-instalar-wpp">
+                    <i class="bi bi-cloud-download"></i> <?= $conexao['instalado'] ? 'Reinstalar bridge' : 'Instalar bridge' ?>
                 </button>
+                <div class="area-qrcode-wpp mt-3" style="display:none">
+                    <img class="img-qrcode-wpp" src="" alt="QR Code do WhatsApp" style="max-width:260px; border:1px solid #e2e8f0; border-radius:8px;">
+                    <p class="text-muted small mt-2">Abra o WhatsApp no celular &gt; Aparelhos conectados &gt; Conectar um aparelho, e escaneie o código acima.</p>
+                </div>
+                <div class="area-conectado-wpp mt-3" style="display:none">
+                    <p class="mb-2">Conectado como <strong class="numero-conectado-wpp"></strong></p>
+                    <form method="post" action="<?= url('/administracao/integracoes/whatsapp/desconectar') ?>" onsubmit="return confirm('Desconectar esta conexão do WhatsApp?');">
+                        <input type="hidden" name="id" value="<?= (int)$conexao['id'] ?>">
+                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                            <i class="bi bi-x-circle"></i> Desconectar
+                        </button>
+                    </form>
+                </div>
+
+                <?php if (!empty($setores)): ?>
+                    <hr>
+                    <form method="post" action="<?= url('/administracao/integracoes/whatsapp/conexao/setores') ?>" class="text-start">
+                        <input type="hidden" name="id" value="<?= (int)$conexao['id'] ?>">
+                        <label class="form-label small text-muted">Setores visíveis nesse número</label>
+                        <div class="row row-cols-2 g-1 mb-2">
+                            <?php foreach ($setores as $setor): ?>
+                                <div class="col">
+                                    <div class="form-check">
+                                        <input type="checkbox" name="setor_ids[]" value="<?= (int)$setor['id'] ?>" class="form-check-input" id="setorConexao<?= (int)$conexao['id'] ?>_<?= (int)$setor['id'] ?>" <?= in_array((int)$setor['id'], $conexao['setor_ids'], true) ? 'checked' : '' ?>>
+                                        <label class="form-check-label small" for="setorConexao<?= (int)$conexao['id'] ?>_<?= (int)$setor['id'] ?>"><?= htmlspecialchars($setor['nome']) ?></label>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                        <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-check-lg"></i> Salvar setores</button>
+                    </form>
+                <?php endif; ?>
+            </div>
+        </div>
+    <?php endforeach; ?>
+
+    <div class="card border-0 shadow-sm mb-3">
+        <div class="card-body">
+            <form method="post" action="<?= url('/administracao/integracoes/whatsapp/conexao') ?>" class="d-flex gap-2">
+                <input type="text" name="nome" class="form-control form-control-sm" placeholder="Nome da conexão (ex: Comercial)" required>
+                <button type="submit" class="btn btn-sm btn-outline-primary text-nowrap"><i class="bi bi-plus-lg"></i> Nova conexão</button>
             </form>
         </div>
     </div>
@@ -86,14 +124,6 @@ use App\Components\Alert;
 
 <script>
 (function () {
-    const badge = document.getElementById('badgeStatusWpp');
-    const texto = document.getElementById('textoStatusWpp');
-    const botaoInstalar = document.getElementById('botaoInstalarWpp');
-    const areaQrcode = document.getElementById('areaQrcodeWpp');
-    const imgQrcode = document.getElementById('imgQrcodeWpp');
-    const areaConectado = document.getElementById('areaConectadoWpp');
-    const numeroConectado = document.getElementById('numeroConectadoWpp');
-
     // "npm install" do bridge pode legitimamente levar quase um minuto
     // num servidor mais lento -- durante essa janela, o /status ainda
     // não responde (porta nem subiu), o que sem esse controle parecia
@@ -101,120 +131,140 @@ use App\Components\Alert;
     // da janela, troca só o texto (sem virar "erro" sozinho -- não dá
     // pra saber se travou ou só está demorando mais que o normal).
     const JANELA_INSTALACAO_MS = 70000;
-    let instalando = false;
-    let inicioInstalacao = null;
 
-    let timerStatus = null;
-    let timerQrcode = null;
+    // Cada cartão é uma conexão independente -- mesma lógica de sempre,
+    // só que instanciada uma vez por id em vez de uma vez só pra tela
+    // inteira.
+    document.querySelectorAll('[data-conexao-id]').forEach(function (cartao) {
+        const id = cartao.dataset.conexaoId;
+        const badge = cartao.querySelector('.badge-status-wpp');
+        const texto = cartao.querySelector('.texto-status-wpp');
+        const botaoInstalar = cartao.querySelector('.botao-instalar-wpp');
+        const areaQrcode = cartao.querySelector('.area-qrcode-wpp');
+        const imgQrcode = cartao.querySelector('.img-qrcode-wpp');
+        const areaConectado = cartao.querySelector('.area-conectado-wpp');
+        const numeroConectado = cartao.querySelector('.numero-conectado-wpp');
 
-    function pararQrcode() {
-        if (timerQrcode) { clearInterval(timerQrcode); timerQrcode = null; }
-        areaQrcode.style.display = 'none';
-    }
+        let instalando = false;
+        let inicioInstalacao = null;
+        let timerQrcode = null;
 
-    function buscarQrcode() {
-        fetch(<?= json_encode(url('/administracao/integracoes/whatsapp/qrcode')) ?>)
-            .then(r => r.json())
-            .then(dados => {
-                if (dados.success && dados.qrcode) {
-                    imgQrcode.src = dados.qrcode;
-                    areaQrcode.style.display = '';
-                }
-            })
-            .catch(() => {});
-    }
+        function pararQrcode() {
+            if (timerQrcode) { clearInterval(timerQrcode); timerQrcode = null; }
+            areaQrcode.style.display = 'none';
+        }
 
-    function marcarInstalando(demorando) {
-        badge.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Instalando...';
-        badge.className = 'badge text-bg-info';
-        texto.textContent = demorando
-            ? 'Ainda instalando o bridge... está demorando mais que o normal, mas pode ser só um servidor mais lento. Continue aguardando.'
-            : 'Instalando o bridge no servidor -- isso pode levar até 1 minuto. Esta página atualiza sozinha, não precisa recarregar.';
-        pararQrcode();
-        areaConectado.style.display = 'none';
-    }
+        function buscarQrcode() {
+            fetch(<?= json_encode(url('/administracao/integracoes/whatsapp/qrcode')) ?> + '?id=' + id)
+                .then(r => r.json())
+                .then(dados => {
+                    if (dados.success && dados.qrcode) {
+                        imgQrcode.src = dados.qrcode;
+                        areaQrcode.style.display = '';
+                    }
+                })
+                .catch(() => {});
+        }
 
-    function atualizarStatus() {
-        fetch(<?= json_encode(url('/administracao/integracoes/whatsapp/status')) ?>)
-            .then(r => r.json())
-            .then(dados => {
-                if (!dados.success) {
+        function marcarInstalando(demorando) {
+            badge.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Instalando...';
+            badge.className = 'badge-status-wpp badge text-bg-info';
+            texto.textContent = demorando
+                ? 'Ainda instalando o bridge... está demorando mais que o normal, mas pode ser só um servidor mais lento. Continue aguardando.'
+                : 'Instalando o bridge no servidor -- isso pode levar até 1 minuto. Esta página atualiza sozinha, não precisa recarregar.';
+            pararQrcode();
+            areaConectado.style.display = 'none';
+        }
+
+        function atualizarStatus() {
+            fetch(<?= json_encode(url('/administracao/integracoes/whatsapp/status')) ?> + '?id=' + id)
+                .then(r => r.json())
+                .then(dados => {
+                    if (!dados.success) {
+                        if (instalando) {
+                            const decorrido = Date.now() - inicioInstalacao;
+                            marcarInstalando(decorrido > JANELA_INSTALACAO_MS);
+                            return;
+                        }
+
+                        badge.textContent = 'bridge não respondeu';
+                        badge.className = 'badge-status-wpp badge text-bg-secondary';
+                        texto.textContent = 'O bridge não respondeu. Se ainda não foi instalado neste servidor, clique em "Instalar bridge" acima.';
+                        pararQrcode();
+                        areaConectado.style.display = 'none';
+                        return;
+                    }
+
+                    // Qualquer resposta válida do bridge confirma que ele já
+                    // subiu -- a partir daqui os status abaixo é que mandam.
+                    instalando = false;
+
+                    if (dados.status === 'conectado') {
+                        badge.textContent = 'Conectado';
+                        badge.className = 'badge-status-wpp badge text-bg-success';
+                        texto.textContent = 'Bridge conectado e funcionando.';
+                        pararQrcode();
+                        areaConectado.style.display = '';
+                        numeroConectado.textContent = dados.numero || '-';
+                    } else if (dados.status === 'aguardando_qrcode') {
+                        badge.textContent = 'Aguardando leitura do QR Code';
+                        badge.className = 'badge-status-wpp badge text-bg-warning';
+                        texto.textContent = 'Bridge instalado e rodando -- escaneie o QR Code abaixo para conectar.';
+                        areaConectado.style.display = 'none';
+                        if (!timerQrcode) {
+                            buscarQrcode();
+                            timerQrcode = setInterval(buscarQrcode, 2000);
+                        }
+                    } else {
+                        badge.textContent = 'Desconectado';
+                        badge.className = 'badge-status-wpp badge text-bg-secondary';
+                        texto.textContent = 'Bridge instalado, mas desconectado do WhatsApp. Clique em "Reinstalar bridge" para gerar um novo QR Code.';
+                        pararQrcode();
+                        areaConectado.style.display = 'none';
+                    }
+                })
+                .catch(() => {
                     if (instalando) {
-                        const decorrido = Date.now() - inicioInstalacao;
-                        marcarInstalando(decorrido > JANELA_INSTALACAO_MS);
+                        marcarInstalando(Date.now() - inicioInstalacao > JANELA_INSTALACAO_MS);
                         return;
                     }
 
                     badge.textContent = 'bridge não respondeu';
-                    badge.className = 'badge text-bg-secondary';
-                    texto.textContent = 'O bridge não respondeu. Se ainda não foi instalado neste servidor, clique em "Instalar bridge" acima.';
-                    pararQrcode();
-                    areaConectado.style.display = 'none';
-                    return;
-                }
+                    badge.className = 'badge-status-wpp badge text-bg-secondary';
+                });
+        }
 
-                // Qualquer resposta válida do bridge confirma que ele já
-                // subiu -- a partir daqui os status abaixo é que mandam.
-                instalando = false;
+        botaoInstalar.addEventListener('click', function () {
+            botaoInstalar.disabled = true;
+            botaoInstalar.innerHTML = '<i class="bi bi-hourglass-split"></i> Instalando...';
 
-                if (dados.status === 'conectado') {
-                    badge.textContent = 'Conectado';
-                    badge.className = 'badge text-bg-success';
-                    texto.textContent = 'Bridge conectado e funcionando.';
-                    pararQrcode();
-                    areaConectado.style.display = '';
-                    numeroConectado.textContent = dados.numero || '-';
-                } else if (dados.status === 'aguardando_qrcode') {
-                    badge.textContent = 'Aguardando leitura do QR Code';
-                    badge.className = 'badge text-bg-warning';
-                    texto.textContent = 'Bridge instalado e rodando -- escaneie o QR Code abaixo para conectar.';
-                    areaConectado.style.display = 'none';
-                    if (!timerQrcode) {
-                        buscarQrcode();
-                        timerQrcode = setInterval(buscarQrcode, 2000);
-                    }
-                } else {
-                    badge.textContent = 'Desconectado';
-                    badge.className = 'badge text-bg-secondary';
-                    texto.textContent = 'Bridge instalado, mas desconectado do WhatsApp. Clique em "Reinstalar bridge" para gerar um novo QR Code.';
-                    pararQrcode();
-                    areaConectado.style.display = 'none';
-                }
+            const dadosForm = new URLSearchParams();
+            dadosForm.set('id', id);
+
+            fetch(<?= json_encode(url('/administracao/integracoes/whatsapp/instalar')) ?>, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: dadosForm.toString(),
             })
-            .catch(() => {
-                if (instalando) {
-                    marcarInstalando(Date.now() - inicioInstalacao > JANELA_INSTALACAO_MS);
-                    return;
-                }
+                .then(r => r.json())
+                .then(() => {
+                    instalando = true;
+                    inicioInstalacao = Date.now();
+                    marcarInstalando(false);
+                    atualizarStatus();
+                })
+                .catch(() => {
+                    texto.textContent = 'Erro ao comunicar com o servidor -- tente novamente.';
+                })
+                .finally(() => {
+                    botaoInstalar.disabled = false;
+                    botaoInstalar.innerHTML = '<i class="bi bi-cloud-download"></i> Reinstalar bridge';
+                });
+        });
 
-                badge.textContent = 'bridge não respondeu';
-                badge.className = 'badge text-bg-secondary';
-            });
-    }
-
-    botaoInstalar.addEventListener('click', function () {
-        botaoInstalar.disabled = true;
-        botaoInstalar.innerHTML = '<i class="bi bi-hourglass-split"></i> Instalando...';
-
-        fetch(<?= json_encode(url('/administracao/integracoes/whatsapp/instalar')) ?>, { method: 'POST' })
-            .then(r => r.json())
-            .then(() => {
-                instalando = true;
-                inicioInstalacao = Date.now();
-                marcarInstalando(false);
-                atualizarStatus();
-            })
-            .catch(() => {
-                texto.textContent = 'Erro ao comunicar com o servidor -- tente novamente.';
-            })
-            .finally(() => {
-                botaoInstalar.disabled = false;
-                botaoInstalar.innerHTML = '<i class="bi bi-cloud-download"></i> Reinstalar bridge';
-            });
+        atualizarStatus();
+        setInterval(atualizarStatus, 3000);
     });
-
-    atualizarStatus();
-    timerStatus = setInterval(atualizarStatus, 3000);
 })();
 </script>
 <?php endif; ?>

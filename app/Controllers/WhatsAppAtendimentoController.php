@@ -170,7 +170,7 @@ class WhatsAppAtendimentoController extends Controller
             (string)$_SESSION['usuario']['nome']
         );
 
-        $envio = (new WhatsAppMensagemService())->enviar($atendimento['numero'], $textoComIdentificacao);
+        $envio = (new WhatsAppMensagemService())->enviar($atendimento['numero'], $textoComIdentificacao, $atendimento['conexao_id'] ?? null);
 
         if (!$envio['success']) {
             echo json_encode(['success' => false, 'message' => $envio['message'] ?? 'Falha ao enviar mensagem pelo WhatsApp.']);
@@ -241,7 +241,8 @@ class WhatsAppAtendimentoController extends Controller
             // já mostra o nome de quem mandou).
             (new WhatsAppMensagemService())->enviar(
                 $atendimento['numero'],
-                WhatsAppAtendimentoService::comIdentificacaoDoAtendente('', $setorNome, $nomeUsuario)
+                WhatsAppAtendimentoService::comIdentificacaoDoAtendente('', $setorNome, $nomeUsuario),
+                $atendimento['conexao_id'] ?? null
             );
             $legendaParaEnvio = null;
         } else {
@@ -254,7 +255,8 @@ class WhatsAppAtendimentoController extends Controller
             $mimetype,
             $tipo,
             $legendaParaEnvio,
-            $arquivo['name']
+            $arquivo['name'],
+            $atendimento['conexao_id'] ?? null
         );
 
         if (!$envio['success']) {

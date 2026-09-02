@@ -3,19 +3,25 @@
 namespace App\Services;
 
 /**
- * Cliente HTTP do bridge Node local (whatsapp-bridge/, instalado em
- * /opt/rdtecnologia/whatsapp-bridge por
+ * Cliente HTTP do bridge Node local (whatsapp-bridge/, um processo por
+ * conexão/número, instalado em `diretorio_instalacao` por
  * scripts/system/whatsapp_bridge_instalar_web.sh) -- mesmo padrão de
  * chamada de KbService::chamarCentral(), mas contra 127.0.0.1 em vez de
- * um servidor externo.
+ * um servidor externo. Exige a linha de `whatsapp_conexoes` explicitamente
+ * (sem default implícito) -- com múltiplas conexões, um default
+ * "silencioso" faria status/QR/desconectar de uma conexão mostrar o
+ * estado de OUTRA sem erro nenhum.
  */
 class WhatsAppBridgeService
 {
-    private WhatsAppConfigService $config;
+    private int $porta;
+    private string $apiKey;
 
-    public function __construct()
+    /** @param array{porta: int, api_key_cifrada: ?string} $conexao linha de whatsapp_conexoes */
+    public function __construct(array $conexao)
     {
-        $this->config = new WhatsAppConfigService();
+        $this->porta = (int)$conexao['porta'];
+        $this->apiKey = !empty($conexao['api_key_cifrada']) ? CryptoService::decriptar($conexao['api_key_cifrada']) : '';
     }
 
     public function status(): array
@@ -69,14 +75,14 @@ class WhatsAppBridgeService
 
     private function chamar(string $caminho, string $metodo = 'GET', array $corpo = [], int $timeout = 10): array
     {
-        $ch = curl_init('http://127.0.0.1:' . $this->config->bridgePorta() . $caminho);
+        $ch = curl_init('http://127.0.0.1:' . $this->porta . $caminho);
 
         $opcoes = [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT => $timeout,
             CURLOPT_CONNECTTIMEOUT => 3,
             CURLOPT_HTTPHEADER => [
-                'X-Api-Key: ' . $this->config->bridgeApiKey(),
+                'X-Api-Key: ' . $this->apiKey,
                 'Content-Type: application/json',
             ],
         ];

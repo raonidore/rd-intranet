@@ -5,8 +5,10 @@ namespace App\Controllers;
 use App\Core\Controller;
 use App\Services\WhatsAppApiOficialService;
 use App\Services\WhatsAppAtendimentoService;
+use App\Services\WhatsAppConexaoService;
 use App\Services\WhatsAppConfigService;
 use App\Services\WhatsAppTwilioService;
+use PDOException;
 
 /**
  * Recebe mensagem nova de qualquer um dos 3 canais possíveis -- cada um
@@ -34,7 +36,26 @@ class WhatsAppWebhookController extends Controller
         $config = new WhatsAppConfigService();
         $chaveRecebida = $_SERVER['HTTP_X_API_KEY'] ?? '';
 
-        if (!hash_equals($config->bridgeApiKey(), $chaveRecebida)) {
+        // Autenticação em 2 camadas, as duas permanentes (não é só transição):
+        // 1) identifica de qual conexão veio pela própria API key (poucas
+        //    linhas, comparação segura em WhatsAppConexaoService::buscarPorApiKey());
+        // 2) se não achou -- inclusive se `whatsapp_conexoes` ainda não existir,
+        //    janela normal de deploy neste projeto (código novo sobe ANTES da
+        //    migration rodar) -- cai pra chave global antiga. Sem isso, uma
+        //    mensagem chegando nessa janela seria perdida de vez: o bridge Node
+        //    não tem retry nenhum no webhook (avisarWebhook() só loga erro).
+        $conexaoId = null;
+
+        try {
+            $conexao = (new WhatsAppConexaoService())->buscarPorApiKey($chaveRecebida);
+            if ($conexao) {
+                $conexaoId = (int)$conexao['id'];
+            }
+        } catch (PDOException $e) {
+            // tabela ainda não existe -- segue pro fallback abaixo
+        }
+
+        if ($conexaoId === null && !hash_equals($config->bridgeApiKey(), $chaveRecebida)) {
             http_response_code(403);
             echo json_encode(['success' => false, 'message' => 'Chave inválida.']);
             return;
@@ -64,7 +85,7 @@ class WhatsAppWebhookController extends Controller
         $midiaBase64 = isset($corpo['midia_base64']) ? (string)$corpo['midia_base64'] : null;
         $midiaMimetype = isset($corpo['midia_mimetype']) ? (string)$corpo['midia_mimetype'] : null;
 
-        (new WhatsAppAtendimentoService())->receberMensagem($numero, $nomeContato, $texto, $tipo, $whatsappMessageId, $midiaBase64, $midiaMimetype);
+        (new WhatsAppAtendimentoService())->receberMensagem($numero, $nomeContato, $texto, $tipo, $whatsappMessageId, $midiaBase64, $midiaMimetype, $conexaoId);
 
         echo json_encode(['success' => true]);
     }

@@ -264,6 +264,14 @@ class WhatsAppChatbotService
         $atendimentoService = new WhatsAppAtendimentoService();
         $contato = (new WhatsAppContatoService())->buscarPorId((int)$atendimento['contato_id']) ?? [];
 
+        // Conexão dessa mensagem (null pra api_oficial/twilio, ou pro
+        // fallback legado do webhook) -- filtra as opções "encaminhar
+        // pro setor" que esse número não atende (whatsapp_conexao_setores)
+        // e garante que a resposta sai pelo mesmo número que o cliente
+        // escreveu.
+        $conexaoId = !empty($atendimento['conexao_id']) ? (int)$atendimento['conexao_id'] : null;
+        $setorIdsPermitidos = $conexaoId !== null ? (new WhatsAppConexaoService())->idsSetoresDaConexao($conexaoId) : null;
+
         if (empty($atendimento['no_bot_atual_id'])) {
             $raiz = $this->buscarRaiz();
 
@@ -275,7 +283,7 @@ class WhatsAppChatbotService
                 return;
             }
 
-            $this->entrarNo((int)$atendimento['id'], $raiz, $numero, $contato, $mensageiro, $atendimentoService, true);
+            $this->entrarNo((int)$atendimento['id'], $raiz, $numero, $contato, $mensageiro, $atendimentoService, true, $setorIdsPermitidos, $conexaoId);
             return;
         }
 
@@ -286,7 +294,7 @@ class WhatsAppChatbotService
             return;
         }
 
-        $filhos = $this->filhosAtivos((int)$atual['id']);
+        $filhos = $this->filhosAtivos((int)$atual['id'], $setorIdsPermitidos);
         $escolha = ctype_digit(trim($texto)) ? (int)trim($texto) : 0;
         $selecionado = ($escolha >= 1 && $escolha <= count($filhos)) ? $filhos[$escolha - 1] : null;
 
@@ -302,12 +310,12 @@ class WhatsAppChatbotService
                 ->execute([$tentativas, $atendimento['id']]);
 
             $aviso = "Opção inválida. " . $this->montarMensagemDoNo($atual, $filhos, $contato);
-            $envio = $mensageiro->enviar($numero, $aviso);
+            $envio = $mensageiro->enviar($numero, $aviso, $conexaoId);
             $atendimentoService->registrarMensagemSaida((int)$atendimento['id'], $aviso, 'bot', null, 'texto', null, 'atendimento', $envio['success'] ? 'enviado' : 'falhou');
             return;
         }
 
-        $this->entrarNo((int)$atendimento['id'], $selecionado, $numero, $contato, $mensageiro, $atendimentoService, true);
+        $this->entrarNo((int)$atendimento['id'], $selecionado, $numero, $contato, $mensageiro, $atendimentoService, true, $setorIdsPermitidos, $conexaoId);
     }
 
     private function entrarNo(
@@ -317,12 +325,14 @@ class WhatsAppChatbotService
         array $contato,
         WhatsAppMensagemService $mensageiro,
         WhatsAppAtendimentoService $atendimentoService,
-        bool $reiniciaTentativas
+        bool $reiniciaTentativas,
+        ?array $setorIdsPermitidos = null,
+        ?int $conexaoId = null
     ): void {
-        $filhos = $no['tipo'] === 'menu' ? $this->filhosAtivos((int)$no['id']) : [];
+        $filhos = $no['tipo'] === 'menu' ? $this->filhosAtivos((int)$no['id'], $setorIdsPermitidos) : [];
         $texto = $this->montarMensagemDoNo($no, $filhos, $contato);
 
-        $envio = $mensageiro->enviar($numero, $texto);
+        $envio = $mensageiro->enviar($numero, $texto, $conexaoId);
         $atendimentoService->registrarMensagemSaida($atendimentoId, $texto, 'bot', null, 'texto', null, 'atendimento', $envio['success'] ? 'enviado' : 'falhou');
 
         if ($no['tipo'] === 'resposta_final') {
@@ -421,11 +431,41 @@ class WhatsAppChatbotService
         return $no ?: null;
     }
 
-    private function filhosAtivos(int $noPaiId): array
+    /**
+     * `$setorIdsPermitidos` null = sem filtro (comportamento de sempre --
+     * api_oficial/twilio, ou atendimento sem conexão associada). Com uma
+     * lista, esconde opções `encaminhar_setor` pra setores que o número
+     * que recebeu a mensagem não atende (whatsapp_conexao_setores) --
+     * nós `abrir_chamado` não são filtrados (setor de outro módulo,
+     * chamados_setores, sem relação com whatsapp_setores). Um submenu
+     * que fica com zero opções visíveis depois do filtro também some
+     * (recursivo), pra nunca sobrar uma opção que leva a um menu vazio.
+     */
+    private function filhosAtivos(int $noPaiId, ?array $setorIdsPermitidos = null): array
     {
         $stmt = $this->pdo->prepare('SELECT * FROM whatsapp_chatbot_nos WHERE no_pai_id = ? AND ativo = 1 ORDER BY ordem, id');
         $stmt->execute([$noPaiId]);
+        $filhos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        if ($setorIdsPermitidos === null) {
+            return $filhos;
+        }
+
+        $visiveis = [];
+        foreach ($filhos as $filho) {
+            if ($filho['tipo'] === 'encaminhar_setor' && $filho['setor_destino_id'] !== null
+                && !in_array((int)$filho['setor_destino_id'], $setorIdsPermitidos, true)
+            ) {
+                continue;
+            }
+
+            if ($filho['tipo'] === 'menu' && empty($this->filhosAtivos((int)$filho['id'], $setorIdsPermitidos))) {
+                continue;
+            }
+
+            $visiveis[] = $filho;
+        }
+
+        return $visiveis;
     }
 }

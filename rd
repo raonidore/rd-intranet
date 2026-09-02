@@ -23,6 +23,7 @@ if (!$comando) {
     echo "  whatsapp:encerrar-inativos  Encerra atendimentos sem mensagem há mais tempo que o configurado em Chatbot > Finalização\n";
     echo "  chamados:distribuir     Atribui automaticamente chamados parados na fila (Chamados > Configurações)\n";
     echo "  chamados:sincronizar-sla  Pausa/retoma o prazo de SLA dos chamados conforme o horário de expediente\n";
+    echo "  whatsapp:diagnosticar-conexoes  Confere as conexões WhatsApp (QR Code) -- API key, porta, conexão padrão, bridge respondendo\n";
     exit;
 }
 
@@ -282,6 +283,26 @@ switch ($comando) {
     case 'chamados:sincronizar-sla':
         $total = (new \App\Services\ChamadoService())->sincronizarPausaSlaTodos();
         echo "OK: {$total} chamado(s) aberto(s) conferido(s) pra pausa/retomada de SLA.\n";
+
+        break;
+
+    case 'whatsapp:diagnosticar-conexoes':
+        $diagnostico = (new \App\Services\WhatsAppConexaoService())->diagnosticar();
+        $falhou = false;
+
+        foreach ($diagnostico as $item) {
+            echo ($item['ok'] ? 'OK' : 'PROBLEMA') . " -- {$item['nome']}\n";
+            foreach ($item['detalhes'] as $detalhe) {
+                echo "  - {$detalhe}\n";
+            }
+            if (!$item['ok']) {
+                $falhou = true;
+            }
+        }
+
+        if ($falhou) {
+            exit(1);
+        }
 
         break;
 

@@ -5,20 +5,25 @@ namespace App\Controllers;
 use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
 use App\Services\AuditService;
+use App\Services\CryptoService;
 use App\Services\LinuxService;
 use App\Services\NotificationService;
 use App\Services\WhatsAppApiOficialService;
 use App\Services\WhatsAppBridgeService;
+use App\Services\WhatsAppConexaoService;
 use App\Services\WhatsAppConfigService;
+use App\Services\WhatsAppSetorService;
 use App\Services\WhatsAppTwilioService;
 
 class WhatsAppIntegracaoController extends Controller
 {
     private WhatsAppConfigService $config;
+    private WhatsAppConexaoService $conexoes;
 
     public function __construct()
     {
         $this->config = new WhatsAppConfigService();
+        $this->conexoes = new WhatsAppConexaoService();
     }
 
     public function form(): void
@@ -27,13 +32,22 @@ class WhatsAppIntegracaoController extends Controller
 
         $apiOficial = new WhatsAppApiOficialService();
         $twilio = new WhatsAppTwilioService();
+        $setorService = new WhatsAppSetorService();
 
         $esquema = ($_SERVER['HTTPS'] ?? '') === 'on' ? 'https' : 'http';
         $baseUrl = $esquema . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
 
+        $setores = $setorService->listar();
+        $conexoes = $this->conexoes->listar();
+        foreach ($conexoes as &$conexao) {
+            $conexao['setor_ids'] = $this->conexoes->idsSetoresDaConexao((int)$conexao['id']);
+        }
+        unset($conexao);
+
         $this->view('administracao/integracoes_whatsapp', [
             'tipoAtual' => $this->config->tipoIntegracao(),
-            'bridgeInstalado' => $this->config->bridgeInstalado(),
+            'conexoes' => $conexoes,
+            'setores' => $setores,
             'webhookMetaUrl' => $baseUrl . url('/api/whatsapp/webhook/meta'),
             'webhookTwilioUrl' => $baseUrl . url('/api/whatsapp/webhook/twilio'),
             'metaPhoneNumberId' => $apiOficial->phoneNumberId(),
@@ -108,39 +122,97 @@ class WhatsAppIntegracaoController extends Controller
         exit;
     }
 
+    /** Cadastra uma conexão nova (um número/departamento a mais) -- ainda não instalada, o admin clica "Instalar" no card dela em seguida. */
+    public function novaConexao(): void
+    {
+        AuthMiddleware::checkAdmin();
+
+        $resultado = $this->conexoes->criar($_POST['nome'] ?? '');
+
+        AuditService::registrar('Integrações', 'WhatsApp', 'Nova conexão: ' . $resultado['message']);
+
+        if ($resultado['success']) {
+            NotificationService::success($resultado['message']);
+        } else {
+            NotificationService::error($resultado['message']);
+        }
+
+        header('Location: ' . url('/administracao/integracoes/whatsapp'));
+        exit;
+    }
+
+    /** Quais setores (whatsapp_setores) esse número atende -- filtra as opções "encaminhar pro setor X" no menu do bot pra esse número. */
+    public function salvarSetores(): void
+    {
+        AuthMiddleware::checkAdmin();
+
+        $id = (int)($_POST['id'] ?? 0);
+        $setorIds = array_map('intval', $_POST['setor_ids'] ?? []);
+
+        $resultado = $this->conexoes->salvarSetoresDaConexao($id, $setorIds);
+
+        AuditService::registrar('Integrações', 'WhatsApp', "Setores da conexão #{$id} atualizados.");
+
+        if ($resultado['success']) {
+            NotificationService::success($resultado['message']);
+        } else {
+            NotificationService::error($resultado['message']);
+        }
+
+        header('Location: ' . url('/administracao/integracoes/whatsapp'));
+        exit;
+    }
+
     /**
-     * Dispara a instalação do bridge em segundo plano (npm install pode
-     * levar dezenas de segundos) -- a tela acompanha via polling em
-     * status()/qrcode(), não espera essa requisição terminar.
+     * Dispara a instalação do bridge dessa conexão em segundo plano
+     * (npm install pode levar dezenas de segundos) -- a tela acompanha
+     * via polling em status()/qrcode(), não espera essa requisição
+     * terminar. Todos os caminhos (diretório/usuário/unit systemd) já
+     * vêm gravados na linha da conexão (fixos, pra "Principal", ou
+     * derivados do id na criação, pra uma nova) -- nada é decidido aqui.
      */
     public function instalar(): void
     {
         AuthMiddleware::checkAdmin();
         header('Content-Type: application/json');
 
+        $id = (int)($_POST['id'] ?? 0);
+        $conexao = $this->conexoes->buscar($id);
+
+        if (!$conexao) {
+            echo json_encode(['success' => false, 'message' => 'Conexão não encontrada.']);
+            return;
+        }
+
         // URL absoluta de verdade (não só o path de url()) -- o bridge é
         // um processo Node à parte, sem noção de "host atual" nenhuma,
         // então precisa do endereço completo pra conseguir chamar o
         // webhook de volta. Usa o mesmo host/porta/esquema que o próprio
-        // admin está usando agora pra acessar esta tela.
+        // admin está usando agora pra acessar esta tela. A mesma URL
+        // serve pra todas as conexões -- quem identifica de qual
+        // conexão veio a mensagem é a API key (ver WhatsAppWebhookController).
         $esquema = ($_SERVER['HTTPS'] ?? '') === 'on' ? 'https' : 'http';
         $webhookUrl = $esquema . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . url('/api/whatsapp/webhook');
 
         $repoDir = realpath(__DIR__ . '/../..');
+        $apiKey = !empty($conexao['api_key_cifrada']) ? CryptoService::decriptar($conexao['api_key_cifrada']) : '';
 
         (new LinuxService())->executarScriptEmSegundoPlano(
             '/opt/rdtecnologia/scripts/whatsapp_bridge_instalar_web.sh',
             [
                 $repoDir,
-                (string)$this->config->bridgePorta(),
-                $this->config->bridgeApiKey(),
+                (string)$conexao['porta'],
+                $apiKey,
                 $webhookUrl,
+                $conexao['diretorio_instalacao'],
+                $conexao['usuario_sistema'],
+                $conexao['unit_systemd'],
             ]
         );
 
-        $this->config->marcarBridgeInstalado();
+        $this->conexoes->marcarInstalado($id);
 
-        AuditService::registrar('Integrações', 'WhatsApp', 'Instalação do bridge (QR Code) disparada.');
+        AuditService::registrar('Integrações', 'WhatsApp', "Instalação da conexão \"{$conexao['nome']}\" disparada.");
 
         echo json_encode(['success' => true, 'message' => 'Instalação iniciada -- pode levar um minuto.']);
     }
@@ -150,7 +222,14 @@ class WhatsAppIntegracaoController extends Controller
         AuthMiddleware::checkAdmin();
         header('Content-Type: application/json');
 
-        echo json_encode((new WhatsAppBridgeService())->status());
+        $conexao = $this->conexoes->buscar((int)($_GET['id'] ?? 0));
+
+        if (!$conexao) {
+            echo json_encode(['success' => false, 'message' => 'Conexão não encontrada.']);
+            return;
+        }
+
+        echo json_encode((new WhatsAppBridgeService($conexao))->status());
     }
 
     public function qrcode(): void
@@ -158,16 +237,32 @@ class WhatsAppIntegracaoController extends Controller
         AuthMiddleware::checkAdmin();
         header('Content-Type: application/json');
 
-        echo json_encode((new WhatsAppBridgeService())->qrcode());
+        $conexao = $this->conexoes->buscar((int)($_GET['id'] ?? 0));
+
+        if (!$conexao) {
+            echo json_encode(['success' => false, 'message' => 'Conexão não encontrada.']);
+            return;
+        }
+
+        echo json_encode((new WhatsAppBridgeService($conexao))->qrcode());
     }
 
     public function desconectar(): void
     {
         AuthMiddleware::checkAdmin();
 
-        $resultado = (new WhatsAppBridgeService())->desconectar();
+        $id = (int)($_POST['id'] ?? 0);
+        $conexao = $this->conexoes->buscar($id);
 
-        AuditService::registrar('Integrações', 'WhatsApp', 'Desconexão do WhatsApp solicitada.');
+        if (!$conexao) {
+            NotificationService::error('Conexão não encontrada.');
+            header('Location: ' . url('/administracao/integracoes/whatsapp'));
+            exit;
+        }
+
+        $resultado = (new WhatsAppBridgeService($conexao))->desconectar();
+
+        AuditService::registrar('Integrações', 'WhatsApp', "Desconexão da conexão \"{$conexao['nome']}\" solicitada.");
 
         if ($resultado['success']) {
             NotificationService::success($resultado['message'] ?? 'Desconectado.');

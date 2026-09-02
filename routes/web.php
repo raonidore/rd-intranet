@@ -383,6 +383,8 @@ $router->post('/administracao/integracoes/base-conhecimento', [IntegracoesContro
 
 $router->get('/administracao/integracoes/whatsapp', [WhatsAppIntegracaoController::class, 'form']);
 $router->post('/administracao/integracoes/whatsapp/tipo', [WhatsAppIntegracaoController::class, 'salvarTipo']);
+$router->post('/administracao/integracoes/whatsapp/conexao', [WhatsAppIntegracaoController::class, 'novaConexao']);
+$router->post('/administracao/integracoes/whatsapp/conexao/setores', [WhatsAppIntegracaoController::class, 'salvarSetores']);
 $router->post('/administracao/integracoes/whatsapp/instalar', [WhatsAppIntegracaoController::class, 'instalar']);
 $router->get('/administracao/integracoes/whatsapp/status', [WhatsAppIntegracaoController::class, 'status']);
 $router->get('/administracao/integracoes/whatsapp/qrcode', [WhatsAppIntegracaoController::class, 'qrcode']);

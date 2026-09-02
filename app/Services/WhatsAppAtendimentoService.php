@@ -47,7 +47,8 @@ class WhatsAppAtendimentoService
         string $tipo,
         ?string $whatsappMessageId,
         ?string $midiaBase64 = null,
-        ?string $midiaMimetype = null
+        ?string $midiaMimetype = null,
+        ?int $conexaoId = null
     ): void {
         // Confere retry ANTES de gastar disco baixando/salvando o anexo
         // de novo -- registrarMensagemEntrada() já dedupa pelo id, mas só
@@ -87,7 +88,7 @@ class WhatsAppAtendimentoService
         }
 
         $contato = (new WhatsAppContatoService())->buscarOuCriarPorNumero($numero, $nomeContato);
-        $atendimento = $this->abrirOuReaproveitar((int)$contato['id']);
+        $atendimento = $this->abrirOuReaproveitar((int)$contato['id'], $conexaoId);
 
         // Se o atendimento tá esperando resposta do NPS, essa mensagem
         // (o número que o cliente digitou pra avaliar) é parte do
@@ -125,7 +126,7 @@ class WhatsAppAtendimentoService
         if (!$config->dentroDoExpediente()) {
             $mensagemForaExpediente = $chatbot->renderizarTemplate($config->mensagemForaExpediente(), $contato);
 
-            $envio = (new WhatsAppMensagemService())->enviar($numero, $mensagemForaExpediente);
+            $envio = (new WhatsAppMensagemService())->enviar($numero, $mensagemForaExpediente, $atendimento['conexao_id'] ?? null);
             $this->registrarMensagemSaida((int)$atendimento['id'], $mensagemForaExpediente, 'bot', null, 'texto', null, 'atendimento', $envio['success'] ? 'enviado' : 'falhou');
 
             return;
@@ -170,23 +171,28 @@ class WhatsAppAtendimentoService
     }
 
     /**
-     * Atendimento ainda não encerrado mais recente do contato, ou cria
-     * um novo (status inicial 'bot').
+     * Atendimento ainda não encerrado mais recente do contato NESSA
+     * CONEXÃO (`conexao_id <=> ?`, null-safe equal -- o mesmo cliente
+     * escrevendo pra dois números diferentes da empresa vira duas
+     * conversas separadas, cada uma sabendo por qual número responder),
+     * ou cria um novo (status inicial 'bot'). `$conexaoId` null cobre
+     * api_oficial/twilio (singleton, sem conceito de conexão) e o
+     * fallback de autenticação legado do webhook.
      */
-    public function abrirOuReaproveitar(int $contatoId): array
+    public function abrirOuReaproveitar(int $contatoId, ?int $conexaoId = null): array
     {
         $stmt = $this->pdo->prepare(
-            "SELECT * FROM whatsapp_atendimentos WHERE contato_id = ? AND status != 'encerrado' ORDER BY id DESC LIMIT 1"
+            "SELECT * FROM whatsapp_atendimentos WHERE contato_id = ? AND conexao_id <=> ? AND status != 'encerrado' ORDER BY id DESC LIMIT 1"
         );
-        $stmt->execute([$contatoId]);
+        $stmt->execute([$contatoId, $conexaoId]);
         $atendimento = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if ($atendimento) {
             return $atendimento;
         }
 
-        $ins = $this->pdo->prepare("INSERT INTO whatsapp_atendimentos (contato_id, status) VALUES (?, 'bot')");
-        $ins->execute([$contatoId]);
+        $ins = $this->pdo->prepare("INSERT INTO whatsapp_atendimentos (contato_id, conexao_id, status) VALUES (?, ?, 'bot')");
+        $ins->execute([$contatoId, $conexaoId]);
 
         return $this->buscar((int)$this->pdo->lastInsertId());
     }
@@ -445,7 +451,7 @@ class WhatsAppAtendimentoService
             ['nome' => $atendimento['contato_nome']]
         );
 
-        $envio = (new WhatsAppMensagemService())->enviar($atendimento['numero'], $mensagemFechamento);
+        $envio = (new WhatsAppMensagemService())->enviar($atendimento['numero'], $mensagemFechamento, $atendimento['conexao_id'] ?? null);
         $this->registrarMensagemSaida($atendimentoId, $mensagemFechamento, 'bot', null, 'texto', null, 'atendimento', $envio['success'] ? 'enviado' : 'falhou');
 
         $stmt = $this->pdo->prepare("UPDATE whatsapp_atendimentos SET status = 'encerrado', encerrado_em = NOW() WHERE id = ?");
@@ -631,7 +637,7 @@ class WhatsAppAtendimentoService
         // Estados 'normais' (bot/fila/em_atendimento) -- timeout geral,
         // manda o aviso de encerramento por inatividade.
         $stmt = $this->pdo->prepare(
-            "SELECT a.id, c.numero, c.nome
+            "SELECT a.id, a.conexao_id, c.numero, c.nome
              FROM whatsapp_atendimentos a
              JOIN whatsapp_contatos c ON c.id = a.contato_id
              WHERE a.status IN ('bot', 'fila', 'em_atendimento')
@@ -644,7 +650,7 @@ class WhatsAppAtendimentoService
         foreach ($inativos as $item) {
             $mensagemFechamento = $chatbot->renderizarTemplate($mensagemBase, ['nome' => $item['nome']]);
 
-            $envio = $mensageiro->enviar($item['numero'], $mensagemFechamento);
+            $envio = $mensageiro->enviar($item['numero'], $mensagemFechamento, $item['conexao_id'] ?? null);
             $this->registrarMensagemSaida((int)$item['id'], $mensagemFechamento, 'bot', null, 'texto', null, 'atendimento', $envio['success'] ? 'enviado' : 'falhou');
 
             $this->pdo->prepare("UPDATE whatsapp_atendimentos SET status = 'encerrado', encerrado_em = NOW() WHERE id = ?")
