@@ -130,6 +130,34 @@ async function avisarWebhook(payload) {
     }
 }
 
+/**
+ * Números de celular brasileiros têm uma ambiguidade conhecida no
+ * WhatsApp: o app hoje exige o 9º dígito, mas várias contas ficaram
+ * registradas internamente no formato antigo (sem ele) -- "adivinhar"
+ * o JID só grudando "@s.whatsapp.net" no número informado erra
+ * silenciosamente pra esses casos (a mensagem não dá erro nenhum, só
+ * nunca chega, porque o JID construído não corresponde a conta
+ * nenhuma). onWhatsApp() pergunta pro próprio WhatsApp qual JID de
+ * fato existe pra aquele número, então usa a resposta dele em vez de
+ * confiar só na nossa formatação -- mesma checagem que o WhatsApp Web
+ * faz antes de abrir uma conversa nova.
+ */
+async function resolverJid(numeroDigitos) {
+    const jidIngenuo = numeroDigitos + '@s.whatsapp.net';
+
+    try {
+        const resultado = await socketAtual.onWhatsApp('+' + numeroDigitos);
+        const encontrado = (resultado || []).find((r) => r.exists);
+        if (encontrado) {
+            return encontrado.jid;
+        }
+    } catch (e) {
+        // segue com o formato "ingênuo" se a consulta falhar (ex: sem rede) -- mais vale tentar que travar o envio
+    }
+
+    return jidIngenuo;
+}
+
 async function iniciarSessaoWhatsapp() {
     const { state, saveCreds } = await useMultiFileAuthState(SESSAO_DIR);
 
@@ -319,7 +347,7 @@ const servidor = http.createServer(async (req, res) => {
                 return;
             }
 
-            const jid = String(dados.numero || '').replace(/\D+/g, '') + '@s.whatsapp.net';
+            const jid = await resolverJid(String(dados.numero || '').replace(/\D+/g, ''));
 
             let conteudo;
             if (dados.midia_base64) {
