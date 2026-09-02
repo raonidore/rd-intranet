@@ -58,6 +58,14 @@ class WhatsAppAtendimentoService
             return;
         }
 
+        // Resposta de avaliação de chamado (nota 1-5 / resolvido sim-não) --
+        // checado ANTES de tudo, isolado de whatsapp_atendimentos: se achar
+        // um convite pendente pra esse número, processa e para por aqui,
+        // sem abrir/reaproveitar atendimento nenhum.
+        if ($tipo === 'texto' && (new ChamadoAvaliacaoService())->tentarProcessarRespostaWhatsApp($numero, $texto)) {
+            return;
+        }
+
         $midiaPath = null;
 
         if ($tipo !== 'texto') {

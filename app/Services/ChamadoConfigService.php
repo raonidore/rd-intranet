@@ -38,7 +38,7 @@ class ChamadoConfigService
         return (string)(ConfigService::get(self::CHAVE_EXPEDIENTE_FIM, self::EXPEDIENTE_FIM_PADRAO) ?: self::EXPEDIENTE_FIM_PADRAO);
     }
 
-    /** Fora do expediente (quando o expediente está ativo), o relógio de SLA fica parado -- ver ChamadoSlaService/ChamadoService::calcularPrazos(). */
+    /** Fora do expediente (quando o expediente está ativo), o relógio de SLA fica parado -- ver ChamadoService::sincronizarPausaSlaLinha(). */
     public function dentroDoExpediente(): bool
     {
         if (!$this->expedienteAtivo()) {

@@ -95,6 +95,16 @@ class ChamadoController extends Controller
 
         if (!$resultado['success']) {
             NotificationService::error($resultado['message']);
+            header('Location: ' . url('/chamados/atendimentos/ver?id=' . $id));
+            exit;
+        }
+
+        // Arquivo é opcional aqui -- UPLOAD_ERR_NO_FILE quer dizer "não escolheu nada", não é erro.
+        if (($_FILES['arquivo']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+            $resultadoAnexo = (new ChamadoAnexoService())->salvar($id, $_FILES['arquivo'], (int)$_SESSION['usuario']['id'], $resultado['id']);
+            if (!$resultadoAnexo['success']) {
+                NotificationService::error($resultadoAnexo['message']);
+            }
         }
 
         header('Location: ' . url('/chamados/atendimentos/ver?id=' . $id));

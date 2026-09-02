@@ -22,6 +22,7 @@ if (!$comando) {
     echo "  kb:sincronizar          Atualiza o cache local da Base de Conhecimento pública e confere status dos artigos propostos\n";
     echo "  whatsapp:encerrar-inativos  Encerra atendimentos sem mensagem há mais tempo que o configurado em Chatbot > Finalização\n";
     echo "  chamados:distribuir     Atribui automaticamente chamados parados na fila (Chamados > Configurações)\n";
+    echo "  chamados:sincronizar-sla  Pausa/retoma o prazo de SLA dos chamados conforme o horário de expediente\n";
     exit;
 }
 
@@ -275,6 +276,12 @@ switch ($comando) {
     case 'chamados:distribuir':
         $resultado = (new \App\Services\ChamadoService())->distribuirAutomaticamente();
         echo "OK: {$resultado['atribuidos']}/{$resultado['total']} chamado(s) parado(s) na fila distribuído(s) automaticamente.\n";
+
+        break;
+
+    case 'chamados:sincronizar-sla':
+        $total = (new \App\Services\ChamadoService())->sincronizarPausaSlaTodos();
+        echo "OK: {$total} chamado(s) aberto(s) conferido(s) pra pausa/retomada de SLA.\n";
 
         break;
 

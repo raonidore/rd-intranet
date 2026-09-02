@@ -183,6 +183,7 @@ class AtualizacaoService
             $this->garantirCronBaseConhecimento();
             $this->garantirCronWhatsappInatividade();
             $this->garantirCronChamadosDistribuicao();
+            $this->garantirCronChamadosSlaExpediente();
         }
 
         $commitDepois = $this->commitAtual();
@@ -349,6 +350,21 @@ class AtualizacaoService
             'Atribui automaticamente chamados sem atendente há mais tempo que o configurado em Chamados > Configurações.',
             '*/5 * * * *',
             'php ' . $this->repoDir() . '/rd chamados:distribuir'
+        );
+    }
+
+    /**
+     * Pega a borda do horário de expediente (Chamados > Configurações) --
+     * pausar/retomar o SLA por causa disso não é disparado por nenhuma
+     * ação de usuário, diferente de mudar status/responder um chamado.
+     */
+    public function garantirCronChamadosSlaExpediente(): void
+    {
+        $this->garantirCronJob(
+            'Sincronizar pausa de SLA dos chamados',
+            'Pausa/retoma o prazo de SLA dos chamados abertos conforme o horário de expediente configurado em Chamados > Configurações.',
+            '*/5 * * * *',
+            'php ' . $this->repoDir() . '/rd chamados:sincronizar-sla'
         );
     }
 

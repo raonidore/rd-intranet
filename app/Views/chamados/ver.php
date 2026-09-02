@@ -96,14 +96,22 @@ $corStatus = ['fila' => 'secondary', 'em_atendimento' => 'primary', 'aguardando_
                             <div class="mt-1" style="white-space:pre-wrap; <?= $c['tipo'] === 'interna' ? 'background:#fdf3d6;border:1px dashed #e6cf82;border-radius:8px;padding:8px 12px' : '' ?>">
                                 <?= htmlspecialchars($c['conteudo']) ?>
                             </div>
+                            <?php foreach ($anexos as $anexo): if ((int)($anexo['comentario_id'] ?? 0) !== (int)$c['id']) continue; ?>
+                                <div class="mt-1">
+                                    <a href="<?= url('/chamados/atendimentos/anexo?id=' . (int)$anexo['id']) ?>" target="_blank" class="small">
+                                        <i class="bi bi-paperclip"></i> <?= htmlspecialchars($anexo['nome_original']) ?>
+                                    </a>
+                                </div>
+                            <?php endforeach; ?>
                         </div>
                     <?php endforeach; ?>
                 <?php endif; ?>
 
                 <?php if (!$somenteLeitura): ?>
-                    <form method="post" action="<?= url('/chamados/atendimentos/responder') ?>" class="mt-3">
+                    <form method="post" action="<?= url('/chamados/atendimentos/responder') ?>" enctype="multipart/form-data" class="mt-3">
                         <input type="hidden" name="id" value="<?= (int)$chamado['id'] ?>">
                         <textarea name="conteudo" class="form-control mb-2" rows="3" required placeholder="Escreva sua resposta..."></textarea>
+                        <input type="file" name="arquivo" class="form-control form-control-sm mb-2">
                         <div class="d-flex justify-content-between align-items-center">
                             <div class="form-check">
                                 <input type="checkbox" name="tipo" value="interna" class="form-check-input" id="campoNotaInterna">
@@ -137,11 +145,12 @@ $corStatus = ['fila' => 'secondary', 'em_atendimento' => 'primary', 'aguardando_
         <div class="card border-0 shadow-sm mb-3">
             <div class="card-header bg-white"><strong>Anexos</strong></div>
             <div class="card-body small">
-                <?php if (empty($anexos)): ?>
-                    <p class="text-muted mb-2">Nenhum anexo ainda.</p>
+                <?php $anexosAvulsos = array_filter($anexos, fn (array $a) => $a['comentario_id'] === null); ?>
+                <?php if (empty($anexosAvulsos)): ?>
+                    <p class="text-muted mb-2"><?= empty($anexos) ? 'Nenhum anexo ainda.' : 'Nenhum anexo avulso -- veja os anexados junto com respostas na conversa.' ?></p>
                 <?php else: ?>
                     <ul class="list-unstyled mb-2">
-                        <?php foreach ($anexos as $anexo): ?>
+                        <?php foreach ($anexosAvulsos as $anexo): ?>
                             <li class="mb-1">
                                 <a href="<?= url('/chamados/atendimentos/anexo?id=' . (int)$anexo['id']) ?>" target="_blank">
                                     <i class="bi bi-paperclip"></i> <?= htmlspecialchars($anexo['nome_original']) ?>
@@ -180,6 +189,9 @@ $corStatus = ['fila' => 'secondary', 'em_atendimento' => 'primary', 'aguardando_
                 <?php if ($chamado['sla_resolucao_prazo']): ?>
                     <div class="d-flex justify-content-between border-bottom py-1"><span class="text-muted">1ª resposta</span><span class="fw-semibold"><?= $chamado['primeira_resposta_em'] ? data_br($chamado['primeira_resposta_em'], 'd/m H:i') : data_br($chamado['sla_resposta_prazo'], 'd/m H:i') . ' (prazo)' ?></span></div>
                     <div class="d-flex justify-content-between py-1"><span class="text-muted">SLA resolução</span><span class="fw-semibold"><?= data_br($chamado['sla_resolucao_prazo'], 'd/m H:i') ?></span></div>
+                    <?php if ($chamado['sla_pausado_em']): ?>
+                        <div class="small text-muted mt-1"><i class="bi bi-pause-circle"></i> Prazo pausado -- <?= $chamado['status'] === 'aguardando_cliente' ? 'aguardando resposta do cliente' : 'fora do expediente' ?></div>
+                    <?php endif; ?>
                 <?php endif; ?>
                 <div class="d-flex justify-content-between py-1 pt-2 border-top mt-1"><span class="text-muted">Aberto em</span><span class="fw-semibold"><?= data_br($chamado['aberto_em'], 'd/m/Y H:i') ?></span></div>
             </div>

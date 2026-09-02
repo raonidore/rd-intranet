@@ -49,7 +49,9 @@ $corPrioridade = ['baixa' => 'secondary', 'media' => 'primary', 'alta' => 'warni
                             <td><?= $item['setor_nome'] ? htmlspecialchars($item['setor_nome']) : '<span class="text-muted">-</span>' ?></td>
                             <td><?= Badge::make(htmlspecialchars(ChamadoService::PRIORIDADES[$item['prioridade']]), $corPrioridade[$item['prioridade']] ?? 'secondary') ?></td>
                             <td>
-                                <?php if ($item['sla_resolucao_prazo']): ?>
+                                <?php if ($item['sla_pausado_em']): ?>
+                                    <span class="small text-muted"><i class="bi bi-pause-circle"></i> Pausado -- fora do expediente</span>
+                                <?php elseif ($item['sla_resolucao_prazo']): ?>
                                     <span class="sla-contagem font-monospace small" data-prazo="<?= htmlspecialchars(str_replace(' ', 'T', $item['sla_resolucao_prazo'])) ?>">--</span>
                                 <?php else: ?>
                                     <span class="text-muted">-</span>

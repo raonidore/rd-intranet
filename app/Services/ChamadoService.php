@@ -9,10 +9,11 @@ use PDO;
  * Núcleo do módulo Chamados -- abrir, atribuir (fila -> em_atendimento,
  * mesma corrida evitada do WhatsApp), responder (nota interna vs.
  * resposta pública) e mudar status. Prazo de SLA é calculado na
- * abertura como "agora + minutos configurados" -- não implementa pausa
- * fina por fora-de-expediente (isso exigiria um motor de "minutos
- * úteis" pulando janelas fechadas, escopo maior que o pedido original;
- * fica como possível evolução futura).
+ * abertura como "agora + minutos configurados"; sincronizarPausaSlaLinha()
+ * pausa/retoma esse prazo fora do expediente e durante "aguardando
+ * cliente" (chamado por abrir()/mudarStatus()/responderComoSolicitante()
+ * e pelo cron "chamados:sincronizar-sla", que pega a borda do expediente
+ * -- não disparada por nenhuma ação de usuário).
  */
 class ChamadoService
 {
@@ -108,6 +109,8 @@ class ChamadoService
 
         $this->registrarHistorico($id, 'status', null, 'fila', (int)($_SESSION['usuario']['id'] ?? 0) ?: null);
 
+        $this->sincronizarPausaSlaLinha($id, $this->buscar($id));
+
         AuditService::registrar('Chamados', 'Abertura', "Chamado #{$id} \"{$titulo}\" aberto para {$nomeSolicitante}.");
 
         return ['success' => true, 'message' => 'Chamado #' . $id . ' aberto com sucesso.', 'id' => $id];
@@ -125,6 +128,70 @@ class ChamadoService
         $resolucao = date('Y-m-d H:i:s', strtotime('+' . (int)$sla['tempo_resolucao_min'] . ' minutes'));
 
         return [$resposta, $resolucao];
+    }
+
+    /**
+     * Pausa/retoma o relógio de SLA de UM chamado, comparado com o estado
+     * já gravado -- chamado depois de abrir()/mudarStatus()/
+     * responderComoSolicitante() terem gravado o novo status, pra dar
+     * feedback imediato. A borda do expediente (não disparada por
+     * nenhuma ação de usuário) é pega por sincronizarPausaSlaTodos(), via
+     * cron. Chamado fechado sempre credita e limpa a pausa (senão
+     * sla_resolucao_prazo fica congelado no passado e o chamado aparece
+     * com SLA estourado nas estatísticas mesmo tendo sido resolvido
+     * durante uma pausa).
+     */
+    private function sincronizarPausaSlaLinha(int $chamadoId, array $chamado): void
+    {
+        if ($chamado['sla_resposta_prazo'] === null && $chamado['sla_resolucao_prazo'] === null) {
+            return;
+        }
+
+        if (in_array($chamado['status'], ['resolvido', 'fechado'], true)) {
+            if ($chamado['sla_pausado_em'] !== null) {
+                $this->creditarPausaSla($chamadoId, $chamado['sla_pausado_em']);
+            }
+            return;
+        }
+
+        $devePausar = $chamado['status'] === 'aguardando_cliente' || !(new ChamadoConfigService())->dentroDoExpediente();
+
+        if ($devePausar && $chamado['sla_pausado_em'] === null) {
+            $this->pdo->prepare('UPDATE chamados SET sla_pausado_em = NOW() WHERE id = ?')->execute([$chamadoId]);
+            return;
+        }
+        if (!$devePausar && $chamado['sla_pausado_em'] !== null) {
+            $this->creditarPausaSla($chamadoId, $chamado['sla_pausado_em']);
+        }
+    }
+
+    /** Desloca os dois prazos pra frente pelo tempo que ficou pausado, e encerra a pausa. */
+    private function creditarPausaSla(int $chamadoId, string $pausadoEm): void
+    {
+        $this->pdo->prepare(
+            "UPDATE chamados SET
+                sla_resposta_prazo = IF(sla_resposta_prazo IS NULL, NULL, DATE_ADD(sla_resposta_prazo, INTERVAL TIMESTAMPDIFF(SECOND, ?, NOW()) SECOND)),
+                sla_resolucao_prazo = IF(sla_resolucao_prazo IS NULL, NULL, DATE_ADD(sla_resolucao_prazo, INTERVAL TIMESTAMPDIFF(SECOND, ?, NOW()) SECOND)),
+                sla_pausado_em = NULL
+             WHERE id = ?"
+        )->execute([$pausadoEm, $pausadoEm, $chamadoId]);
+    }
+
+    /** Varredura periódica (cron "chamados:sincronizar-sla") -- pega a transição de horário de expediente, que nenhuma ação de usuário dispara. */
+    public function sincronizarPausaSlaTodos(): int
+    {
+        $ids = $this->pdo->query(
+            "SELECT id FROM chamados WHERE status NOT IN ('resolvido','fechado') AND (sla_resposta_prazo IS NOT NULL OR sla_resolucao_prazo IS NOT NULL)"
+        )->fetchAll(PDO::FETCH_COLUMN);
+
+        foreach ($ids as $id) {
+            $chamado = $this->buscar((int)$id);
+            if ($chamado) {
+                $this->sincronizarPausaSlaLinha((int)$id, $chamado);
+            }
+        }
+
+        return count($ids);
     }
 
     public function buscar(int $id): ?array
@@ -236,9 +303,17 @@ class ChamadoService
         if ($novoStatus === 'fila') {
             $campos[] = 'usuario_id = NULL, atribuido_em = NULL';
         }
-        // Reabertura (de resolvido/fechado pra em_atendimento) limpa as marcas de encerramento.
-        if (in_array($chamado['status'], ['resolvido', 'fechado'], true) && !in_array($novoStatus, ['resolvido', 'fechado'], true)) {
-            $campos[] = 'resolvido_em = NULL, fechado_em = NULL';
+        // Reabertura (de resolvido/fechado pra em_atendimento) limpa as marcas de encerramento
+        // e recalcula o prazo de SLA do zero -- senão o chamado reaparece com um prazo antigo
+        // e já vencido (sla_resolucao_prazo ficou congelado desde antes de fechar).
+        $reabertura = in_array($chamado['status'], ['resolvido', 'fechado'], true) && !in_array($novoStatus, ['resolvido', 'fechado'], true);
+        if ($reabertura) {
+            $campos[] = 'resolvido_em = NULL, fechado_em = NULL, sla_pausado_em = NULL';
+            [$slaResposta, $slaResolucao] = $this->calcularPrazos((int)$chamado['categoria_id'], $chamado['prioridade']);
+            $campos[] = 'sla_resposta_prazo = ?';
+            $campos[] = 'sla_resolucao_prazo = ?';
+            $params[] = $slaResposta;
+            $params[] = $slaResolucao;
         }
 
         $sql = 'UPDATE chamados SET ' . implode(', ', $campos) . ' WHERE id = ?';
@@ -248,6 +323,8 @@ class ChamadoService
 
         $this->registrarHistorico($chamadoId, 'status', $chamado['status'], $novoStatus, $usuarioId);
 
+        $this->sincronizarPausaSlaLinha($chamadoId, $this->buscar($chamadoId));
+
         if ($novoStatus === 'resolvido' && $chamado['status'] !== 'resolvido') {
             (new ChamadoAvaliacaoService())->perguntar($chamado);
         }
@@ -255,7 +332,7 @@ class ChamadoService
         return ['success' => true, 'message' => 'Status atualizado para "' . self::STATUS[$novoStatus] . '".'];
     }
 
-    /** @return array{success: bool, message: string} */
+    /** @return array{success: bool, message: string, id?: int} */
     public function responder(int $chamadoId, string $conteudo, string $tipo, ?int $usuarioId): array
     {
         $conteudo = trim($conteudo);
@@ -273,6 +350,7 @@ class ChamadoService
 
         $stmt = $this->pdo->prepare('INSERT INTO chamados_comentarios (chamado_id, usuario_id, tipo, conteudo) VALUES (?, ?, ?, ?)');
         $stmt->execute([$chamadoId, $usuarioId, $tipo, $conteudo]);
+        $idComentario = (int)$this->pdo->lastInsertId(); // captura antes de qualquer outro statement -- um UPDATE seguinte zera esse valor
 
         $primeiraResposta = $tipo === 'publica' && $chamado['primeira_resposta_em'] === null;
 
@@ -290,7 +368,7 @@ class ChamadoService
             $this->notificarSolicitantePorEmail($chamado, $conteudo);
         }
 
-        return ['success' => true, 'message' => 'Enviado.'];
+        return ['success' => true, 'message' => 'Enviado.', 'id' => $idComentario];
     }
 
     /**
@@ -327,6 +405,8 @@ class ChamadoService
         }
 
         $this->pdo->prepare('UPDATE chamados SET ' . implode(', ', $campos) . ' WHERE id = ?')->execute([$chamadoId]);
+
+        $this->sincronizarPausaSlaLinha($chamadoId, $this->buscar($chamadoId));
 
         return ['success' => true, 'message' => 'Resposta enviada.'];
     }
