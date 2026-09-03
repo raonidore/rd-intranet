@@ -187,12 +187,17 @@ class WhatsAppIntegracaoController extends Controller
         // URL absoluta de verdade (não só o path de url()) -- o bridge é
         // um processo Node à parte, sem noção de "host atual" nenhuma,
         // então precisa do endereço completo pra conseguir chamar o
-        // webhook de volta. Usa o mesmo host/porta/esquema que o próprio
-        // admin está usando agora pra acessar esta tela. A mesma URL
-        // serve pra todas as conexões -- quem identifica de qual
-        // conexão veio a mensagem é a API key (ver WhatsAppWebhookController).
-        $esquema = ($_SERVER['HTTPS'] ?? '') === 'on' ? 'https' : 'http';
-        $webhookUrl = $esquema . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . url('/api/whatsapp/webhook');
+        // webhook de volta. SEMPRE via loopback HTTP, nunca pelo
+        // host/esquema que o admin usou pra acessar esta tela: bridge e
+        // painel sempre rodam na mesma máquina, então não há motivo pra
+        // esse aviso interno passar por TLS/host externo -- e em
+        // instalações com certificado autoassinado (comuns em intranets
+        // sem domínio público), o fetch() do Node rejeita o certificado
+        // e a mensagem chega no bridge mas nunca é repassada pro painel,
+        // sem erro nenhum visível (só um log "fetch failed" no bridge).
+        // A mesma URL serve pra todas as conexões -- quem identifica de
+        // qual conexão veio a mensagem é a API key (ver WhatsAppWebhookController).
+        $webhookUrl = 'http://127.0.0.1' . url('/api/whatsapp/webhook');
 
         $repoDir = realpath(__DIR__ . '/../..');
         $apiKey = !empty($conexao['api_key_cifrada']) ? CryptoService::decriptar($conexao['api_key_cifrada']) : '';
