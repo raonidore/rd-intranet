@@ -98,18 +98,42 @@ $statusClasses = [
                     <p class="text-muted small mb-3">Nenhum anexo ainda.</p>
                 <?php else: ?>
                     <ul class="list-group list-group-flush mb-3">
-                        <?php foreach ($anexos as $anexo): ?>
+                        <?php foreach ($anexos as $anexo):
+                            $ext = strtolower(pathinfo($anexo['anexo_nome_original'], PATHINFO_EXTENSION));
+                            $ehPdf = $ext === 'pdf';
+                            $ehImagem = in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'], true);
+                        ?>
                             <li class="list-group-item px-0 d-flex justify-content-between align-items-center">
-                                <a href="<?= url('/chamados-externos/anexo?anexo_id=' . (int)$anexo['id']) ?>" target="_blank" class="text-decoration-none">
+                                <span>
                                     <i class="bi bi-<?= $anexo['anexo_origem'] === 'samba' ? 'folder-symlink' : 'paperclip' ?>"></i>
                                     <?= htmlspecialchars($anexo['anexo_nome_original']) ?>
                                     <?= $anexo['anexo_origem'] === 'samba' ? '<span class="badge text-bg-light border ms-1">Samba</span>' : '' ?>
-                                </a>
-                                <form method="post" action="<?= url('/chamados-externos/anexo-excluir') ?>" onsubmit="return confirm('Remover este anexo?');">
-                                    <input type="hidden" name="id" value="<?= (int)$chamado['id'] ?>">
-                                    <input type="hidden" name="anexo_id" value="<?= (int)$anexo['id'] ?>">
-                                    <button type="submit" class="btn btn-link btn-sm text-danger p-0"><i class="bi bi-trash"></i></button>
-                                </form>
+                                </span>
+                                <span class="text-nowrap">
+                                    <?php if ($ehPdf || $ehImagem): ?>
+                                        <button type="button" class="btn btn-link btn-sm p-0 me-2 btn-visualizar-anexo"
+                                            data-id="<?= (int)$anexo['id'] ?>"
+                                            data-nome="<?= htmlspecialchars($anexo['anexo_nome_original']) ?>"
+                                            data-tipo="<?= $ehPdf ? 'pdf' : 'imagem' ?>"
+                                            title="Visualizar">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                    <?php endif; ?>
+                                    <a href="<?= url('/chamados-externos/anexo?anexo_id=' . (int)$anexo['id']) ?>" class="btn btn-link btn-sm p-0 me-2" title="Baixar">
+                                        <i class="bi bi-download"></i>
+                                    </a>
+                                    <button type="button" class="btn btn-link btn-sm p-0 me-2 btn-renomear-anexo"
+                                        data-id="<?= (int)$anexo['id'] ?>"
+                                        data-nome="<?= htmlspecialchars($anexo['anexo_nome_original']) ?>"
+                                        title="Renomear">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                    <form method="post" action="<?= url('/chamados-externos/anexo-excluir') ?>" class="d-inline" onsubmit="return confirm('Remover este anexo?');">
+                                        <input type="hidden" name="id" value="<?= (int)$chamado['id'] ?>">
+                                        <input type="hidden" name="anexo_id" value="<?= (int)$anexo['id'] ?>">
+                                        <button type="submit" class="btn btn-link btn-sm text-danger p-0" title="Excluir"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </span>
                             </li>
                         <?php endforeach; ?>
                     </ul>
@@ -247,6 +271,61 @@ $statusClasses = [
     </div>
 </div>
 
+<!-- Modal renomear anexo -->
+<div class="modal fade" id="modalRenomearAnexo" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <form method="post" action="<?= url('/chamados-externos/anexo-renomear') ?>">
+                <input type="hidden" name="id" value="<?= (int)$chamado['id'] ?>">
+                <input type="hidden" name="anexo_id" id="renomearAnexoId">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Renomear anexo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="text" name="novo_nome" id="renomearAnexoNome" class="form-control" required maxlength="255">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Renomear</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal visualizar PDF -->
+<div class="modal fade" id="modalVisualizarPdf" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" style="max-width:90vw">
+        <div class="modal-content" style="height:90vh">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0"><i class="bi bi-file-earmark-pdf text-danger me-2"></i><span id="pdfAnexoTitulo"></span></h6>
+                <a id="pdfAnexoDownload" href="#" class="btn btn-sm btn-outline-primary ms-auto me-2"><i class="bi bi-download me-1"></i>Download</a>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0" style="flex:1;overflow:hidden">
+                <iframe id="pdfAnexoFrame" src="" style="width:100%;height:100%;border:0;display:block"></iframe>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal visualizar imagem -->
+<div class="modal fade" id="modalVisualizarImagem" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0"><i class="bi bi-file-earmark-image text-info me-2"></i><span id="imagemAnexoTitulo"></span></h6>
+                <a id="imagemAnexoDownload" href="#" class="btn btn-sm btn-outline-primary ms-auto me-2"><i class="bi bi-download me-1"></i>Download</a>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center p-3" style="background:#111;">
+                <img id="imagemAnexoPreview" src="" style="max-width:100%;max-height:75vh;">
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 let sambaEstado = { compartilhamentoId: null, compartilhamentoNome: null, subcaminho: '', arquivoSelecionado: null };
 
@@ -378,6 +457,45 @@ function escapeHtml(texto) {
     div.textContent = texto;
     return div.innerHTML;
 }
+
+// ── Visualizar anexo (PDF/imagem) e renomear -- mesmo pop-up do gerenciador de arquivos do Samba ──
+const URL_ANEXO_BAIXAR = '<?= url('/chamados-externos/anexo') ?>';
+
+document.addEventListener('click', function (e) {
+    const btnVer = e.target.closest('.btn-visualizar-anexo');
+    if (btnVer) {
+        const urlInline = URL_ANEXO_BAIXAR + '?anexo_id=' + btnVer.dataset.id + '&modo=inline';
+        const urlDownload = URL_ANEXO_BAIXAR + '?anexo_id=' + btnVer.dataset.id;
+        if (btnVer.dataset.tipo === 'pdf') {
+            document.getElementById('pdfAnexoTitulo').textContent = btnVer.dataset.nome;
+            document.getElementById('pdfAnexoFrame').src = urlInline;
+            document.getElementById('pdfAnexoDownload').href = urlDownload;
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('modalVisualizarPdf')).show();
+        } else {
+            document.getElementById('imagemAnexoTitulo').textContent = btnVer.dataset.nome;
+            document.getElementById('imagemAnexoPreview').src = urlInline;
+            document.getElementById('imagemAnexoDownload').href = urlDownload;
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('modalVisualizarImagem')).show();
+        }
+        return;
+    }
+
+    const btnRenomear = e.target.closest('.btn-renomear-anexo');
+    if (btnRenomear) {
+        document.getElementById('renomearAnexoId').value = btnRenomear.dataset.id;
+        const campoNome = document.getElementById('renomearAnexoNome');
+        campoNome.value = btnRenomear.dataset.nome;
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalRenomearAnexo')).show();
+        setTimeout(() => campoNome.select(), 300);
+    }
+});
+
+document.getElementById('modalVisualizarPdf').addEventListener('hidden.bs.modal', function () {
+    document.getElementById('pdfAnexoFrame').src = '';
+});
+document.getElementById('modalVisualizarImagem').addEventListener('hidden.bs.modal', function () {
+    document.getElementById('imagemAnexoPreview').src = '';
+});
 </script>
 
 <?php

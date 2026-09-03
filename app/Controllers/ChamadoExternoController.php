@@ -3,6 +3,7 @@
 namespace App\Controllers;
 
 use App\Core\Controller;
+use App\Core\Database;
 use App\Middleware\AuthMiddleware;
 use App\Services\AtivoService;
 use App\Services\AuditService;
@@ -11,6 +12,7 @@ use App\Services\ChamadoExternoEstatisticaService;
 use App\Services\ChamadoExternoService;
 use App\Services\FornecedorService;
 use App\Services\NotificationService;
+use App\Services\NumeroControleService;
 use App\Services\PermissionService;
 use App\Services\SambaAnexoService;
 
@@ -50,6 +52,7 @@ class ChamadoExternoController extends Controller
             'fornecedores' => (new FornecedorService())->listarAtivos(),
             'categorias' => (new ChamadoExternoCategoriaService())->listarAtivas(),
             'ativoPreSelecionado' => !empty($_GET['ativo_id']) ? (new AtivoService())->buscar((int)$_GET['ativo_id']) : null,
+            'proximoNumero' => NumeroControleService::previewProximo(Database::connection(), 'chamados_externos', 'aberto_em', 'CE'),
         ]);
     }
 
@@ -209,14 +212,32 @@ class ChamadoExternoController extends Controller
 
         $anexoId = (int)($_POST['anexo_id'] ?? 0);
         $chamadoId = (int)($_POST['id'] ?? 0);
-        $resultado = $this->service->excluirAnexo($anexoId);
+        $resultado = $this->service->excluirAnexo($anexoId, (int)$_SESSION['usuario']['id']);
+
+        AuditService::registrar('Chamados Externos', 'Excluir anexo', "#{$chamadoId}: {$resultado['message']}");
 
         $resultado['success'] ? NotificationService::success($resultado['message']) : NotificationService::error($resultado['message']);
         header('Location: ' . url('/chamados-externos/ver?id=' . $chamadoId));
         exit;
     }
 
-    /** Serve o anexo -- permissão de quem pode ver é o gate do módulo, igual Contratos/Documentos (nunca revalida o Samba de novo). */
+    public function anexoRenomear(): void
+    {
+        AuthMiddleware::checkModulo('chamados_externos_atendimentos');
+
+        $anexoId = (int)($_POST['anexo_id'] ?? 0);
+        $chamadoId = (int)($_POST['id'] ?? 0);
+        $novoNome = (string)($_POST['novo_nome'] ?? '');
+        $resultado = $this->service->renomearAnexo($anexoId, $novoNome, (int)$_SESSION['usuario']['id']);
+
+        AuditService::registrar('Chamados Externos', 'Renomear anexo', "#{$chamadoId}: {$resultado['message']}");
+
+        $resultado['success'] ? NotificationService::success($resultado['message']) : NotificationService::error($resultado['message']);
+        header('Location: ' . url('/chamados-externos/ver?id=' . $chamadoId));
+        exit;
+    }
+
+    /** Serve o anexo -- permissão de quem pode ver é o gate do módulo, igual Contratos/Documentos (nunca revalida o Samba de novo). `modo=inline` é usado pelo pop-up de visualização (PDF/imagem); sem isso, força download. */
     public function anexoBaixar(): void
     {
         AuthMiddleware::checkModulo('chamados_externos_atendimentos');
@@ -229,6 +250,9 @@ class ChamadoExternoController extends Controller
             return;
         }
 
+        $inline = ($_GET['modo'] ?? '') === 'inline';
+        $disposicao = $inline ? 'inline' : 'attachment';
+
         if ($anexo['anexo_origem'] === 'upload') {
             $caminho = ChamadoExternoService::caminhoCompletoUpload($anexo['anexo_caminho']);
             if (!is_file($caminho)) {
@@ -236,14 +260,18 @@ class ChamadoExternoController extends Controller
                 return;
             }
             header('Content-Type: ' . (mime_content_type($caminho) ?: 'application/octet-stream'));
-            header('Content-Disposition: inline; filename="' . basename($anexo['anexo_nome_original']) . '"');
+            header('Content-Disposition: ' . $disposicao . '; filename="' . basename($anexo['anexo_nome_original']) . '"');
             header('Content-Length: ' . filesize($caminho));
             readfile($caminho);
             return;
         }
 
-        header('Content-Type: application/octet-stream');
-        header('Content-Disposition: attachment; filename="' . rawurlencode($anexo['anexo_nome_original']) . '"');
+        $contentType = $inline
+            ? ChamadoExternoService::mimetypeParaVisualizar(pathinfo($anexo['anexo_nome_original'], PATHINFO_EXTENSION))
+            : 'application/octet-stream';
+
+        header('Content-Type: ' . $contentType);
+        header('Content-Disposition: ' . $disposicao . '; filename="' . rawurlencode($anexo['anexo_nome_original']) . '"');
         header('Cache-Control: no-cache');
         (new SambaAnexoService())->servirArquivo($anexo['anexo_caminho']);
     }

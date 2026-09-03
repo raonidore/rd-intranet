@@ -8,7 +8,10 @@ use App\Services\ChamadoService;
 <?= Alert::flash() ?>
 
 <div class="mb-4">
-    <h4 class="mb-1"><i class="bi bi-plus-circle me-1"></i> Abrir Chamado</h4>
+    <h4 class="mb-1">
+        <i class="bi bi-plus-circle me-1"></i> Abrir Chamado
+        <span class="badge text-bg-light border font-monospace fs-6 align-middle ms-1"><?= htmlspecialchars($proximoNumero) ?></span>
+    </h4>
     <small class="text-muted"><a href="<?= url('/chamados/atendimentos') ?>"><i class="bi bi-arrow-left"></i> Voltar</a></small>
 </div>
 

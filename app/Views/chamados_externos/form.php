@@ -10,7 +10,10 @@ use App\Components\Alert;
     <a href="<?= url('/chamados-externos') ?>" class="text-decoration-none small text-muted">
         <i class="bi bi-arrow-left"></i> Voltar
     </a>
-    <h4 class="mb-0 mt-1">Novo chamado externo</h4>
+    <h4 class="mb-0 mt-1">
+        Novo chamado externo
+        <span class="badge text-bg-light border font-monospace fs-6 align-middle ms-1"><?= htmlspecialchars($proximoNumero) ?></span>
+    </h4>
 </div>
 
 <div class="card border-0 shadow-sm">

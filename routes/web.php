@@ -608,6 +608,7 @@ $router->post('/chamados-externos/comentar', [ChamadoExternoController::class, '
 $router->post('/chamados-externos/anexo-upload', [ChamadoExternoController::class, 'anexoUpload']);
 $router->post('/chamados-externos/anexo-samba', [ChamadoExternoController::class, 'anexoSamba']);
 $router->post('/chamados-externos/anexo-excluir', [ChamadoExternoController::class, 'anexoExcluir']);
+$router->post('/chamados-externos/anexo-renomear', [ChamadoExternoController::class, 'anexoRenomear']);
 $router->get('/chamados-externos/anexo', [ChamadoExternoController::class, 'anexoBaixar']);
 $router->get('/chamados-externos/samba-compartilhamentos', [ChamadoExternoController::class, 'sambaCompartilhamentosApi']);
 $router->get('/chamados-externos/samba-listar', [ChamadoExternoController::class, 'sambaListarApi']);

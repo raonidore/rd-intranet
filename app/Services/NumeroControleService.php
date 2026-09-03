@@ -38,4 +38,24 @@ class NumeroControleService
 
         return $prefixo . '-' . date('dmy', strtotime($dataReferencia)) . '-' . $posicao;
     }
+
+    /**
+     * Prévia do número que o PRÓXIMO registro (ainda não criado) vai
+     * receber -- pra mostrar no formulário de abertura antes de o
+     * usuário confirmar. Usa `CURDATE()` do próprio MySQL (não o
+     * relógio do PHP) pelo mesmo motivo do método acima. É só uma
+     * prévia: se dois chamados forem abertos ao mesmo tempo o número
+     * real pode variar em 1, mas isso não trava nada -- `gerar()` é
+     * quem decide o número de verdade, na hora da criação.
+     */
+    public static function previewProximo(PDO $pdo, string $tabela, string $colunaData, string $prefixo): string
+    {
+        $hoje = $pdo->query('SELECT CURDATE()')->fetchColumn();
+
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM {$tabela} WHERE DATE({$colunaData}) = ?");
+        $stmt->execute([$hoje]);
+        $posicao = (int)$stmt->fetchColumn() + 1;
+
+        return $prefixo . '-' . date('dmy', strtotime($hoje)) . '-' . $posicao;
+    }
 }

@@ -3,6 +3,7 @@
 namespace App\Controllers;
 
 use App\Core\Controller;
+use App\Core\Database;
 use App\Middleware\AuthMiddleware;
 use App\Services\AtivoService;
 use App\Services\AuditService;
@@ -12,6 +13,7 @@ use App\Services\ChamadoService;
 use App\Services\ChamadoSetorService;
 use App\Services\KbService;
 use App\Services\NotificationService;
+use App\Services\NumeroControleService;
 use App\Services\UnidadeService;
 use App\Services\UserService;
 
@@ -41,6 +43,7 @@ class ChamadoController extends Controller
             'categorias' => (new ChamadoCategoriaService())->listarAtivas(),
             'setores' => (new ChamadoSetorService())->listarAtivos(),
             'unidades' => (new UnidadeService())->listarAtivas(),
+            'proximoNumero' => NumeroControleService::previewProximo(Database::connection(), 'chamados', 'aberto_em', 'CI'),
         ]);
     }
 

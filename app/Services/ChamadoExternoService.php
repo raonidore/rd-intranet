@@ -71,6 +71,25 @@ class ChamadoExternoService
         return self::EXTENSOES_POR_MIME[$mimetype] ?? null;
     }
 
+    /**
+     * Usado só pro pop-up de visualização de anexo vindo do Samba --
+     * o arquivo é servido por um script externo (`servirArquivo()`),
+     * sem acesso direto ao caminho pra usar `mime_content_type()`
+     * como se faz com upload direto, então o Content-Type sai da
+     * extensão do nome mesmo. Cobre só pdf/imagem (o que o pop-up
+     * sabe exibir); qualquer outra extensão cai no download normal.
+     */
+    public static function mimetypeParaVisualizar(string $extensao): string
+    {
+        $mapa = [
+            'pdf' => 'application/pdf',
+            'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png',
+            'gif' => 'image/gif', 'webp' => 'image/webp', 'bmp' => 'image/bmp',
+        ];
+
+        return $mapa[strtolower($extensao)] ?? 'application/octet-stream';
+    }
+
     public static function gerarNomeArquivo(string $extensao): string
     {
         return uniqid('chext_', true) . '.' . $extensao;
@@ -386,7 +405,7 @@ class ChamadoExternoService
     }
 
     /** @return array{success: bool, message: string} */
-    public function excluirAnexo(int $anexoId): array
+    public function excluirAnexo(int $anexoId, ?int $usuarioId = null): array
     {
         $anexo = $this->buscarAnexo($anexoId);
         if (!$anexo) {
@@ -399,6 +418,30 @@ class ChamadoExternoService
 
         $this->pdo->prepare('DELETE FROM chamados_externos_anexos WHERE id = ?')->execute([$anexoId]);
 
+        $this->registrarSistema((int)$anexo['chamado_externo_id'], 'Removeu o anexo "' . $anexo['anexo_nome_original'] . '".', $usuarioId);
+
         return ['success' => true, 'message' => 'Anexo removido.'];
+    }
+
+    /** @return array{success: bool, message: string} */
+    public function renomearAnexo(int $anexoId, string $novoNome, ?int $usuarioId = null): array
+    {
+        $novoNome = trim($novoNome);
+        if ($novoNome === '') {
+            return ['success' => false, 'message' => 'Informe o novo nome do anexo.'];
+        }
+
+        $anexo = $this->buscarAnexo($anexoId);
+        if (!$anexo) {
+            return ['success' => false, 'message' => 'Anexo não encontrado.'];
+        }
+
+        $nomeAntigo = $anexo['anexo_nome_original'];
+
+        $this->pdo->prepare('UPDATE chamados_externos_anexos SET anexo_nome_original = ? WHERE id = ?')->execute([$novoNome, $anexoId]);
+
+        $this->registrarSistema((int)$anexo['chamado_externo_id'], 'Renomeou o anexo "' . $nomeAntigo . '" para "' . $novoNome . '".', $usuarioId);
+
+        return ['success' => true, 'message' => 'Anexo renomeado.'];
     }
 }
