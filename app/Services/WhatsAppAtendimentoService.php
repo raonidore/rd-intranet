@@ -154,9 +154,23 @@ class WhatsAppAtendimentoService
         }
 
         $contato = (new WhatsAppContatoService())->buscarOuCriarPorNumero($numero, $nome);
-        $atendimento = $this->abrirOuReaproveitar((int)$contato['id']);
 
-        $envio = (new WhatsAppMensagemService())->enviar($numero, self::comIdentificacaoDoAtendente($mensagem, null, $nomeUsuario));
+        // Mesma conexão que o webhook vai resolver quando o cliente
+        // responder (pela API key) -- sem isso, abrirOuReaproveitar()
+        // cria um atendimento NOVO na primeira resposta (o conexao_id não
+        // bate: NULL aqui vs a conexão real resolvida do outro lado), o
+        // que reabre o bot do zero mesmo esse atendimento já estando
+        // "em_atendimento". Só faz sentido resolver isso pro tipo
+        // 'qrcode' -- api_oficial/twilio continuam sem conceito de
+        // conexão, o webhook deles também nunca resolve um conexaoId.
+        $conexaoPadrao = (new WhatsAppConfigService())->tipoIntegracao() === 'qrcode'
+            ? (new WhatsAppConexaoService())->conexaoPadrao()
+            : null;
+        $conexaoId = $conexaoPadrao ? (int)$conexaoPadrao['id'] : null;
+
+        $atendimento = $this->abrirOuReaproveitar((int)$contato['id'], $conexaoId);
+
+        $envio = (new WhatsAppMensagemService())->enviar($numero, self::comIdentificacaoDoAtendente($mensagem, null, $nomeUsuario), $conexaoId);
         if (!$envio['success']) {
             return ['success' => false, 'message' => $envio['message'] ?? 'Falha ao enviar mensagem pelo WhatsApp.'];
         }
