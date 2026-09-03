@@ -167,13 +167,17 @@ class ChamadoExternoService
         ]);
 
         $id = (int)$this->pdo->lastInsertId();
+
+        $numeroControle = NumeroControleService::gerar($this->pdo, 'chamados_externos', 'aberto_em', 'CE', $id);
+        $this->pdo->prepare('UPDATE chamados_externos SET numero_controle = ? WHERE id = ?')->execute([$numeroControle, $id]);
+
         $this->registrarSistema($id, 'Chamado aberto.', $dados['usuario_id'] ?? null);
 
         if (!empty($dados['ativo_id'])) {
             (new AtivoStatusAutomacaoService())->aoAbrirChamadoExterno((int)$dados['ativo_id']);
         }
 
-        return ['success' => true, 'message' => 'Chamado externo criado.', 'id' => $id];
+        return ['success' => true, 'message' => 'Chamado externo #' . $numeroControle . ' criado.', 'id' => $id, 'numero_controle' => $numeroControle];
     }
 
     /** @return array{success: bool, message: string} */

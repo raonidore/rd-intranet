@@ -107,13 +107,16 @@ class ChamadoService
 
         $id = (int)$this->pdo->lastInsertId();
 
+        $numeroControle = NumeroControleService::gerar($this->pdo, 'chamados', 'aberto_em', 'CI', $id);
+        $this->pdo->prepare('UPDATE chamados SET numero_controle = ? WHERE id = ?')->execute([$numeroControle, $id]);
+
         $this->registrarHistorico($id, 'status', null, 'fila', (int)($_SESSION['usuario']['id'] ?? 0) ?: null);
 
         $this->sincronizarPausaSlaLinha($id, $this->buscar($id));
 
-        AuditService::registrar('Chamados', 'Abertura', "Chamado #{$id} \"{$titulo}\" aberto para {$nomeSolicitante}.");
+        AuditService::registrar('Chamados', 'Abertura', "Chamado #{$numeroControle} \"{$titulo}\" aberto para {$nomeSolicitante}.");
 
-        return ['success' => true, 'message' => 'Chamado #' . $id . ' aberto com sucesso.', 'id' => $id];
+        return ['success' => true, 'message' => 'Chamado #' . $numeroControle . ' aberto com sucesso.', 'id' => $id, 'numero_controle' => $numeroControle];
     }
 
     private function calcularPrazos(int $categoriaId, string $prioridade): array

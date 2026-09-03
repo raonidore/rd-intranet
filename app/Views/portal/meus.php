@@ -38,7 +38,7 @@ $corStatus = ['fila' => 'secondary', 'em_atendimento' => 'primary', 'aguardando_
                 <div class="card border-0 shadow-sm mb-2">
                     <div class="card-body d-flex justify-content-between align-items-center">
                         <div style="min-width:0">
-                            <span class="font-monospace text-muted small">#<?= (int)$item['id'] ?></span>
+                            <span class="font-monospace text-muted small">#<?= htmlspecialchars($item['numero_controle'] ?? $item['id']) ?></span>
                             <strong><?= htmlspecialchars($item['titulo']) ?></strong>
                             <span class="badge text-bg-<?= $corStatus[$item['status']] ?? 'secondary' ?>"><?= htmlspecialchars(ChamadoService::STATUS[$item['status']]) ?></span>
                             <div class="text-muted small"><?= htmlspecialchars($item['categoria_nome']) ?></div>

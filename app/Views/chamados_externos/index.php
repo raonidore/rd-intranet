@@ -92,6 +92,7 @@ $prioridadeClasses = [
             <table class="table table-hover align-middle mb-0">
                 <thead>
                     <tr>
+                        <th>Nº</th>
                         <th>Título</th>
                         <th>Fornecedor</th>
                         <th>Categoria</th>
@@ -103,6 +104,7 @@ $prioridadeClasses = [
                 <tbody>
                     <?php foreach ($chamados as $chamado): ?>
                         <tr style="cursor:pointer" onclick="location.href='<?= url('/chamados-externos/ver?id=' . (int)$chamado['id']) ?>'">
+                            <td class="font-monospace text-muted small"><?= htmlspecialchars($chamado['numero_controle'] ?? $chamado['id']) ?></td>
                             <td>
                                 <strong><?= htmlspecialchars($chamado['titulo']) ?></strong>
                                 <?php if (!empty($chamado['ativo_patrimonio'])): ?>

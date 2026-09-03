@@ -20,7 +20,10 @@ $statusClasses = [
         <a href="<?= url('/chamados-externos') ?>" class="text-decoration-none small text-muted d-block mb-1">
             <i class="bi bi-arrow-left"></i> Chamados Externos
         </a>
-        <h4 class="mb-1"><?= htmlspecialchars($chamado['titulo']) ?></h4>
+        <h4 class="mb-1">
+            <span class="font-monospace text-muted"><?= htmlspecialchars('#' . ($chamado['numero_controle'] ?? $chamado['id'])) ?></span>
+            <?= htmlspecialchars($chamado['titulo']) ?>
+        </h4>
         <span class="badge <?= $statusClasses[$chamado['status']] ?? '' ?>"><?= ChamadoExternoService::statusLabel($chamado['status']) ?></span>
         <span class="badge text-bg-light border"><?= ucfirst($chamado['prioridade']) ?></span>
         <?php if (!empty($chamado['ativo_id'])): ?>

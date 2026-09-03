@@ -15,7 +15,7 @@ $corStatus = ['fila' => 'secondary', 'em_atendimento' => 'primary', 'aguardando_
     <div>
         <small class="text-muted"><a href="<?= url('/chamados/atendimentos') ?>"><i class="bi bi-arrow-left"></i> Chamados</a></small>
         <h4 class="mb-1 mt-1">
-            <span class="font-monospace text-muted">#<?= (int)$chamado['id'] ?></span>
+            <span class="font-monospace text-muted">#<?= htmlspecialchars($chamado['numero_controle'] ?? $chamado['id']) ?></span>
             <?= htmlspecialchars($chamado['titulo']) ?>
         </h4>
         <?= Badge::make(htmlspecialchars(ChamadoService::STATUS[$chamado['status']]), $corStatus[$chamado['status']] ?? 'secondary') ?>
@@ -238,6 +238,6 @@ $corStatus = ['fila' => 'secondary', 'em_atendimento' => 'primary', 'aguardando_
 
 <?php
 $conteudo = ob_get_clean();
-$titulo = 'Chamado #' . (int)$chamado['id'];
+$titulo = 'Chamado #' . ($chamado['numero_controle'] ?? $chamado['id']);
 
 require __DIR__ . '/../layouts/main.php';

@@ -42,7 +42,7 @@ $corPrioridade = ['baixa' => 'secondary', 'media' => 'primary', 'alta' => 'warni
                 <tbody>
                     <?php foreach ($fila as $item): ?>
                         <tr>
-                            <td class="font-monospace">#<?= (int)$item['id'] ?></td>
+                            <td class="font-monospace">#<?= htmlspecialchars($item['numero_controle'] ?? $item['id']) ?></td>
                             <td><?= htmlspecialchars($item['titulo']) ?></td>
                             <td><?= htmlspecialchars($item['solicitante_nome']) ?></td>
                             <td><?= htmlspecialchars($item['categoria_nome']) ?></td>

@@ -12,7 +12,7 @@ $corStatus = ['fila' => 'secondary', 'em_atendimento' => 'primary', 'aguardando_
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Chamado #<?= (int)$chamado['id'] ?></title>
+    <title>Chamado #<?= htmlspecialchars($chamado['numero_controle'] ?? $chamado['id']) ?></title>
     <link rel="icon" href="<?= url('/favicon.ico') ?>" sizes="any">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
@@ -26,7 +26,7 @@ $corStatus = ['fila' => 'secondary', 'em_atendimento' => 'primary', 'aguardando_
 
     <div class="mb-3 mt-1">
         <h4 class="mb-1">
-            <span class="font-monospace text-muted">#<?= (int)$chamado['id'] ?></span>
+            <span class="font-monospace text-muted">#<?= htmlspecialchars($chamado['numero_controle'] ?? $chamado['id']) ?></span>
             <?= htmlspecialchars($chamado['titulo']) ?>
         </h4>
         <span class="badge text-bg-<?= $corStatus[$chamado['status']] ?? 'secondary' ?>"><?= htmlspecialchars(ChamadoService::STATUS[$chamado['status']]) ?></span>
