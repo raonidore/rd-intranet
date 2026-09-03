@@ -64,6 +64,7 @@ class ModuloCatalogo
         'base_conhecimento_visualizar' => ['label' => 'Base de Conhecimento - Visualizar', 'grupo' => 'Base de Conhecimento'],
         'base_conhecimento_criar' => ['label' => 'Base de Conhecimento - Criar/Gerenciar', 'grupo' => 'Base de Conhecimento'],
         'whatsapp_atendimentos' => ['label' => 'WhatsApp - Atendimentos', 'grupo' => 'WhatsApp'],
+        'whatsapp_contatos' => ['label' => 'WhatsApp - Contatos', 'grupo' => 'WhatsApp'],
         'whatsapp_fila' => ['label' => 'WhatsApp - Fila', 'grupo' => 'WhatsApp'],
         'whatsapp_chatbot' => ['label' => 'WhatsApp - Chatbot', 'grupo' => 'WhatsApp'],
         'whatsapp_setores' => ['label' => 'WhatsApp - Setores', 'grupo' => 'WhatsApp'],

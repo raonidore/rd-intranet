@@ -15,10 +15,10 @@ use App\Services\WhatsAppPermissaoService;
  * (whatsapp_contatos, preenchida automaticamente por
  * WhatsAppContatoService::buscarOuCriarPorNumero()), com ações pra ver
  * o histórico completo, reabrir o atendimento direto (sem bot) e
- * excluir. Mesmo módulo de permissão de Atendimentos/Fila
- * ('whatsapp_atendimentos') -- não existe hoje um conceito de "contato
- * pertence a tal setor" pra filtrar por usuário, então não restringe
- * por linha.
+ * excluir. Módulo de permissão próprio ('whatsapp_contatos',
+ * ModuloCatalogo.php), independente de Atendimentos/Fila -- não existe
+ * hoje um conceito de "contato pertence a tal setor" pra filtrar por
+ * usuário, então não restringe por linha.
  */
 class WhatsAppContatoController extends Controller
 {
@@ -26,7 +26,7 @@ class WhatsAppContatoController extends Controller
 
     public function index(): void
     {
-        AuthMiddleware::checkModulo('whatsapp_atendimentos');
+        AuthMiddleware::checkModulo('whatsapp_contatos');
 
         $busca = trim((string)($_GET['busca'] ?? ''));
         $pagina = max(1, (int)($_GET['pagina'] ?? 1));
@@ -44,7 +44,7 @@ class WhatsAppContatoController extends Controller
 
     public function historico(): void
     {
-        AuthMiddleware::checkModulo('whatsapp_atendimentos');
+        AuthMiddleware::checkModulo('whatsapp_contatos');
 
         $id = (int)($_GET['id'] ?? 0);
         $contatoService = new WhatsAppContatoService();
@@ -73,7 +73,7 @@ class WhatsAppContatoController extends Controller
 
     public function reabrir(): void
     {
-        AuthMiddleware::checkModulo('whatsapp_atendimentos');
+        AuthMiddleware::checkModulo('whatsapp_contatos');
 
         $id = (int)($_POST['id'] ?? 0);
         $resultado = (new WhatsAppAtendimentoService())->reabrirOuAbrirParaContato($id, (int)$_SESSION['usuario']['id']);
@@ -92,7 +92,7 @@ class WhatsAppContatoController extends Controller
 
     public function excluir(): void
     {
-        AuthMiddleware::checkModulo('whatsapp_atendimentos');
+        AuthMiddleware::checkModulo('whatsapp_contatos');
 
         $id = (int)($_POST['id'] ?? 0);
         $resultado = (new WhatsAppContatoService())->excluir($id);
