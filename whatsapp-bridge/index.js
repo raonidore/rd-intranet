@@ -321,6 +321,21 @@ const servidor = http.createServer(async (req, res) => {
         return;
     }
 
+    if (req.method === 'GET' && req.url.startsWith('/resolver?')) {
+        const numeroDigitos = String(new URL(req.url, 'http://localhost').searchParams.get('numero') || '').replace(/\D+/g, '');
+
+        if (!socketAtual || statusAtual !== 'conectado' || !numeroDigitos) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, message: 'WhatsApp não está conectado ou número não informado.' }));
+            return;
+        }
+
+        const jid = await resolverJid(numeroDigitos);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, numero: jid.split('@')[0] }));
+        return;
+    }
+
     if (req.method === 'GET' && req.url === '/status') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, status: statusAtual, numero: numeroConectado }));

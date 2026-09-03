@@ -34,6 +34,21 @@ class WhatsAppBridgeService
         return $this->chamar('/qrcode');
     }
 
+    /**
+     * Número de verdade que essa conta do WhatsApp usa pra falar com
+     * $numeroDigitos, ou null se não achar/não conseguir consultar --
+     * resolve a ambiguidade do 9º dígito do celular brasileiro (algumas
+     * contas ainda são registradas no formato antigo, sem ele) ANTES de
+     * criar um contato novo, pra nunca duplicar o mesmo cliente em duas
+     * linhas de `whatsapp_contatos` por causa da formatação.
+     */
+    public function resolverNumero(string $numeroDigitos): ?string
+    {
+        $resultado = $this->chamar('/resolver?numero=' . urlencode($numeroDigitos));
+
+        return !empty($resultado['success']) ? ($resultado['numero'] ?? null) : null;
+    }
+
     public function enviar(string $numero, string $texto): array
     {
         return $this->chamar('/enviar', 'POST', ['numero' => $numero, 'texto' => $texto]);

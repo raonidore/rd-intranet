@@ -153,8 +153,6 @@ class WhatsAppAtendimentoService
             return ['success' => false, 'message' => 'Escreva a primeira mensagem.'];
         }
 
-        $contato = (new WhatsAppContatoService())->buscarOuCriarPorNumero($numero, $nome);
-
         // Mesma conexão que o webhook vai resolver quando o cliente
         // responder (pela API key) -- sem isso, abrirOuReaproveitar()
         // cria um atendimento NOVO na primeira resposta (o conexao_id não
@@ -168,6 +166,21 @@ class WhatsAppAtendimentoService
             : null;
         $conexaoId = $conexaoPadrao ? (int)$conexaoPadrao['id'] : null;
 
+        // Resolve o número de verdade que essa conta usa (ambiguidade do
+        // 9º dígito do celular brasileiro) ANTES de criar/achar o
+        // contato -- sem isso, quando o cliente responder, o número que
+        // chega pelo webhook pode ter uma quantidade de dígitos
+        // diferente da que a gente digitou aqui, criando um SEGUNDO
+        // contato pra mesma pessoa (visto ao vivo: contato criado com o
+        // número "com o 9" não batia com o que a resposta trazia).
+        if ($conexaoPadrao) {
+            $numeroResolvido = (new WhatsAppBridgeService($conexaoPadrao))->resolverNumero($numero);
+            if ($numeroResolvido !== null) {
+                $numero = $numeroResolvido;
+            }
+        }
+
+        $contato = (new WhatsAppContatoService())->buscarOuCriarPorNumero($numero, $nome);
         $atendimento = $this->abrirOuReaproveitar((int)$contato['id'], $conexaoId);
 
         $envio = (new WhatsAppMensagemService())->enviar($numero, self::comIdentificacaoDoAtendente($mensagem, null, $nomeUsuario), $conexaoId);
