@@ -112,7 +112,7 @@ use App\Components\Alert;
                     </p>
                     <div class="mb-3">
                         <label class="form-label">Telefone (com DDD)</label>
-                        <input type="text" name="telefone" class="form-control" placeholder="(83) 99104-3598" required>
+                        <input type="text" name="telefone" id="campoTelefoneIniciar" class="form-control" placeholder="(83) 98765-4321" maxlength="16" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Nome <span class="text-muted">(opcional)</span></label>
@@ -134,6 +134,25 @@ use App\Components\Alert;
 
 <script>
 (function () {
+    // Máscara (DD) DDDDD-DDDD (ou (DD) DDDD-DDDD pra fixo, 10 dígitos) --
+    // só formata enquanto digita, quem colar um número já digitado só
+    // sem os separadores.
+    const campoTelefone = document.getElementById('campoTelefoneIniciar');
+    campoTelefone.addEventListener('input', function () {
+        let digitos = campoTelefone.value.replace(/\D+/g, '').slice(0, 11);
+        let formatado = digitos;
+
+        if (digitos.length > 2) {
+            formatado = '(' + digitos.slice(0, 2) + ') ' + digitos.slice(2);
+        }
+        if (digitos.length > 7) {
+            const fimPrefixo = digitos.length > 10 ? 7 : 6;
+            formatado = '(' + digitos.slice(0, 2) + ') ' + digitos.slice(2, fimPrefixo) + '-' + digitos.slice(fimPrefixo);
+        }
+
+        campoTelefone.value = formatado;
+    });
+
     const CHAVE_SOM = 'wppSomAtivo';
     const btnSom = document.getElementById('btnSomWpp');
     const icone = btnSom.querySelector('i');

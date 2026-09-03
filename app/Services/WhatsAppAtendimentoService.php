@@ -198,6 +198,49 @@ class WhatsAppAtendimentoService
     }
 
     /**
+     * Reabre o atendimento mais recente de um contato já salvo (tela de
+     * Contatos), OU só devolve o id se já estiver ativo -- nunca passa
+     * por `status='bot'`, então o chatbot nunca entra no meio (mesmo
+     * raciocínio de `iniciarProativo()`: quando a EQUIPE retoma a
+     * conversa, não faz sentido o cliente ter que escolher opção de
+     * menu de novo). Também reatribui `conexao_id` pra conexão padrão
+     * atual, pelo mesmo motivo documentado em `iniciarProativo()` --
+     * um atendimento antigo pode ter ficado com `conexao_id` de uma
+     * conexão que não existe mais.
+     *
+     * @return array{success: bool, message: string, atendimento_id?: int}
+     */
+    public function reabrirOuAbrirParaContato(int $contatoId, int $usuarioId): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT * FROM whatsapp_atendimentos WHERE contato_id = ? ORDER BY id DESC LIMIT 1'
+        );
+        $stmt->execute([$contatoId]);
+        $atendimento = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$atendimento) {
+            return ['success' => false, 'message' => 'Esse contato ainda não teve nenhum atendimento -- use "Iniciar Atendimento" com o número dele.'];
+        }
+
+        if ($atendimento['status'] !== 'encerrado') {
+            return ['success' => true, 'message' => 'Esse atendimento já está ativo.', 'atendimento_id' => (int)$atendimento['id']];
+        }
+
+        $conexaoPadrao = (new WhatsAppConfigService())->tipoIntegracao() === 'qrcode'
+            ? (new WhatsAppConexaoService())->conexaoPadrao()
+            : null;
+        $conexaoId = $conexaoPadrao ? (int)$conexaoPadrao['id'] : null;
+
+        $this->pdo->prepare(
+            "UPDATE whatsapp_atendimentos
+             SET status = 'em_atendimento', usuario_id = ?, atribuido_em = NOW(), encerrado_em = NULL, conexao_id = ?
+             WHERE id = ?"
+        )->execute([$usuarioId, $conexaoId, $atendimento['id']]);
+
+        return ['success' => true, 'message' => 'Atendimento reaberto.', 'atendimento_id' => (int)$atendimento['id']];
+    }
+
+    /**
      * Atendimento ainda não encerrado mais recente do contato NESSA
      * CONEXÃO (`conexao_id <=> ?`, null-safe equal -- o mesmo cliente
      * escrevendo pra dois números diferentes da empresa vira duas

@@ -46,6 +46,7 @@ use App\Controllers\KbController;
 use App\Controllers\WhatsAppSetorController;
 use App\Controllers\WhatsAppFilaController;
 use App\Controllers\WhatsAppAtendimentoController;
+use App\Controllers\WhatsAppContatoController;
 use App\Controllers\WhatsAppChatbotController;
 use App\Controllers\WhatsAppMensagemRapidaController;
 use App\Controllers\WhatsAppIntegracaoController;
@@ -294,6 +295,11 @@ $router->post('/whatsapp/atendimentos/encerrar', [WhatsAppAtendimentoController:
 $router->post('/whatsapp/atendimentos/transferir', [WhatsAppAtendimentoController::class, 'transferir']);
 $router->post('/whatsapp/atendimentos/transferir-usuario', [WhatsAppAtendimentoController::class, 'transferirParaUsuario']);
 $router->post('/whatsapp/atendimentos/assumir-supervisor', [WhatsAppAtendimentoController::class, 'assumirSupervisor']);
+
+$router->get('/whatsapp/contatos', [WhatsAppContatoController::class, 'index']);
+$router->get('/whatsapp/contatos/historico', [WhatsAppContatoController::class, 'historico']);
+$router->post('/whatsapp/contatos/reabrir', [WhatsAppContatoController::class, 'reabrir']);
+$router->post('/whatsapp/contatos/excluir', [WhatsAppContatoController::class, 'excluir']);
 
 $router->get('/whatsapp/chatbot', [WhatsAppChatbotController::class, 'index']);
 $router->post('/whatsapp/chatbot/boas-vindas', [WhatsAppChatbotController::class, 'salvarRaiz']);

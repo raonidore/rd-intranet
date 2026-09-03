@@ -906,6 +906,9 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
             <span><i class="bi bi-chat-dots me-2"></i> Atendimentos</span>
             <span class="rd-menu-badge" id="rdWppBadgeAtendimentos" style="<?= $wppAguardando > 0 ? '' : 'display:none' ?>"><?= $wppAguardando ?></span>
         </a>
+        <a href="<?= url('/whatsapp/contatos') ?>" class="<?= str_starts_with($uriAtual, '/whatsapp/contatos') ? 'active' : '' ?>">
+            <i class="bi bi-person-lines-fill me-2"></i> Contatos
+        </a>
         <?php endif; ?>
         <?php if (PermissionService::temAcesso('whatsapp_fila')): ?>
         <a href="<?= url('/whatsapp/fila') ?>" class="<?= $uriAtual === '/whatsapp/fila' ? 'active' : '' ?>">
