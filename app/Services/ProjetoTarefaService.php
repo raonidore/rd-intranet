@@ -20,6 +20,16 @@ class ProjetoTarefaService
         'concluido' => 'Concluído',
     ];
 
+    /** Cor do cartão -- etiqueta puramente visual (tipo Trello), não interfere em status/coluna/fase. */
+    public const CORES = [
+        'rosa' => '#f4a6c1',
+        'azul' => '#8ec9f0',
+        'verde' => '#8fd4ac',
+        'amarelo' => '#f0d878',
+        'laranja' => '#f0b06e',
+        'roxo' => '#c3a6e8',
+    ];
+
     private PDO $pdo;
 
     public function __construct()
@@ -30,6 +40,11 @@ class ProjetoTarefaService
     public static function colunaLabel(string $coluna): string
     {
         return self::COLUNA_LABEL[$coluna] ?? $coluna;
+    }
+
+    public static function corHex(?string $cor): ?string
+    {
+        return self::CORES[$cor] ?? null;
     }
 
     /** @return array<string, array> tarefas do projeto já agrupadas por coluna, prontas pro Kanban renderizar. */
@@ -102,14 +117,15 @@ class ProjetoTarefaService
         }
 
         $faseId = !empty($dados['fase_id']) ? (int)$dados['fase_id'] : null;
+        $cor = array_key_exists($dados['cor'] ?? '', self::CORES) ? $dados['cor'] : null;
 
         $stmt = $this->pdo->prepare('SELECT COALESCE(MAX(posicao), -1) + 1 FROM projetos_tarefas WHERE projeto_id = ? AND coluna = "a_fazer"');
         $stmt->execute([$projetoId]);
         $posicao = (int)$stmt->fetchColumn();
 
         $ins = $this->pdo->prepare(
-            'INSERT INTO projetos_tarefas (projeto_id, fase_id, titulo, descricao, tag, posicao, data_inicio, prazo, criado_por)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            'INSERT INTO projetos_tarefas (projeto_id, fase_id, titulo, descricao, tag, cor, posicao, data_inicio, prazo, criado_por)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $ins->execute([
             $projetoId,
@@ -117,6 +133,7 @@ class ProjetoTarefaService
             $titulo,
             trim($dados['descricao'] ?? '') ?: null,
             trim($dados['tag'] ?? '') ?: null,
+            $cor,
             $posicao,
             trim($dados['data_inicio'] ?? '') ?: null,
             trim($dados['prazo'] ?? '') ?: null,
@@ -139,14 +156,16 @@ class ProjetoTarefaService
         }
 
         $faseId = !empty($dados['fase_id']) ? (int)$dados['fase_id'] : null;
+        $cor = array_key_exists($dados['cor'] ?? '', self::CORES) ? $dados['cor'] : null;
 
         $stmt = $this->pdo->prepare(
-            'UPDATE projetos_tarefas SET titulo = ?, descricao = ?, tag = ?, fase_id = ?, data_inicio = ?, prazo = ? WHERE id = ?'
+            'UPDATE projetos_tarefas SET titulo = ?, descricao = ?, tag = ?, cor = ?, fase_id = ?, data_inicio = ?, prazo = ? WHERE id = ?'
         );
         $stmt->execute([
             $titulo,
             trim($dados['descricao'] ?? '') ?: null,
             trim($dados['tag'] ?? '') ?: null,
+            $cor,
             $faseId,
             trim($dados['data_inicio'] ?? '') ?: null,
             trim($dados['prazo'] ?? '') ?: null,

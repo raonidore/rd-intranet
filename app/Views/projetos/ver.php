@@ -156,6 +156,11 @@ $colunaLabels = [
 .gantt-marco { position: absolute; top: 9px; width: 16px; height: 16px; background: #495364; transform: translateX(-8px) rotate(45deg); border-radius: 3px; }
 .gantt-hoje { position: absolute; top: 0; bottom: 0; width: 2px; background: #dc3545; opacity: .5; z-index: 2; }
 .gantt-wrap { overflow-x: auto; }
+.cor-swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+.cor-swatch { width: 26px; height: 26px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; display: inline-block; }
+.cor-swatch.selecionada { border-color: #212529; box-shadow: 0 0 0 2px #fff inset; }
+.cor-swatch.cor-nenhuma { background: #fff; border: 2px dashed #ced4da; position: relative; }
+.cor-swatch.cor-nenhuma.selecionada { border-color: #212529; border-style: solid; }
 </style>
 
 <div class="card border-0 shadow-sm mb-4">
@@ -169,6 +174,11 @@ $colunaLabels = [
             <li class="nav-item" role="presentation">
                 <button class="nav-link" data-bs-toggle="tab" data-bs-target="#painelCronograma" type="button">
                     <i class="bi bi-bar-chart-steps"></i> Cronograma
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#painelLista" type="button">
+                    <i class="bi bi-list-ul"></i> Lista
                 </button>
             </li>
             <li class="nav-item ms-auto">
@@ -190,8 +200,11 @@ $colunaLabels = [
                             <div class="kanban-lista d-flex flex-column gap-2 p-2 rounded" style="min-height:80px; background:#f4f6f9" data-coluna="<?= $colunaChave ?>">
                                 <?php foreach ($quadro[$colunaChave] as $tarefa):
                                     $atrasada = $tarefa['coluna'] !== 'concluido' && !empty($tarefa['prazo']) && strtotime($tarefa['prazo']) < strtotime(date('Y-m-d'));
+                                    $corCartao = ProjetoTarefaService::corHex($tarefa['cor'] ?? null);
                                 ?>
-                                    <div class="card shadow-sm kanban-card" data-id="<?= (int)$tarefa['id'] ?>" style="cursor:pointer" data-bs-toggle="modal" data-bs-target="#modalTarefa<?= (int)$tarefa['id'] ?>">
+                                    <div class="card shadow-sm kanban-card" data-id="<?= (int)$tarefa['id'] ?>"
+                                        style="cursor:pointer<?= $corCartao ? "; border-left:4px solid {$corCartao}" : '' ?>"
+                                        data-bs-toggle="modal" data-bs-target="#modalTarefa<?= (int)$tarefa['id'] ?>">
                                         <div class="card-body p-2">
                                             <?php if ($tarefa['tag']): ?>
                                                 <span class="badge text-bg-light border mb-1"><?= htmlspecialchars($tarefa['tag']) ?></span>
@@ -264,6 +277,49 @@ $colunaLabels = [
                     </div>
                     <p class="text-muted small mt-2 mb-0"><i class="bi bi-info-circle"></i> Losango = marco (só uma data conhecida); barra = intervalo. Linha vermelha = hoje.</p>
                 <?php endif; ?>
+            </div>
+
+            <div class="tab-pane fade" id="painelLista">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th style="width:6px"></th>
+                                <th>Tarefa</th>
+                                <th>Fase</th>
+                                <th>Status</th>
+                                <th>Prazo</th>
+                                <th>Pessoas</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php $totalListado = 0; ?>
+                            <?php foreach ($colunaLabels as $colunaChave => $colunaLabel): foreach ($quadro[$colunaChave] as $tarefa): $totalListado++;
+                                $atrasadaLista = $tarefa['coluna'] !== 'concluido' && !empty($tarefa['prazo']) && strtotime($tarefa['prazo']) < strtotime(date('Y-m-d'));
+                                $corLista = ProjetoTarefaService::corHex($tarefa['cor'] ?? null);
+                            ?>
+                                <tr style="cursor:pointer" data-bs-toggle="modal" data-bs-target="#modalTarefa<?= (int)$tarefa['id'] ?>">
+                                    <td><?php if ($corLista): ?><span class="d-inline-block rounded-circle" style="width:10px;height:10px;background:<?= $corLista ?>"></span><?php endif; ?></td>
+                                    <td>
+                                        <?= htmlspecialchars($tarefa['titulo']) ?>
+                                        <?php if ($tarefa['tag']): ?><span class="badge text-bg-light border ms-1"><?= htmlspecialchars($tarefa['tag']) ?></span><?php endif; ?>
+                                    </td>
+                                    <td class="text-muted small"><?= htmlspecialchars($tarefa['fase_nome'] ?? '-') ?></td>
+                                    <td><span class="badge text-bg-light border"><?= $colunaLabel ?></span></td>
+                                    <td class="small <?= $atrasadaLista ? 'text-danger fw-semibold' : 'text-muted' ?>"><?= $tarefa['prazo'] ? date('d/m/Y', strtotime($tarefa['prazo'])) : '-' ?></td>
+                                    <td class="small text-muted">
+                                        <?php if ($tarefa['total_responsaveis'] || $tarefa['total_externos']): ?>
+                                            <i class="bi bi-people"></i> <?= (int)$tarefa['total_responsaveis'] + (int)$tarefa['total_externos'] ?>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; endforeach; ?>
+                            <?php if ($totalListado === 0): ?>
+                                <tr><td colspan="6" class="text-center text-muted py-4">Nenhuma tarefa ainda.</td></tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -557,6 +613,16 @@ $colunaLabels = [
                             <input type="text" name="tag" class="form-control" maxlength="60" placeholder="Ex: Segurança, Infra...">
                         </div>
                         <div class="col-12">
+                            <label class="form-label">Cor do cartão <span class="text-muted fw-normal">(opcional)</span></label>
+                            <input type="hidden" name="cor" class="campo-cor-tarefa">
+                            <div class="cor-swatches">
+                                <span class="cor-swatch cor-nenhuma selecionada" data-cor="" title="Sem cor"></span>
+                                <?php foreach (ProjetoTarefaService::CORES as $corChave => $corHex): ?>
+                                    <span class="cor-swatch" data-cor="<?= $corChave ?>" style="background:<?= $corHex ?>" title="<?= ucfirst($corChave) ?>"></span>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                        <div class="col-12">
                             <label class="form-label">Descrição</label>
                             <textarea name="descricao" class="form-control" rows="3"></textarea>
                         </div>
@@ -602,6 +668,15 @@ $colunaLabels = [
                         </div>
                         <div class="col-md-6">
                             <input type="text" name="tag" class="form-control form-control-sm" value="<?= htmlspecialchars($tarefa['tag'] ?? '') ?>" placeholder="Tag" maxlength="60">
+                        </div>
+                        <div class="col-12">
+                            <input type="hidden" name="cor" class="campo-cor-tarefa" value="<?= htmlspecialchars($tarefa['cor'] ?? '') ?>">
+                            <div class="cor-swatches">
+                                <span class="cor-swatch cor-nenhuma <?= empty($tarefa['cor']) ? 'selecionada' : '' ?>" data-cor="" title="Sem cor"></span>
+                                <?php foreach (ProjetoTarefaService::CORES as $corChave => $corHex): ?>
+                                    <span class="cor-swatch <?= ($tarefa['cor'] ?? '') === $corChave ? 'selecionada' : '' ?>" data-cor="<?= $corChave ?>" style="background:<?= $corHex ?>" title="<?= ucfirst($corChave) ?>"></span>
+                                <?php endforeach; ?>
+                            </div>
                         </div>
                         <?php if (!empty($fases)): ?>
                         <div class="col-12">
@@ -723,6 +798,18 @@ $colunaLabels = [
         form.submit();
     }
     window.mudarStatusProjeto = mudarStatusProjeto;
+
+    // --- Cor do cartão: clicar num swatch marca ele e guarda no campo escondido ---
+    document.querySelectorAll('.cor-swatches').forEach(function (grupo) {
+        const campo = grupo.parentElement.querySelector('.campo-cor-tarefa');
+        grupo.querySelectorAll('.cor-swatch').forEach(function (swatch) {
+            swatch.addEventListener('click', function () {
+                grupo.querySelectorAll('.cor-swatch').forEach(function (s) { s.classList.remove('selecionada'); });
+                swatch.classList.add('selecionada');
+                campo.value = swatch.dataset.cor;
+            });
+        });
+    });
 
     document.querySelectorAll('.btn-editar-fase').forEach(function (botao) {
         botao.addEventListener('click', function () {
