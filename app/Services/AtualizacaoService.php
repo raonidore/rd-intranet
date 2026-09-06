@@ -184,6 +184,7 @@ class AtualizacaoService
             $this->garantirCronWhatsappInatividade();
             $this->garantirCronChamadosDistribuicao();
             $this->garantirCronChamadosSlaExpediente();
+            $this->garantirCronProjetosPrazos();
         }
 
         $commitDepois = $this->commitAtual();
@@ -365,6 +366,21 @@ class AtualizacaoService
             'Pausa/retoma o prazo de SLA dos chamados abertos conforme o horário de expediente configurado em Chamados > Configurações.',
             '*/5 * * * *',
             'php ' . $this->repoDir() . '/rd chamados:sincronizar-sla'
+        );
+    }
+
+    /**
+     * Roda mesmo sem nenhuma tarefa com prazo pra vencer -- só não avisa
+     * ninguém nesse caso (checado dentro de
+     * ProjetoTarefaService::verificarPrazosVencendo()).
+     */
+    public function garantirCronProjetosPrazos(): void
+    {
+        $this->garantirCronJob(
+            'Verificar prazos de tarefas de Projetos',
+            'Avisa por e-mail (e WhatsApp, se o participante externo tiver telefone cadastrado) os responsáveis de tarefa do módulo Projetos com prazo vencendo amanhã.',
+            '@daily',
+            'php ' . $this->repoDir() . '/rd projetos:verificar-prazos'
         );
     }
 
