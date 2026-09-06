@@ -25,6 +25,8 @@ declare -A COMANDOS=(
   [qrencode]="qrencode"
   [snmp]="snmpget"
   [rclone]="rclone"
+  [mtr]="mtr"
+  [bind9-dnsutils]="dig"
 )
 
 for CHAVE in "${!COMANDOS[@]}"; do
