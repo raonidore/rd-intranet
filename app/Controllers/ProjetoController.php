@@ -43,6 +43,12 @@ class ProjetoController extends Controller
             exit;
         }
 
+        if ($projeto['excluido_em'] !== null) {
+            NotificationService::error('Esse projeto está na lixeira -- restaure antes de mexer nele.');
+            header('Location: ' . url('/projetos'));
+            exit;
+        }
+
         $usuarioId = (int)$_SESSION['usuario']['id'];
         $ehAdmin = $this->ehAdmin();
         $liberado = $exigirGerenciar
@@ -120,6 +126,7 @@ class ProjetoController extends Controller
             'podeGerenciar' => $this->service->podeGerenciar($projeto, $usuarioId, $this->ehAdmin()),
             'fases' => (new ProjetoFaseService())->listar($id),
             'quadro' => $tarefaService->quadro($id),
+            'gantt' => $tarefaService->gantt($id),
             'resumo' => $tarefaService->resumo($id),
             'timeline' => (new ProjetoComentarioService())->timeline($id),
             'anexos' => (new ProjetoAnexoService())->porProjeto($id),
@@ -167,7 +174,7 @@ class ProjetoController extends Controller
         $id = (int)($_POST['id'] ?? 0);
         $this->projetoVisivelOuSair($id, true);
 
-        $resultado = $this->service->excluir($id);
+        $resultado = $this->service->excluir($id, (int)$_SESSION['usuario']['id']);
 
         AuditService::registrar('Projetos', 'Excluir projeto', "#{$id}: {$resultado['message']}");
 

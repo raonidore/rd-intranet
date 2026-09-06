@@ -185,6 +185,7 @@ class AtualizacaoService
             $this->garantirCronChamadosDistribuicao();
             $this->garantirCronChamadosSlaExpediente();
             $this->garantirCronProjetosPrazos();
+            $this->garantirCronProjetosLixeira();
         }
 
         $commitDepois = $this->commitAtual();
@@ -381,6 +382,21 @@ class AtualizacaoService
             'Avisa por e-mail (e WhatsApp, se o participante externo tiver telefone cadastrado) os responsáveis de tarefa do módulo Projetos com prazo vencendo amanhã.',
             '@daily',
             'php ' . $this->repoDir() . '/rd projetos:verificar-prazos'
+        );
+    }
+
+    /**
+     * Purga em definitivo (arquivo + linha do banco) projeto na lixeira
+     * há mais de 30 dias. Roda mesmo sem nada na lixeira -- só não faz
+     * nada nesse caso (checado dentro de ProjetoService::purgarExpirados()).
+     */
+    public function garantirCronProjetosLixeira(): void
+    {
+        $this->garantirCronJob(
+            'Purgar lixeira de Projetos',
+            'Remove em definitivo projeto excluído há mais de 30 dias no módulo Projetos (antes disso, fica na Lixeira pra restaurar).',
+            '@daily',
+            'php ' . $this->repoDir() . '/rd projetos:purgar-lixeira'
         );
     }
 

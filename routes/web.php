@@ -29,6 +29,7 @@ use App\Controllers\ProjetoComentarioController;
 use App\Controllers\ProjetoAnexoController;
 use App\Controllers\ProjetoPainelTvController;
 use App\Controllers\ProjetoPortalController;
+use App\Controllers\ProjetoLixeiraController;
 use App\Controllers\DocumentoCategoriaController;
 use App\Controllers\DocumentoController;
 use App\Controllers\FornecedorController;
@@ -680,6 +681,10 @@ $router->get('/projetos/portal/sair', [ProjetoPortalController::class, 'sair']);
 $router->get('/projetos/portal', [ProjetoPortalController::class, 'index']);
 $router->get('/projetos/portal/tarefa', [ProjetoPortalController::class, 'tarefa']);
 $router->post('/projetos/portal/comentar', [ProjetoPortalController::class, 'comentar']);
+
+$router->get('/projetos/lixeira', [ProjetoLixeiraController::class, 'index']);
+$router->post('/projetos/lixeira/restaurar', [ProjetoLixeiraController::class, 'restaurar']);
+$router->post('/projetos/lixeira/excluir-definitivo', [ProjetoLixeiraController::class, 'excluirDefinitivo']);
 
 $router->get('/avisos', [AvisoController::class, 'mural']);
 $router->post('/avisos/marcar-visto', [AvisoController::class, 'marcarVisto']);

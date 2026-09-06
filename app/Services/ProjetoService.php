@@ -53,7 +53,7 @@ class ProjetoService
      */
     public function visivelPara(int $usuarioId, bool $ehAdmin, array $filtros = []): array
     {
-        $sql = 'SELECT p.*, a.nome AS area_nome FROM projetos p JOIN projetos_areas a ON a.id = p.area_id WHERE 1=1';
+        $sql = 'SELECT p.*, a.nome AS area_nome FROM projetos p JOIN projetos_areas a ON a.id = p.area_id WHERE p.excluido_em IS NULL';
         $params = [];
 
         if (!$ehAdmin) {
@@ -97,7 +97,7 @@ class ProjetoService
         $stmt = $this->pdo->prepare(
             "SELECT p.*, a.nome AS area_nome FROM projetos p
              JOIN projetos_areas a ON a.id = p.area_id
-             WHERE p.area_id = ? AND p.status IN ('planejamento','em_andamento')
+             WHERE p.area_id = ? AND p.excluido_em IS NULL AND p.status IN ('planejamento','em_andamento')
              ORDER BY p.atualizado_em DESC"
         );
         $stmt->execute([$areaId]);
@@ -249,8 +249,30 @@ class ProjetoService
         return ['success' => true, 'message' => 'Status atualizado.'];
     }
 
+    /**
+     * Não apaga de verdade -- manda pra lixeira (30 dias pra restaurar
+     * antes da purga automática de `purgarExpirados()`). O hard-delete
+     * de verdade só acontece em excluirDefinitivo().
+     *
+     * @return array{success: bool, message: string}
+     */
+    public function excluir(int $id, ?int $usuarioId): array
+    {
+        $this->pdo->prepare('UPDATE projetos SET excluido_em = NOW(), excluido_por = ? WHERE id = ?')->execute([$usuarioId, $id]);
+
+        return ['success' => true, 'message' => 'Projeto movido para a lixeira. Fica lá por 30 dias antes de ser removido de vez.'];
+    }
+
     /** @return array{success: bool, message: string} */
-    public function excluir(int $id): array
+    public function restaurar(int $id): array
+    {
+        $this->pdo->prepare('UPDATE projetos SET excluido_em = NULL, excluido_por = NULL WHERE id = ?')->execute([$id]);
+
+        return ['success' => true, 'message' => 'Projeto restaurado.'];
+    }
+
+    /** Hard-delete de verdade -- usado pelo botão "Excluir definitivo" da lixeira e pela purga automática. */
+    public function excluirDefinitivo(int $id): array
     {
         foreach ((new ProjetoAnexoService())->porProjeto($id) as $anexo) {
             if ($anexo['anexo_origem'] === 'upload') {
@@ -260,7 +282,42 @@ class ProjetoService
 
         $this->pdo->prepare('DELETE FROM projetos WHERE id = ?')->execute([$id]);
 
-        return ['success' => true, 'message' => 'Projeto removido.'];
+        return ['success' => true, 'message' => 'Projeto removido em definitivo.'];
+    }
+
+    /** @return array<int, array> projetos na lixeira, com quantos dias faltam antes da purga automática. */
+    public function listarLixeira(): array
+    {
+        $stmt = $this->pdo->query(
+            "SELECT p.*, a.nome AS area_nome, u.nome AS excluido_por_nome,
+                    GREATEST(0, DATEDIFF(DATE_ADD(p.excluido_em, INTERVAL 30 DAY), NOW())) AS dias_restantes
+             FROM projetos p
+             JOIN projetos_areas a ON a.id = p.area_id
+             LEFT JOIN usuarios u ON u.id = p.excluido_por
+             WHERE p.excluido_em IS NOT NULL
+             ORDER BY p.excluido_em DESC"
+        );
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Varredura periódica (cron "projetos:purgar-lixeira") -- remove
+     * em definitivo quem está na lixeira há mais de 30 dias. Mesmo
+     * formato de ProjetoTarefaService::verificarPrazosVencendo().
+     */
+    public function purgarExpirados(): int
+    {
+        $stmt = $this->pdo->query(
+            "SELECT id FROM projetos WHERE excluido_em IS NOT NULL AND excluido_em < DATE_SUB(NOW(), INTERVAL 30 DAY)"
+        );
+        $ids = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+        foreach ($ids as $id) {
+            $this->excluirDefinitivo((int)$id);
+        }
+
+        return count($ids);
     }
 
     /**

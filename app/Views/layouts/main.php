@@ -419,6 +419,9 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         <a href="<?= url('/projetos/areas') ?>" class="<?= str_starts_with($uriAtual, '/projetos/areas') ? 'active' : '' ?>">
             <i class="bi bi-diagram-3 me-2"></i> Áreas
         </a>
+        <a href="<?= url('/projetos/lixeira') ?>" class="<?= str_starts_with($uriAtual, '/projetos/lixeira') ? 'active' : '' ?>">
+            <i class="bi bi-trash3 me-2"></i> Lixeira
+        </a>
         <?php endif; ?>
         <?php if (PermissionService::temAcesso('projetos_estatisticas')): ?>
         <a href="<?= url('/projetos/estatisticas') ?>" class="<?= $uriAtual === '/projetos/estatisticas' ? 'active' : '' ?>">

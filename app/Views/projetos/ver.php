@@ -52,6 +52,12 @@ $colunaLabels = [
             <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#modalDuplicar">
                 <i class="bi bi-copy"></i> Duplicar
             </button>
+            <form method="post" action="<?= url('/projetos/excluir') ?>" onsubmit="return confirm('Excluir este projeto? Ele vai pra lixeira por 30 dias, dá pra restaurar até lá.');">
+                <input type="hidden" name="id" value="<?= (int)$projeto['id'] ?>">
+                <button type="submit" class="btn btn-outline-danger btn-sm">
+                    <i class="bi bi-trash3"></i> Excluir
+                </button>
+            </form>
         </div>
     <?php endif; ?>
 </div>
@@ -136,50 +142,129 @@ $colunaLabels = [
 </div>
 <?php endif; ?>
 
+<style>
+.gantt-row { height: 34px; border-bottom: 1px solid #eef0f3; }
+.gantt-label { width: 220px; flex-shrink: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 8px; }
+.gantt-track { flex: 1; position: relative; }
+.gantt-bar { position: absolute; top: 8px; height: 18px; border-radius: 5px; background: #8b95a5; }
+.gantt-bar.gantt-fase { background: #495364; top: 6px; height: 22px; }
+.gantt-bar.gantt-a_fazer { background: #adb5bd; }
+.gantt-bar.gantt-em_andamento { background: #0d6efd; }
+.gantt-bar.gantt-aguardando_terceiro { background: #ffc107; }
+.gantt-bar.gantt-concluido { background: #198754; }
+.gantt-bar.gantt-atrasada { background: #dc3545; }
+.gantt-marco { position: absolute; top: 9px; width: 16px; height: 16px; background: #495364; transform: translateX(-8px) rotate(45deg); border-radius: 3px; }
+.gantt-hoje { position: absolute; top: 0; bottom: 0; width: 2px; background: #dc3545; opacity: .5; z-index: 2; }
+.gantt-wrap { overflow-x: auto; }
+</style>
+
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h6 class="card-title mb-0"><i class="bi bi-kanban"></i> Quadro</h6>
-            <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalNovaTarefa">
-                <i class="bi bi-plus-lg"></i> Nova tarefa
-            </button>
-        </div>
-        <div class="kanban-board d-flex gap-3" style="overflow-x:auto">
-            <?php foreach ($colunaLabels as $colunaChave => $colunaLabel): ?>
-                <div class="kanban-col flex-shrink-0" style="width:270px">
-                    <div class="d-flex justify-content-between align-items-center mb-2 small text-uppercase text-muted fw-semibold">
-                        <span><?= $colunaLabel ?></span>
-                        <span class="badge text-bg-light border"><?= count($quadro[$colunaChave]) ?></span>
-                    </div>
-                    <div class="kanban-lista d-flex flex-column gap-2 p-2 rounded" style="min-height:80px; background:#f4f6f9" data-coluna="<?= $colunaChave ?>">
-                        <?php foreach ($quadro[$colunaChave] as $tarefa):
-                            $atrasada = $tarefa['coluna'] !== 'concluido' && !empty($tarefa['prazo']) && strtotime($tarefa['prazo']) < strtotime(date('Y-m-d'));
-                        ?>
-                            <div class="card shadow-sm kanban-card" data-id="<?= (int)$tarefa['id'] ?>" style="cursor:pointer" data-bs-toggle="modal" data-bs-target="#modalTarefa<?= (int)$tarefa['id'] ?>">
-                                <div class="card-body p-2">
-                                    <?php if ($tarefa['tag']): ?>
-                                        <span class="badge text-bg-light border mb-1"><?= htmlspecialchars($tarefa['tag']) ?></span>
-                                    <?php endif; ?>
-                                    <div class="small fw-medium"><?= htmlspecialchars($tarefa['titulo']) ?></div>
-                                    <?php if ($tarefa['fase_nome']): ?>
-                                        <div class="text-muted" style="font-size:11px"><?= htmlspecialchars($tarefa['fase_nome']) ?></div>
-                                    <?php endif; ?>
-                                    <div class="d-flex justify-content-between align-items-center mt-2">
-                                        <span class="small <?= $atrasada ? 'text-danger fw-semibold' : 'text-muted' ?>">
-                                            <?= $tarefa['prazo'] ? date('d/m', strtotime($tarefa['prazo'])) : '' ?>
-                                        </span>
-                                        <span class="small text-muted">
-                                            <?php if ($tarefa['total_responsaveis'] || $tarefa['total_externos']): ?>
-                                                <i class="bi bi-people"></i> <?= (int)$tarefa['total_responsaveis'] + (int)$tarefa['total_externos'] ?>
+        <ul class="nav nav-tabs mb-3" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#painelQuadro" type="button">
+                    <i class="bi bi-kanban"></i> Quadro
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#painelCronograma" type="button">
+                    <i class="bi bi-bar-chart-steps"></i> Cronograma
+                </button>
+            </li>
+            <li class="nav-item ms-auto">
+                <button type="button" class="btn btn-primary btn-sm mt-1" data-bs-toggle="modal" data-bs-target="#modalNovaTarefa">
+                    <i class="bi bi-plus-lg"></i> Nova tarefa
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content">
+            <div class="tab-pane fade show active" id="painelQuadro">
+                <div class="kanban-board d-flex gap-3" style="overflow-x:auto">
+                    <?php foreach ($colunaLabels as $colunaChave => $colunaLabel): ?>
+                        <div class="kanban-col flex-shrink-0" style="width:270px">
+                            <div class="d-flex justify-content-between align-items-center mb-2 small text-uppercase text-muted fw-semibold">
+                                <span><?= $colunaLabel ?></span>
+                                <span class="badge text-bg-light border"><?= count($quadro[$colunaChave]) ?></span>
+                            </div>
+                            <div class="kanban-lista d-flex flex-column gap-2 p-2 rounded" style="min-height:80px; background:#f4f6f9" data-coluna="<?= $colunaChave ?>">
+                                <?php foreach ($quadro[$colunaChave] as $tarefa):
+                                    $atrasada = $tarefa['coluna'] !== 'concluido' && !empty($tarefa['prazo']) && strtotime($tarefa['prazo']) < strtotime(date('Y-m-d'));
+                                ?>
+                                    <div class="card shadow-sm kanban-card" data-id="<?= (int)$tarefa['id'] ?>" style="cursor:pointer" data-bs-toggle="modal" data-bs-target="#modalTarefa<?= (int)$tarefa['id'] ?>">
+                                        <div class="card-body p-2">
+                                            <?php if ($tarefa['tag']): ?>
+                                                <span class="badge text-bg-light border mb-1"><?= htmlspecialchars($tarefa['tag']) ?></span>
                                             <?php endif; ?>
-                                        </span>
+                                            <div class="small fw-medium"><?= htmlspecialchars($tarefa['titulo']) ?></div>
+                                            <?php if ($tarefa['fase_nome']): ?>
+                                                <div class="text-muted" style="font-size:11px"><?= htmlspecialchars($tarefa['fase_nome']) ?></div>
+                                            <?php endif; ?>
+                                            <div class="d-flex justify-content-between align-items-center mt-2">
+                                                <span class="small <?= $atrasada ? 'text-danger fw-semibold' : 'text-muted' ?>">
+                                                    <?= $tarefa['prazo'] ? date('d/m', strtotime($tarefa['prazo'])) : '' ?>
+                                                </span>
+                                                <span class="small text-muted">
+                                                    <?php if ($tarefa['total_responsaveis'] || $tarefa['total_externos']): ?>
+                                                        <i class="bi bi-people"></i> <?= (int)$tarefa['total_responsaveis'] + (int)$tarefa['total_externos'] ?>
+                                                    <?php endif; ?>
+                                                </span>
+                                            </div>
+                                        </div>
                                     </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="painelCronograma">
+                <?php if (empty($gantt['linhas'])): ?>
+                    <p class="text-muted small mb-0">Defina data de início/fim numa fase, ou data de início/prazo numa tarefa, pra elas aparecerem aqui.</p>
+                <?php else: ?>
+                    <div class="d-flex justify-content-between small text-muted mb-2">
+                        <span><?= date('d/m/Y', strtotime($gantt['inicio'])) ?></span>
+                        <span><?= date('d/m/Y', strtotime($gantt['fim'])) ?></span>
+                    </div>
+                    <div class="gantt-wrap" style="min-width:600px">
+                        <?php foreach ($gantt['linhas'] as $linha): ?>
+                            <div class="gantt-row d-flex align-items-center">
+                                <div class="gantt-label fw-semibold"><?= htmlspecialchars($linha['nome']) ?></div>
+                                <div class="gantt-track">
+                                    <?php if ($gantt['hoje_pct'] !== null): ?>
+                                        <div class="gantt-hoje" style="left:<?= $gantt['hoje_pct'] ?>%"></div>
+                                    <?php endif; ?>
+                                    <?php if ($linha['tipo'] === 'barra'): ?>
+                                        <div class="gantt-bar gantt-fase" style="left:<?= $linha['left'] ?>%; width:<?= $linha['width'] ?>%" title="<?= htmlspecialchars($linha['nome']) ?>"></div>
+                                    <?php elseif ($linha['tipo'] === 'marco'): ?>
+                                        <div class="gantt-marco" style="left:<?= $linha['left'] ?>%" title="<?= htmlspecialchars($linha['nome']) ?> (marco)"></div>
+                                    <?php endif; ?>
                                 </div>
                             </div>
+                            <?php foreach ($linha['tarefas'] as $tarefa):
+                                $atrasadaGantt = $tarefa['coluna'] !== 'concluido' && !empty($tarefa['prazo']) && strtotime($tarefa['prazo']) < strtotime(date('Y-m-d'));
+                                $corBarra = $atrasadaGantt ? 'gantt-atrasada' : 'gantt-' . $tarefa['coluna'];
+                            ?>
+                                <div class="gantt-row d-flex align-items-center">
+                                    <div class="gantt-label ps-3 text-muted"><?= htmlspecialchars($tarefa['titulo']) ?></div>
+                                    <div class="gantt-track">
+                                        <?php if ($gantt['hoje_pct'] !== null): ?>
+                                            <div class="gantt-hoje" style="left:<?= $gantt['hoje_pct'] ?>%"></div>
+                                        <?php endif; ?>
+                                        <?php if ($tarefa['tipo'] === 'barra'): ?>
+                                            <div class="gantt-bar <?= $corBarra ?>" style="left:<?= $tarefa['left'] ?>%; width:<?= $tarefa['width'] ?>%" title="<?= htmlspecialchars($tarefa['titulo']) ?>"></div>
+                                        <?php else: ?>
+                                            <div class="gantt-marco <?= $corBarra ?>" style="left:<?= $tarefa['left'] ?>%" title="<?= htmlspecialchars($tarefa['titulo']) ?> (marco)"></div>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
                         <?php endforeach; ?>
                     </div>
-                </div>
-            <?php endforeach; ?>
+                    <p class="text-muted small mt-2 mb-0"><i class="bi bi-info-circle"></i> Losango = marco (só uma data conhecida); barra = intervalo. Linha vermelha = hoje.</p>
+                <?php endif; ?>
+            </div>
         </div>
     </div>
 </div>
@@ -460,6 +545,10 @@ $colunaLabels = [
                         </div>
                         <?php endif; ?>
                         <div class="col-md-6">
+                            <label class="form-label">Início <span class="text-muted fw-normal">(opcional -- pra aparecer como barra no Cronograma)</span></label>
+                            <input type="date" name="data_inicio" class="form-control">
+                        </div>
+                        <div class="col-md-6">
                             <label class="form-label">Prazo</label>
                             <input type="date" name="prazo" class="form-control">
                         </div>
@@ -504,6 +593,11 @@ $colunaLabels = [
                             <input type="text" name="titulo" class="form-control form-control-sm" value="<?= htmlspecialchars($tarefa['titulo']) ?>" maxlength="200" required>
                         </div>
                         <div class="col-md-6">
+                            <label class="form-label small mb-0">Início</label>
+                            <input type="date" name="data_inicio" class="form-control form-control-sm" value="<?= htmlspecialchars($tarefa['data_inicio'] ?? '') ?>">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small mb-0">Prazo</label>
                             <input type="date" name="prazo" class="form-control form-control-sm" value="<?= htmlspecialchars($tarefa['prazo'] ?? '') ?>">
                         </div>
                         <div class="col-md-6">

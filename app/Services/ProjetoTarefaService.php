@@ -108,8 +108,8 @@ class ProjetoTarefaService
         $posicao = (int)$stmt->fetchColumn();
 
         $ins = $this->pdo->prepare(
-            'INSERT INTO projetos_tarefas (projeto_id, fase_id, titulo, descricao, tag, posicao, prazo, criado_por)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+            'INSERT INTO projetos_tarefas (projeto_id, fase_id, titulo, descricao, tag, posicao, data_inicio, prazo, criado_por)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $ins->execute([
             $projetoId,
@@ -118,6 +118,7 @@ class ProjetoTarefaService
             trim($dados['descricao'] ?? '') ?: null,
             trim($dados['tag'] ?? '') ?: null,
             $posicao,
+            trim($dados['data_inicio'] ?? '') ?: null,
             trim($dados['prazo'] ?? '') ?: null,
             $usuarioId,
         ]);
@@ -140,13 +141,14 @@ class ProjetoTarefaService
         $faseId = !empty($dados['fase_id']) ? (int)$dados['fase_id'] : null;
 
         $stmt = $this->pdo->prepare(
-            'UPDATE projetos_tarefas SET titulo = ?, descricao = ?, tag = ?, fase_id = ?, prazo = ? WHERE id = ?'
+            'UPDATE projetos_tarefas SET titulo = ?, descricao = ?, tag = ?, fase_id = ?, data_inicio = ?, prazo = ? WHERE id = ?'
         );
         $stmt->execute([
             $titulo,
             trim($dados['descricao'] ?? '') ?: null,
             trim($dados['tag'] ?? '') ?: null,
             $faseId,
+            trim($dados['data_inicio'] ?? '') ?: null,
             trim($dados['prazo'] ?? '') ?: null,
             $id,
         ]);
@@ -300,5 +302,103 @@ class ProjetoTarefaService
         }
 
         return count($ids);
+    }
+
+    /**
+     * Dados prontos pra desenhar o Gantt em PHP+CSS (`left`/`width` em
+     * %, já calculados aqui) -- a view só desenha `<div style="...">`,
+     * sem nenhuma matemática de data nela. Uma linha por Fase (barra
+     * larga), com as tarefas daquela fase logo abaixo, indentadas;
+     * tarefas sem fase entram num grupo "Sem fase" no fim.
+     *
+     * "Marco": quando só dá pra saber UM ponto no tempo (fase com
+     * data_inicio == data_fim_prevista, ou tarefa só com `prazo` e sem
+     * `data_inicio`), vira `tipo => 'marco'` -- a view desenha um
+     * losango em vez de uma barra. Sem nenhuma data utilizável, a
+     * linha nem entra no resultado (não dá pra posicionar).
+     *
+     * @return array{inicio: string, fim: string, hoje_pct: ?float, linhas: array<int, array>}
+     */
+    public function gantt(int $projetoId): array
+    {
+        $fases = (new ProjetoFaseService())->listar($projetoId);
+        $quadro = $this->quadro($projetoId);
+        $tarefas = array_merge(...array_values($quadro));
+
+        $datas = [];
+        foreach ($fases as $fase) {
+            if ($fase['data_inicio']) $datas[] = $fase['data_inicio'];
+            if ($fase['data_fim_prevista']) $datas[] = $fase['data_fim_prevista'];
+        }
+        foreach ($tarefas as $tarefa) {
+            if ($tarefa['data_inicio']) $datas[] = $tarefa['data_inicio'];
+            if ($tarefa['prazo']) $datas[] = $tarefa['prazo'];
+        }
+
+        if (empty($datas)) {
+            $inicio = date('Y-m-d');
+            $fim = date('Y-m-d', strtotime('+30 days'));
+        } else {
+            $inicio = min($datas);
+            $fim = max($datas);
+            if ($inicio === $fim) {
+                $fim = date('Y-m-d', strtotime($fim . ' +1 day'));
+            }
+        }
+
+        $totalDias = max(1, (int)((strtotime($fim) - strtotime($inicio)) / 86400));
+        $hojePct = null;
+        $hoje = date('Y-m-d');
+        if ($hoje >= $inicio && $hoje <= $fim) {
+            $hojePct = round((strtotime($hoje) - strtotime($inicio)) / 86400 / $totalDias * 100, 2);
+        }
+
+        $barra = function (?string $de, ?string $ate) use ($inicio, $totalDias): ?array {
+            $de = $de ?: $ate;
+            $ate = $ate ?: $de;
+            if ($de === null) {
+                return null;
+            }
+            if ($de === $ate) {
+                $left = round((strtotime($de) - strtotime($inicio)) / 86400 / $totalDias * 100, 2);
+                return ['tipo' => 'marco', 'left' => max(0, min(100, $left)), 'width' => 0];
+            }
+            $left = round((strtotime($de) - strtotime($inicio)) / 86400 / $totalDias * 100, 2);
+            $width = round((strtotime($ate) - strtotime($de)) / 86400 / $totalDias * 100, 2);
+            return ['tipo' => 'barra', 'left' => max(0, min(100, $left)), 'width' => max(1, $width)];
+        };
+
+        $linhas = [];
+        $tarefasSemFase = [];
+        foreach ($fases as $fase) {
+            $pos = $barra($fase['data_inicio'], $fase['data_fim_prevista']);
+            $filhas = [];
+            foreach ($tarefas as $tarefa) {
+                if ((int)($tarefa['fase_id'] ?? 0) !== (int)$fase['id']) {
+                    continue;
+                }
+                $posTarefa = $barra($tarefa['data_inicio'], $tarefa['prazo']);
+                if ($posTarefa !== null) {
+                    $filhas[] = array_merge($tarefa, $posTarefa);
+                }
+            }
+            if ($pos !== null || !empty($filhas)) {
+                $linhas[] = array_merge($fase, $pos ?? ['tipo' => null, 'left' => 0, 'width' => 0], ['tarefas' => $filhas]);
+            }
+        }
+        foreach ($tarefas as $tarefa) {
+            if (!empty($tarefa['fase_id'])) {
+                continue;
+            }
+            $posTarefa = $barra($tarefa['data_inicio'], $tarefa['prazo']);
+            if ($posTarefa !== null) {
+                $tarefasSemFase[] = array_merge($tarefa, $posTarefa);
+            }
+        }
+        if (!empty($tarefasSemFase)) {
+            $linhas[] = ['id' => null, 'nome' => 'Sem fase', 'tipo' => null, 'left' => 0, 'width' => 0, 'tarefas' => $tarefasSemFase];
+        }
+
+        return ['inicio' => $inicio, 'fim' => $fim, 'hoje_pct' => $hojePct, 'linhas' => $linhas];
     }
 }
