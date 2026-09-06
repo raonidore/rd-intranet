@@ -79,6 +79,9 @@ class ModuloCatalogo
         'chamados_externos_atendimentos' => ['label' => 'Chamados Externos - Atendimentos', 'grupo' => 'Chamados'],
         'chamados_externos_categorias' => ['label' => 'Chamados Externos - Categorias', 'grupo' => 'Chamados'],
         'chamados_externos_estatisticas' => ['label' => 'Chamados Externos - Estatísticas', 'grupo' => 'Chamados'],
+        'projetos_atendimentos' => ['label' => 'Projetos - Atendimentos', 'grupo' => 'Projetos'],
+        'projetos_gerenciar' => ['label' => 'Projetos - Gerenciar (Áreas)', 'grupo' => 'Projetos'],
+        'projetos_estatisticas' => ['label' => 'Projetos - Estatísticas', 'grupo' => 'Projetos'],
         'chat_conversas' => ['label' => 'Chat Interno', 'grupo' => 'Chat'],
         'fornecedores_gerenciar' => ['label' => 'Fornecedores e Contratos', 'grupo' => 'Fornecedores'],
         'documentos_acessar' => ['label' => 'Documentos - Acessar', 'grupo' => 'Documentos'],
@@ -117,6 +120,7 @@ class ModuloCatalogo
         'Banco de Dados' => 'bi-database',
         'Base de Conhecimento' => 'bi-journal-text',
         'Chamados' => 'bi-ticket-perforated',
+        'Projetos' => 'bi-kanban',
         'Avisos' => 'bi-megaphone-fill',
         'Chat' => 'bi-chat-dots-fill',
         'Documentos' => 'bi-folder2-open',
@@ -147,7 +151,7 @@ class ModuloCatalogo
      */
 
     public const GRUPOS_TOGGLEAVEIS = [
-        'Apache', 'Banco de Dados', 'Ativos', 'Infraestrutura', 'VPN', 'Samba', 'Segurança', 'Microsoft Entra', 'Backup', 'SSH', 'Base de Conhecimento', 'WhatsApp', 'Chamados', 'Chat', 'Fornecedores', 'Documentos', 'Avisos',
+        'Apache', 'Banco de Dados', 'Ativos', 'Infraestrutura', 'VPN', 'Samba', 'Segurança', 'Microsoft Entra', 'Backup', 'SSH', 'Base de Conhecimento', 'WhatsApp', 'Chamados', 'Projetos', 'Chat', 'Fornecedores', 'Documentos', 'Avisos',
     ];
 
     /** Grupos que nascem desligados em instalações novas -- opt-in, não fazem parte do uso típico. */

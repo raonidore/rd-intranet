@@ -42,6 +42,7 @@ $abrirEntra = $rdSecaoAtiva(['/entra']);
 $abrirBaseConhecimento = $rdSecaoAtiva(['/base-conhecimento']);
 $abrirWhatsapp = $rdSecaoAtiva(['/whatsapp']);
 $abrirChamados = $rdSecaoAtiva(['/chamados']);
+$abrirProjetos = $rdSecaoAtiva(['/projetos']);
 
 $abrirHardware = $rdSecaoAtiva(['/infraestrutura/hardware']);
 $abrirRede = $rdSecaoAtiva(['/infraestrutura/rede', '/infraestrutura/servidor/rede']);
@@ -392,6 +393,36 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         <?php if (PermissionService::temAcesso('chamados_configuracoes')): ?>
         <a href="<?= url('/chamados/configuracoes') ?>" class="<?= $uriAtual === '/chamados/configuracoes' ? 'active' : '' ?>">
             <i class="bi bi-gear me-2"></i> Configurações
+        </a>
+        <?php endif; ?>
+    </div>
+    <?php endif; ?>
+
+    <?php
+    $temProjetos = PermissionService::temAcesso('projetos_atendimentos')
+        || PermissionService::temAcesso('projetos_gerenciar')
+        || PermissionService::temAcesso('projetos_estatisticas');
+    ?>
+    <?php if ($temProjetos): ?>
+    <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuProjetos"
+            aria-expanded="<?= $abrirProjetos ? 'true' : 'false' ?>">
+        <span><i class="bi bi-kanban me-2"></i>Projetos</span>
+        <i class="bi bi-chevron-right chevron"></i>
+    </button>
+    <div class="collapse <?= $abrirProjetos ? 'show' : '' ?>" id="menuProjetos">
+        <?php if (PermissionService::temAcesso('projetos_atendimentos')): ?>
+        <a href="<?= url('/projetos') ?>" class="<?= $uriAtual === '/projetos' || str_starts_with($uriAtual, '/projetos/ver') || str_starts_with($uriAtual, '/projetos/novo') ? 'active' : '' ?>">
+            <i class="bi bi-kanban me-2"></i> Projetos
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('projetos_gerenciar')): ?>
+        <a href="<?= url('/projetos/areas') ?>" class="<?= str_starts_with($uriAtual, '/projetos/areas') ? 'active' : '' ?>">
+            <i class="bi bi-diagram-3 me-2"></i> Áreas
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('projetos_estatisticas')): ?>
+        <a href="<?= url('/projetos/estatisticas') ?>" class="<?= $uriAtual === '/projetos/estatisticas' ? 'active' : '' ?>">
+            <i class="bi bi-bar-chart-line me-2"></i> Estatísticas
         </a>
         <?php endif; ?>
     </div>

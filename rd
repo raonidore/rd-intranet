@@ -2,6 +2,7 @@
 <?php
 
 require_once __DIR__ . '/vendor/autoload.php';
+require_once __DIR__ . '/app/Helpers/url.php';
 
 $comando = $argv[1] ?? null;
 $nome = $argv[2] ?? null;
@@ -23,6 +24,7 @@ if (!$comando) {
     echo "  whatsapp:encerrar-inativos  Encerra atendimentos sem mensagem há mais tempo que o configurado em Chatbot > Finalização\n";
     echo "  chamados:distribuir     Atribui automaticamente chamados parados na fila (Chamados > Configurações)\n";
     echo "  chamados:sincronizar-sla  Pausa/retoma o prazo de SLA dos chamados conforme o horário de expediente\n";
+    echo "  projetos:verificar-prazos  Avisa responsáveis de tarefa de Projetos com prazo vencendo amanhã\n";
     echo "  whatsapp:diagnosticar-conexoes  Confere as conexões WhatsApp (QR Code) -- API key, porta, conexão padrão, bridge respondendo\n";
     exit;
 }
@@ -283,6 +285,12 @@ switch ($comando) {
     case 'chamados:sincronizar-sla':
         $total = (new \App\Services\ChamadoService())->sincronizarPausaSlaTodos();
         echo "OK: {$total} chamado(s) aberto(s) conferido(s) pra pausa/retomada de SLA.\n";
+
+        break;
+
+    case 'projetos:verificar-prazos':
+        $total = (new \App\Services\ProjetoTarefaService())->verificarPrazosVencendo();
+        echo "OK: {$total} tarefa(s) com prazo vencendo amanhã, responsáveis avisados.\n";
 
         break;
 

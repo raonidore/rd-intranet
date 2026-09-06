@@ -21,6 +21,14 @@ use App\Controllers\GrupoController;
 use App\Controllers\AvisoController;
 use App\Controllers\ChamadoExternoCategoriaController;
 use App\Controllers\ChamadoExternoController;
+use App\Controllers\ProjetoAreaController;
+use App\Controllers\ProjetoController;
+use App\Controllers\ProjetoFaseController;
+use App\Controllers\ProjetoTarefaController;
+use App\Controllers\ProjetoComentarioController;
+use App\Controllers\ProjetoAnexoController;
+use App\Controllers\ProjetoPainelTvController;
+use App\Controllers\ProjetoPortalController;
 use App\Controllers\DocumentoCategoriaController;
 use App\Controllers\DocumentoController;
 use App\Controllers\FornecedorController;
@@ -619,6 +627,59 @@ $router->get('/chamados-externos/categorias', [ChamadoExternoCategoriaController
 $router->post('/chamados-externos/categorias/criar', [ChamadoExternoCategoriaController::class, 'criar']);
 $router->post('/chamados-externos/categorias/atualizar', [ChamadoExternoCategoriaController::class, 'atualizar']);
 $router->post('/chamados-externos/categorias/excluir', [ChamadoExternoCategoriaController::class, 'excluir']);
+
+$router->get('/projetos', [ProjetoController::class, 'index']);
+$router->get('/projetos/novo', [ProjetoController::class, 'novoForm']);
+$router->post('/projetos/novo', [ProjetoController::class, 'novo']);
+$router->get('/projetos/ver', [ProjetoController::class, 'ver']);
+$router->post('/projetos/editar', [ProjetoController::class, 'editar']);
+$router->post('/projetos/status', [ProjetoController::class, 'mudarStatus']);
+$router->post('/projetos/excluir', [ProjetoController::class, 'excluir']);
+$router->post('/projetos/duplicar', [ProjetoController::class, 'duplicar']);
+$router->get('/projetos/estatisticas', [ProjetoController::class, 'estatisticas']);
+
+$router->get('/projetos/areas', [ProjetoAreaController::class, 'index']);
+$router->post('/projetos/areas/criar', [ProjetoAreaController::class, 'criar']);
+$router->post('/projetos/areas/atualizar', [ProjetoAreaController::class, 'atualizar']);
+$router->post('/projetos/areas/excluir', [ProjetoAreaController::class, 'excluir']);
+$router->post('/projetos/areas/gestor-adicionar', [ProjetoAreaController::class, 'gestorAdicionar']);
+$router->post('/projetos/areas/gestor-remover', [ProjetoAreaController::class, 'gestorRemover']);
+$router->get('/projetos/areas/usuarios-buscar', [ProjetoAreaController::class, 'usuariosBuscarApi']);
+
+$router->post('/projetos/fases/criar', [ProjetoFaseController::class, 'criar']);
+$router->post('/projetos/fases/atualizar', [ProjetoFaseController::class, 'atualizar']);
+$router->post('/projetos/fases/excluir', [ProjetoFaseController::class, 'excluir']);
+
+$router->post('/projetos/tarefas/criar', [ProjetoTarefaController::class, 'criar']);
+$router->post('/projetos/tarefas/atualizar', [ProjetoTarefaController::class, 'atualizar']);
+$router->post('/projetos/tarefas/mover', [ProjetoTarefaController::class, 'mover']);
+$router->post('/projetos/tarefas/excluir', [ProjetoTarefaController::class, 'excluir']);
+$router->get('/projetos/tarefas/usuarios-buscar', [ProjetoTarefaController::class, 'usuariosBuscarApi']);
+$router->post('/projetos/tarefas/responsavel-adicionar', [ProjetoTarefaController::class, 'responsavelAdicionar']);
+$router->post('/projetos/tarefas/responsavel-remover', [ProjetoTarefaController::class, 'responsavelRemover']);
+$router->get('/projetos/tarefas/externos-buscar', [ProjetoTarefaController::class, 'externosBuscarApi']);
+$router->post('/projetos/tarefas/externo-adicionar', [ProjetoTarefaController::class, 'externoAdicionar']);
+$router->post('/projetos/tarefas/externo-remover', [ProjetoTarefaController::class, 'externoRemover']);
+
+$router->post('/projetos/comentar', [ProjetoComentarioController::class, 'comentar']);
+$router->post('/projetos/anexo-upload', [ProjetoAnexoController::class, 'upload']);
+$router->post('/projetos/anexo-samba', [ProjetoAnexoController::class, 'samba']);
+$router->post('/projetos/anexo-excluir', [ProjetoAnexoController::class, 'excluir']);
+$router->post('/projetos/anexo-renomear', [ProjetoAnexoController::class, 'renomear']);
+$router->get('/projetos/anexo', [ProjetoAnexoController::class, 'baixar']);
+
+$router->post('/projetos/tv/gerar-link', [ProjetoPainelTvController::class, 'gerarLink']);
+$router->post('/projetos/tv/revogar', [ProjetoPainelTvController::class, 'revogar']);
+$router->get('/projetos/tv', [ProjetoPainelTvController::class, 'pagina']);
+$router->get('/projetos/tv/dados', [ProjetoPainelTvController::class, 'dados']);
+
+$router->get('/projetos/portal/login', [ProjetoPortalController::class, 'loginForm']);
+$router->post('/projetos/portal/login', [ProjetoPortalController::class, 'login']);
+$router->get('/projetos/portal/acessar', [ProjetoPortalController::class, 'acessar']);
+$router->get('/projetos/portal/sair', [ProjetoPortalController::class, 'sair']);
+$router->get('/projetos/portal', [ProjetoPortalController::class, 'index']);
+$router->get('/projetos/portal/tarefa', [ProjetoPortalController::class, 'tarefa']);
+$router->post('/projetos/portal/comentar', [ProjetoPortalController::class, 'comentar']);
 
 $router->get('/avisos', [AvisoController::class, 'mural']);
 $router->post('/avisos/marcar-visto', [AvisoController::class, 'marcarVisto']);
