@@ -41,6 +41,12 @@ use App\Components\Alert;
 .ipscan-map-label { font-size: 9px; fill: #495057; }
 
 .ipscan-search { max-width: 320px; }
+
+.ipscan-chip { display:flex; align-items:center; gap:8px; background:#f8fafc; border:1px solid #e9ecef; border-radius:10px; padding:6px 10px; font-size:12px; }
+.ipscan-chip .chip-cidr { font-family: monospace; font-weight:600; color:#0d3b66; }
+.ipscan-chip .chip-meta { color:#6c757d; }
+.ipscan-chip button { border:0; background:transparent; color:#0d6efd; padding:0 2px; line-height:1; }
+.ipscan-chip button:hover { color:#0a58ca; }
 </style>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -73,6 +79,15 @@ use App\Components\Alert;
                 <i class="bi bi-radar me-1"></i> Iniciar varredura
             </button>
         </form>
+    </div>
+</div>
+
+<div class="card ipscan-card mb-4" id="painel-recentes" style="<?= empty($recentes) ? 'display:none' : '' ?>">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center py-2">
+        <span class="small text-muted text-uppercase" style="letter-spacing:.04em"><i class="bi bi-clock-history me-1"></i>Varreduras recentes</span>
+    </div>
+    <div class="card-body py-2">
+        <div id="lista-recentes" class="d-flex gap-2 flex-wrap"></div>
     </div>
 </div>
 
@@ -205,12 +220,54 @@ use App\Components\Alert;
     const URL_INICIAR = <?= json_encode(url('/infraestrutura/rede/scanner')) ?>;
     const URL_STATUS = <?= json_encode(url('/infraestrutura/rede/scanner/status')) ?>;
     const URL_FINALIZAR = <?= json_encode(url('/infraestrutura/rede/scanner/finalizar')) ?>;
+    const URL_HISTORICO = <?= json_encode(url('/infraestrutura/rede/scanner/historico')) ?>;
     const URL_PORTAS = <?= json_encode(url('/infraestrutura/rede/scanner/portas')) ?>;
     const URL_WOL = <?= json_encode(url('/infraestrutura/rede/scanner/wol')) ?>;
 
     let hostsAtuais = [];
     let poll = null;
     let chartFabricantes = null;
+
+    function tempoRelativo(dataStr) {
+        const diffMin = Math.max(0, Math.round((Date.now() - new Date(dataStr.replace(' ', 'T'))) / 60000));
+        if (diffMin < 1) return 'agora';
+        if (diffMin < 60) return diffMin + 'min atrás';
+        const diffH = Math.round(diffMin / 60);
+        if (diffH < 24) return diffH + 'h atrás';
+        return Math.round(diffH / 24) + 'd atrás';
+    }
+
+    function renderizarRecentes(lista) {
+        const painel = document.getElementById('painel-recentes');
+        const container = document.getElementById('lista-recentes');
+        container.innerHTML = '';
+
+        if (!lista || lista.length === 0) { painel.style.display = 'none'; return; }
+        painel.style.display = '';
+
+        lista.forEach(function (item) {
+            const chip = document.createElement('div');
+            chip.className = 'ipscan-chip';
+            chip.innerHTML =
+                '<span class="chip-cidr">' + item.cidr + '</span>' +
+                '<span class="chip-meta">' + item.total_hosts + ' host(s) &middot; ' + tempoRelativo(item.executado_em) + '</span>' +
+                '<button type="button" title="Varrer de novo"><i class="bi bi-arrow-repeat"></i></button>';
+            chip.querySelector('button').addEventListener('click', function () {
+                document.getElementById('input-cidr').value = item.cidr;
+                document.getElementById('form-scanner').requestSubmit();
+            });
+            container.appendChild(chip);
+        });
+    }
+
+    async function atualizarRecentes() {
+        try {
+            const res = await fetch(URL_HISTORICO);
+            renderizarRecentes(await res.json());
+        } catch (err) { /* silencioso -- não é crítico */ }
+    }
+
+    renderizarRecentes(<?= json_encode($recentes ?? []) ?>);
 
     function toast(msg, ok) {
         var el = document.getElementById('ipscan-toast');
@@ -304,6 +361,7 @@ use App\Components\Alert;
 
         setTimeout(function () { document.getElementById('painel-radar').classList.add('d-none'); }, 600);
         renderizarResultado(cidr);
+        atualizarRecentes();
     }
 
     function renderizarComparacao(comparacao) {

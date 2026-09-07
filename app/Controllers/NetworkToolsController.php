@@ -172,7 +172,16 @@ class NetworkToolsController extends Controller
 
         $this->view('infrastructure/rede_scanner', [
             'faixaSugerida' => $this->service->sugerirFaixaPadrao(),
+            'recentes' => $this->service->listarExecucoesRecentes(),
         ]);
+    }
+
+    public function scannerHistorico(): void
+    {
+        AuthMiddleware::checkModulo('infra_rede');
+        header('Content-Type: application/json');
+
+        echo json_encode($this->service->listarExecucoesRecentes());
     }
 
     public function scannerIniciar(): void

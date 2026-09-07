@@ -47,6 +47,7 @@ class ModuloCatalogo
         'ssh_conexoes' => ['label' => 'Conexões SSH', 'grupo' => 'SSH'],
         'auditoria' => ['label' => 'Auditoria', 'grupo' => 'Segurança'],
         'seguranca_antivirus' => ['label' => 'Antivírus', 'grupo' => 'Segurança'],
+        'seguranca_auditoria_credenciais' => ['label' => 'Auditoria de Credenciais', 'grupo' => 'Segurança'],
         'ativos_dashboard' => ['label' => 'Ativos - Dashboard', 'grupo' => 'Ativos'],
         'ativos_lista' => ['label' => 'Ativos - Lista', 'grupo' => 'Ativos'],
         'ativos_novo' => ['label' => 'Ativos - Novo/Editar', 'grupo' => 'Ativos'],
@@ -157,6 +158,19 @@ class ModuloCatalogo
 
     /** Grupos que nascem desligados em instalações novas -- opt-in, não fazem parte do uso típico. */
     private const GRUPOS_DESABILITADOS_POR_PADRAO = ['Microsoft Entra'];
+
+    /**
+     * Módulos "restritos": nem perfil admin ganha acesso automático (ver
+     * PermissionService::temAcessoRestrito()) -- precisam de concessão
+     * explícita pela tela de Usuários, mesmo pra quem já é admin. Reservado
+     * pra ferramentas sensíveis (hoje só a auditoria de credenciais).
+     */
+    public const MODULOS_RESTRITOS = ['seguranca_auditoria_credenciais'];
+
+    public static function ehRestrito(string $modulo): bool
+    {
+        return in_array($modulo, self::MODULOS_RESTRITOS, true);
+    }
 
     private const CHAVE_CONFIG_GRUPOS = 'sistema_grupos_habilitados';
 

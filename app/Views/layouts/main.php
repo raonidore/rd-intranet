@@ -727,7 +727,8 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
     <?php endif; ?>
 
     <?php
-    $temSeguranca = PermissionService::temAcesso('seguranca_antivirus');
+    $temSeguranca = PermissionService::temAcesso('seguranca_antivirus')
+        || PermissionService::temAcessoRestrito('seguranca_auditoria_credenciais');
     ?>
     <?php if ($temSeguranca): ?>
     <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuSeguranca"
@@ -739,6 +740,11 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         <?php if (PermissionService::temAcesso('seguranca_antivirus')): ?>
         <a href="<?= url('/seguranca/antivirus') ?>" class="<?= str_starts_with($uriAtual, '/seguranca/antivirus') ? 'active' : '' ?>">
             <i class="bi bi-virus me-2"></i> Antivírus
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcessoRestrito('seguranca_auditoria_credenciais')): ?>
+        <a href="<?= url('/seguranca/auditoria-credenciais') ?>" class="<?= str_starts_with($uriAtual, '/seguranca/auditoria-credenciais') ? 'active' : '' ?>">
+            <i class="bi bi-key me-2"></i> Auditoria de Credenciais
         </a>
         <?php endif; ?>
     </div>

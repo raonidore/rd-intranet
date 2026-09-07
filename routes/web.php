@@ -85,6 +85,7 @@ use App\Controllers\VpnIkev2Controller;
 use App\Controllers\VpnIkev2SaidaController;
 use App\Controllers\AtualizacaoController;
 use App\Controllers\AntivirusController;
+use App\Controllers\SegurancaAuditoriaController;
 use App\Controllers\BackupController;
 use App\Controllers\AtivoController;
 use App\Controllers\AtivoAgenteController;
@@ -248,6 +249,7 @@ $router->get('/infraestrutura/rede/trafego/historico', [NetworkToolsController::
 $router->get('/infraestrutura/rede/scanner', [NetworkToolsController::class, 'scanner']);
 $router->post('/infraestrutura/rede/scanner', [NetworkToolsController::class, 'scannerIniciar']);
 $router->get('/infraestrutura/rede/scanner/status', [NetworkToolsController::class, 'scannerStatus']);
+$router->get('/infraestrutura/rede/scanner/historico', [NetworkToolsController::class, 'scannerHistorico']);
 $router->post('/infraestrutura/rede/scanner/finalizar', [NetworkToolsController::class, 'scannerFinalizar']);
 $router->post('/infraestrutura/rede/scanner/portas', [NetworkToolsController::class, 'scannerPortas']);
 $router->post('/infraestrutura/rede/scanner/wol', [NetworkToolsController::class, 'scannerWol']);
@@ -579,6 +581,13 @@ $router->post('/seguranca/antivirus/tempo-real/ativar', [AntivirusController::cl
 $router->post('/seguranca/antivirus/tempo-real/desativar', [AntivirusController::class, 'desativarTempoReal']);
 $router->post('/seguranca/antivirus/verificacao-periodica', [AntivirusController::class, 'verificacaoPeriodica']);
 $router->post('/seguranca/antivirus/quarentena/excluir', [AntivirusController::class, 'quarentenaExcluir']);
+
+$router->get('/seguranca/auditoria-credenciais', [SegurancaAuditoriaController::class, 'index']);
+$router->post('/seguranca/auditoria-credenciais/local', [SegurancaAuditoriaController::class, 'local']);
+$router->post('/seguranca/auditoria-credenciais/credenciais-padrao', [SegurancaAuditoriaController::class, 'credenciaisPadrao']);
+$router->post('/seguranca/auditoria-credenciais/ssh/iniciar', [SegurancaAuditoriaController::class, 'sshIniciar']);
+$router->get('/seguranca/auditoria-credenciais/ssh/status', [SegurancaAuditoriaController::class, 'sshStatus']);
+$router->post('/seguranca/auditoria-credenciais/ssh/finalizar', [SegurancaAuditoriaController::class, 'sshFinalizar']);
 
 $router->get('/backup/configuracao', [BackupController::class, 'configuracao']);
 $router->post('/backup/configuracao/salvar', [BackupController::class, 'salvar']);

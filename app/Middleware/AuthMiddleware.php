@@ -26,6 +26,16 @@ class AuthMiddleware
         }
     }
 
+    /** Ver PermissionService::temAcessoRestrito() -- sem bypass de admin. */
+    public static function checkModuloRestrito(string $modulo): void
+    {
+        self::check();
+
+        if (!PermissionService::temAcessoRestrito($modulo)) {
+            self::negarAcesso();
+        }
+    }
+
     public static function checkAdmin(): void
     {
         self::check();

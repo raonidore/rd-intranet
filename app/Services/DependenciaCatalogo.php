@@ -103,6 +103,22 @@ class DependenciaCatalogo
                 'obrigatorio' => false,
             ],
             [
+                'chave' => 'john',
+                'nome' => 'John the Ripper',
+                'pacote' => 'john',
+                'descricao' => 'Auditoria offline de senha das contas locais deste servidor (contra o próprio /etc/shadow) usada pela Auditoria de Credenciais.',
+                'usado_em' => 'Segurança > Auditoria de Credenciais',
+                'obrigatorio' => false,
+            ],
+            [
+                'chave' => 'hydra',
+                'nome' => 'THC-Hydra',
+                'pacote' => 'hydra',
+                'descricao' => 'Teste de credenciais padrão/senha fraca em um dispositivo/serviço específico, usado pela Auditoria de Credenciais.',
+                'usado_em' => 'Segurança > Auditoria de Credenciais',
+                'obrigatorio' => false,
+            ],
+            [
                 'chave' => 'nmap',
                 'nome' => 'nmap',
                 'pacote' => 'nmap',

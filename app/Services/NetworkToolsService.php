@@ -450,4 +450,31 @@ class NetworkToolsService
         $stmt = $pdo->prepare("INSERT INTO ip_scanner_execucoes (cidr, executado_em, executado_por, total_hosts, hosts) VALUES (?, NOW(), ?, ?, ?)");
         $stmt->execute([$cidr, $usuarioId, count($hosts), json_encode($hosts)]);
     }
+
+    /**
+     * Última varredura de cada faixa distinta, mais recente primeiro --
+     * alimenta o menu "Varreduras recentes" (atalho pra re-escanear sem
+     * digitar o CIDR de novo). Uma linha por CIDR (não o histórico
+     * completo), então re-escanear a mesma faixa várias vezes não
+     * polui a lista com repetições.
+     */
+    public function listarExecucoesRecentes(int $limite = 8): array
+    {
+        $pdo = Database::connection();
+        $stmt = $pdo->prepare("
+            SELECT e.cidr, e.executado_em, e.total_hosts
+            FROM ip_scanner_execucoes e
+            INNER JOIN (
+                SELECT cidr, MAX(executado_em) AS ultima
+                FROM ip_scanner_execucoes
+                GROUP BY cidr
+            ) u ON u.cidr = e.cidr AND u.ultima = e.executado_em
+            ORDER BY e.executado_em DESC
+            LIMIT ?
+        ");
+        $stmt->bindValue(1, $limite, \PDO::PARAM_INT);
+        $stmt->execute();
+
+        return $stmt->fetchAll(\PDO::FETCH_ASSOC);
+    }
 }

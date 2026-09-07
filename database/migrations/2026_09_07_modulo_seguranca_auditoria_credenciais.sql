@@ -1,0 +1,10 @@
+-- Novo módulo "seguranca_auditoria_credenciais" (auditoria de credenciais:
+-- contas locais fracas, credenciais padrão de fábrica, teste de senha de
+-- SSH escopado a um alvo/conta já escolhidos).
+--
+-- DE PROPÓSITO esta migração NÃO concede o módulo a ninguém -- nem a
+-- perfil admin, diferente de todo outro módulo do sistema. É um módulo
+-- restrito: mesmo admin só ganha acesso se for liberado explicitamente
+-- pela tela "Usuários do Sistema" (PermissionService::temAcessoRestrito()
+-- não faz bypass de perfil admin, ao contrário de temAcesso()). Fica em
+-- zero usuários até uma decisão manual e deliberada.

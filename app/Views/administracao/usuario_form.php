@@ -153,7 +153,7 @@ $perfilAtual = $usuario['perfil'] ?? 'ti';
         <div class="card uf-card mb-3">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-grid-3x3-gap-fill me-1"></i> Módulos com acesso liberado</span>
-                <small class="text-muted fw-normal">Só vale para TI e Consulta -- administrador já tem acesso total</small>
+                <small class="text-muted fw-normal">Pra TI/Consulta, libera o módulo. Pra admin, só os marcados "Restrito" abaixo importam -- o resto admin já tem por padrão.</small>
             </div>
             <div class="card-body">
                 <div class="row g-3">
@@ -172,6 +172,9 @@ $perfilAtual = $usuario['perfil'] ?? 'ti';
                                                <?= in_array($chave, $modulosSelecionados, true) ? 'checked' : '' ?>>
                                         <label class="form-check-label small" for="modulo_<?= $chave ?>">
                                             <?= htmlspecialchars($label) ?>
+                                            <?php if (ModuloCatalogo::ehRestrito($chave)): ?>
+                                                <span class="badge text-bg-danger" title="Precisa de liberação explícita -- mesmo perfil admin não ganha por padrão">Restrito</span>
+                                            <?php endif; ?>
                                         </label>
                                     </div>
                                 <?php endforeach; ?>
@@ -194,9 +197,15 @@ $perfilAtual = $usuario['perfil'] ?? 'ti';
 </form>
 
 <script>
+const RD_HA_MODULOS_RESTRITOS = <?= json_encode(!empty(ModuloCatalogo::MODULOS_RESTRITOS)) ?>;
+
 function atualizarBlocoModulos() {
     const perfil = document.querySelector('input[name="perfil"]:checked')?.value;
-    document.getElementById('blocoModulos').style.display = perfil === 'admin' ? 'none' : '';
+    // Pra admin, o bloco de módulos só continua visível se existir algum
+    // módulo restrito (a lista inteira não importa pra admin, exceto os
+    // restritos -- ver PermissionService::temAcessoRestrito()).
+    const escondeModulos = perfil === 'admin' && !RD_HA_MODULOS_RESTRITOS;
+    document.getElementById('blocoModulos').style.display = escondeModulos ? 'none' : '';
     const blocoGrupos = document.getElementById('blocoGrupos');
     if (blocoGrupos) blocoGrupos.style.display = perfil === 'admin' ? 'none' : '';
 }
