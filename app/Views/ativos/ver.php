@@ -777,7 +777,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                             <p class="text-muted p-3 mb-0">Nenhum cliente conectado neste AP no momento da última coleta.</p>
                         <?php else: ?>
                             <table class="table table-sm mb-0">
-                                <thead><tr><th>Nome</th><th>Rede</th><th>IP</th><th>MAC</th><th>Sinal</th><th>Conectado desde</th></tr></thead>
+                                <thead><tr><th>Nome</th><th>Rede</th><th>IP</th><th>MAC</th><th>Sinal</th><th>Conectado desde</th><th></th></tr></thead>
                                 <tbody>
                                     <?php foreach ($clientesWifi as $cliente): ?>
                                         <tr>
@@ -787,6 +787,41 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                             <td class="font-monospace small"><?= htmlspecialchars($cliente['mac'] ?? '—') ?></td>
                                             <td><?= isset($cliente['sinal_dbm']) ? htmlspecialchars($cliente['sinal_dbm'] . ' dBm') : '—' ?></td>
                                             <td><?= htmlspecialchars(data_br($cliente['conectado_em'] ?? null)) ?></td>
+                                            <td class="text-end text-nowrap">
+                                                <button type="button" class="btn btn-sm btn-outline-secondary botao-unifi-cliente" data-acao="desconectar" data-mac="<?= htmlspecialchars($cliente['mac'] ?? '') ?>" data-nome="<?= htmlspecialchars($cliente['nome'] ?? '') ?>" title="Desconectar (reconecta sozinho)">
+                                                    <i class="bi bi-x-circle"></i>
+                                                </button>
+                                                <button type="button" class="btn btn-sm btn-outline-danger botao-unifi-cliente" data-acao="bloquear" data-mac="<?= htmlspecialchars($cliente['mac'] ?? '') ?>" data-nome="<?= htmlspecialchars($cliente['nome'] ?? '') ?>" title="Bloquear (até ser desbloqueado)">
+                                                    <i class="bi bi-slash-circle"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-white"><strong>Clientes bloqueados</strong> <span class="text-muted small">(rede toda, não só este AP)</span></div>
+                    <div class="card-body p-0">
+                        <?php if (empty($clientesUnifiBloqueados)): ?>
+                            <p class="text-muted p-3 mb-0">Nenhum cliente bloqueado no momento.</p>
+                        <?php else: ?>
+                            <table class="table table-sm mb-0">
+                                <thead><tr><th>Nome</th><th>MAC</th><th></th></tr></thead>
+                                <tbody>
+                                    <?php foreach ($clientesUnifiBloqueados as $bloqueado): ?>
+                                        <tr>
+                                            <td><?= htmlspecialchars($bloqueado['nome'] ?? '—') ?></td>
+                                            <td class="font-monospace small"><?= htmlspecialchars($bloqueado['mac'] ?? '') ?></td>
+                                            <td class="text-end">
+                                                <button type="button" class="btn btn-sm btn-outline-success botao-unifi-cliente" data-acao="desbloquear" data-mac="<?= htmlspecialchars($bloqueado['mac'] ?? '') ?>" data-nome="<?= htmlspecialchars($bloqueado['nome'] ?? '') ?>">
+                                                    <i class="bi bi-unlock"></i> Desbloquear
+                                                </button>
+                                            </td>
                                         </tr>
                                     <?php endforeach; ?>
                                 </tbody>
@@ -1289,6 +1324,46 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             botao.disabled = false;
             botao.innerHTML = '<i class="bi bi-arrow-repeat"></i> Coletar dados UniFi';
         }
+    });
+})();
+
+(function () {
+    const rotas = {
+        desconectar: <?= json_encode(url('/ativos/unifi/desconectar-cliente')) ?>,
+        bloquear: <?= json_encode(url('/ativos/unifi/bloquear-cliente')) ?>,
+        desbloquear: <?= json_encode(url('/ativos/unifi/desbloquear-cliente')) ?>,
+    };
+    const confirmacoes = {
+        desconectar: nome => `Desconectar "${nome}" da rede agora? Ele pode reconectar sozinho em seguida.`,
+        bloquear: nome => `Bloquear "${nome}"? Ele fica impedido de conectar em qualquer rede Wi-Fi deste site até ser desbloqueado.`,
+        desbloquear: nome => `Desbloquear "${nome}"?`,
+    };
+
+    document.querySelectorAll('.botao-unifi-cliente').forEach(function (botao) {
+        botao.addEventListener('click', async function () {
+            const acao = botao.dataset.acao;
+            const mac = botao.dataset.mac;
+            const nome = botao.dataset.nome || mac;
+
+            if (!confirm(confirmacoes[acao](nome))) return;
+
+            botao.disabled = true;
+
+            const dados = new URLSearchParams();
+            dados.set('mac', mac);
+            dados.set('nome', nome);
+
+            try {
+                const res = await fetch(rotas[acao], { method: 'POST', body: dados });
+                const resultado = await res.json();
+                alert(resultado.message || (resultado.success ? 'Feito.' : 'Falha.'));
+                if (resultado.success) location.reload();
+            } catch (e) {
+                alert('Erro ao comunicar com o servidor.');
+            } finally {
+                botao.disabled = false;
+            }
+        });
     });
 })();
 

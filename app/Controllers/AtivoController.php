@@ -132,6 +132,7 @@ class AtivoController extends Controller
             'temAcessoChamadosExternos' => PermissionService::temAcesso('chamados_externos_atendimentos'),
             'historicoChamadosInternos' => PermissionService::temAcesso('chamados_atendimentos') ? (new ChamadoService())->listarPorAtivo($id) : [],
             'historicoChamadosExternos' => PermissionService::temAcesso('chamados_externos_atendimentos') ? (new ChamadoExternoEstatisticaService())->porAtivo($id) : [],
+            'clientesUnifiBloqueados' => ($ativo['tipo_slug'] ?? '') === 'ponto_acesso' ? $this->service->listarClientesUnifiBloqueados() : [],
         ]);
     }
 
@@ -409,6 +410,39 @@ class AtivoController extends Controller
         }
 
         return false;
+    }
+
+    public function unifiDesconectarCliente(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $mac = trim($_POST['mac'] ?? '');
+        $nome = trim($_POST['nome'] ?? '') ?: $mac;
+
+        echo json_encode($this->service->desconectarClienteUnifi($mac, $nome));
+    }
+
+    public function unifiBloquearCliente(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $mac = trim($_POST['mac'] ?? '');
+        $nome = trim($_POST['nome'] ?? '') ?: $mac;
+
+        echo json_encode($this->service->bloquearClienteUnifi($mac, $nome));
+    }
+
+    public function unifiDesbloquearCliente(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $mac = trim($_POST['mac'] ?? '');
+        $nome = trim($_POST['nome'] ?? '') ?: $mac;
+
+        echo json_encode($this->service->desbloquearClienteUnifi($mac, $nome));
     }
 
     public function salvarIntervaloComunicacao(): void

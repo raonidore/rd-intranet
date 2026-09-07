@@ -1106,6 +1106,60 @@ class AtivoService
         return self::NOME_JOB_CRON_UNIFI;
     }
 
+    /**
+     * Ações de gerenciamento de cliente Wi-Fi (desconectar/bloquear/
+     * desbloquear) -- afetam de verdade um dispositivo real na rede do
+     * cliente, por isso cada uma vira um registro de auditoria próprio,
+     * igual às ações remotas de Ativos (reiniciar/desligar máquina).
+     */
+    public function desconectarClienteUnifi(string $mac, string $nomeAuditoria): array
+    {
+        $resultado = (new UnifiService())->desconectarCliente($mac);
+
+        if ($resultado['success']) {
+            AuditService::registrar('Ativos', 'UniFi - Desconectar cliente', "Cliente \"{$nomeAuditoria}\" ({$mac}) desconectado via UniFi Controller.");
+        }
+
+        return $resultado;
+    }
+
+    public function bloquearClienteUnifi(string $mac, string $nomeAuditoria): array
+    {
+        $resultado = (new UnifiService())->bloquearCliente($mac);
+
+        if ($resultado['success']) {
+            AuditService::registrar('Ativos', 'UniFi - Bloquear cliente', "Cliente \"{$nomeAuditoria}\" ({$mac}) bloqueado via UniFi Controller.");
+        }
+
+        return $resultado;
+    }
+
+    public function desbloquearClienteUnifi(string $mac, string $nomeAuditoria): array
+    {
+        $resultado = (new UnifiService())->desbloquearCliente($mac);
+
+        if ($resultado['success']) {
+            AuditService::registrar('Ativos', 'UniFi - Desbloquear cliente', "Cliente \"{$nomeAuditoria}\" ({$mac}) desbloqueado via UniFi Controller.");
+        }
+
+        return $resultado;
+    }
+
+    /** @return array<int, array{mac:string, nome:string}> */
+    public function listarClientesUnifiBloqueados(): array
+    {
+        $bloqueados = [];
+
+        foreach ((new UnifiService())->listarClientesBloqueados() as $u) {
+            $bloqueados[] = [
+                'mac' => $u['mac'] ?? '',
+                'nome' => $u['hostname'] ?? ($u['name'] ?? ($u['mac'] ?? '')),
+            ];
+        }
+
+        return $bloqueados;
+    }
+
     /*
      |---------------------------------------------------------
      | Agente Windows (Fase 3) -- checkin autenticado por chave de API,

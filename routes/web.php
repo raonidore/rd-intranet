@@ -934,6 +934,9 @@ $router->post('/ativos/snmp/config', [AtivoController::class, 'salvarConfigSnmp'
 $router->post('/ativos/snmp/ativar-coleta', [AtivoController::class, 'ativarColetaSnmp']);
 $router->post('/ativos/coletar-unifi', [AtivoController::class, 'coletarUnifi']);
 $router->post('/ativos/unifi/ativar-coleta', [AtivoController::class, 'ativarColetaUnifi']);
+$router->post('/ativos/unifi/desconectar-cliente', [AtivoController::class, 'unifiDesconectarCliente']);
+$router->post('/ativos/unifi/bloquear-cliente', [AtivoController::class, 'unifiBloquearCliente']);
+$router->post('/ativos/unifi/desbloquear-cliente', [AtivoController::class, 'unifiDesbloquearCliente']);
 $router->post('/ativos/agente/regenerar-chave', [AtivoController::class, 'regenerarChaveAgente']);
 $router->post('/ativos/agente/desativar-chave', [AtivoController::class, 'desativarChaveAgente']);
 $router->post('/ativos/elevacao/credenciais', [AtivoController::class, 'salvarCredenciaisElevacao']);

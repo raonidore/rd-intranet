@@ -215,6 +215,66 @@ class UnifiService
         return $resultado['dados']['data'] ?? [];
     }
 
+    /**
+     * Todos os clientes já vistos pelo Controller (não só os conectados
+     * agora) com `blocked = true` -- fonte pro botão "Desbloquear": um
+     * cliente bloqueado desconecta na hora e some de listarClientesLegado()
+     * (só mostra quem está conectado), então precisa dessa lista à parte
+     * pra conseguir desbloquear alguém que já caiu da rede.
+     */
+    public function listarClientesBloqueados(): array
+    {
+        $ref = $this->siteRefAtual();
+
+        if ($ref === null) {
+            return [];
+        }
+
+        $resultado = $this->chamarApi('GET', "/proxy/network/api/s/{$ref}/list/user");
+
+        if (!$resultado['sucesso']) {
+            NotificationService::error('Erro ao listar clientes bloqueados do UniFi Controller.', $resultado['mensagem']);
+            return [];
+        }
+
+        return array_values(array_filter($resultado['dados']['data'] ?? [], fn($u) => !empty($u['blocked'])));
+    }
+
+    /** Desconecta o cliente agora -- reconecta sozinho em seguida (não é um bloqueio, só força uma nova associação). */
+    public function desconectarCliente(string $mac): array
+    {
+        return $this->executarComandoStamgr('kick-sta', $mac, 'Cliente desconectado -- pode reconectar normalmente em seguida.');
+    }
+
+    /** Bloqueia o cliente -- fica impedido de conectar em qualquer AP deste site até ser desbloqueado (não existe bloqueio por tempo determinado nativo no Controller). */
+    public function bloquearCliente(string $mac): array
+    {
+        return $this->executarComandoStamgr('block-sta', $mac, 'Cliente bloqueado -- vai continuar impedido de conectar até ser desbloqueado.');
+    }
+
+    public function desbloquearCliente(string $mac): array
+    {
+        return $this->executarComandoStamgr('unblock-sta', $mac, 'Cliente desbloqueado.');
+    }
+
+    /** @return array{success:bool, message:string} */
+    private function executarComandoStamgr(string $cmd, string $mac, string $mensagemSucesso): array
+    {
+        $ref = $this->siteRefAtual();
+
+        if ($ref === null) {
+            return ['success' => false, 'message' => 'Site do UniFi Controller ainda não identificado -- use "Testar conexão" em Integrações > UniFi.'];
+        }
+
+        $resultado = $this->chamarApi('POST', "/proxy/network/api/s/{$ref}/cmd/stamgr", ['cmd' => $cmd, 'mac' => strtolower(trim($mac))]);
+
+        if (!$resultado['sucesso']) {
+            return ['success' => false, 'message' => $resultado['mensagem']];
+        }
+
+        return ['success' => true, 'message' => $mensagemSucesso];
+    }
+
     /** offset/limit até esgotar totalCount -- na prática quase sempre cabe numa página só, mas evita truncar silenciosamente em instalações maiores. */
     private function paginar(string $caminhoBase): array
     {
@@ -248,7 +308,7 @@ class UnifiService
      *
      * @return array{sucesso:bool, dados:mixed, mensagem:string}
      */
-    private function chamarApi(string $metodo, string $caminho): array
+    private function chamarApi(string $metodo, string $caminho, ?array $corpo = null): array
     {
         if (!$this->configurado()) {
             return ['sucesso' => false, 'dados' => null, 'mensagem' => 'Integração com o UniFi Controller ainda não configurada -- veja Integrações.'];
@@ -262,15 +322,24 @@ class UnifiService
 
         $url = $this->urlAtual() . $caminho;
 
+        $cabecalhos = ['X-API-KEY: ' . $apiKey, 'Accept: application/json'];
+        if ($corpo !== null) {
+            $cabecalhos[] = 'Content-Type: application/json';
+        }
+
         $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_CUSTOMREQUEST => $metodo,
-            CURLOPT_HTTPHEADER => ['X-API-KEY: ' . $apiKey, 'Accept: application/json'],
+            CURLOPT_HTTPHEADER => $cabecalhos,
             CURLOPT_TIMEOUT => 15,
             CURLOPT_SSL_VERIFYPEER => false,
             CURLOPT_SSL_VERIFYHOST => false,
         ]);
+
+        if ($corpo !== null) {
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($corpo));
+        }
 
         $resposta = curl_exec($ch);
         $codigo = curl_getinfo($ch, CURLINFO_HTTP_CODE);
