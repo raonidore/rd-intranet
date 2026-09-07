@@ -5,6 +5,7 @@ use App\Components\Alert;
 use App\Components\Badge;
 use App\Services\AtivoService;
 use App\Services\PermissionService;
+use App\Services\UnifiService;
 
 $statusCores = [
     'ativo' => 'success',
@@ -155,6 +156,11 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                 <i class="bi bi-arrow-repeat"></i> Coletar via SNMP
             </button>
         <?php endif; ?>
+        <?php if (($ativo['tipo_slug'] ?? '') === 'ponto_acesso' && !empty($ativo['ip']) && (new UnifiService())->configurado()): ?>
+            <button type="button" class="btn btn-outline-secondary" id="botaoColetarUnifi" data-id="<?= (int)$ativo['id'] ?>">
+                <i class="bi bi-arrow-repeat"></i> Coletar dados UniFi
+            </button>
+        <?php endif; ?>
         <?php if ($ativo['origem'] === 'agente'): ?>
             <button type="button" class="btn btn-outline-secondary" id="botaoForcarCheckin" data-id="<?= (int)$ativo['id'] ?>">
                 <i class="bi bi-arrow-repeat"></i> Forçar coleta agora
@@ -241,6 +247,14 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     <?php if ($ativo['origem'] === 'agente'): ?>
     <li class="nav-item" role="presentation">
         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaProcessos" type="button"><i class="bi bi-cpu"></i> Processos</button>
+    </li>
+    <?php endif; ?>
+    <?php if (($ativo['tipo_slug'] ?? '') === 'ponto_acesso'): ?>
+    <?php $clientesWifi = $detalhes['unifi_clientes'] ?? []; ?>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaWifi" type="button">
+            <i class="bi bi-wifi"></i> Wi-Fi <?= !empty($clientesWifi) ? '<span class="badge text-bg-secondary ms-1">' . count($clientesWifi) . '</span>' : '' ?>
+        </button>
     </li>
     <?php endif; ?>
     <?php if ($temAcessoChamadosInternos || $temAcessoChamadosExternos): ?>
@@ -720,6 +734,63 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
         </div>
     </div>
 
+    <?php if (($ativo['tipo_slug'] ?? '') === 'ponto_acesso'): ?>
+    <!-- Wi-Fi (UniFi) -->
+    <div class="tab-pane fade" id="abaWifi">
+        <div class="row g-3">
+            <div class="col-lg-5">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-white"><strong>Rádios</strong></div>
+                    <div class="card-body p-0">
+                        <?php $radios = $detalhes['unifi_radios'] ?? []; ?>
+                        <?php if (empty($radios)): ?>
+                            <p class="text-muted p-3 mb-0">Nenhum dado coletado ainda. Use o botão "Coletar dados UniFi".</p>
+                        <?php else: ?>
+                            <table class="table table-sm mb-0">
+                                <thead><tr><th>Banda</th><th>Canal</th><th>Largura</th><th>Padrão</th></tr></thead>
+                                <tbody>
+                                    <?php foreach ($radios as $radio): ?>
+                                        <tr>
+                                            <td><?= htmlspecialchars((string)($radio['banda'] ?? '—')) ?></td>
+                                            <td><?= htmlspecialchars((string)($radio['canal'] ?? '—')) ?></td>
+                                            <td><?= $radio['largura_mhz'] ? htmlspecialchars($radio['largura_mhz'] . ' MHz') : '—' ?></td>
+                                            <td><?= htmlspecialchars((string)($radio['padrao'] ?? '—')) ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-7">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-white"><strong>Clientes conectados (Wi-Fi)</strong></div>
+                    <div class="card-body p-0">
+                        <?php if (empty($clientesWifi)): ?>
+                            <p class="text-muted p-3 mb-0">Nenhum cliente conectado neste AP no momento da última coleta.</p>
+                        <?php else: ?>
+                            <table class="table table-sm mb-0">
+                                <thead><tr><th>Nome</th><th>IP</th><th>MAC</th><th>Conectado desde</th></tr></thead>
+                                <tbody>
+                                    <?php foreach ($clientesWifi as $cliente): ?>
+                                        <tr>
+                                            <td><?= htmlspecialchars($cliente['nome'] ?? '—') ?></td>
+                                            <td><?= htmlspecialchars($cliente['ip'] ?? '—') ?></td>
+                                            <td class="font-monospace small"><?= htmlspecialchars($cliente['mac'] ?? '—') ?></td>
+                                            <td><?= htmlspecialchars(data_br($cliente['conectado_em'] ?? null)) ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
+
     <!-- Programas -->
     <div class="tab-pane fade" id="abaProgramas">
         <div class="card border-0 shadow-sm">
@@ -1184,6 +1255,31 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
         } finally {
             botao.disabled = false;
             botao.innerHTML = '<i class="bi bi-arrow-repeat"></i> Coletar via SNMP';
+        }
+    });
+})();
+
+(function () {
+    const botao = document.getElementById('botaoColetarUnifi');
+    if (!botao) return;
+
+    botao.addEventListener('click', async function () {
+        botao.disabled = true;
+        botao.innerHTML = '<i class="bi bi-hourglass-split"></i> Coletando...';
+
+        const dados = new URLSearchParams();
+        dados.set('id', botao.dataset.id);
+
+        try {
+            const res = await fetch(<?= json_encode(url('/ativos/coletar-unifi')) ?>, { method: 'POST', body: dados });
+            const resultado = await res.json();
+            alert(resultado.message || (resultado.success ? 'Coletado.' : 'Falha ao coletar.'));
+            if (resultado.success) location.reload();
+        } catch (e) {
+            alert('Erro ao comunicar com o servidor.');
+        } finally {
+            botao.disabled = false;
+            botao.innerHTML = '<i class="bi bi-arrow-repeat"></i> Coletar dados UniFi';
         }
     });
 })();

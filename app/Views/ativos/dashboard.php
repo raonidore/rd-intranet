@@ -348,6 +348,25 @@ $statusCores = [
             </div>
         </div>
 
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white"><strong>Coleta via UniFi Controller</strong></div>
+            <div class="card-body">
+                <p class="text-muted small mb-2">
+                    Modelo, firmware, status, rádios e clientes conectados dos pontos de acesso UniFi, via
+                    <a href="<?= url('/administracao/integracoes/unifi') ?>">API do Controller</a> -- alternativa ao SNMP,
+                    que não funciona nessa linha de equipamentos.
+                </p>
+                <div class="d-flex justify-content-between align-items-center small text-muted">
+                    <span><i class="bi bi-info-circle"></i> Coleta periódica (a cada 30 min) dos pontos de acesso cadastrados com IP.</span>
+                    <?php if ($coletaUnifiAtiva): ?>
+                        <span class="text-success"><i class="bi bi-check-circle"></i> Ativa</span>
+                    <?php else: ?>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="botaoAtivarColetaUnifi">Ativar coleta periódica</button>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+
         <div class="card border-0 shadow-sm h-100">
             <div class="card-header bg-white d-flex justify-content-between align-items-center">
                 <strong>Cadastrados recentemente</strong>
@@ -390,6 +409,21 @@ $statusCores = [
                 location.reload();
             } catch (e) {
                 botao.disabled = false;
+            }
+        });
+    }
+
+    const botaoUnifi = document.getElementById('botaoAtivarColetaUnifi');
+    if (botaoUnifi) {
+        botaoUnifi.addEventListener('click', async function () {
+            botaoUnifi.disabled = true;
+            try {
+                const res = await fetch(<?= json_encode(url('/ativos/unifi/ativar-coleta')) ?>, { method: 'POST' });
+                const dados = await res.json();
+                alert(dados.message || (dados.success ? 'Ativado.' : 'Falha ao ativar.'));
+                location.reload();
+            } catch (e) {
+                botaoUnifi.disabled = false;
             }
         });
     }

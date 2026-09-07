@@ -106,9 +106,20 @@ class AtivoService
             'snmp_sys_descr' => 'Descrição (SNMP)',
             'snmp_uptime' => 'Uptime (SNMP)',
         ],
+        // 'unifi_radios' e 'unifi_clientes' (arrays, não texto) ficam FORA
+        // daqui de propósito -- o loop genérico da Visão Geral em ver.php
+        // só sabe exibir texto simples. Eles são lidos direto de $detalhes
+        // numa aba própria ("Wi-Fi"), condicionada a tipo_slug === 'ponto_acesso'.
+        'ponto_acesso' => [
+            'unifi_model' => 'Modelo (UniFi)',
+            'unifi_firmware' => 'Versão de firmware',
+            'unifi_status' => 'Status no Controller',
+            'unifi_adotado_em' => 'Adotado em',
+        ],
     ];
 
     private const NOME_JOB_CRON_SNMP = 'Coleta SNMP de Ativos de TI';
+    private const NOME_JOB_CRON_UNIFI = 'Coleta UniFi de Ativos de TI';
 
     public function __construct()
     {
@@ -913,6 +924,133 @@ class AtivoService
     public function nomeJobCronSnmp(): string
     {
         return self::NOME_JOB_CRON_SNMP;
+    }
+
+    /**
+     * Casa o ativo (por IP exato -- mesma técnica de
+     * NetworkToolsService::relacionarComAtivos()) com um dispositivo do
+     * UniFi Controller, e grava modelo/firmware/status/rádios/clientes
+     * conectados em `detalhes`. Ao contrário do SNMP, os rádios e a lista
+     * de clientes ficam fora de CAMPOS_DETALHES (são arrays, não texto) --
+     * ver.php lê essas duas chaves direto na aba "Wi-Fi".
+     */
+    public function coletarUnifi(int $id): array
+    {
+        $ativo = $this->repository->buscarPorId($id);
+
+        if (!$ativo) {
+            return ['success' => false, 'message' => 'Ativo não encontrado.'];
+        }
+
+        if (empty($ativo['ip'])) {
+            return ['success' => false, 'message' => 'Este ativo não tem IP cadastrado.'];
+        }
+
+        $unifi = new UnifiService();
+
+        if (!$unifi->configurado()) {
+            return ['success' => false, 'message' => 'Integração com o UniFi Controller ainda não configurada -- veja Integrações.'];
+        }
+
+        $dispositivo = null;
+        foreach ($unifi->listarDispositivos() as $d) {
+            if (($d['ipAddress'] ?? '') === $ativo['ip']) {
+                $dispositivo = $d;
+                break;
+            }
+        }
+
+        if ($dispositivo === null) {
+            return ['success' => false, 'message' => 'Nenhum dispositivo com esse IP foi encontrado no UniFi Controller.'];
+        }
+
+        $detalheDispositivo = $unifi->buscarDetalheDispositivo($dispositivo['id']) ?? [];
+
+        $radios = [];
+        foreach ($detalheDispositivo['interfaces']['radios'] ?? [] as $radio) {
+            $radios[] = [
+                'banda' => self::rotuloBandaRadio((float)($radio['frequencyGHz'] ?? 0)),
+                'canal' => $radio['channel'] ?? null,
+                'largura_mhz' => $radio['channelWidthMHz'] ?? null,
+                'padrao' => $radio['wlanStandard'] ?? null,
+            ];
+        }
+
+        $clientesWifi = [];
+        foreach ($unifi->listarClientes() as $c) {
+            if (($c['uplinkDeviceId'] ?? '') === $dispositivo['id'] && ($c['type'] ?? '') === 'WIRELESS') {
+                $clientesWifi[] = [
+                    'nome' => $c['name'] ?? ($c['macAddress'] ?? ''),
+                    'mac' => $c['macAddress'] ?? '',
+                    'ip' => $c['ipAddress'] ?? '',
+                    'conectado_em' => $c['connectedAt'] ?? '',
+                ];
+            }
+        }
+
+        $coletado = [
+            'unifi_model' => $dispositivo['model'] ?? '',
+            'unifi_firmware' => $dispositivo['firmwareVersion'] ?? '',
+            'unifi_status' => self::rotuloStatusUnifi($dispositivo['state'] ?? ''),
+            'unifi_adotado_em' => !empty($detalheDispositivo['adoptedAt']) ? data_br($detalheDispositivo['adoptedAt']) : '',
+            'unifi_radios' => $radios,
+            'unifi_clientes' => $clientesWifi,
+        ];
+
+        $detalhesAtuais = json_decode($ativo['detalhes'] ?? '', true) ?: [];
+        $detalhesNovos = array_merge($detalhesAtuais, $coletado);
+
+        $this->repository->atualizarDetalhesApi($id, json_encode($detalhesNovos, JSON_UNESCAPED_UNICODE));
+
+        AuditService::registrar('Ativos', 'Coleta UniFi', 'Dados coletados via API do UniFi Controller para ' . $ativo['codigo_patrimonio'] . '.');
+
+        return ['success' => true, 'message' => 'Dados coletados com sucesso via UniFi Controller.'];
+    }
+
+    private static function rotuloBandaRadio(float $ghz): string
+    {
+        if ($ghz >= 6) {
+            return '6 GHz';
+        }
+        if ($ghz >= 5) {
+            return '5 GHz';
+        }
+        return '2,4 GHz';
+    }
+
+    private static function rotuloStatusUnifi(string $state): string
+    {
+        return match ($state) {
+            'ONLINE' => 'Online',
+            'OFFLINE' => 'Offline',
+            'PENDING' => 'Pendente de adoção',
+            default => $state !== '' ? $state : 'Desconhecido',
+        };
+    }
+
+    /**
+     * Roda a coleta UniFi em todos os ativos do tipo "Ponto de Acesso" com
+     * IP cadastrado -- chamado pelo cron (rd ativos:coletar-unifi), mesmo
+     * padrão de coletarSnmpTodos().
+     */
+    public function coletarUnifiTodos(): array
+    {
+        $ativos = $this->repository->listarPorTipoSlugComIp('ponto_acesso');
+        $sucesso = 0;
+
+        foreach ($ativos as $ativo) {
+            $resultado = $this->coletarUnifi((int)$ativo['id']);
+            if ($resultado['success']) {
+                $sucesso++;
+            }
+        }
+
+        return ['total' => count($ativos), 'sucesso' => $sucesso];
+    }
+
+    public function nomeJobCronUnifi(): string
+    {
+        return self::NOME_JOB_CRON_UNIFI;
     }
 
     /*

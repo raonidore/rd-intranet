@@ -7,6 +7,7 @@ use App\Middleware\AuthMiddleware;
 use App\Services\AuditService;
 use App\Services\KbService;
 use App\Services\NotificationService;
+use App\Services\UnifiService;
 
 /**
  * Hub de integrações do Sistema -- admin-only (dados sensíveis: senha de
@@ -49,5 +50,48 @@ class IntegracoesController extends Controller
 
         header('Location: ' . url('/administracao/integracoes/base-conhecimento'));
         exit;
+    }
+
+    public function unifiForm(): void
+    {
+        AuthMiddleware::checkAdmin();
+
+        $service = new UnifiService();
+
+        $this->view('administracao/integracoes_unifi', [
+            'urlAtual' => $service->urlAtual(),
+            'configurado' => $service->configurado(),
+            'siteId' => $service->siteIdAtual(),
+        ]);
+    }
+
+    public function unifiSalvar(): void
+    {
+        AuthMiddleware::checkAdmin();
+
+        (new UnifiService())->salvarConfiguracao($_POST['url'] ?? '', $_POST['api_key'] ?? '');
+
+        header('Location: ' . url('/administracao/integracoes/unifi'));
+        exit;
+    }
+
+    public function unifiRemover(): void
+    {
+        AuthMiddleware::checkAdmin();
+
+        (new UnifiService())->removerConfiguracao();
+
+        header('Location: ' . url('/administracao/integracoes/unifi'));
+        exit;
+    }
+
+    public function unifiTestar(): void
+    {
+        AuthMiddleware::checkAdmin();
+        header('Content-Type: application/json');
+
+        set_time_limit(30);
+
+        echo json_encode((new UnifiService())->testarConexao());
     }
 }

@@ -40,6 +40,7 @@ class AtivoController extends Controller
             'tipos' => $this->tipoService->listarAtivos(),
             'comunidadePadrao' => $this->service->comunidadePadrao(),
             'coletaSnmpAtiva' => $this->coletaSnmpAtiva(),
+            'coletaUnifiAtiva' => $this->coletaUnifiAtiva(),
             'chaveAgente' => $this->service->chaveAgente(),
             'historicoChaves' => $this->service->historicoChavesAgente(),
             'intervaloComunicacao' => $this->service->intervaloComunicacao(),
@@ -357,6 +358,52 @@ class AtivoController extends Controller
     {
         foreach ((new CronService())->listar() as $job) {
             if ($job['nome'] === $this->service->nomeJobCronSnmp()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function coletarUnifi(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $resultado = $this->service->coletarUnifi($id);
+
+        echo json_encode($resultado);
+    }
+
+    public function ativarColetaUnifi(): void
+    {
+        AuthMiddleware::checkModulo('ativos_dashboard');
+        header('Content-Type: application/json');
+
+        if ($this->coletaUnifiAtiva()) {
+            echo json_encode(['success' => true, 'message' => 'Coleta já estava ativa.']);
+            return;
+        }
+
+        $resultado = (new CronService())->criar([
+            'nome' => $this->service->nomeJobCronUnifi(),
+            'descricao' => 'Coleta dados via API do UniFi Controller dos pontos de acesso cadastrados (Ativos de TI).',
+            'expressao' => '*/30 * * * *',
+            'usuario_execucao' => 'www-data',
+            'comando' => 'php /var/www/rd.intranet/rd ativos:coletar-unifi',
+            'ativo' => true,
+        ]);
+
+        AuditService::registrar('Ativos', 'Ativar coleta UniFi', $resultado['message']);
+
+        echo json_encode($resultado);
+    }
+
+    private function coletaUnifiAtiva(): bool
+    {
+        foreach ((new CronService())->listar() as $job) {
+            if ($job['nome'] === $this->service->nomeJobCronUnifi()) {
                 return true;
             }
         }

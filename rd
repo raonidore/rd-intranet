@@ -327,6 +327,12 @@ switch ($comando) {
 
         break;
 
+    case 'ativos:coletar-unifi':
+        $resultado = (new \App\Services\AtivoService())->coletarUnifiTodos();
+        echo "OK: UniFi coletado em {$resultado['sucesso']}/{$resultado['total']} ativo(s).\n";
+
+        break;
+
     default:
         echo "Comando não encontrado: {$comando}\n";
         exit(1);

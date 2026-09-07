@@ -455,6 +455,10 @@ $router->get('/api/chat/validar-socket-token', [ChatController::class, 'validarS
 $router->get('/administracao/integracoes', [IntegracoesController::class, 'index']);
 $router->get('/administracao/integracoes/base-conhecimento', [IntegracoesController::class, 'baseConhecimentoForm']);
 $router->post('/administracao/integracoes/base-conhecimento', [IntegracoesController::class, 'baseConhecimentoSalvar']);
+$router->get('/administracao/integracoes/unifi', [IntegracoesController::class, 'unifiForm']);
+$router->post('/administracao/integracoes/unifi/salvar', [IntegracoesController::class, 'unifiSalvar']);
+$router->post('/administracao/integracoes/unifi/remover', [IntegracoesController::class, 'unifiRemover']);
+$router->post('/administracao/integracoes/unifi/testar', [IntegracoesController::class, 'unifiTestar']);
 
 $router->get('/administracao/integracoes/whatsapp', [WhatsAppIntegracaoController::class, 'form']);
 $router->post('/administracao/integracoes/whatsapp/tipo', [WhatsAppIntegracaoController::class, 'salvarTipo']);
@@ -928,6 +932,8 @@ $router->get('/ativos/etiquetas/lote', [AtivoController::class, 'etiquetasLote']
 $router->post('/ativos/coletar-snmp', [AtivoController::class, 'coletarSnmp']);
 $router->post('/ativos/snmp/config', [AtivoController::class, 'salvarConfigSnmp']);
 $router->post('/ativos/snmp/ativar-coleta', [AtivoController::class, 'ativarColetaSnmp']);
+$router->post('/ativos/coletar-unifi', [AtivoController::class, 'coletarUnifi']);
+$router->post('/ativos/unifi/ativar-coleta', [AtivoController::class, 'ativarColetaUnifi']);
 $router->post('/ativos/agente/regenerar-chave', [AtivoController::class, 'regenerarChaveAgente']);
 $router->post('/ativos/agente/desativar-chave', [AtivoController::class, 'desativarChaveAgente']);
 $router->post('/ativos/elevacao/credenciais', [AtivoController::class, 'salvarCredenciaisElevacao']);

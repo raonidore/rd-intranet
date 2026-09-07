@@ -60,6 +60,19 @@ ob_start();
             </div>
         </a>
     </div>
+    <div class="col-md-4">
+        <a href="<?= url('/administracao/integracoes/unifi') ?>" class="metodo-card">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="mb-2" style="font-size:28px; color:#0559C9;"><i class="bi bi-wifi"></i></div>
+                    <h6 class="mb-1">UniFi Network Controller</h6>
+                    <p class="text-muted small mb-0">
+                        URL e API Key do Controller UniFi (Ubiquiti) -- usada pra coletar dados de pontos de acesso cadastrados em Ativos.
+                    </p>
+                </div>
+            </div>
+        </a>
+    </div>
 </div>
 
 <?php

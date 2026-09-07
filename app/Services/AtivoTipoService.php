@@ -16,6 +16,7 @@ class AtivoTipoService
         'bi-printer' => 'Impressora',
         'bi-hdd-network' => 'Switch',
         'bi-router' => 'Roteador',
+        'bi-wifi' => 'Ponto de Acesso',
         'bi-camera-video' => 'Câmera',
         'bi-camera-reels' => 'DVR/NVR',
         'bi-tablet' => 'Tablet',

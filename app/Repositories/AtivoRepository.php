@@ -259,6 +259,32 @@ class AtivoRepository
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /** @param string $detalhesJson igual a atualizarDetalhesSnmp(), mas grava origem='api' -- dado vindo de uma API (UniFi Controller etc.), não de SNMP. */
+    public function atualizarDetalhesApi(int $id, string $detalhesJson): bool
+    {
+        $stmt = $this->pdo->prepare("
+            UPDATE ativos
+               SET detalhes = :detalhes,
+                   origem = 'api',
+                   ultimo_checkin = NOW()
+             WHERE id = :id
+        ");
+
+        return $stmt->execute(['id' => $id, 'detalhes' => $detalhesJson]);
+    }
+
+    public function listarPorTipoSlugComIp(string $slug): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT a.* FROM ativos a
+            JOIN ativos_tipos t ON t.id = a.tipo_id
+            WHERE t.slug = :slug AND a.ip IS NOT NULL AND a.ip <> ''
+        ");
+        $stmt->execute(['slug' => $slug]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function buscarPorMachineGuid(string $machineGuid): ?array
     {
         $stmt = $this->pdo->prepare("SELECT * FROM ativos WHERE machine_guid = ? LIMIT 1");
