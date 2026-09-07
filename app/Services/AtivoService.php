@@ -117,11 +117,24 @@ class AtivoService
             'unifi_model' => 'Modelo (UniFi)',
             'unifi_firmware' => 'Versão de firmware',
             'unifi_status' => 'Status no Controller',
+            'unifi_uptime' => 'Uptime',
+            'unifi_cpu_pct' => 'Uso de CPU',
+            'unifi_mem_pct' => 'Uso de memória',
+            'unifi_temperatura_c' => 'Temperatura',
+            'unifi_clientes_total' => 'Clientes conectados',
         ],
         'roteador' => [
             'unifi_model' => 'Modelo (UniFi)',
             'unifi_firmware' => 'Versão de firmware',
             'unifi_status' => 'Status no Controller',
+            'unifi_uptime' => 'Uptime',
+            'unifi_cpu_pct' => 'Uso de CPU',
+            'unifi_mem_pct' => 'Uso de memória',
+            'unifi_temperatura_c' => 'Temperatura',
+            'unifi_clientes_total' => 'Clientes conectados (rede toda)',
+            'unifi_wan_status' => 'Status do WAN',
+            'unifi_wan_ip_publico' => 'IP público (WAN)',
+            'unifi_velocidade' => 'Última velocidade medida (Speedtest)',
         ],
     ];
 
@@ -960,6 +973,7 @@ class AtivoService
         }
 
         $dispositivos = $unifi->listarDispositivos();
+        $dispositivosLegados = $unifi->listarDispositivosLegado();
 
         $dispositivo = null;
         foreach ($dispositivos as $d) {
@@ -973,7 +987,7 @@ class AtivoService
         // gerenciamento na LAN que a gente cadastra em Ativos -- procura o
         // IP entre as portas do dispositivo via API legada e casa por MAC.
         if ($dispositivo === null) {
-            foreach ($unifi->listarDispositivosLegado() as $legado) {
+            foreach ($dispositivosLegados as $legado) {
                 $temIp = false;
                 foreach ($legado['port_table'] ?? [] as $porta) {
                     if (($porta['ip'] ?? '') === $ativo['ip']) {
@@ -1000,6 +1014,18 @@ class AtivoService
         }
 
         $detalheDispositivo = $unifi->buscarDetalheDispositivo($dispositivo['id']) ?? [];
+
+        // Registro legado do MESMO dispositivo -- só ele traz uso de
+        // CPU/memória, temperatura, uptime, contagem de clientes e (pra
+        // gateways) status do WAN/IP público/último speedtest, nada disso
+        // existe em /integration/v1.
+        $legadoDispositivo = null;
+        foreach ($dispositivosLegados as $legado) {
+            if (($legado['mac'] ?? '') === ($dispositivo['macAddress'] ?? '')) {
+                $legadoDispositivo = $legado;
+                break;
+            }
+        }
 
         $radios = [];
         foreach ($detalheDispositivo['interfaces']['radios'] ?? [] as $radio) {
@@ -1042,6 +1068,48 @@ class AtivoService
             'unifi_radios' => $radios,
             'unifi_clientes' => $clientesWifi,
         ];
+
+        // Só existem na API legada, e nem todo tipo de dispositivo reporta
+        // todos eles (gateways têm WAN/speedtest, AP e switch não) -- por
+        // isso cada chave só entra em $coletado quando o dado realmente veio.
+        // date() é função nativa do PHP, funciona em qualquer contexto
+        // (diferente de data_br()) -- por isso já formata aqui, sem precisar
+        // de um campo cru + formatação adiada como o unifi_adotado_em acima.
+        if ($legadoDispositivo !== null) {
+            if (isset($legadoDispositivo['system-stats']['cpu'])) {
+                $coletado['unifi_cpu_pct'] = round((float)$legadoDispositivo['system-stats']['cpu'], 1) . '%';
+            }
+            if (isset($legadoDispositivo['system-stats']['mem'])) {
+                $coletado['unifi_mem_pct'] = round((float)$legadoDispositivo['system-stats']['mem'], 1) . '%';
+            }
+            if (!empty($legadoDispositivo['uptime'])) {
+                $coletado['unifi_uptime'] = self::duracaoLegivel((int)$legadoDispositivo['uptime']);
+            }
+            if (isset($legadoDispositivo['temperatures'][0]['value'])) {
+                $coletado['unifi_temperatura_c'] = round((float)$legadoDispositivo['temperatures'][0]['value']) . '°C';
+            }
+            if (isset($legadoDispositivo['num_sta'])) {
+                $coletado['unifi_clientes_total'] = (string)$legadoDispositivo['num_sta'];
+            }
+            if (!empty($legadoDispositivo['last_wan_status']) && is_array($legadoDispositivo['last_wan_status'])) {
+                $partes = [];
+                foreach ($legadoDispositivo['last_wan_status'] as $wan => $status) {
+                    $partes[] = "{$wan}: " . ucfirst((string)$status);
+                }
+                $coletado['unifi_wan_status'] = implode(' · ', $partes);
+            }
+            if (!empty($legadoDispositivo['last_wan_ip'])) {
+                $coletado['unifi_wan_ip_publico'] = $legadoDispositivo['last_wan_ip'];
+            }
+
+            $speedtest = $legadoDispositivo['speedtest-status'] ?? null;
+            if (!empty($speedtest) && (isset($speedtest['xput_download']) || isset($speedtest['xput_upload']))) {
+                $download = round((float)($speedtest['xput_download'] ?? 0), 1);
+                $upload = round((float)($speedtest['xput_upload'] ?? 0), 1);
+                $coletado['unifi_velocidade'] = "{$download} Mbps ↓ / {$upload} Mbps ↑"
+                    . (!empty($speedtest['rundate']) ? ' (testado em ' . date('d/m/Y H:i', (int)$speedtest['rundate']) . ')' : '');
+            }
+        }
 
         $detalhesAtuais = json_decode($ativo['detalhes'] ?? '', true) ?: [];
         $detalhesNovos = array_merge($detalhesAtuais, $coletado);
