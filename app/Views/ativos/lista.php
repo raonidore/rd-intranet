@@ -207,6 +207,20 @@ function thOrdenavel(string $coluna, string $label, ?string $ordenarChave, array
                                         <span data-bs-toggle="tooltip" title="<?= htmlspecialchars($dicaStatus) ?>">
                                             <?= Badge::make(AtivoService::estaLigada($a) ? 'Ligado' : 'Desligado', AtivoService::estaLigada($a) ? 'success' : 'secondary') ?>
                                         </span>
+                                    <?php elseif (($a['tipo_slug'] ?? '') === 'ponto_acesso' && !empty($detalhesLinha['unifi_status'])): ?>
+                                        <?php
+                                            // Não é ping ao vivo (como o heartbeat do agente) -- reflete o status
+                                            // ONLINE/OFFLINE que o UniFi Controller reportou na última coleta
+                                            // (a cada 30 min via cron, ou manual pelo botão na ficha do ativo).
+                                            $ligadoUnifi = $detalhesLinha['unifi_status'] === 'Online';
+                                            $minutosAtrasUnifi = AtivoService::minutosDesdeUltimoCheckin($a);
+                                            $dicaStatusUnifi = 'Via UniFi Controller -- ' . ($minutosAtrasUnifi !== null
+                                                ? 'última coleta há ' . AtivoService::duracaoLegivel($minutosAtrasUnifi * 60)
+                                                : 'ainda sem coleta');
+                                        ?>
+                                        <span data-bs-toggle="tooltip" title="<?= htmlspecialchars($dicaStatusUnifi) ?>">
+                                            <?= Badge::make($ligadoUnifi ? 'Ligado' : 'Desligado', $ligadoUnifi ? 'success' : 'secondary') ?>
+                                        </span>
                                     <?php else: ?>
                                         <span class="text-muted small">—</span>
                                     <?php endif; ?>
