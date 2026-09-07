@@ -245,6 +245,13 @@ $router->get('/infraestrutura/rede/trafego', [NetworkToolsController::class, 'tr
 $router->get('/infraestrutura/rede/trafego/api', [NetworkToolsController::class, 'trafegoApi']);
 $router->get('/infraestrutura/rede/trafego/historico', [NetworkToolsController::class, 'historico']);
 
+$router->get('/infraestrutura/rede/scanner', [NetworkToolsController::class, 'scanner']);
+$router->post('/infraestrutura/rede/scanner', [NetworkToolsController::class, 'scannerIniciar']);
+$router->get('/infraestrutura/rede/scanner/status', [NetworkToolsController::class, 'scannerStatus']);
+$router->post('/infraestrutura/rede/scanner/finalizar', [NetworkToolsController::class, 'scannerFinalizar']);
+$router->post('/infraestrutura/rede/scanner/portas', [NetworkToolsController::class, 'scannerPortas']);
+$router->post('/infraestrutura/rede/scanner/wol', [NetworkToolsController::class, 'scannerWol']);
+
 $router->get('/infraestrutura/rede/rotas', [NetworkRouteController::class, 'index']);
 $router->get('/infraestrutura/rede/rotas/novo', [NetworkRouteController::class, 'novoForm']);
 $router->post('/infraestrutura/rede/rotas/novo', [NetworkRouteController::class, 'novo']);

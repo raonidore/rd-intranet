@@ -2,8 +2,12 @@
 
 namespace App\Services;
 
+use App\Core\Database;
+
 class NetworkToolsService
 {
+    private const SCANNER_STATUS_DIR = '/var/www/rd.intranet/storage/ip_scanner_status';
+
     private LinuxService $linux;
 
     public function __construct()
@@ -256,5 +260,194 @@ class NetworkToolsService
                 'tx_bytes' => $i['tx_bytes'],
             ];
         }, $interfaces);
+    }
+
+    // ── IP Scanner ───────────────────────────────────────────────────────
+
+    /**
+     * Sugere a faixa da própria rede do servidor como valor inicial do
+     * formulário -- calcula o endereço de rede a partir do primeiro
+     * IPv4/CIDR de interface válido (NetworkConfigService já expõe isso
+     * pronto, "192.168.1.10/24"), pra o admin não precisar digitar nada.
+     */
+    public function sugerirFaixaPadrao(): ?string
+    {
+        $rede = new NetworkConfigService();
+
+        foreach ($rede->interfacesValidas() as $iface) {
+            $config = $rede->configuracaoAtual($iface);
+
+            foreach (($config['ipv4'] ?? []) as $ipCidr) {
+                $redeCidr = $this->calcularRedeCidr((string)$ipCidr);
+
+                if ($redeCidr !== null && $this->validarFaixaScan($redeCidr)['valido']) {
+                    return $redeCidr;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function calcularRedeCidr(string $ipCidr): ?string
+    {
+        [$ip, $prefixoStr] = array_pad(explode('/', $ipCidr, 2), 2, null);
+
+        if ($ip === null || $prefixoStr === null || filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
+            return null;
+        }
+
+        $prefixo = (int)$prefixoStr;
+        if ($prefixo < 0 || $prefixo > 32) {
+            return null;
+        }
+
+        $ipLong = ip2long($ip);
+        if ($ipLong === false) {
+            return null;
+        }
+
+        $mascara = $prefixo === 0 ? 0 : (~0 << (32 - $prefixo)) & 0xFFFFFFFF;
+        $redeLong = $ipLong & $mascara;
+
+        return long2ip($redeLong) . '/' . $prefixo;
+    }
+
+    /**
+     * Redundante à validação que o próprio script faz de novo (defesa em
+     * profundidade) -- exige faixa privada (RFC1918) ou link-local, e no
+     * máximo /22 (1024 endereços), mantendo a ferramenta no escopo "minha
+     * rede", não um scanner de internet.
+     */
+    public function validarFaixaScan(string $cidr): array
+    {
+        if (!preg_match('#^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})$#', $cidr, $m)) {
+            return ['valido' => false, 'mensagem' => 'Faixa de IP inválida.'];
+        }
+
+        for ($i = 1; $i <= 4; $i++) {
+            if ((int)$m[$i] > 255) {
+                return ['valido' => false, 'mensagem' => 'Faixa de IP inválida.'];
+            }
+        }
+
+        $octeto1 = (int)$m[1];
+        $octeto2 = (int)$m[2];
+        $prefixo = (int)$m[5];
+
+        $privada = ($octeto1 === 10)
+            || ($octeto1 === 172 && $octeto2 >= 16 && $octeto2 <= 31)
+            || ($octeto1 === 192 && $octeto2 === 168)
+            || ($octeto1 === 169 && $octeto2 === 254);
+
+        if (!$privada) {
+            return ['valido' => false, 'mensagem' => 'Só é permitido varrer faixas de rede privada (RFC1918) ou link-local.'];
+        }
+
+        if ($prefixo < 22 || $prefixo > 32) {
+            return ['valido' => false, 'mensagem' => 'Faixa grande demais -- use no máximo /22 (1024 endereços).'];
+        }
+
+        return ['valido' => true, 'mensagem' => ''];
+    }
+
+    public function iniciarScan(string $cidr): array
+    {
+        $validacao = $this->validarFaixaScan($cidr);
+        if (!$validacao['valido']) {
+            return ['success' => false, 'message' => $validacao['mensagem']];
+        }
+
+        $execucaoId = bin2hex(random_bytes(8));
+
+        $this->linux->executarScriptEmSegundoPlano(
+            '/opt/rdtecnologia/scripts/ip_scanner_web.sh',
+            [$execucaoId, $cidr]
+        );
+
+        AuditService::registrar('Rede', 'IP Scanner', "Varredura iniciada em {$cidr}.");
+
+        return ['success' => true, 'execucao_id' => $execucaoId];
+    }
+
+    public function statusScan(string $execucaoId): array
+    {
+        $id = preg_replace('/[^a-f0-9]/', '', $execucaoId);
+        $arquivo = self::SCANNER_STATUS_DIR . "/{$id}.json";
+
+        if ($id === '' || !is_file($arquivo)) {
+            return ['status' => 'desconhecido'];
+        }
+
+        $dados = json_decode((string)file_get_contents($arquivo), true);
+
+        return is_array($dados) ? $dados : ['status' => 'desconhecido'];
+    }
+
+    public function escanearPortas(string $ip): array
+    {
+        if (filter_var($ip, FILTER_VALIDATE_IP) === false) {
+            return ['success' => false, 'message' => 'IP inválido.'];
+        }
+
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/ip_scanner_portas_web.sh', [$ip]);
+        $dados = json_decode(trim($resultado['output']), true);
+
+        return is_array($dados) ? $dados : ['success' => false, 'message' => $resultado['output']];
+    }
+
+    public function enviarWol(string $mac): array
+    {
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/ip_scanner_wol_web.sh', [$mac]);
+        $dados = json_decode(trim($resultado['output']), true);
+
+        if (is_array($dados) && $dados['success']) {
+            AuditService::registrar('Rede', 'Wake-on-LAN', "Magic packet enviado para {$mac}.");
+        }
+
+        return is_array($dados) ? $dados : ['success' => false, 'message' => $resultado['output']];
+    }
+
+    /**
+     * Compara o resultado atual com a última varredura salva pra essa
+     * MESMA faixa, e só depois grava o atual como a nova "última" -- nessa
+     * ordem, senão a comparação seria sempre contra si mesma. Chamado uma
+     * única vez pelo controller (endpoint de finalizar, não pelo polling
+     * de status, que pode ser chamado várias vezes sem efeito colateral).
+     */
+    public function registrarResultadoEComparar(string $cidr, array $hosts, ?int $usuarioId): array
+    {
+        $comparacao = $this->compararComUltimaExecucao($cidr, $hosts);
+        $this->salvarExecucao($cidr, $hosts, $usuarioId);
+
+        return $comparacao;
+    }
+
+    private function compararComUltimaExecucao(string $cidr, array $hostsAtual): array
+    {
+        $pdo = Database::connection();
+        $stmt = $pdo->prepare("SELECT hosts FROM ip_scanner_execucoes WHERE cidr = ? ORDER BY executado_em DESC LIMIT 1");
+        $stmt->execute([$cidr]);
+        $anteriorJson = $stmt->fetchColumn();
+
+        if ($anteriorJson === false) {
+            return ['novos' => [], 'sumiram' => [], 'primeira_execucao' => true];
+        }
+
+        $anteriores = json_decode((string)$anteriorJson, true) ?: [];
+        $ipsAnteriores = array_column($anteriores, 'ip');
+        $ipsAtuais = array_column($hostsAtual, 'ip');
+
+        $novos = array_values(array_filter($hostsAtual, fn (array $h) => !in_array($h['ip'], $ipsAnteriores, true)));
+        $sumiram = array_values(array_filter($anteriores, fn (array $h) => !in_array($h['ip'], $ipsAtuais, true)));
+
+        return ['novos' => $novos, 'sumiram' => $sumiram, 'primeira_execucao' => false];
+    }
+
+    private function salvarExecucao(string $cidr, array $hosts, ?int $usuarioId): void
+    {
+        $pdo = Database::connection();
+        $stmt = $pdo->prepare("INSERT INTO ip_scanner_execucoes (cidr, executado_em, executado_por, total_hosts, hosts) VALUES (?, NOW(), ?, ?, ?)");
+        $stmt->execute([$cidr, $usuarioId, count($hosts), json_encode($hosts)]);
     }
 }

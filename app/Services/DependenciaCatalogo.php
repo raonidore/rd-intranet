@@ -103,6 +103,14 @@ class DependenciaCatalogo
                 'obrigatorio' => false,
             ],
             [
+                'chave' => 'nmap',
+                'nome' => 'nmap',
+                'pacote' => 'nmap',
+                'descricao' => 'Varredura de rede (descoberta de hosts, MAC/fabricante, portas de um dispositivo) usada pelo IP Scanner.',
+                'usado_em' => 'Infraestrutura > Network > IP Scanner',
+                'obrigatorio' => false,
+            ],
+            [
                 'chave' => 'iproute2',
                 'nome' => 'ip (iproute2)',
                 'pacote' => 'iproute2',

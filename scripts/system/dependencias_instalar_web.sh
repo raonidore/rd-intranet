@@ -23,6 +23,7 @@ declare -A PACOTES=(
   [winbind]="winbind"
   [krb5-user]="krb5-user"
   [chrony]="chrony"
+  [nmap]="nmap"
   [iproute2]="iproute2"
   [python3]="python3"
   [smbclient]="smbclient"

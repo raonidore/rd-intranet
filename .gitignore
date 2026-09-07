@@ -6,6 +6,7 @@
 /storage/backup_status/*
 /storage/samba_lote_status/*
 /storage/samba_dc_status/*
+/storage/ip_scanner_status/*
 /storage/config_backups/*
 /storage/config_backup_status/*
 /storage/config_restore_status/*

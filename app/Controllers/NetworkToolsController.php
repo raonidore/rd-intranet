@@ -163,4 +163,78 @@ class NetworkToolsController extends Controller
             'consumo' => (new TrafegoHistoricoService())->consumoDiario($dias),
         ]);
     }
+
+    // ── IP Scanner ───────────────────────────────────────────────────────
+
+    public function scanner(): void
+    {
+        AuthMiddleware::checkModulo('infra_rede');
+
+        $this->view('infrastructure/rede_scanner', [
+            'faixaSugerida' => $this->service->sugerirFaixaPadrao(),
+        ]);
+    }
+
+    public function scannerIniciar(): void
+    {
+        AuthMiddleware::checkModulo('infra_rede');
+        header('Content-Type: application/json');
+
+        $resultado = $this->service->iniciarScan(trim($_POST['cidr'] ?? ''));
+
+        echo json_encode($resultado);
+    }
+
+    public function scannerStatus(): void
+    {
+        AuthMiddleware::checkModulo('infra_rede');
+        header('Content-Type: application/json');
+
+        echo json_encode($this->service->statusScan((string)($_GET['id'] ?? '')));
+    }
+
+    /**
+     * Chamado UMA vez pelo front-end quando detecta status=concluido no
+     * polling -- grava a execução e devolve a comparação com a anterior.
+     * Separado de scannerStatus() de propósito: polling é idempotente
+     * (só leitura), aqui é onde o efeito colateral (grava no banco)
+     * acontece, uma única vez por varredura.
+     */
+    public function scannerFinalizar(): void
+    {
+        AuthMiddleware::checkModulo('infra_rede');
+        header('Content-Type: application/json');
+
+        $execucaoId = (string)($_POST['id'] ?? '');
+        $cidr = trim((string)($_POST['cidr'] ?? ''));
+
+        $status = $this->service->statusScan($execucaoId);
+        if (($status['status'] ?? '') !== 'concluido') {
+            echo json_encode(['success' => false, 'message' => 'Varredura ainda não concluída.']);
+            return;
+        }
+
+        $usuarioId = isset($_SESSION['usuario']['id']) ? (int)$_SESSION['usuario']['id'] : null;
+        $comparacao = $this->service->registrarResultadoEComparar($cidr, $status['resultados'] ?? [], $usuarioId);
+
+        AuditService::registrar('Rede', 'IP Scanner', "Varredura de {$cidr} concluída: " . count($status['resultados'] ?? []) . ' dispositivo(s).');
+
+        echo json_encode(['success' => true, 'comparacao' => $comparacao]);
+    }
+
+    public function scannerPortas(): void
+    {
+        AuthMiddleware::checkModulo('infra_rede');
+        header('Content-Type: application/json');
+
+        echo json_encode($this->service->escanearPortas(trim($_POST['ip'] ?? '')));
+    }
+
+    public function scannerWol(): void
+    {
+        AuthMiddleware::checkModulo('infra_rede');
+        header('Content-Type: application/json');
+
+        echo json_encode($this->service->enviarWol(trim($_POST['mac'] ?? '')));
+    }
 }

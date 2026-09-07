@@ -523,6 +523,9 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
             <a href="<?= url('/infraestrutura/rede/arp') ?>" class="<?= $uriAtual === '/infraestrutura/rede/arp' ? 'active' : '' ?>">
                 <i class="bi bi-list-ul me-2"></i> ARP
             </a>
+            <a href="<?= url('/infraestrutura/rede/scanner') ?>" class="<?= $uriAtual === '/infraestrutura/rede/scanner' ? 'active' : '' ?>">
+                <i class="bi bi-broadcast-pin me-2"></i> IP Scanner
+            </a>
             <a href="<?= url('/infraestrutura/rede/ping') ?>" class="<?= $uriAtual === '/infraestrutura/rede/ping' ? 'active' : '' ?>">
                 <i class="bi bi-broadcast me-2"></i> Ping
             </a>

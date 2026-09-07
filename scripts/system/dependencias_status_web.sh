@@ -15,6 +15,7 @@ declare -A COMANDOS=(
   [winbind]="wbinfo"
   [krb5-user]="kinit"
   [chrony]="chronyc"
+  [nmap]="nmap"
   [iproute2]="ip"
   [python3]="python3"
   [smbclient]="smbcacls"
