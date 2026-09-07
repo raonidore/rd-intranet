@@ -95,6 +95,36 @@ $ehDC = $status['is_dc'] ?? false;
             </div>
         </a>
     </div>
+    <div class="col-md-4">
+        <a href="<?= url('/samba/dominio/ous') ?>" class="dom-atalho">
+            <div class="card dom-card mb-0 h-100">
+                <div class="card-body text-center py-4">
+                    <i class="bi bi-diagram-2 fs-2 text-primary d-block mb-2"></i>
+                    <strong>Unidades Organizacionais</strong>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-4">
+        <a href="<?= url('/samba/dominio/gpos') ?>" class="dom-atalho">
+            <div class="card dom-card mb-0 h-100">
+                <div class="card-body text-center py-4">
+                    <i class="bi bi-journal-check fs-2 text-primary d-block mb-2"></i>
+                    <strong>GPOs</strong>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-4">
+        <a href="<?= url('/samba/dominio/politica-senha') ?>" class="dom-atalho">
+            <div class="card dom-card mb-0 h-100">
+                <div class="card-body text-center py-4">
+                    <i class="bi bi-shield-lock fs-2 text-primary d-block mb-2"></i>
+                    <strong>Política de Senha</strong>
+                </div>
+            </div>
+        </a>
+    </div>
 </div>
 
 <?php else: ?>

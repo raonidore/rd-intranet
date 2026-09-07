@@ -41,9 +41,22 @@ ob_start();
                             <?= !empty($u['habilitado']) ? Badge::make('Ativo', 'success') : Badge::make('Desativado', 'secondary') ?>
                         </td>
                         <td class="text-end">
+                            <a href="<?= url('/samba/dominio/usuarios/ver?username=' . urlencode($u['username'])) ?>"
+                               class="btn btn-sm btn-outline-secondary" title="Ver detalhes">
+                                <i class="bi bi-eye"></i>
+                            </a>
                             <a href="<?= url('/samba/dominio/usuarios/senha?username=' . urlencode($u['username'])) ?>"
                                class="btn btn-sm btn-outline-secondary" title="Resetar senha">
                                 <i class="bi bi-key"></i>
+                            </a>
+                            <a href="<?= url('/samba/dominio/usuarios/expiracao?username=' . urlencode($u['username'])) ?>"
+                               class="btn btn-sm btn-outline-secondary" title="Expiração de senha">
+                                <i class="bi bi-calendar-event"></i>
+                            </a>
+                            <a href="<?= url('/samba/dominio/usuarios/desbloquear?username=' . urlencode($u['username'])) ?>"
+                               class="btn btn-sm btn-outline-secondary" title="Desbloquear (conta travada por tentativas)"
+                               onclick="return confirm('Desbloquear esta conta?')">
+                                <i class="bi bi-shield-lock"></i>
                             </a>
                             <?php if (!empty($u['habilitado'])): ?>
                                 <a href="<?= url('/samba/dominio/usuarios/desativar?username=' . urlencode($u['username'])) ?>"
@@ -56,6 +69,11 @@ ob_start();
                                     <i class="bi bi-unlock"></i>
                                 </a>
                             <?php endif; ?>
+                            <a href="<?= url('/samba/dominio/usuarios/excluir?username=' . urlencode($u['username'])) ?>"
+                               class="btn btn-sm btn-outline-danger" title="Excluir"
+                               onclick="return confirm('Excluir o usuário \'<?= htmlspecialchars($u['username'], ENT_QUOTES) ?>\'? Essa ação não pode ser desfeita.')">
+                                <i class="bi bi-trash"></i>
+                            </a>
                         </td>
                     </tr>
                 <?php endforeach; ?>

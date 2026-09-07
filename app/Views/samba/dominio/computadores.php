@@ -18,14 +18,23 @@ ob_start();
     <div class="card-body p-0">
         <table class="table table-hover align-middle mb-0">
             <thead>
-                <tr><th>Nome</th></tr>
+                <tr><th>Nome</th><th class="text-end">Ações</th></tr>
             </thead>
             <tbody>
                 <?php if (empty($computadores)): ?>
-                    <tr><td class="text-center text-muted py-4">Nenhum computador ingressado.</td></tr>
+                    <tr><td colspan="2" class="text-center text-muted py-4">Nenhum computador ingressado.</td></tr>
                 <?php endif; ?>
                 <?php foreach ($computadores as $c): ?>
-                    <tr><td class="font-monospace"><?= htmlspecialchars($c) ?></td></tr>
+                    <tr>
+                        <td class="font-monospace"><?= htmlspecialchars($c) ?></td>
+                        <td class="text-end">
+                            <a href="<?= url('/samba/dominio/computadores/excluir?nome=' . urlencode($c)) ?>"
+                               class="btn btn-sm btn-outline-danger" title="Remover do domínio"
+                               onclick="return confirm('Remover \'<?= htmlspecialchars($c, ENT_QUOTES) ?>\' do domínio?')">
+                                <i class="bi bi-trash"></i>
+                            </a>
+                        </td>
+                    </tr>
                 <?php endforeach; ?>
             </tbody>
         </table>

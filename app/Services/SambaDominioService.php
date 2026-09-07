@@ -153,7 +153,7 @@ class SambaDominioService
         return is_array($dados) ? $dados : [];
     }
 
-    public function criarUsuario(string $username, string $nomeCompleto, string $senha, string $confirmacao): array
+    public function criarUsuario(string $username, string $nomeCompleto, string $senha, string $confirmacao, string $email = '', string $telefone = '', string $descricao = ''): array
     {
         if (!preg_match('/^[a-zA-Z][a-zA-Z0-9._-]{0,19}$/', $username)) {
             return ['success' => false, 'message' => 'Nome de usuário inválido.'];
@@ -169,7 +169,7 @@ class SambaDominioService
 
         $resultado = $this->linux->executarScriptComEntrada(
             '/opt/rdtecnologia/scripts/samba_dc_usuario_criar_web.sh',
-            [$username, $nomeCompleto],
+            [$username, $nomeCompleto, $email, $telefone, $descricao],
             $senha
         );
 
@@ -230,6 +230,53 @@ class SambaDominioService
         return is_array($dados) ? $dados : ['success' => false, 'message' => $resultado['output']];
     }
 
+    public function excluirUsuario(string $username): array
+    {
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/samba_dc_usuario_excluir_web.sh', [$username]);
+        $dados = json_decode(trim($resultado['output']), true);
+
+        if (is_array($dados) && $dados['success']) {
+            AuditService::registrar('Samba', 'Domínio: excluir usuário', "Usuário de domínio \"{$username}\" excluído.");
+        }
+
+        return is_array($dados) ? $dados : ['success' => false, 'message' => $resultado['output']];
+    }
+
+    public function desbloquearUsuario(string $username): array
+    {
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/samba_dc_usuario_desbloquear_web.sh', [$username]);
+        $dados = json_decode(trim($resultado['output']), true);
+
+        if (is_array($dados) && $dados['success']) {
+            AuditService::registrar('Samba', 'Domínio: desbloquear usuário', "Usuário de domínio \"{$username}\" desbloqueado.");
+        }
+
+        return is_array($dados) ? $dados : ['success' => false, 'message' => $resultado['output']];
+    }
+
+    /** $dias null ou 0 => senha nunca expira. */
+    public function definirExpiracaoSenha(string $username, ?int $dias): array
+    {
+        $valor = ($dias === null || $dias <= 0) ? 'nunca' : (string)$dias;
+
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/samba_dc_usuario_expiracao_web.sh', [$username, $valor]);
+        $dados = json_decode(trim($resultado['output']), true);
+
+        if (is_array($dados) && $dados['success']) {
+            AuditService::registrar('Samba', 'Domínio: expiração de senha', "Expiração de senha de \"{$username}\" definida para " . ($valor === 'nunca' ? 'nunca expirar' : "{$valor} dia(s)") . ".");
+        }
+
+        return is_array($dados) ? $dados : ['success' => false, 'message' => $resultado['output']];
+    }
+
+    public function detalhesUsuario(string $username): array
+    {
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/samba_dc_usuario_detalhes_web.sh', [$username]);
+        $dados = json_decode(trim($resultado['output']), true);
+
+        return is_array($dados) ? $dados : ['success' => false, 'message' => $resultado['output']];
+    }
+
     public function listarGrupos(): array
     {
         $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/samba_dc_grupo_listar_web.sh');
@@ -274,11 +321,182 @@ class SambaDominioService
         return is_array($dados) ? $dados : ['success' => false, 'message' => $resultado['output']];
     }
 
+    public function removerMembroGrupo(string $grupo, string $usuario): array
+    {
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/samba_dc_grupo_membro_remover_web.sh', [$grupo, $usuario]);
+        $dados = json_decode(trim($resultado['output']), true);
+
+        if (is_array($dados) && $dados['success']) {
+            AuditService::registrar('Samba', 'Domínio: remover membro', "Usuário \"{$usuario}\" removido do grupo \"{$grupo}\".");
+        }
+
+        return is_array($dados) ? $dados : ['success' => false, 'message' => $resultado['output']];
+    }
+
+    public function excluirGrupo(string $nome): array
+    {
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/samba_dc_grupo_excluir_web.sh', [$nome]);
+        $dados = json_decode(trim($resultado['output']), true);
+
+        if (is_array($dados) && $dados['success']) {
+            AuditService::registrar('Samba', 'Domínio: excluir grupo', "Grupo de domínio \"{$nome}\" excluído.");
+        }
+
+        return is_array($dados) ? $dados : ['success' => false, 'message' => $resultado['output']];
+    }
+
     public function listarComputadores(): array
     {
         $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/samba_dc_computador_listar_web.sh');
         $dados = json_decode(trim($resultado['output']), true);
 
         return is_array($dados) ? $dados : [];
+    }
+
+    public function excluirComputador(string $nome): array
+    {
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/samba_dc_computador_excluir_web.sh', [$nome]);
+        $dados = json_decode(trim($resultado['output']), true);
+
+        if (is_array($dados) && $dados['success']) {
+            AuditService::registrar('Samba', 'Domínio: excluir computador', "Computador \"{$nome}\" removido do domínio.");
+        }
+
+        return is_array($dados) ? $dados : ['success' => false, 'message' => $resultado['output']];
+    }
+
+    // ── Política de senha do domínio ────────────────────────────────────
+
+    public function obterPoliticaSenha(): array
+    {
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/samba_dc_politica_senha_ver_web.sh');
+        $dados = json_decode(trim($resultado['output']), true);
+
+        return is_array($dados) ? $dados : ['success' => false, 'message' => $resultado['output']];
+    }
+
+    public function salvarPoliticaSenha(array $dados): array
+    {
+        $complexidade = !empty($dados['complexidade']) ? 'on' : 'off';
+
+        $campos = ['historico', 'tamanho_minimo', 'idade_minima_dias', 'idade_maxima_dias', 'bloqueio_limite_tentativas', 'bloqueio_duracao_min', 'bloqueio_reset_min'];
+        $valores = [];
+        foreach ($campos as $campo) {
+            $valor = $dados[$campo] ?? '';
+            if (!preg_match('/^\d+$/', (string)$valor)) {
+                return ['success' => false, 'message' => 'Valores numéricos inválidos.'];
+            }
+            $valores[] = (string)$valor;
+        }
+
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/samba_dc_politica_senha_salvar_web.sh', array_merge([$complexidade], $valores));
+        $resposta = json_decode(trim($resultado['output']), true);
+
+        if (is_array($resposta) && $resposta['success']) {
+            AuditService::registrar('Samba', 'Domínio: política de senha', 'Política de senha do domínio atualizada.');
+        }
+
+        return is_array($resposta) ? $resposta : ['success' => false, 'message' => $resultado['output']];
+    }
+
+    // ── Unidades Organizacionais (OUs) ──────────────────────────────────
+
+    public function listarOus(): array
+    {
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/samba_dc_ou_listar_web.sh');
+        $dados = json_decode(trim($resultado['output']), true);
+
+        return is_array($dados) ? $dados : [];
+    }
+
+    public function criarOu(string $nome): array
+    {
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/samba_dc_ou_criar_web.sh', [$nome]);
+        $dados = json_decode(trim($resultado['output']), true);
+
+        if (is_array($dados) && $dados['success']) {
+            AuditService::registrar('Samba', 'Domínio: criar OU', "OU \"{$nome}\" criada.");
+        }
+
+        return is_array($dados) ? $dados : ['success' => false, 'message' => $resultado['output']];
+    }
+
+    public function excluirOu(string $ouDn): array
+    {
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/samba_dc_ou_excluir_web.sh', [$ouDn]);
+        $dados = json_decode(trim($resultado['output']), true);
+
+        if (is_array($dados) && $dados['success']) {
+            AuditService::registrar('Samba', 'Domínio: excluir OU', "OU \"{$ouDn}\" excluída.");
+        }
+
+        return is_array($dados) ? $dados : ['success' => false, 'message' => $resultado['output']];
+    }
+
+    // ── GPOs (mecânica: criar/excluir/vincular -- conteúdo da política
+    // continua exigindo GPMC do Windows, não há como editar por aqui) ────
+
+    public function listarGpos(): array
+    {
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/samba_dc_gpo_listar_web.sh');
+        $dados = json_decode(trim($resultado['output']), true);
+
+        return is_array($dados) ? $dados : [];
+    }
+
+    public function criarGpo(string $nome): array
+    {
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/samba_dc_gpo_criar_web.sh', [$nome]);
+        $dados = json_decode(trim($resultado['output']), true);
+
+        if (is_array($dados) && $dados['success']) {
+            AuditService::registrar('Samba', 'Domínio: criar GPO', "GPO \"{$nome}\" criada.");
+        }
+
+        return is_array($dados) ? $dados : ['success' => false, 'message' => $resultado['output']];
+    }
+
+    public function excluirGpo(string $guid): array
+    {
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/samba_dc_gpo_excluir_web.sh', [$guid]);
+        $dados = json_decode(trim($resultado['output']), true);
+
+        if (is_array($dados) && $dados['success']) {
+            AuditService::registrar('Samba', 'Domínio: excluir GPO', "GPO \"{$guid}\" excluída.");
+        }
+
+        return is_array($dados) ? $dados : ['success' => false, 'message' => $resultado['output']];
+    }
+
+    public function vincularGpo(string $guid, string $containerDn): array
+    {
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/samba_dc_gpo_vincular_web.sh', [$guid, $containerDn]);
+        $dados = json_decode(trim($resultado['output']), true);
+
+        if (is_array($dados) && $dados['success']) {
+            AuditService::registrar('Samba', 'Domínio: vincular GPO', "GPO \"{$guid}\" vinculada a \"{$containerDn}\".");
+        }
+
+        return is_array($dados) ? $dados : ['success' => false, 'message' => $resultado['output']];
+    }
+
+    public function desvincularGpo(string $guid, string $containerDn): array
+    {
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/samba_dc_gpo_desvincular_web.sh', [$guid, $containerDn]);
+        $dados = json_decode(trim($resultado['output']), true);
+
+        if (is_array($dados) && $dados['success']) {
+            AuditService::registrar('Samba', 'Domínio: desvincular GPO', "GPO \"{$guid}\" desvinculada de \"{$containerDn}\".");
+        }
+
+        return is_array($dados) ? $dados : ['success' => false, 'message' => $resultado['output']];
+    }
+
+    public function verificarAclSysvol(): array
+    {
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/samba_dc_gpo_aclcheck_web.sh');
+        $dados = json_decode(trim($resultado['output']), true);
+
+        return is_array($dados) ? $dados : ['success' => false, 'message' => $resultado['output']];
     }
 }

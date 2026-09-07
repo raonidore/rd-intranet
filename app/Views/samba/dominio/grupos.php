@@ -42,6 +42,11 @@ ob_start();
                                class="btn btn-sm btn-outline-secondary">
                                 <i class="bi bi-people"></i> Membros
                             </a>
+                            <a href="<?= url('/samba/dominio/grupos/excluir?nome=' . urlencode($g['nome'])) ?>"
+                               class="btn btn-sm btn-outline-danger" title="Excluir"
+                               onclick="return confirm('Excluir o grupo \'<?= htmlspecialchars($g['nome'], ENT_QUOTES) ?>\'?')">
+                                <i class="bi bi-trash"></i>
+                            </a>
                         </td>
                     </tr>
                 <?php endforeach; ?>

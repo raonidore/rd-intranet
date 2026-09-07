@@ -24,7 +24,14 @@ ob_start();
                         <li class="list-group-item text-muted text-center py-4">Nenhum membro.</li>
                     <?php endif; ?>
                     <?php foreach ($membros as $m): ?>
-                        <li class="list-group-item font-monospace"><?= htmlspecialchars($m) ?></li>
+                        <li class="list-group-item font-monospace d-flex justify-content-between align-items-center">
+                            <?= htmlspecialchars($m) ?>
+                            <a href="<?= url('/samba/dominio/grupos/membros/remover?grupo=' . urlencode($nome) . '&usuario=' . urlencode($m)) ?>"
+                               class="btn btn-sm btn-outline-danger" title="Remover"
+                               onclick="return confirm('Remover \'<?= htmlspecialchars($m, ENT_QUOTES) ?>\' do grupo?')">
+                                <i class="bi bi-x-lg"></i>
+                            </a>
+                        </li>
                     <?php endforeach; ?>
                 </ul>
             </div>

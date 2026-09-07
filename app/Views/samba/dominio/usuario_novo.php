@@ -35,6 +35,24 @@ ob_start();
                 <input type="password" name="confirmacao" class="form-control" required minlength="8">
             </div>
 
+            <hr>
+            <p class="text-muted small">Campos opcionais:</p>
+
+            <div class="mb-3">
+                <label class="form-label">E-mail</label>
+                <input type="email" name="email" class="form-control">
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Telefone</label>
+                <input type="text" name="telefone" class="form-control">
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Descrição</label>
+                <input type="text" name="descricao" class="form-control">
+            </div>
+
             <button type="submit" class="btn btn-primary">
                 <i class="bi bi-plus-lg"></i> Criar usuário
             </button>
