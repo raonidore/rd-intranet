@@ -462,7 +462,7 @@ class NetworkToolsService
     {
         $pdo = Database::connection();
         $stmt = $pdo->prepare("
-            SELECT e.cidr, e.executado_em, e.total_hosts
+            SELECT e.id, e.cidr, e.executado_em, e.total_hosts
             FROM ip_scanner_execucoes e
             INNER JOIN (
                 SELECT cidr, MAX(executado_em) AS ultima
@@ -476,5 +476,70 @@ class NetworkToolsService
         $stmt->execute();
 
         return $stmt->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /** Uma execução específica salva (pra "ver" uma varredura antiga sem rodar de novo). */
+    public function buscarExecucao(int $id): ?array
+    {
+        $pdo = Database::connection();
+        $stmt = $pdo->prepare("SELECT id, cidr, executado_em, total_hosts, hosts FROM ip_scanner_execucoes WHERE id = ?");
+        $stmt->execute([$id]);
+        $linha = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$linha) {
+            return null;
+        }
+
+        $linha['hosts'] = json_decode($linha['hosts'], true) ?: [];
+
+        return $linha;
+    }
+
+    /**
+     * Cruza os hosts descobertos com o cadastro de Ativos (por IP exato
+     * ou pelo nome curto, sem o sufixo de domínio que o reverse DNS
+     * costuma trazer, ex: "EP-RCP-01.localdomain" -> "EP-RCP-01") -- uma
+     * consulta só, comparação em PHP, evita N+1 pra cada host da faixa.
+     * Cada host ganha 'ativo' => null (não cadastrado) ou um resumo do
+     * ativo já cadastrado (id, codigo_patrimonio, nome).
+     */
+    public function relacionarComAtivos(array $hosts): array
+    {
+        if (empty($hosts)) {
+            return $hosts;
+        }
+
+        $pdo = Database::connection();
+        $ativos = $pdo->query("SELECT id, codigo_patrimonio, nome, ip FROM ativos")->fetchAll(\PDO::FETCH_ASSOC);
+
+        $porIp = [];
+        $porNome = [];
+        foreach ($ativos as $a) {
+            if (!empty($a['ip'])) {
+                $porIp[$a['ip']] = $a;
+            }
+            $nomeCurto = strtolower(explode('.', $a['nome'])[0]);
+            if ($nomeCurto !== '') {
+                $porNome[$nomeCurto] = $a;
+            }
+        }
+
+        foreach ($hosts as &$host) {
+            $achado = $porIp[$host['ip']] ?? null;
+
+            if (!$achado && !empty($host['hostname'])) {
+                $nomeCurto = strtolower(explode('.', $host['hostname'])[0]);
+                $achado = $porNome[$nomeCurto] ?? null;
+            }
+
+            $host['ativo'] = $achado ? [
+                'id' => (int)$achado['id'],
+                'codigo_patrimonio' => $achado['codigo_patrimonio'],
+                'nome' => $achado['nome'],
+            ] : null;
+        }
+        unset($host);
+
+        return $hosts;
     }
 }

@@ -64,7 +64,7 @@ $idsTiposComSnmp = array_column(array_filter($tipos, fn (array $t) => (bool)$t['
                 </div>
                 <div class="col-md-<?= $editando ? '3' : '6' ?>">
                     <label class="form-label">Nome / Identificação</label>
-                    <input type="text" name="nome" class="form-control" required value="<?= htmlspecialchars($ativo['nome'] ?? '') ?>" placeholder="Ex: Notebook Financeiro 01">
+                    <input type="text" name="nome" class="form-control" required value="<?= htmlspecialchars($ativo['nome'] ?? $prefillNome ?? '') ?>" placeholder="Ex: Notebook Financeiro 01">
                 </div>
             </div>
 
@@ -110,7 +110,7 @@ $idsTiposComSnmp = array_column(array_filter($tipos, fn (array $t) => (bool)$t['
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">IP</label>
-                    <input type="text" name="ip" class="form-control" value="<?= htmlspecialchars($ativo['ip'] ?? '') ?>" placeholder="192.168.0.10">
+                    <input type="text" name="ip" class="form-control" value="<?= htmlspecialchars($ativo['ip'] ?? $prefillIp ?? '') ?>" placeholder="192.168.0.10">
                 </div>
             </div>
 

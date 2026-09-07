@@ -250,6 +250,7 @@ $router->get('/infraestrutura/rede/scanner', [NetworkToolsController::class, 'sc
 $router->post('/infraestrutura/rede/scanner', [NetworkToolsController::class, 'scannerIniciar']);
 $router->get('/infraestrutura/rede/scanner/status', [NetworkToolsController::class, 'scannerStatus']);
 $router->get('/infraestrutura/rede/scanner/historico', [NetworkToolsController::class, 'scannerHistorico']);
+$router->get('/infraestrutura/rede/scanner/execucao', [NetworkToolsController::class, 'scannerExecucao']);
 $router->post('/infraestrutura/rede/scanner/finalizar', [NetworkToolsController::class, 'scannerFinalizar']);
 $router->post('/infraestrutura/rede/scanner/portas', [NetworkToolsController::class, 'scannerPortas']);
 $router->post('/infraestrutura/rede/scanner/wol', [NetworkToolsController::class, 'scannerWol']);

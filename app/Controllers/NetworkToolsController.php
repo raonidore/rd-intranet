@@ -224,11 +224,37 @@ class NetworkToolsController extends Controller
         }
 
         $usuarioId = isset($_SESSION['usuario']['id']) ? (int)$_SESSION['usuario']['id'] : null;
-        $comparacao = $this->service->registrarResultadoEComparar($cidr, $status['resultados'] ?? [], $usuarioId);
+        $hosts = $status['resultados'] ?? [];
+        $comparacao = $this->service->registrarResultadoEComparar($cidr, $hosts, $usuarioId);
 
-        AuditService::registrar('Rede', 'IP Scanner', "Varredura de {$cidr} concluída: " . count($status['resultados'] ?? []) . ' dispositivo(s).');
+        AuditService::registrar('Rede', 'IP Scanner', "Varredura de {$cidr} concluída: " . count($hosts) . ' dispositivo(s).');
 
-        echo json_encode(['success' => true, 'comparacao' => $comparacao]);
+        echo json_encode([
+            'success' => true,
+            'comparacao' => $comparacao,
+            'resultados' => $this->service->relacionarComAtivos($hosts),
+        ]);
+    }
+
+    /** Reabre uma varredura salva no histórico, sem rodar de novo. */
+    public function scannerExecucao(): void
+    {
+        AuthMiddleware::checkModulo('infra_rede');
+        header('Content-Type: application/json');
+
+        $execucao = $this->service->buscarExecucao((int)($_GET['id'] ?? 0));
+
+        if (!$execucao) {
+            echo json_encode(['success' => false, 'message' => 'Varredura não encontrada.']);
+            return;
+        }
+
+        echo json_encode([
+            'success' => true,
+            'cidr' => $execucao['cidr'],
+            'executado_em' => $execucao['executado_em'],
+            'resultados' => $this->service->relacionarComAtivos($execucao['hosts']),
+        ]);
     }
 
     public function scannerPortas(): void

@@ -40,6 +40,16 @@ use App\Components\Alert;
 .ipscan-map-node:hover circle { r: 9; }
 .ipscan-map-label { font-size: 9px; fill: #495057; }
 
+.ipscan-map-wrap { position: relative; }
+.ipscan-map-wrap svg { cursor: grab; touch-action: none; }
+.ipscan-map-wrap svg.dragging { cursor: grabbing; }
+.ipscan-zoom-controls { position: absolute; top: 10px; right: 10px; display: flex; flex-direction: column; gap: 4px; z-index: 2; }
+.ipscan-zoom-controls button { width: 30px; height: 30px; border-radius: 8px; border: 1px solid #e9ecef; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.08); color: #495057; line-height: 1; }
+.ipscan-zoom-controls button:hover { background: #f8fafc; }
+.ipscan-map-legenda { position: absolute; bottom: 8px; left: 12px; display: flex; gap: 14px; font-size: 11px; color: #6c757d; z-index: 2; }
+.ipscan-map-legenda span { display: inline-flex; align-items: center; gap: 4px; }
+.ipscan-map-legenda i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
 .ipscan-search { max-width: 320px; }
 
 .ipscan-chip { display:flex; align-items:center; gap:8px; background:#f8fafc; border:1px solid #e9ecef; border-radius:10px; padding:6px 10px; font-size:12px; }
@@ -109,22 +119,27 @@ use App\Components\Alert;
     <div id="banner-comparacao" class="mb-3"></div>
 
     <div class="row g-3 mb-4">
-        <div class="col-md-3">
+        <div class="col-6 col-md">
             <div class="card ipscan-card h-100"><div class="card-body ipscan-stat">
                 <b id="stat-total">0</b><small>Dispositivos</small>
             </div></div>
         </div>
-        <div class="col-md-3">
+        <div class="col-6 col-md">
+            <div class="card ipscan-card h-100"><div class="card-body ipscan-stat">
+                <b id="stat-cadastrados" class="text-primary">0</b><small>Cadastrados como Ativo</small>
+            </div></div>
+        </div>
+        <div class="col-6 col-md">
+            <div class="card ipscan-card h-100"><div class="card-body ipscan-stat">
+                <b id="stat-nao-cadastrados" class="text-warning">0</b><small>Não cadastrados</small>
+            </div></div>
+        </div>
+        <div class="col-6 col-md">
             <div class="card ipscan-card h-100"><div class="card-body ipscan-stat">
                 <b id="stat-com-mac">0</b><small>Com MAC identificado</small>
             </div></div>
         </div>
-        <div class="col-md-3">
-            <div class="card ipscan-card h-100"><div class="card-body ipscan-stat">
-                <b id="stat-com-nome">0</b><small>Com hostname</small>
-            </div></div>
-        </div>
-        <div class="col-md-3">
+        <div class="col-6 col-md">
             <div class="card ipscan-card h-100"><div class="card-body ipscan-stat">
                 <b id="stat-fabricantes">0</b><small>Fabricantes distintos</small>
             </div></div>
@@ -148,8 +163,19 @@ use App\Components\Alert;
                     </div>
                 </div>
                 <div class="card-body p-0">
-                    <div id="view-mapa" class="d-none text-center p-3">
-                        <svg id="svg-mapa" width="100%" height="280" viewBox="0 0 400 280"></svg>
+                    <div id="view-mapa" class="d-none ipscan-map-wrap">
+                        <div class="ipscan-zoom-controls">
+                            <button type="button" id="btn-zoom-in" title="Aproximar"><i class="bi bi-plus-lg"></i></button>
+                            <button type="button" id="btn-zoom-out" title="Afastar"><i class="bi bi-dash-lg"></i></button>
+                            <button type="button" id="btn-zoom-reset" title="Restaurar"><i class="bi bi-aspect-ratio"></i></button>
+                        </div>
+                        <div class="ipscan-map-legenda">
+                            <span><i style="background:#0d6efd"></i> Cadastrado como Ativo</span>
+                            <span><i style="background:#fd7e14"></i> Não cadastrado</span>
+                        </div>
+                        <svg id="svg-mapa" width="100%" height="320" viewBox="0 0 400 320">
+                            <g id="mapa-zoom-layer"></g>
+                        </svg>
                     </div>
                     <div id="view-tabela">
                         <div class="p-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -174,7 +200,7 @@ use App\Components\Alert;
                             <table class="table table-hover align-middle mb-0">
                                 <thead>
                                     <tr>
-                                        <th>IP</th><th>Hostname</th><th>MAC</th><th>Fabricante</th><th class="text-end">Ações</th>
+                                        <th>IP</th><th>Hostname</th><th>MAC</th><th>Fabricante</th><th>Cadastro</th><th class="text-end">Ações</th>
                                     </tr>
                                 </thead>
                                 <tbody id="tabela-hosts"></tbody>
@@ -221,6 +247,9 @@ use App\Components\Alert;
     const URL_STATUS = <?= json_encode(url('/infraestrutura/rede/scanner/status')) ?>;
     const URL_FINALIZAR = <?= json_encode(url('/infraestrutura/rede/scanner/finalizar')) ?>;
     const URL_HISTORICO = <?= json_encode(url('/infraestrutura/rede/scanner/historico')) ?>;
+    const URL_EXECUCAO = <?= json_encode(url('/infraestrutura/rede/scanner/execucao')) ?>;
+    const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
+    const URL_ATIVO_VER = <?= json_encode(url('/ativos/ver')) ?>;
     const URL_PORTAS = <?= json_encode(url('/infraestrutura/rede/scanner/portas')) ?>;
     const URL_WOL = <?= json_encode(url('/infraestrutura/rede/scanner/wol')) ?>;
 
@@ -251,8 +280,12 @@ use App\Components\Alert;
             chip.innerHTML =
                 '<span class="chip-cidr">' + item.cidr + '</span>' +
                 '<span class="chip-meta">' + item.total_hosts + ' host(s) &middot; ' + tempoRelativo(item.executado_em) + '</span>' +
-                '<button type="button" title="Varrer de novo"><i class="bi bi-arrow-repeat"></i></button>';
-            chip.querySelector('button').addEventListener('click', function () {
+                '<button type="button" data-acao="ver" title="Ver esta varredura"><i class="bi bi-eye"></i></button>' +
+                '<button type="button" data-acao="rescan" title="Varrer de novo"><i class="bi bi-arrow-repeat"></i></button>';
+            chip.querySelector('[data-acao="ver"]').addEventListener('click', function () {
+                carregarExecucaoSalva(item.id);
+            });
+            chip.querySelector('[data-acao="rescan"]').addEventListener('click', function () {
                 document.getElementById('input-cidr').value = item.cidr;
                 document.getElementById('form-scanner').requestSubmit();
             });
@@ -354,7 +387,12 @@ use App\Components\Alert;
                 body: 'id=' + encodeURIComponent(execucaoId) + '&cidr=' + encodeURIComponent(cidr)
             });
             const dados = await res.json();
-            renderizarComparacao(dados.success ? dados.comparacao : null);
+            if (dados.success) {
+                hostsAtuais = dados.resultados || resultados;
+                renderizarComparacao(dados.comparacao);
+            } else {
+                renderizarComparacao(null);
+            }
         } catch (err) {
             renderizarComparacao(null);
         }
@@ -362,6 +400,31 @@ use App\Components\Alert;
         setTimeout(function () { document.getElementById('painel-radar').classList.add('d-none'); }, 600);
         renderizarResultado(cidr);
         atualizarRecentes();
+    }
+
+    async function carregarExecucaoSalva(id) {
+        try {
+            const res = await fetch(URL_EXECUCAO + '?id=' + encodeURIComponent(id));
+            const dados = await res.json();
+
+            if (!dados.success) {
+                toast(dados.message || 'Não foi possível carregar essa varredura.', false);
+                return;
+            }
+
+            pararPoll();
+            document.getElementById('painel-radar').classList.add('d-none');
+            hostsAtuais = dados.resultados || [];
+
+            const banner = document.getElementById('banner-comparacao');
+            banner.innerHTML = '<div class="alert alert-secondary mb-0"><i class="bi bi-clock-history me-1"></i> Mostrando varredura salva de <strong>' + dados.executado_em + '</strong> -- não é uma varredura nova.</div>';
+
+            document.getElementById('input-cidr').value = dados.cidr;
+            renderizarResultado(dados.cidr);
+            document.getElementById('painel-resultado').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } catch (err) {
+            toast('Erro ao comunicar com o servidor.', false);
+        }
     }
 
     function renderizarComparacao(comparacao) {
@@ -389,13 +452,14 @@ use App\Components\Alert;
         document.getElementById('export-dropdown').setAttribute('data-rd-export-alvo', cidr);
 
         const comMac = hostsAtuais.filter(h => h.mac).length;
-        const comNome = hostsAtuais.filter(h => h.hostname).length;
+        const cadastrados = hostsAtuais.filter(h => h.ativo).length;
         const fabricantes = {};
         hostsAtuais.forEach(h => { const f = h.vendor || 'Desconhecido'; fabricantes[f] = (fabricantes[f] || 0) + 1; });
 
         document.getElementById('stat-total').textContent = hostsAtuais.length;
+        document.getElementById('stat-cadastrados').textContent = cadastrados;
+        document.getElementById('stat-nao-cadastrados').textContent = hostsAtuais.length - cadastrados;
         document.getElementById('stat-com-mac').textContent = comMac;
-        document.getElementById('stat-com-nome').textContent = comNome;
         document.getElementById('stat-fabricantes').textContent = Object.keys(fabricantes).length;
 
         renderizarGrafico(fabricantes);
@@ -422,7 +486,7 @@ use App\Components\Alert;
         corpo.innerHTML = '';
 
         if (hosts.length === 0) {
-            corpo.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Nenhum dispositivo respondeu nessa faixa.</td></tr>';
+            corpo.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Nenhum dispositivo respondeu nessa faixa.</td></tr>';
             return;
         }
 
@@ -430,11 +494,22 @@ use App\Components\Alert;
             const busca = (h.ip + ' ' + (h.hostname || '') + ' ' + (h.mac || '') + ' ' + (h.vendor || '')).toLowerCase();
             const tr = document.createElement('tr');
             tr.setAttribute('data-busca', busca);
+
+            let colCadastro;
+            if (h.ativo) {
+                colCadastro = '<a href="' + URL_ATIVO_VER + '?id=' + h.ativo.id + '" class="badge text-bg-primary text-decoration-none">' +
+                    '<i class="bi bi-check-circle me-1"></i>' + h.ativo.codigo_patrimonio + '</a>';
+            } else {
+                colCadastro = '<a href="' + URL_ATIVO_NOVO + '?nome=' + encodeURIComponent(h.hostname || h.ip) + '&ip=' + encodeURIComponent(h.ip) + '" class="badge text-bg-warning text-decoration-none" title="Cadastrar como ativo">' +
+                    '<i class="bi bi-plus-circle me-1"></i>Não cadastrado</a>';
+            }
+
             tr.innerHTML =
                 '<td class="font-monospace">' + h.ip + '</td>' +
                 '<td>' + (h.hostname || '<span class="text-muted">-</span>') + '</td>' +
                 '<td class="font-monospace small">' + (h.mac || '<span class="text-muted">-</span>') + '</td>' +
                 '<td>' + (h.vendor || '<span class="text-muted">-</span>') + '</td>' +
+                '<td>' + colCadastro + '</td>' +
                 '<td class="text-end"></td>';
 
             const acoes = tr.querySelector('td:last-child');
@@ -460,9 +535,9 @@ use App\Components\Alert;
     }
 
     function renderizarMapa(hosts) {
-        const svg = document.getElementById('svg-mapa');
-        svg.innerHTML = '';
-        const cx = 200, cy = 140, raio = 105;
+        const camada = document.getElementById('mapa-zoom-layer');
+        camada.innerHTML = '';
+        const cx = 200, cy = 160, raio = 120;
         const ns = 'http://www.w3.org/2000/svg';
 
         function el(tag, attrs) {
@@ -471,33 +546,98 @@ use App\Components\Alert;
             return e;
         }
 
-        const centro = el('circle', { cx: cx, cy: cy, r: 16, fill: '#0d6efd' });
-        svg.appendChild(centro);
+        const centro = el('circle', { cx: cx, cy: cy, r: 16, fill: '#0d1b2a' });
+        camada.appendChild(centro);
         const centroLabel = el('text', { x: cx, y: cy + 32, 'text-anchor': 'middle', class: 'ipscan-map-label' });
         centroLabel.textContent = 'Este servidor';
-        svg.appendChild(centroLabel);
+        camada.appendChild(centroLabel);
 
         const n = hosts.length || 1;
         hosts.forEach(function (h, i) {
             const ang = (2 * Math.PI * i) / n - Math.PI / 2;
             const x = cx + raio * Math.cos(ang);
             const y = cy + raio * Math.sin(ang);
+            const cor = h.ativo ? '#0d6efd' : '#fd7e14';
 
-            svg.appendChild(el('line', { x1: cx, y1: cy, x2: x, y2: y, stroke: '#dee2e6', 'stroke-width': 1 }));
+            camada.appendChild(el('line', { x1: cx, y1: cy, x2: x, y2: y, stroke: '#dee2e6', 'stroke-width': 1 }));
 
             const g = el('g', { class: 'ipscan-map-node' });
-            g.appendChild(el('circle', { cx: x, cy: y, r: 6, fill: h.mac ? '#198754' : '#6c757d' }));
+            g.appendChild(el('circle', { cx: x, cy: y, r: 6, fill: cor }));
             const label = el('text', { x: x, y: y - 10, 'text-anchor': 'middle', class: 'ipscan-map-label' });
             label.textContent = h.hostname || h.ip;
             g.appendChild(label);
 
             const titulo = el('title', {});
-            titulo.textContent = h.ip + (h.vendor ? ' -- ' + h.vendor : '');
+            const statusAtivo = h.ativo ? ('Ativo cadastrado: ' + h.ativo.codigo_patrimonio) : 'Não cadastrado como Ativo';
+            titulo.textContent = h.ip + (h.vendor ? ' -- ' + h.vendor : '') + ' -- ' + statusAtivo;
             g.appendChild(titulo);
 
-            svg.appendChild(g);
+            g.style.cursor = 'pointer';
+            g.addEventListener('click', function () {
+                if (h.ativo) {
+                    window.open(URL_ATIVO_VER + '?id=' + h.ativo.id, '_blank');
+                } else {
+                    window.open(URL_ATIVO_NOVO + '?nome=' + encodeURIComponent(h.hostname || h.ip) + '&ip=' + encodeURIComponent(h.ip), '_blank');
+                }
+            });
+
+            camada.appendChild(g);
         });
+
+        resetarZoomMapa();
     }
+
+    // ── Zoom/pan do mapa: transform num <g> só, roda do mouse + arrastar +
+    // botões, sem nenhuma lib nova (o SVG já é gerado na mão acima) ──────
+    let mapaEscala = 1, mapaTx = 0, mapaTy = 0;
+    let arrastando = false, arrastoX = 0, arrastoY = 0;
+
+    function aplicarTransformMapa() {
+        document.getElementById('mapa-zoom-layer').setAttribute('transform', 'translate(' + mapaTx + ',' + mapaTy + ') scale(' + mapaEscala + ')');
+    }
+
+    function resetarZoomMapa() {
+        mapaEscala = 1; mapaTx = 0; mapaTy = 0;
+        aplicarTransformMapa();
+    }
+
+    (function initZoomMapa() {
+        const svg = document.getElementById('svg-mapa');
+
+        svg.addEventListener('wheel', function (e) {
+            e.preventDefault();
+            const fator = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+            mapaEscala = Math.min(4, Math.max(0.4, mapaEscala * fator));
+            aplicarTransformMapa();
+        }, { passive: false });
+
+        svg.addEventListener('pointerdown', function (e) {
+            arrastando = true;
+            arrastoX = e.clientX - mapaTx;
+            arrastoY = e.clientY - mapaTy;
+            svg.classList.add('dragging');
+            svg.setPointerCapture(e.pointerId);
+        });
+        svg.addEventListener('pointermove', function (e) {
+            if (!arrastando) return;
+            mapaTx = e.clientX - arrastoX;
+            mapaTy = e.clientY - arrastoY;
+            aplicarTransformMapa();
+        });
+        ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (evt) {
+            svg.addEventListener(evt, function () { arrastando = false; svg.classList.remove('dragging'); });
+        });
+
+        document.getElementById('btn-zoom-in').addEventListener('click', function () {
+            mapaEscala = Math.min(4, mapaEscala * 1.25);
+            aplicarTransformMapa();
+        });
+        document.getElementById('btn-zoom-out').addEventListener('click', function () {
+            mapaEscala = Math.max(0.4, mapaEscala / 1.25);
+            aplicarTransformMapa();
+        });
+        document.getElementById('btn-zoom-reset').addEventListener('click', resetarZoomMapa);
+    })();
 
     async function escanearPortas(ip) {
         document.getElementById('modalPortasIp').textContent = ip;
@@ -573,9 +713,10 @@ use App\Components\Alert;
 
     document.getElementById('link-export-csv').addEventListener('click', function (e) {
         e.preventDefault();
-        let csv = 'IP,Hostname,MAC,Fabricante\n';
+        let csv = 'IP,Hostname,MAC,Fabricante,Ativo Cadastrado\n';
         hostsAtuais.forEach(h => {
-            csv += [h.ip, h.hostname || '', h.mac || '', (h.vendor || '').replace(/,/g, ' ')].map(v => '"' + v + '"').join(',') + '\n';
+            const cadastro = h.ativo ? h.ativo.codigo_patrimonio : 'Não cadastrado';
+            csv += [h.ip, h.hostname || '', h.mac || '', (h.vendor || '').replace(/,/g, ' '), cadastro].map(v => '"' + v + '"').join(',') + '\n';
         });
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');

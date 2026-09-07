@@ -147,6 +147,11 @@ class AtivoController extends Controller
             'unidades' => $this->unidadeService->listarAtivas(),
             'setores' => $this->catalogoService->listarSetores(),
             'localizacoes' => $this->catalogoService->listarLocalizacoes(),
+            // Pré-preenchimento vindo de fora (ex: "Cadastrar como ativo" a
+            // partir de um dispositivo achado no IP Scanner) -- só nome/IP,
+            // o resto continua em branco pro admin completar.
+            'prefillNome' => $_GET['nome'] ?? '',
+            'prefillIp' => $_GET['ip'] ?? '',
         ]);
     }
 
