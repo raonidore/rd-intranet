@@ -86,6 +86,7 @@ use App\Controllers\VpnIkev2SaidaController;
 use App\Controllers\AtualizacaoController;
 use App\Controllers\AntivirusController;
 use App\Controllers\SegurancaAuditoriaController;
+use App\Controllers\MapaRedeController;
 use App\Controllers\BackupController;
 use App\Controllers\AtivoController;
 use App\Controllers\AtivoAgenteController;
@@ -254,6 +255,16 @@ $router->get('/infraestrutura/rede/scanner/execucao', [NetworkToolsController::c
 $router->post('/infraestrutura/rede/scanner/finalizar', [NetworkToolsController::class, 'scannerFinalizar']);
 $router->post('/infraestrutura/rede/scanner/portas', [NetworkToolsController::class, 'scannerPortas']);
 $router->post('/infraestrutura/rede/scanner/wol', [NetworkToolsController::class, 'scannerWol']);
+
+$router->get('/infraestrutura/rede/mapa', [MapaRedeController::class, 'index']);
+$router->get('/infraestrutura/rede/mapa/novo', [MapaRedeController::class, 'novoForm']);
+$router->post('/infraestrutura/rede/mapa/novo', [MapaRedeController::class, 'novo']);
+$router->get('/infraestrutura/rede/mapa/ver', [MapaRedeController::class, 'ver']);
+$router->post('/infraestrutura/rede/mapa/salvar', [MapaRedeController::class, 'salvar']);
+$router->post('/infraestrutura/rede/mapa/excluir', [MapaRedeController::class, 'excluir']);
+$router->post('/infraestrutura/rede/mapa/renomear', [MapaRedeController::class, 'renomear']);
+$router->get('/infraestrutura/rede/mapa/listar-nomes', [MapaRedeController::class, 'listarNomes']);
+$router->post('/infraestrutura/rede/mapa/importar', [MapaRedeController::class, 'importar']);
 
 $router->get('/infraestrutura/rede/rotas', [NetworkRouteController::class, 'index']);
 $router->get('/infraestrutura/rede/rotas/novo', [NetworkRouteController::class, 'novoForm']);

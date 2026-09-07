@@ -526,6 +526,11 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
             <a href="<?= url('/infraestrutura/rede/scanner') ?>" class="<?= $uriAtual === '/infraestrutura/rede/scanner' ? 'active' : '' ?>">
                 <i class="bi bi-broadcast-pin me-2"></i> IP Scanner
             </a>
+            <?php if (PermissionService::temAcesso('infra_rede_mapa')): ?>
+            <a href="<?= url('/infraestrutura/rede/mapa') ?>" class="<?= str_starts_with($uriAtual, '/infraestrutura/rede/mapa') ? 'active' : '' ?>">
+                <i class="bi bi-diagram-3 me-2"></i> Mapa de Rede
+            </a>
+            <?php endif; ?>
             <a href="<?= url('/infraestrutura/rede/ping') ?>" class="<?= $uriAtual === '/infraestrutura/rede/ping' ? 'active' : '' ?>">
                 <i class="bi bi-broadcast me-2"></i> Ping
             </a>

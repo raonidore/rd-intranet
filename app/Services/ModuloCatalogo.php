@@ -26,6 +26,7 @@ class ModuloCatalogo
         'infra_speedtest' => ['label' => 'Teste de Velocidade', 'grupo' => 'Infraestrutura'],
         'infra_ddns' => ['label' => 'DNS Dinâmico', 'grupo' => 'Infraestrutura'],
         'infra_tuneis' => ['label' => 'Túneis', 'grupo' => 'Infraestrutura'],
+        'infra_rede_mapa' => ['label' => 'Mapa de Rede', 'grupo' => 'Infraestrutura'],
         'vpn_dashboard' => ['label' => 'Dashboard', 'grupo' => 'VPN'],
         'vpn_wireguard_servidor' => ['label' => 'WireGuard - Servidor', 'grupo' => 'VPN'],
         'vpn_wireguard_peers' => ['label' => 'WireGuard - Peers', 'grupo' => 'VPN'],

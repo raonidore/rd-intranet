@@ -40,7 +40,7 @@ use App\Components\Alert;
 .ipscan-map-node:hover circle { r: 9; }
 .ipscan-map-label { font-size: 9px; fill: #495057; }
 
-.ipscan-map-wrap { position: relative; }
+.ipscan-map-wrap { position: relative; min-height: 560px; }
 .ipscan-map-wrap svg { cursor: grab; touch-action: none; }
 .ipscan-map-wrap svg.dragging { cursor: grabbing; }
 .ipscan-zoom-controls { position: absolute; top: 10px; right: 10px; display: flex; flex-direction: column; gap: 4px; z-index: 2; }
@@ -147,19 +147,24 @@ use App\Components\Alert;
     </div>
 
     <div class="row g-3 mb-4">
-        <div class="col-lg-4">
+        <div class="col-lg-3">
             <div class="card ipscan-card h-100">
                 <div class="card-header bg-white"><i class="bi bi-pie-chart me-1"></i> Por fabricante</div>
                 <div class="card-body"><canvas id="grafico-fabricantes" height="220"></canvas></div>
             </div>
         </div>
-        <div class="col-lg-8">
+        <div class="col-lg-9">
             <div class="card ipscan-card h-100">
                 <div class="card-header bg-white d-flex justify-content-between align-items-center">
                     <span><i class="bi bi-diagram-3 me-1"></i> Mapa da rede</span>
-                    <div class="btn-group btn-group-sm" role="group">
-                        <button type="button" class="btn btn-outline-secondary active" id="btn-view-tabela">Tabela</button>
-                        <button type="button" class="btn btn-outline-secondary" id="btn-view-mapa">Mapa</button>
+                    <div class="d-flex align-items-center gap-2">
+                        <a href="#" class="btn btn-sm btn-outline-primary" id="btn-exportar-mapa">
+                            <i class="bi bi-box-arrow-up-right"></i> Mapa de Rede
+                        </a>
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button type="button" class="btn btn-outline-secondary active" id="btn-view-tabela">Tabela</button>
+                            <button type="button" class="btn btn-outline-secondary" id="btn-view-mapa">Mapa</button>
+                        </div>
                     </div>
                 </div>
                 <div class="card-body p-0">
@@ -173,7 +178,7 @@ use App\Components\Alert;
                             <span><i style="background:#0d6efd"></i> Cadastrado como Ativo</span>
                             <span><i style="background:#fd7e14"></i> Não cadastrado</span>
                         </div>
-                        <svg id="svg-mapa" width="100%" height="320" viewBox="0 0 400 320">
+                        <svg id="svg-mapa" width="100%" height="560" viewBox="0 0 400 320">
                             <g id="mapa-zoom-layer"></g>
                         </svg>
                     </div>
@@ -228,6 +233,37 @@ use App\Components\Alert;
     </div>
 </div>
 
+<!-- Modal de exportar pro Mapa de Rede -->
+<div class="modal fade" id="modalExportarMapa" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-diagram-3 me-1"></i> Exportar pro Mapa de Rede</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-check mb-2">
+                    <input type="radio" class="form-check-input" name="exp-mapa-destino" id="exp-mapa-novo" value="novo" checked>
+                    <label class="form-check-label" for="exp-mapa-novo">Criar um mapa novo</label>
+                </div>
+                <input type="text" id="exp-mapa-nome-novo" class="form-control form-control-sm mb-3" placeholder="Nome do novo mapa">
+
+                <div class="form-check mb-2">
+                    <input type="radio" class="form-check-input" name="exp-mapa-destino" id="exp-mapa-existente" value="existente">
+                    <label class="form-check-label" for="exp-mapa-existente">Adicionar a um mapa existente</label>
+                </div>
+                <select id="exp-mapa-select" class="form-select form-select-sm" disabled></select>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btn-confirmar-exportar-mapa">
+                    <i class="bi bi-box-arrow-up-right me-1"></i> Exportar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index:1080">
     <div id="ipscan-toast" class="toast align-items-center text-white border-0" role="alert">
         <div class="d-flex">
@@ -252,6 +288,9 @@ use App\Components\Alert;
     const URL_ATIVO_VER = <?= json_encode(url('/ativos/ver')) ?>;
     const URL_PORTAS = <?= json_encode(url('/infraestrutura/rede/scanner/portas')) ?>;
     const URL_WOL = <?= json_encode(url('/infraestrutura/rede/scanner/wol')) ?>;
+    const URL_MAPA_LISTAR = <?= json_encode(url('/infraestrutura/rede/mapa/listar-nomes')) ?>;
+    const URL_MAPA_IMPORTAR = <?= json_encode(url('/infraestrutura/rede/mapa/importar')) ?>;
+    const URL_MAPA_VER = <?= json_encode(url('/infraestrutura/rede/mapa/ver')) ?>;
 
     let hostsAtuais = [];
     let poll = null;
@@ -535,10 +574,20 @@ use App\Components\Alert;
     }
 
     function renderizarMapa(hosts) {
+        const svg = document.getElementById('svg-mapa');
         const camada = document.getElementById('mapa-zoom-layer');
         camada.innerHTML = '';
-        const cx = 200, cy = 160, raio = 120;
         const ns = 'http://www.w3.org/2000/svg';
+
+        // Usa o tamanho real do card em vez de um viewBox fixo -- antes
+        // sobrava bastante area vazia em cards largos porque o viewBox
+        // (400x320) nao acompanhava a largura de verdade do container.
+        const retangulo = svg.getBoundingClientRect();
+        const largura = Math.max(400, retangulo.width || 800);
+        const altura = Math.max(320, retangulo.height || 560);
+        svg.setAttribute('viewBox', '0 0 ' + largura + ' ' + altura);
+
+        const cx = largura / 2, cy = altura / 2, raio = Math.min(largura, altura) / 2 - 60;
 
         function el(tag, attrs) {
             const e = document.createElementNS(ns, tag);
@@ -709,6 +758,82 @@ use App\Components\Alert;
         document.getElementById('btn-view-tabela').classList.remove('active');
         document.getElementById('view-mapa').classList.remove('d-none');
         document.getElementById('view-tabela').classList.add('d-none');
+        // Só agora o card fica visível de verdade -- recalcula o viewBox
+        // com o tamanho real (medir enquanto "d-none" sempre dá 0x0).
+        renderizarMapa(hostsAtuais);
+    });
+
+    window.addEventListener('resize', function () {
+        if (!document.getElementById('view-mapa').classList.contains('d-none')) {
+            renderizarMapa(hostsAtuais);
+        }
+    });
+
+    document.getElementById('btn-exportar-mapa').addEventListener('click', async function (e) {
+        e.preventDefault();
+
+        if (hostsAtuais.length === 0) {
+            toast('Rode uma varredura primeiro.', false);
+            return;
+        }
+
+        document.getElementById('exp-mapa-nome-novo').value = document.getElementById('input-cidr').value + ' -- ' + new Date().toLocaleDateString('pt-BR');
+        document.getElementById('exp-mapa-select').innerHTML = '<option>Carregando...</option>';
+
+        try {
+            const res = await fetch(URL_MAPA_LISTAR);
+            const mapas = await res.json();
+            const select = document.getElementById('exp-mapa-select');
+            select.innerHTML = mapas.length === 0
+                ? '<option value="">Nenhum mapa existente</option>'
+                : mapas.map(m => '<option value="' + m.id + '">' + m.nome + '</option>').join('');
+        } catch (err) { /* segue com a lista vazia, "criar novo" ja fica marcado */ }
+
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalExportarMapa')).show();
+    });
+
+    document.querySelectorAll('input[name="exp-mapa-destino"]').forEach(function (radio) {
+        radio.addEventListener('change', function () {
+            document.getElementById('exp-mapa-nome-novo').disabled = this.value !== 'novo';
+            document.getElementById('exp-mapa-select').disabled = this.value !== 'existente';
+        });
+    });
+
+    document.getElementById('btn-confirmar-exportar-mapa').addEventListener('click', async function () {
+        const destino = document.querySelector('input[name="exp-mapa-destino"]:checked').value;
+        const btn = this;
+        btn.disabled = true;
+
+        try {
+            let corpo = 'hosts=' + encodeURIComponent(JSON.stringify(hostsAtuais));
+            if (destino === 'novo') {
+                const nome = document.getElementById('exp-mapa-nome-novo').value.trim();
+                if (!nome) { toast('Informe um nome pro mapa.', false); btn.disabled = false; return; }
+                corpo += '&nome_novo=' + encodeURIComponent(nome);
+            } else {
+                const mapaId = document.getElementById('exp-mapa-select').value;
+                if (!mapaId) { toast('Escolha um mapa.', false); btn.disabled = false; return; }
+                corpo += '&mapa_id=' + encodeURIComponent(mapaId);
+            }
+
+            const res = await fetch(URL_MAPA_IMPORTAR, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: corpo
+            });
+            const dados = await res.json();
+
+            if (!dados.success) {
+                toast(dados.message || 'Falha ao exportar.', false);
+                btn.disabled = false;
+                return;
+            }
+
+            window.location.href = URL_MAPA_VER + '?id=' + dados.mapa_id;
+        } catch (err) {
+            toast('Erro ao comunicar com o servidor.', false);
+            btn.disabled = false;
+        }
     });
 
     document.getElementById('link-export-csv').addEventListener('click', function (e) {
