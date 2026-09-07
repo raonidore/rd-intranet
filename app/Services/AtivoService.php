@@ -118,6 +118,11 @@ class AtivoService
             'unifi_firmware' => 'Versão de firmware',
             'unifi_status' => 'Status no Controller',
         ],
+        'roteador' => [
+            'unifi_model' => 'Modelo (UniFi)',
+            'unifi_firmware' => 'Versão de firmware',
+            'unifi_status' => 'Status no Controller',
+        ],
     ];
 
     private const NOME_JOB_CRON_SNMP = 'Coleta SNMP de Ativos de TI';
@@ -954,11 +959,39 @@ class AtivoService
             return ['success' => false, 'message' => 'Integração com o UniFi Controller ainda não configurada -- veja Integrações.'];
         }
 
+        $dispositivos = $unifi->listarDispositivos();
+
         $dispositivo = null;
-        foreach ($unifi->listarDispositivos() as $d) {
+        foreach ($dispositivos as $d) {
             if (($d['ipAddress'] ?? '') === $ativo['ip']) {
                 $dispositivo = $d;
                 break;
+            }
+        }
+
+        // Gateways (UCG etc.) reportam em 'ipAddress' o IP do WAN, não o de
+        // gerenciamento na LAN que a gente cadastra em Ativos -- procura o
+        // IP entre as portas do dispositivo via API legada e casa por MAC.
+        if ($dispositivo === null) {
+            foreach ($unifi->listarDispositivosLegado() as $legado) {
+                $temIp = false;
+                foreach ($legado['port_table'] ?? [] as $porta) {
+                    if (($porta['ip'] ?? '') === $ativo['ip']) {
+                        $temIp = true;
+                        break;
+                    }
+                }
+
+                if (!$temIp) {
+                    continue;
+                }
+
+                foreach ($dispositivos as $d) {
+                    if (($d['macAddress'] ?? '') === ($legado['mac'] ?? '')) {
+                        $dispositivo = $d;
+                        break 2;
+                    }
+                }
             }
         }
 
@@ -978,14 +1011,21 @@ class AtivoService
             ];
         }
 
+        // API legada (stat/sta) em vez de /integration/v1/clients -- essa
+        // traz 'essid' (rede Wi-Fi) e 'signal' (dBm), que a API nova ainda
+        // não expõe.
         $clientesWifi = [];
-        foreach ($unifi->listarClientes() as $c) {
-            if (($c['uplinkDeviceId'] ?? '') === $dispositivo['id'] && ($c['type'] ?? '') === 'WIRELESS') {
+        foreach ($unifi->listarClientesLegado() as $c) {
+            if (($c['ap_mac'] ?? '') === ($dispositivo['macAddress'] ?? '') && empty($c['is_wired'])) {
                 $clientesWifi[] = [
-                    'nome' => $c['name'] ?? ($c['macAddress'] ?? ''),
-                    'mac' => $c['macAddress'] ?? '',
-                    'ip' => $c['ipAddress'] ?? '',
-                    'conectado_em' => $c['connectedAt'] ?? '',
+                    'nome' => $c['hostname'] ?? ($c['name'] ?? ($c['mac'] ?? '')),
+                    'mac' => $c['mac'] ?? '',
+                    'ip' => $c['ip'] ?? '',
+                    'rede' => $c['essid'] ?? '',
+                    'sinal_dbm' => $c['signal'] ?? null,
+                    // 'assoc_time' vem em epoch (segundos) -- date('c', ...) já formata
+                    // em ISO 8601, sem depender de data_br() (não carregado no cron).
+                    'conectado_em' => !empty($c['assoc_time']) ? date('c', (int)$c['assoc_time']) : '',
                 ];
             }
         }
@@ -1039,9 +1079,16 @@ class AtivoService
      * IP cadastrado -- chamado pelo cron (rd ativos:coletar-unifi), mesmo
      * padrão de coletarSnmpTodos().
      */
+    /** @var string[] Tipos de ativo gerenciados pelo UniFi Controller (pontos de acesso + o gateway/roteador). */
+    private const TIPOS_UNIFI = ['ponto_acesso', 'roteador'];
+
     public function coletarUnifiTodos(): array
     {
-        $ativos = $this->repository->listarPorTipoSlugComIp('ponto_acesso');
+        $ativos = [];
+        foreach (self::TIPOS_UNIFI as $slug) {
+            $ativos = array_merge($ativos, $this->repository->listarPorTipoSlugComIp($slug));
+        }
+
         $sucesso = 0;
 
         foreach ($ativos as $ativo) {

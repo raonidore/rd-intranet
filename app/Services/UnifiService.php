@@ -26,6 +26,7 @@ class UnifiService
     private const CHAVE_URL = 'unifi_url';
     private const CHAVE_API_KEY_CIFRADA = 'unifi_api_key_cifrada';
     private const CHAVE_SITE_ID = 'unifi_site_id';
+    private const CHAVE_SITE_REF = 'unifi_site_ref';
 
     private const LIMITE_PAGINA = 200;
 
@@ -45,6 +46,14 @@ class UnifiService
         $id = trim((string)(ConfigService::get(self::CHAVE_SITE_ID, '') ?: ''));
 
         return $id !== '' ? $id : null;
+    }
+
+    /** Identificador curto do site (ex: "default") -- usado nos endpoints legados /api/s/{ref}/*, diferente do UUID usado em /integration/v1/sites/{id}/*. */
+    public function siteRefAtual(): ?string
+    {
+        $ref = trim((string)(ConfigService::get(self::CHAVE_SITE_REF, '') ?: ''));
+
+        return $ref !== '' ? $ref : null;
     }
 
     public function salvarConfiguracao(string $url, string $apiKey): bool
@@ -125,6 +134,8 @@ class UnifiService
 
         $site = $sites[0];
         ConfigService::set(self::CHAVE_SITE_ID, (string)$site['id']);
+        // "internalReference" (ex: "default") é o identificador curto que os endpoints legados /api/s/{ref}/* esperam -- diferente do UUID usado em /integration/v1/sites/{id}/*.
+        ConfigService::set(self::CHAVE_SITE_REF, (string)($site['internalReference'] ?? 'default'));
 
         AuditService::registrar('UniFi Controller', 'Testar conexão', "Conexão validada -- site \"{$site['name']}\" ({$site['id']}).");
 
@@ -158,17 +169,50 @@ class UnifiService
         return $resultado['sucesso'] ? $resultado['dados'] : null;
     }
 
-    /** Todos os clientes (com/sem fio) do site -- cada um traz uplinkDeviceId, usado pra saber em qual AP/switch está conectado. */
-    public function listarClientes(): array
+    /**
+     * Todos os dispositivos via API LEGADA (/api/s/{ref}/stat/device) --
+     * usada só como fallback de casamento por IP: dispositivos gateway
+     * reportam em /integration/v1 o IP do WAN (o que faz sentido pro
+     * Controller, mas não é o IP de gerenciamento na LAN que a gente
+     * cadastra em Ativos). A API legada expõe `port_table[].ip` por
+     * porta, incluindo o IP da LAN -- ver coletarUnifi() em AtivoService.
+     */
+    public function listarDispositivosLegado(): array
     {
-        $siteId = $this->siteIdAtual();
+        $ref = $this->siteRefAtual();
 
-        if ($siteId === null) {
+        if ($ref === null) {
+            return [];
+        }
+
+        $resultado = $this->chamarApi('GET', "/proxy/network/api/s/{$ref}/stat/device");
+
+        return $resultado['sucesso'] ? ($resultado['dados']['data'] ?? []) : [];
+    }
+
+    /**
+     * Clientes conectados via API LEGADA (/api/s/{ref}/stat/sta) -- ao
+     * contrário de /integration/v1/clients, traz `essid` (rede Wi-Fi),
+     * `signal` (dBm) e `ap_mac` (MAC do AP, casamento direto sem precisar
+     * do id interno do dispositivo).
+     */
+    public function listarClientesLegado(): array
+    {
+        $ref = $this->siteRefAtual();
+
+        if ($ref === null) {
             NotificationService::error('Site do UniFi Controller ainda não identificado -- use "Testar conexão" em Integrações > UniFi.');
             return [];
         }
 
-        return $this->paginar("/proxy/network/integration/v1/sites/{$siteId}/clients");
+        $resultado = $this->chamarApi('GET', "/proxy/network/api/s/{$ref}/stat/sta");
+
+        if (!$resultado['sucesso']) {
+            NotificationService::error('Erro ao listar clientes do UniFi Controller.', $resultado['mensagem']);
+            return [];
+        }
+
+        return $resultado['dados']['data'] ?? [];
     }
 
     /** offset/limit até esgotar totalCount -- na prática quase sempre cabe numa página só, mas evita truncar silenciosamente em instalações maiores. */

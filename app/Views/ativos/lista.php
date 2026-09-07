@@ -207,7 +207,7 @@ function thOrdenavel(string $coluna, string $label, ?string $ordenarChave, array
                                         <span data-bs-toggle="tooltip" title="<?= htmlspecialchars($dicaStatus) ?>">
                                             <?= Badge::make(AtivoService::estaLigada($a) ? 'Ligado' : 'Desligado', AtivoService::estaLigada($a) ? 'success' : 'secondary') ?>
                                         </span>
-                                    <?php elseif (($a['tipo_slug'] ?? '') === 'ponto_acesso' && !empty($detalhesLinha['unifi_status'])): ?>
+                                    <?php elseif (in_array($a['tipo_slug'] ?? '', ['ponto_acesso', 'roteador'], true) && !empty($detalhesLinha['unifi_status'])): ?>
                                         <?php
                                             // Não é ping ao vivo (como o heartbeat do agente) -- reflete o status
                                             // ONLINE/OFFLINE que o UniFi Controller reportou na última coleta
