@@ -17,6 +17,7 @@ class AtivoTipoService
         'bi-hdd-network' => 'Switch',
         'bi-router' => 'Roteador',
         'bi-camera-video' => 'Câmera',
+        'bi-camera-reels' => 'DVR/NVR',
         'bi-tablet' => 'Tablet',
         'bi-phone' => 'Telefone',
         'bi-projector' => 'Projetor',
