@@ -307,6 +307,12 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                 <?php endif; ?>
                             <?php endforeach; ?>
                         <?php endif; ?>
+                        <?php if (!empty($detalhes['unifi_adotado_em'])): ?>
+                            <div class="d-flex justify-content-between py-2 border-bottom">
+                                <span class="text-muted">Adotado em</span>
+                                <span><?= htmlspecialchars(data_br($detalhes['unifi_adotado_em'])) ?></span>
+                            </div>
+                        <?php endif; ?>
                         <?php if (!empty($ativo['observacoes'])): ?>
                             <hr>
                             <div class="text-muted small mb-1">Observações</div>

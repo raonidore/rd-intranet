@@ -106,15 +106,17 @@ class AtivoService
             'snmp_sys_descr' => 'Descrição (SNMP)',
             'snmp_uptime' => 'Uptime (SNMP)',
         ],
-        // 'unifi_radios' e 'unifi_clientes' (arrays, não texto) ficam FORA
-        // daqui de propósito -- o loop genérico da Visão Geral em ver.php
-        // só sabe exibir texto simples. Eles são lidos direto de $detalhes
-        // numa aba própria ("Wi-Fi"), condicionada a tipo_slug === 'ponto_acesso'.
+        // 'unifi_radios', 'unifi_clientes' (arrays) e 'unifi_adotado_em'
+        // (formatado com data_br() só na view, nunca no coletor -- data_br()
+        // só é carregado no bootstrap web, não no `rd` CLI que roda o cron)
+        // ficam FORA daqui de propósito -- o loop genérico da Visão Geral em
+        // ver.php só sabe exibir texto simples já pronto. Lidos direto de
+        // $detalhes numa aba própria ("Wi-Fi"), condicionada a
+        // tipo_slug === 'ponto_acesso'.
         'ponto_acesso' => [
             'unifi_model' => 'Modelo (UniFi)',
             'unifi_firmware' => 'Versão de firmware',
             'unifi_status' => 'Status no Controller',
-            'unifi_adotado_em' => 'Adotado em',
         ],
     ];
 
@@ -992,7 +994,11 @@ class AtivoService
             'unifi_model' => $dispositivo['model'] ?? '',
             'unifi_firmware' => $dispositivo['firmwareVersion'] ?? '',
             'unifi_status' => self::rotuloStatusUnifi($dispositivo['state'] ?? ''),
-            'unifi_adotado_em' => !empty($detalheDispositivo['adoptedAt']) ? data_br($detalheDispositivo['adoptedAt']) : '',
+            // ISO 8601 cru (ex: "2026-06-18T18:35:06Z") -- formatado com
+            // data_br() só na view (ver.php), nunca aqui: este método também
+            // roda via `rd ativos:coletar-unifi` (cron), que não carrega
+            // app/bootstrap.php (só o CLI/`rd` em si), logo não tem data_br().
+            'unifi_adotado_em' => $detalheDispositivo['adoptedAt'] ?? '',
             'unifi_radios' => $radios,
             'unifi_clientes' => $clientesWifi,
         ];
