@@ -35,6 +35,14 @@ function parseGb($texto): float
     return isset($m[1]) ? (float)$m[1] : 0.0;
 }
 
+/** Faixas padrão de sinal Wi-Fi (dBm, quanto mais perto de 0 melhor) -- bom/razoável/fraco. */
+function corSinalWifi(int $dbm): string
+{
+    if ($dbm >= -60) return 'success';
+    if ($dbm >= -70) return 'warning';
+    return 'danger';
+}
+
 function gaugeRadial(float $percentual, string $label, string $sublabel): string
 {
     $percentual = max(0, min(100, $percentual));
@@ -785,7 +793,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                             <td><?= htmlspecialchars($cliente['rede'] ?? '—') ?></td>
                                             <td><?= htmlspecialchars($cliente['ip'] ?? '—') ?></td>
                                             <td class="font-monospace small"><?= htmlspecialchars($cliente['mac'] ?? '—') ?></td>
-                                            <td><?= isset($cliente['sinal_dbm']) ? htmlspecialchars($cliente['sinal_dbm'] . ' dBm') : '—' ?></td>
+                                            <td><?= isset($cliente['sinal_dbm']) ? Badge::make($cliente['sinal_dbm'] . ' dBm', corSinalWifi((int)$cliente['sinal_dbm'])) : '—' ?></td>
                                             <td><?= htmlspecialchars(data_br($cliente['conectado_em'] ?? null)) ?></td>
                                             <td class="text-end text-nowrap">
                                                 <button type="button" class="btn btn-sm btn-outline-secondary botao-unifi-cliente" data-acao="desconectar" data-mac="<?= htmlspecialchars($cliente['mac'] ?? '') ?>" data-nome="<?= htmlspecialchars($cliente['nome'] ?? '') ?>" title="Desconectar (reconecta sozinho)">
