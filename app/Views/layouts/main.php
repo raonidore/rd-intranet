@@ -641,6 +641,7 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         || PermissionService::temAcesso('deploy')
         || PermissionService::temAcesso('samba_compartilhamentos')
         || PermissionService::temAcesso('samba_config')
+        || PermissionService::temAcesso('samba_dominio')
         || PermissionService::temAcesso('samba_diagnostico')
         || PermissionService::temAcesso('samba_grupos')
         || PermissionService::temAcesso('samba_lixeira')
@@ -681,6 +682,12 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         <?php if (PermissionService::temAcesso('samba_config')): ?>
         <a href="<?= url('/samba/configuracao') ?>" class="<?= $uriAtual === '/samba/configuracao' ? 'active' : '' ?>">
             <i class="bi bi-sliders me-2"></i> Config. Global
+        </a>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('samba_dominio')): ?>
+        <a href="<?= url('/samba/dominio') ?>" class="<?= $uriAtual === '/samba/dominio' ? 'active' : '' ?>">
+            <i class="bi bi-diagram-3 me-2"></i> Domínio
         </a>
         <?php endif; ?>
 

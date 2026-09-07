@@ -25,12 +25,19 @@ class SambaConfiguracaoController extends Controller
             'config'  => $this->service->lerConfigAtual(),
             'backups' => $this->service->listarBackups(),
             'grupos'  => SambaGlobalConfigService::$grupos,
+            'ehDC'    => $this->service->ehDC(),
         ]);
     }
 
     public function salvar(): void
     {
         AuthMiddleware::checkModulo('samba_config');
+
+        if ($this->service->ehDC()) {
+            NotificationService::error('Este servidor é um Controlador de Domínio. Edite pela tela Samba > Domínio.');
+            header('Location: ' . url('/samba/configuracao'));
+            exit;
+        }
 
         $params  = $this->extrairParametros($_POST);
         $resultado = $this->service->aplicar($params);

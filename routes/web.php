@@ -38,6 +38,7 @@ use App\Controllers\PerfilController;
 use App\Controllers\PasswordResetController;
 use App\Controllers\PoliticaSenhaController;
 use App\Controllers\SambaGrupoController;
+use App\Controllers\SambaDominioController;
 use App\Controllers\ApacheController;
 use App\Controllers\ApacheSiteController;
 use App\Controllers\ApacheModuloController;
@@ -145,6 +146,24 @@ $router->post('/samba/compartilhamentos/backup/alternar', [SambaCompartilhamento
 $router->get('/samba/lixeira', [SambaLixeiraController::class, 'index']);
 $router->post('/samba/lixeira/restaurar', [SambaLixeiraController::class, 'restaurar']);
 $router->post('/samba/lixeira/excluir', [SambaLixeiraController::class, 'excluir']);
+
+$router->get('/samba/dominio', [SambaDominioController::class, 'index']);
+$router->post('/samba/dominio/hostname', [SambaDominioController::class, 'hostnameAplicar']);
+$router->post('/samba/dominio/provisionar', [SambaDominioController::class, 'provisionar']);
+$router->get('/samba/dominio/provisionar/status', [SambaDominioController::class, 'provisionarStatus']);
+$router->get('/samba/dominio/usuarios', [SambaDominioController::class, 'usuarios']);
+$router->get('/samba/dominio/usuarios/novo', [SambaDominioController::class, 'usuarioNovoForm']);
+$router->post('/samba/dominio/usuarios/novo', [SambaDominioController::class, 'usuarioNovo']);
+$router->get('/samba/dominio/usuarios/senha', [SambaDominioController::class, 'usuarioSenhaForm']);
+$router->post('/samba/dominio/usuarios/senha', [SambaDominioController::class, 'usuarioSenha']);
+$router->get('/samba/dominio/usuarios/ativar', [SambaDominioController::class, 'usuarioAtivar']);
+$router->get('/samba/dominio/usuarios/desativar', [SambaDominioController::class, 'usuarioDesativar']);
+$router->get('/samba/dominio/grupos', [SambaDominioController::class, 'grupos']);
+$router->get('/samba/dominio/grupos/novo', [SambaDominioController::class, 'grupoNovoForm']);
+$router->post('/samba/dominio/grupos/novo', [SambaDominioController::class, 'grupoNovo']);
+$router->get('/samba/dominio/grupos/membros', [SambaDominioController::class, 'grupoMembros']);
+$router->post('/samba/dominio/grupos/membros', [SambaDominioController::class, 'grupoMembroAdicionar']);
+$router->get('/samba/dominio/computadores', [SambaDominioController::class, 'computadores']);
 
 $router->get('/samba/diagnostico', [SambaDiagnosticoController::class, 'index']);
 $router->get('/samba/diagnostico/logs-completos', [SambaDiagnosticoController::class, 'logsCompletos']);

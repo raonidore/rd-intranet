@@ -45,7 +45,16 @@ function cfgName(string $key): string {
     </a>
 </div>
 
+<?php if (!empty($ehDC)): ?>
+<div class="alert alert-warning border-0 shadow-sm mb-4">
+    <i class="bi bi-diagram-3 me-2"></i>
+    Este servidor já é um <strong>Controlador de Domínio (Active Directory)</strong>. A edição do bloco <code>[global]</code> por aqui fica bloqueada — o <code>samba-tool</code> já gerou sua própria configuração na promoção. Gerencie o domínio pela tela
+    <a href="<?= url('/samba/dominio') ?>">Samba &gt; Domínio</a>.
+</div>
+<?php endif; ?>
+
 <form method="POST" action="<?= url('/samba/configuracao/salvar') ?>" id="form-config">
+<fieldset <?= !empty($ehDC) ? 'disabled' : '' ?>>
 
 <?php foreach ($grupos as $grupoKey => $grupo): ?>
 <div class="cfg-card card">
@@ -105,6 +114,7 @@ function cfgName(string $key): string {
     </button>
 </div>
 
+</fieldset>
 </form>
 
 <!-- Backups -->

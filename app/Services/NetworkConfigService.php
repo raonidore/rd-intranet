@@ -125,6 +125,36 @@ class NetworkConfigService
         return is_array($dados) ? $dados : ['success' => false, 'message' => 'Resposta inesperada do script: ' . $resultado['output']];
     }
 
+    /**
+     * Hostname atual da maquina -- mesma leitura que ServerInfoService ja
+     * faz pro dashboard (so exibicao); aqui existe pra compor o checklist
+     * de pre-requisitos do assistente de Controlador de Dominio (Samba >
+     * Dominio), que tambem precisa mostrar/validar o valor atual antes de
+     * eventualmente trocar via aplicarHostname().
+     */
+    public function hostnameAtual(): string
+    {
+        return trim(shell_exec('hostname 2>/dev/null') ?? '') ?: php_uname('n');
+    }
+
+    /**
+     * Troca o hostname da maquina -- usado pelo assistente de Controlador
+     * de Dominio (samba-tool deriva o nome do DC do hostname curto). Nao
+     * ha tela dedicada de hostname; a validacao de formato e feita de novo
+     * dentro do proprio script (nunca confiar so na validacao do PHP).
+     */
+    public function aplicarHostname(string $novo): array
+    {
+        $resultado = $this->linux->executarScript(
+            '/opt/rdtecnologia/scripts/samba_dc_hostname_aplicar_web.sh',
+            [$novo]
+        );
+
+        $dados = json_decode(trim($resultado['output']), true);
+
+        return is_array($dados) ? $dados : ['success' => false, 'message' => 'Resposta inesperada do script: ' . $resultado['output']];
+    }
+
     public function statusRollback(): array
     {
         $resultado = $this->linux->executar(

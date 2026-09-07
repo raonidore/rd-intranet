@@ -141,9 +141,25 @@ class SambaGlobalConfigService
         ],
     ];
 
+    private SambaDominioService $dominio;
+
     public function __construct()
     {
         $this->linux = new LinuxService();
+        $this->dominio = new SambaDominioService();
+    }
+
+    /**
+     * Este editor de [global] só faz sentido pra um servidor standalone --
+     * depois que vira Controlador de Domínio, editar "security"/etc por
+     * aqui deixaria um admin quebrar o DC sem querer (o samba-tool já
+     * gerou um [global] próprio na promoção). aplicar() recusa cedo com
+     * base nisso; restaurarBackup()/listarBackups() continuam liberados,
+     * são a rede de segurança de um provisionamento malsucedido.
+     */
+    public function ehDC(): bool
+    {
+        return $this->dominio->ehDC();
     }
 
     public function lerConfigAtual(): array
@@ -172,6 +188,10 @@ class SambaGlobalConfigService
 
     public function aplicar(array $params): array
     {
+        if ($this->ehDC()) {
+            return ['success' => false, 'output' => 'Este servidor já é um Controlador de Domínio (Active Directory). A configuração global agora é gerenciada pela tela Samba > Domínio.'];
+        }
+
         $conteudo = $this->gerarSmbConf($params);
         $tmpFile  = tempnam('/tmp', 'samba_global_');
         file_put_contents($tmpFile, $conteudo);

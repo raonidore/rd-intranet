@@ -170,6 +170,24 @@ class LinuxService
     }
 
     /**
+     * Combina executarScript() (script + args escapados, via sudo) com
+     * executarComEntrada() (segredo via stdin, nunca em disco/argv/"ps aux")
+     * -- para ações sensíveis que precisam de resposta imediata (não são
+     * longas o bastante para justificar o padrão de arquivo de
+     * status/polling de executarScriptEmSegundoPlanoComEntrada()).
+     */
+    public function executarScriptComEntrada(string $script, array $parametros, string $entrada): array
+    {
+        $cmd = "sudo " . escapeshellarg($script);
+
+        foreach ($parametros as $valor) {
+            $cmd .= " " . escapeshellarg($valor);
+        }
+
+        return $this->executarComEntrada($cmd, $entrada);
+    }
+
+    /**
      * Lista grupos Linux.
      */
     public function grupos(): array

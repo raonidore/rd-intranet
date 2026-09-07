@@ -15,6 +15,7 @@ class ModuloCatalogo
         'samba_lixeira' => ['label' => 'Lixeira Administrativa', 'grupo' => 'Samba'],
         'deploy' => ['label' => 'Central de Configurações', 'grupo' => 'Samba'],
         'samba_config' => ['label' => 'Config. Global Samba', 'grupo' => 'Samba'],
+        'samba_dominio' => ['label' => 'Domínio (AD)', 'grupo' => 'Samba'],
         'infra_servidor' => ['label' => 'Servidor (dashboard)', 'grupo' => 'Infraestrutura'],
         'infra_hardware' => ['label' => 'Hardware', 'grupo' => 'Infraestrutura'],
         'infra_rede' => ['label' => 'Network', 'grupo' => 'Infraestrutura'],
