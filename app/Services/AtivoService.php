@@ -1257,10 +1257,15 @@ class AtivoService
 
             $legado = $unifi->buscarDispositivoLegado($mac);
             $pendente = !empty($legado['speedtest-pending-interfaces']);
-            $timestampAtual = $legado['speedtest-status']['timestamp'] ?? 0;
+            $statusAtual = $legado['speedtest-status'] ?? [];
+            $timestampAtual = $statusAtual['timestamp'] ?? 0;
 
-            if (!$pendente && $timestampAtual > $timestampAntes) {
-                $resultado = $legado['speedtest-status'];
+            // O Controller grava o registro em mais de uma etapa durante o teste
+            // (a primeira, inclusive, com timestamp novo mas taxas zeradas) --
+            // só aceita quando realmente tem throughput medido, senão continua
+            // esperando em vez de reportar 0 Mbps como se fosse resultado real.
+            if (!$pendente && $timestampAtual > $timestampAntes && (float)($statusAtual['xput_download'] ?? 0) > 0) {
+                $resultado = $statusAtual;
                 break;
             }
         }
