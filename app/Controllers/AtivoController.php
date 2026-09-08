@@ -376,6 +376,22 @@ class AtivoController extends Controller
         echo json_encode($this->service->avaliarInternetUnifi($id));
     }
 
+    public function trocarWanPrimariaUnifi(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $grupo = trim((string)($_POST['grupo'] ?? ''));
+
+        if ($grupo === '') {
+            echo json_encode(['success' => false, 'message' => 'WAN não informada.']);
+            return;
+        }
+
+        echo json_encode($this->service->trocarWanPrimariaUnifi($id, $grupo));
+    }
+
     public function coletarAutomatico(): void
     {
         AuthMiddleware::checkModulo('ativos_lista');

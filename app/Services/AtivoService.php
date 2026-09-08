@@ -1297,6 +1297,35 @@ class AtivoService
         return ['success' => true, 'message' => $mensagem];
     }
 
+    /**
+     * Troca a WAN primária direto do RD.Intranet -- sem precisar abrir o
+     * UniFi Network pra reordenar em Configurações > Internet. Recoleta os
+     * dados do gateway em seguida pra "Conexões WAN" já refletir a mudança.
+     */
+    public function trocarWanPrimariaUnifi(int $id, string $grupo): array
+    {
+        $ativo = $this->repository->buscarPorId($id);
+
+        if (!$ativo) {
+            return ['success' => false, 'message' => 'Ativo não encontrado.'];
+        }
+
+        $unifi = new UnifiService();
+
+        if (!$unifi->configurado()) {
+            return ['success' => false, 'message' => 'Integração com o UniFi Controller ainda não configurada -- veja Integrações.'];
+        }
+
+        $resultado = $unifi->definirWanPrimaria($grupo);
+
+        if ($resultado['success']) {
+            AuditService::registrar('Ativos', 'Trocar WAN primária (UniFi)', "{$ativo['codigo_patrimonio']}: WAN primária alterada para {$grupo}.");
+            $this->coletarUnifi($id);
+        }
+
+        return $resultado;
+    }
+
     private static function rotuloBandaRadio(float $ghz): string
     {
         if ($ghz >= 6) {

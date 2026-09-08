@@ -874,8 +874,8 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                         <?php if (empty($wanConfig)): ?>
                             <p class="text-muted p-3 mb-0">Nenhum dado coletado ainda. Use o botão "Detectar e coletar automaticamente" na Visão Geral.</p>
                         <?php else: ?>
-                            <table class="table table-sm mb-0">
-                                <thead><tr><th>Prioridade</th><th>Nome</th><th>Tipo</th><th>Modo</th><th>Status</th><th>Contratado</th><th>Credenciais</th></tr></thead>
+                            <table class="table table-sm mb-0 align-middle">
+                                <thead><tr><th>Prioridade</th><th>Nome</th><th>Tipo</th><th>Modo</th><th>Status</th><th>Contratado</th><th>Credenciais</th><?php if (count($wanConfig) > 1): ?><th class="text-end">Ação</th><?php endif; ?></tr></thead>
                                 <tbody>
                                     <?php foreach ($wanConfig as $i => $wan): ?>
                                         <?php
@@ -905,10 +905,23 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                                     <span class="text-muted">—</span>
                                                 <?php endif; ?>
                                             </td>
+                                            <?php if (count($wanConfig) > 1): ?>
+                                                <td class="text-end">
+                                                    <?php if ($i !== 0 && ($wan['modo'] ?? '') !== 'Balanceamento de carga'): ?>
+                                                        <button type="button" class="btn btn-sm btn-outline-primary botao-tornar-wan-primaria"
+                                                                data-id="<?= (int)$ativo['id'] ?>" data-grupo="<?= htmlspecialchars($wan['grupo']) ?>" data-nome="<?= htmlspecialchars($wan['nome'] ?: $wan['grupo']) ?>">
+                                                            <i class="bi bi-arrow-repeat"></i> Tornar primária
+                                                        </button>
+                                                    <?php endif; ?>
+                                                </td>
+                                            <?php endif; ?>
                                         </tr>
                                     <?php endforeach; ?>
                                 </tbody>
                             </table>
+                            <?php if (count($wanConfig) > 1 && ($wanConfig[0]['modo'] ?? '') === 'Balanceamento de carga'): ?>
+                                <p class="text-muted small p-2 mb-0"><i class="bi bi-info-circle"></i> Essas WANs estão em balanceamento de carga -- as duas são usadas ao mesmo tempo, então não existe uma "primária" pra trocar. Pra forçar o uso de só uma, mude o modo pra failover no UniFi Network.</p>
+                            <?php endif; ?>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -1530,6 +1543,37 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                 span.textContent = span.dataset.senha || '(vazio)';
                 icone.className = 'bi bi-eye-slash';
             }
+        });
+    });
+})();
+
+(function () {
+    document.querySelectorAll('.botao-tornar-wan-primaria').forEach(function (botao) {
+        botao.addEventListener('click', async function () {
+            if (!confirm(`Tornar "${botao.dataset.nome}" a WAN primária agora? O gateway migra o tráfego pra ela em seguida.`)) return;
+
+            botao.disabled = true;
+            const textoOriginal = botao.innerHTML;
+            botao.innerHTML = '<i class="bi bi-hourglass-split"></i> Trocando...';
+
+            const dados = new URLSearchParams();
+            dados.set('id', botao.dataset.id);
+            dados.set('grupo', botao.dataset.grupo);
+
+            try {
+                const res = await fetch(<?= json_encode(url('/ativos/unifi/trocar-wan-primaria')) ?>, { method: 'POST', body: dados });
+                const resultado = await res.json();
+                alert(resultado.message || (resultado.success ? 'Concluído.' : 'Falha.'));
+                if (resultado.success) {
+                    location.reload();
+                    return;
+                }
+            } catch (e) {
+                alert('Erro ao comunicar com o servidor.');
+            }
+
+            botao.disabled = false;
+            botao.innerHTML = textoOriginal;
         });
     });
 })();

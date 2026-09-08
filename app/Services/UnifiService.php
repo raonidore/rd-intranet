@@ -254,6 +254,71 @@ class UnifiService
         return $resultado['dados']['data'] ?? [];
     }
 
+    /**
+     * Troca qual WAN é a primária de failover -- mesmo efeito de reordenar
+     * manualmente em Configurações > Internet no UniFi Network. Reordena
+     * $grupoWan pra prioridade 1 e empurra as demais uma posição, preservando
+     * a ordem relativa entre elas (funciona igual com 2 ou mais WANs). Só
+     * faz sentido pra WANs em modo failover -- em load-balance as duas são
+     * usadas ao mesmo tempo por peso, não existe "primária" pra trocar.
+     *
+     * @return array{success:bool, message:string}
+     */
+    public function definirWanPrimaria(string $grupoWan): array
+    {
+        $ref = $this->siteRefAtual();
+
+        if ($ref === null) {
+            return ['success' => false, 'message' => 'Site do UniFi Controller ainda não identificado -- use "Testar conexão" em Integrações > UniFi.'];
+        }
+
+        $redes = array_values(array_filter(
+            $this->listarRedesConfiguradas(),
+            fn($r) => ($r['purpose'] ?? '') === 'wan'
+        ));
+
+        if (empty($redes)) {
+            return ['success' => false, 'message' => 'Nenhuma rede WAN encontrada no Controller.'];
+        }
+
+        $alvo = null;
+        foreach ($redes as $rede) {
+            if (($rede['wan_networkgroup'] ?? '') === $grupoWan) {
+                $alvo = $rede;
+                break;
+            }
+        }
+
+        if ($alvo === null) {
+            return ['success' => false, 'message' => 'Essa WAN não foi encontrada no Controller -- recarregue a página e tente de novo.'];
+        }
+
+        if ((int)($alvo['wan_failover_priority'] ?? 0) === 1) {
+            return ['success' => true, 'message' => 'Essa WAN já é a primária.'];
+        }
+
+        usort($redes, fn($a, $b) => ($a['wan_failover_priority'] ?? 99) <=> ($b['wan_failover_priority'] ?? 99));
+        $outras = array_values(array_filter($redes, fn($r) => $r['_id'] !== $alvo['_id']));
+        $reordenadas = array_merge([$alvo], $outras);
+
+        foreach ($reordenadas as $i => $rede) {
+            $novaPrioridade = $i + 1;
+
+            if ((int)($rede['wan_failover_priority'] ?? 0) === $novaPrioridade) {
+                continue;
+            }
+
+            $rede['wan_failover_priority'] = $novaPrioridade;
+            $resultado = $this->chamarApi('PUT', "/proxy/network/api/s/{$ref}/rest/networkconf/{$rede['_id']}", $rede);
+
+            if (!$resultado['sucesso']) {
+                return ['success' => false, 'message' => 'Falha ao atualizar "' . ($rede['name'] ?? $rede['wan_networkgroup']) . '": ' . $resultado['mensagem']];
+            }
+        }
+
+        return ['success' => true, 'message' => 'WAN primária alterada -- pode levar alguns segundos pra rede migrar de fato.'];
+    }
+
     /** Dispara um speedtest sob demanda no gateway (mesmo comando usado pelo próprio app oficial) -- ver AtivoService::avaliarInternetUnifi() pra acompanhar o resultado. */
     public function dispararSpeedtest(): array
     {
