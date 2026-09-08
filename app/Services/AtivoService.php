@@ -1504,6 +1504,87 @@ class AtivoService
     }
 
     /**
+     * Mesma ideia de coletarAutomatico(), mas ANTES do ativo existir --
+     * usada no formulário de "Novo Ativo" pra pré-preencher tipo/marca/
+     * modelo a partir só do IP digitado, sem obrigar quem está cadastrando
+     * a digitar de novo o que o sistema já sabe descobrir sozinho.
+     *
+     * @return array{success:bool, tipo_slug?:string, nome?:string, marca?:string, modelo?:string, firmware?:string, message:string}
+     */
+    public function detectarPorIp(string $ip): array
+    {
+        $ip = trim($ip);
+
+        if ($ip === '') {
+            return ['success' => false, 'message' => 'Informe um IP.'];
+        }
+
+        $integracoesTentadas = [];
+
+        $unifi = new UnifiService();
+        if ($unifi->configurado()) {
+            $integracoesTentadas[] = 'UniFi';
+            $dispositivo = $this->buscarDispositivoUnifiPorIp($unifi, $ip);
+
+            if ($dispositivo !== null) {
+                $legado = null;
+                foreach ($unifi->listarDispositivosLegado() as $l) {
+                    if (($l['mac'] ?? '') === ($dispositivo['macAddress'] ?? '')) {
+                        $legado = $l;
+                        break;
+                    }
+                }
+
+                // Gateway se tiver wan1/wan2 no registro legado (mesmo critério
+                // de coletarUnifi()) -- a listagem "nova" (/integration/v1) não
+                // diferencia gateway de switch puro no campo "features".
+                if ($legado !== null && (isset($legado['wan1']) || isset($legado['wan2']))) {
+                    $tipoSlug = 'roteador';
+                } elseif (in_array('accessPoint', $dispositivo['features'] ?? [], true)) {
+                    $tipoSlug = 'ponto_acesso';
+                } else {
+                    $tipoSlug = 'switch';
+                }
+
+                return [
+                    'success' => true,
+                    'tipo_slug' => $tipoSlug,
+                    'nome' => $dispositivo['name'] ?? '',
+                    'marca' => 'Ubiquiti/UniFi',
+                    'modelo' => $dispositivo['model'] ?? '',
+                    'firmware' => $dispositivo['firmwareVersion'] ?? '',
+                    'message' => 'Encontrado no UniFi Controller: ' . ($dispositivo['name'] ?? $dispositivo['model'] ?? 'dispositivo') . '.',
+                ];
+            }
+        }
+
+        $omada = new OmadaService();
+        if ($omada->configurado()) {
+            $integracoesTentadas[] = 'Omada';
+
+            foreach ($omada->listarDispositivos() as $d) {
+                if (($d['ip'] ?? '') === $ip) {
+                    return [
+                        'success' => true,
+                        'tipo_slug' => 'switch',
+                        'nome' => $d['name'] ?? '',
+                        'marca' => 'TP-Link',
+                        'modelo' => $d['modelName'] ?? ($d['model'] ?? ''),
+                        'firmware' => $d['firmwareVersion'] ?? '',
+                        'message' => 'Encontrado no Omada Controller: ' . ($d['name'] ?? $d['modelName'] ?? 'dispositivo') . '.',
+                    ];
+                }
+            }
+        }
+
+        if (empty($integracoesTentadas)) {
+            return ['success' => false, 'message' => 'Nenhuma integração de rede configurada (UniFi/Omada) -- veja Integrações.'];
+        }
+
+        return ['success' => false, 'message' => 'Nenhum dispositivo com esse IP foi encontrado em: ' . implode(', ', $integracoesTentadas) . '.'];
+    }
+
+    /**
      * Botão único da ficha do ativo -- o usuário não precisa saber se o
      * equipamento é UniFi ou TP-Link/Omada (nem se vai existir um terceiro
      * fabricante amanhã): tenta cada integração já configurada, na ordem,

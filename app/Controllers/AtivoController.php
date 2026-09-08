@@ -392,6 +392,16 @@ class AtivoController extends Controller
         echo json_encode($this->service->trocarWanPrimariaUnifi($id, $grupo));
     }
 
+    public function detectarPorIp(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $ip = trim((string)($_POST['ip'] ?? ''));
+
+        echo json_encode($this->service->detectarPorIp($ip));
+    }
+
     public function trocarModoWanUnifi(): void
     {
         AuthMiddleware::checkModulo('ativos_lista');

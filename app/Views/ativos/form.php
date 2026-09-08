@@ -110,7 +110,17 @@ $idsTiposComSnmp = array_column(array_filter($tipos, fn (array $t) => (bool)$t['
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">IP</label>
-                    <input type="text" name="ip" class="form-control" value="<?= htmlspecialchars($ativo['ip'] ?? $prefillIp ?? '') ?>" placeholder="192.168.0.10">
+                    <div class="input-group">
+                        <input type="text" name="ip" id="campoIp" class="form-control" value="<?= htmlspecialchars($ativo['ip'] ?? $prefillIp ?? '') ?>" placeholder="192.168.0.10">
+                        <?php if (!$editando): ?>
+                            <button type="button" class="btn btn-outline-primary" id="botaoDetectarPorIp" title="Buscar esse IP nas integrações de rede (UniFi/Omada) e preencher tipo/marca/modelo sozinho">
+                                <i class="bi bi-search"></i> Detectar
+                            </button>
+                        <?php endif; ?>
+                    </div>
+                    <?php if (!$editando): ?>
+                        <div class="form-text" id="textoDetectarPorIp">Digite o IP e clique em "Detectar" pra preencher tipo, marca e modelo automaticamente, se o equipamento já estiver no UniFi ou Omada.</div>
+                    <?php endif; ?>
                 </div>
             </div>
 
@@ -208,6 +218,76 @@ $idsTiposComSnmp = array_column(array_filter($tipos, fn (array $t) => (bool)$t['
 
     campoTipo.addEventListener('change', atualizarBlocos);
     atualizarBlocos();
+})();
+
+(function () {
+    const botao = document.getElementById('botaoDetectarPorIp');
+    if (!botao) return;
+
+    const tipoIdsPorSlug = <?= json_encode(array_column($tipos, 'id', 'slug')) ?>;
+    const campoIp = document.getElementById('campoIp');
+    const campoTipo = document.getElementById('campoTipo');
+    const campoNome = document.querySelector('input[name="nome"]');
+    const campoMarca = document.querySelector('input[name="marca"]');
+    const campoModelo = document.querySelector('input[name="modelo"]');
+    const texto = document.getElementById('textoDetectarPorIp');
+    const textoOriginal = botao.innerHTML;
+
+    botao.addEventListener('click', async function () {
+        const ip = campoIp.value.trim();
+        if (!ip) {
+            texto.textContent = 'Digite um IP primeiro.';
+            texto.classList.remove('text-success');
+            texto.classList.add('text-danger');
+            return;
+        }
+
+        botao.disabled = true;
+        botao.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+        texto.classList.remove('text-danger', 'text-success');
+        texto.textContent = 'Buscando nas integrações configuradas...';
+
+        const dados = new URLSearchParams();
+        dados.set('ip', ip);
+
+        try {
+            const res = await fetch(<?= json_encode(url('/ativos/detectar-por-ip')) ?>, { method: 'POST', body: dados });
+            const resultado = await res.json();
+
+            texto.textContent = resultado.message || (resultado.success ? 'Encontrado.' : 'Não encontrado.');
+            texto.classList.add(resultado.success ? 'text-success' : 'text-danger');
+
+            if (resultado.success) {
+                if (campoNome && !campoNome.value.trim() && resultado.nome) {
+                    campoNome.value = resultado.nome;
+                }
+                if (campoMarca && resultado.marca) campoMarca.value = resultado.marca;
+                if (campoModelo && resultado.modelo) campoModelo.value = resultado.modelo;
+
+                const tipoId = tipoIdsPorSlug[resultado.tipo_slug];
+                if (campoTipo && tipoId) {
+                    campoTipo.value = String(tipoId);
+                    campoTipo.dispatchEvent(new Event('change'));
+                }
+
+                // Pré-preenche o par modelo/firmware certo pro tipo detectado, se
+                // já estiver visível no bloco de Detalhes técnicos (evita repetir
+                // no card de baixo o que acabou de vir pro card de cima).
+                const prefixo = resultado.tipo_slug === 'switch' ? 'omada' : 'unifi';
+                const campoModeloDetalhe = document.querySelector(`input[name="${prefixo}_model"]`);
+                const campoFirmwareDetalhe = document.querySelector(`input[name="${prefixo}_firmware"]`);
+                if (campoModeloDetalhe && resultado.modelo) campoModeloDetalhe.value = resultado.modelo;
+                if (campoFirmwareDetalhe && resultado.firmware) campoFirmwareDetalhe.value = resultado.firmware;
+            }
+        } catch (e) {
+            texto.textContent = 'Erro ao comunicar com o servidor.';
+            texto.classList.remove('text-success');
+            texto.classList.add('text-danger');
+        } finally {
+            botao.disabled = false;
+            botao.innerHTML = textoOriginal;
+        }
+    });
 })();
 </script>
 
