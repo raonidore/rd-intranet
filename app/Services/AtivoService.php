@@ -1265,6 +1265,54 @@ class AtivoService
     }
 
     /**
+     * Botão único da ficha do ativo -- o usuário não precisa saber se o
+     * equipamento é UniFi ou TP-Link/Omada (nem se vai existir um terceiro
+     * fabricante amanhã): tenta cada integração já configurada, na ordem,
+     * e usa a primeira que encontrar o IP. Só olha as integrações que
+     * já têm credencial salva -- não faz sentido "tentar" uma que nem
+     * está configurada.
+     */
+    public function coletarAutomatico(int $id): array
+    {
+        $ativo = $this->repository->buscarPorId($id);
+
+        if (!$ativo) {
+            return ['success' => false, 'message' => 'Ativo não encontrado.'];
+        }
+
+        if (empty($ativo['ip'])) {
+            return ['success' => false, 'message' => 'Este ativo não tem IP cadastrado.'];
+        }
+
+        $integracoesTentadas = [];
+
+        if ((new UnifiService())->configurado()) {
+            $integracoesTentadas[] = 'UniFi';
+            $resultado = $this->coletarUnifi($id);
+            if ($resultado['success']) {
+                return ['success' => true, 'message' => 'Detectado como UniFi -- ' . $resultado['message']];
+            }
+        }
+
+        if ((new OmadaService())->configurado()) {
+            $integracoesTentadas[] = 'TP-Link/Omada';
+            $resultado = $this->coletarOmada($id);
+            if ($resultado['success']) {
+                return ['success' => true, 'message' => 'Detectado como TP-Link/Omada -- ' . $resultado['message']];
+            }
+        }
+
+        if (empty($integracoesTentadas)) {
+            return ['success' => false, 'message' => 'Nenhuma integração (UniFi, TP-Link/Omada) está configurada ainda -- veja Integrações.'];
+        }
+
+        return [
+            'success' => false,
+            'message' => 'Não encontrado em nenhuma integração configurada (tentado: ' . implode(', ', $integracoesTentadas) . '). Se o equipamento responder SNMP, use "Coletar via SNMP".',
+        ];
+    }
+
+    /**
      * Ações de gerenciamento de cliente Wi-Fi (desconectar/bloquear/
      * desbloquear) -- afetam de verdade um dispositivo real na rede do
      * cliente, por isso cada uma vira um registro de auditoria próprio,

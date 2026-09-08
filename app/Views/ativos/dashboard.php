@@ -102,6 +102,11 @@ $statusCores = [
     </div>
 
     <div class="col-lg-7">
+        <div class="d-flex align-items-center gap-2 mb-3 mt-2">
+            <i class="bi bi-gear text-muted"></i>
+            <span class="text-uppercase text-muted small fw-semibold">Configurações da coleta automática</span>
+            <hr class="flex-grow-1 my-0">
+        </div>
         <div class="card border-0 shadow-sm mb-3">
             <div class="card-header bg-white"><strong>Agente Windows</strong></div>
             <div class="card-body">

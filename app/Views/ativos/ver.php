@@ -165,14 +165,9 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                 <i class="bi bi-arrow-repeat"></i> Coletar via SNMP
             </button>
         <?php endif; ?>
-        <?php if (in_array($ativo['tipo_slug'] ?? '', ['ponto_acesso', 'roteador'], true) && !empty($ativo['ip']) && (new UnifiService())->configurado()): ?>
-            <button type="button" class="btn btn-outline-secondary" id="botaoColetarUnifi" data-id="<?= (int)$ativo['id'] ?>">
-                <i class="bi bi-arrow-repeat"></i> Coletar dados UniFi
-            </button>
-        <?php endif; ?>
-        <?php if (($ativo['tipo_slug'] ?? '') === 'switch' && !empty($ativo['ip']) && (new OmadaService())->configurado()): ?>
-            <button type="button" class="btn btn-outline-secondary" id="botaoColetarOmada" data-id="<?= (int)$ativo['id'] ?>">
-                <i class="bi bi-arrow-repeat"></i> Coletar dados Omada
+        <?php if (in_array($ativo['tipo_slug'] ?? '', ['switch', 'ponto_acesso', 'roteador'], true) && !empty($ativo['ip']) && ((new UnifiService())->configurado() || (new OmadaService())->configurado())): ?>
+            <button type="button" class="btn btn-outline-secondary" id="botaoColetarAutomatico" data-id="<?= (int)$ativo['id'] ?>" title="Testa as integrações configuradas (UniFi, TP-Link/Omada) por IP -- não precisa saber o fabricante">
+                <i class="bi bi-arrow-repeat"></i> Detectar e coletar automaticamente
             </button>
         <?php endif; ?>
         <?php if ($ativo['origem'] === 'agente'): ?>
@@ -1317,18 +1312,20 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
 })();
 
 (function () {
-    const botao = document.getElementById('botaoColetarUnifi');
+    const botao = document.getElementById('botaoColetarAutomatico');
     if (!botao) return;
+
+    const textoOriginal = botao.innerHTML;
 
     botao.addEventListener('click', async function () {
         botao.disabled = true;
-        botao.innerHTML = '<i class="bi bi-hourglass-split"></i> Coletando...';
+        botao.innerHTML = '<i class="bi bi-hourglass-split"></i> Detectando...';
 
         const dados = new URLSearchParams();
         dados.set('id', botao.dataset.id);
 
         try {
-            const res = await fetch(<?= json_encode(url('/ativos/coletar-unifi')) ?>, { method: 'POST', body: dados });
+            const res = await fetch(<?= json_encode(url('/ativos/coletar-automatico')) ?>, { method: 'POST', body: dados });
             const resultado = await res.json();
             alert(resultado.message || (resultado.success ? 'Coletado.' : 'Falha ao coletar.'));
             if (resultado.success) location.reload();
@@ -1336,32 +1333,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             alert('Erro ao comunicar com o servidor.');
         } finally {
             botao.disabled = false;
-            botao.innerHTML = '<i class="bi bi-arrow-repeat"></i> Coletar dados UniFi';
-        }
-    });
-})();
-
-(function () {
-    const botao = document.getElementById('botaoColetarOmada');
-    if (!botao) return;
-
-    botao.addEventListener('click', async function () {
-        botao.disabled = true;
-        botao.innerHTML = '<i class="bi bi-hourglass-split"></i> Coletando...';
-
-        const dados = new URLSearchParams();
-        dados.set('id', botao.dataset.id);
-
-        try {
-            const res = await fetch(<?= json_encode(url('/ativos/coletar-omada')) ?>, { method: 'POST', body: dados });
-            const resultado = await res.json();
-            alert(resultado.message || (resultado.success ? 'Coletado.' : 'Falha ao coletar.'));
-            if (resultado.success) location.reload();
-        } catch (e) {
-            alert('Erro ao comunicar com o servidor.');
-        } finally {
-            botao.disabled = false;
-            botao.innerHTML = '<i class="bi bi-arrow-repeat"></i> Coletar dados Omada';
+            botao.innerHTML = textoOriginal;
         }
     });
 })();

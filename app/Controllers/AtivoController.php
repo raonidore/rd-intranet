@@ -367,6 +367,17 @@ class AtivoController extends Controller
         return false;
     }
 
+    public function coletarAutomatico(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $resultado = $this->service->coletarAutomatico($id);
+
+        echo json_encode($resultado);
+    }
+
     public function coletarUnifi(): void
     {
         AuthMiddleware::checkModulo('ativos_lista');

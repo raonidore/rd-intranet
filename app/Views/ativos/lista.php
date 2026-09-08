@@ -102,6 +102,66 @@ function thOrdenavel(string $coluna, string $label, ?string $ordenarChave, array
     </div>
 </div>
 
+<?php
+// Resumo rápido dos ativos já filtrados -- calculado aqui (não no
+// controller) porque é só um agregado leve sobre o que já veio do banco,
+// sem precisar de outra query. 'monitorado' = tem alguma fonte automática
+// de dados (agente, SNMP ou API de fabricante), 'manual' = só o que foi
+// digitado no cadastro.
+$resumoOnline = 0;
+$resumoOffline = 0;
+$resumoMonitorado = 0;
+foreach ($ativos as $a) {
+    $detalhesResumo = json_decode($a['detalhes'] ?? '', true) ?: [];
+    $temStatusVendor = !empty($detalhesResumo['unifi_status']) || !empty($detalhesResumo['omada_status']);
+
+    if ($a['origem'] === 'agente') {
+        AtivoService::estaLigada($a) ? $resumoOnline++ : $resumoOffline++;
+    } elseif ($temStatusVendor) {
+        $online = ($detalhesResumo['unifi_status'] ?? '') === 'Online' || ($detalhesResumo['omada_status'] ?? '') === 'Online';
+        $online ? $resumoOnline++ : $resumoOffline++;
+    }
+
+    if ($a['origem'] === 'agente' || $a['origem'] === 'snmp' || $a['origem'] === 'api') {
+        $resumoMonitorado++;
+    }
+}
+?>
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body text-center py-3">
+                <div class="fs-3 fw-bold"><?= count($ativos) ?></div>
+                <div class="text-muted small"><i class="bi bi-boxes"></i> Ativos nesta lista</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body text-center py-3">
+                <div class="fs-3 fw-bold text-success"><?= $resumoOnline ?></div>
+                <div class="text-muted small"><i class="bi bi-check-circle"></i> Ligados agora</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body text-center py-3">
+                <div class="fs-3 fw-bold text-secondary"><?= $resumoOffline ?></div>
+                <div class="text-muted small"><i class="bi bi-x-circle"></i> Desligados/offline</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body text-center py-3">
+                <div class="fs-3 fw-bold text-primary"><?= $resumoMonitorado ?></div>
+                <div class="text-muted small"><i class="bi bi-broadcast"></i> Com coleta automática</div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <form method="get" action="<?= url('/ativos/lista') ?>" class="card border-0 shadow-sm mb-4">
     <div class="card-body">
         <div class="row g-3 align-items-end">
