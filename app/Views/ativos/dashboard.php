@@ -14,39 +14,35 @@ $statusCores = [
 ?>
 
 <style>
-.config-panel {
-    background: linear-gradient(160deg, #0d1117, #161b22);
-    border-radius: 14px;
-    padding: 20px 20px 4px;
-    box-shadow: 0 4px 18px rgba(0,0,0,.18);
-}
 .config-panel-header {
     display: flex;
     align-items: center;
     gap: 12px;
-    margin-bottom: 16px;
+    background: linear-gradient(135deg, #0d1117, #161b22);
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin-bottom: 12px;
 }
 .config-panel-header > i {
-    font-size: 1.6rem;
+    font-size: 1.5rem;
     color: #58a6ff;
 }
-.config-panel-title { color: #fff; font-weight: 700; font-size: 1.05rem; }
-.config-panel-subtitle { color: #8b949e; font-size: .8rem; }
-.config-tabs { border-bottom: none; gap: 6px; flex-wrap: wrap; }
+.config-panel-title { color: #fff; font-weight: 700; font-size: 1.02rem; }
+.config-panel-subtitle { color: #8b949e; font-size: .78rem; }
+.config-tabs { border-bottom: none; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
 .config-tabs .nav-link {
-    color: #8b949e;
-    border: 1px solid #30363d;
+    color: #495057;
+    border: 1px solid #dee2e6;
     border-radius: 999px;
     padding: 6px 14px;
     font-size: .82rem;
     font-weight: 600;
-    background: transparent;
+    background: #fff;
     transition: all .15s ease;
 }
 .config-tabs .nav-link i { margin-right: 4px; }
-.config-tabs .nav-link:hover { color: #c9d1d9; border-color: #58a6ff; }
-.config-tabs .nav-link.active { color: #0d1117; background: #58a6ff; border-color: #58a6ff; }
-.config-tab-content { background: #f8f9fa; border-radius: 12px; margin: 0 -20px; padding: 18px 20px; }
+.config-tabs .nav-link:hover { color: #0d1117; border-color: #58a6ff; }
+.config-tabs .nav-link.active { color: #fff; background: #0d1117; border-color: #0d1117; }
 
 .integration-tile {
     border-radius: 12px;
@@ -146,7 +142,7 @@ $statusCores = [
     <?php endforeach; ?>
 </div>
 
-<div class="row g-3">
+<div class="row g-3 align-items-start">
     <div class="col-lg-5">
         <div class="card border-0 shadow-sm">
             <div class="card-header bg-white"><strong>Por status</strong></div>
@@ -206,34 +202,35 @@ $statusCores = [
     </div>
 
     <div class="col-lg-7">
-        <div class="config-panel">
-            <div class="config-panel-header">
-                <i class="bi bi-sliders"></i>
-                <div>
-                    <div class="config-panel-title">Configurações da coleta automática</div>
-                    <div class="config-panel-subtitle">Agente Windows, integrações de rede e frequência de comunicação</div>
-                </div>
+        <div class="config-panel-header">
+            <i class="bi bi-sliders"></i>
+            <div>
+                <div class="config-panel-title">Configurações da coleta automática</div>
+                <div class="config-panel-subtitle">Agente Windows, integrações de rede e frequência de comunicação</div>
             </div>
+        </div>
 
-            <ul class="nav config-tabs" id="abasConfig" role="tablist">
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabAgente" type="button" role="tab">
-                        <i class="bi bi-laptop"></i> Agente Windows
-                    </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabIntegracoes" type="button" role="tab">
-                        <i class="bi bi-hdd-network"></i> Integrações de rede
-                    </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabComunicacao" type="button" role="tab">
-                        <i class="bi bi-broadcast"></i> Comunicação
-                    </button>
-                </li>
-            </ul>
+        <ul class="nav config-tabs" id="abasConfig" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabAgente" type="button" role="tab">
+                    <i class="bi bi-laptop"></i> Agente Windows
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabIntegracoes" type="button" role="tab">
+                    <i class="bi bi-hdd-network"></i> Integrações de rede
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabComunicacao" type="button" role="tab">
+                    <i class="bi bi-broadcast"></i> Comunicação
+                </button>
+            </li>
+        </ul>
 
-            <div class="tab-content config-tab-content">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+            <div class="tab-content">
                 <div class="tab-pane fade show active" id="tabAgente" role="tabpanel">
                     <p class="text-muted small mb-3">
                         Instale nos computadores/servidores Windows pra receber automaticamente hardware,
@@ -528,6 +525,7 @@ $statusCores = [
                         </div>
                     </form>
                 </div>
+            </div>
             </div>
         </div>
     </div>
