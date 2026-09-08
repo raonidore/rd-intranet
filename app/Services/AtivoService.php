@@ -21,8 +21,9 @@ class AtivoService
      * colunas mostrar" (visibilidade é só client-side/localStorage, não
      * precisa de round-trip; ordenação usa 'ordenar', que é validado contra
      * AtivoRepository::ORDENACAO_PERMITIDA antes de virar SQL). 'condicao'
-     * é o status Ligado/Desligado ao vivo -- calculado, não tem coluna própria
-     * pra ordenar por ela. 'ip' e 'so' são as duas colunas novas pedidas,
+     * é o status Ligado/Desligado ao vivo -- calculado, não tem coluna própria,
+     * mas ordena pelo timestamp cru do último heartbeat (mesma ordem prática).
+     * 'ip' e 'so' são as duas colunas novas pedidas,
      * por isso nascem desmarcadas por padrão (não muda a visão de quem já
      * usa a tela hoje até a pessoa optar por ligar).
      */
@@ -32,7 +33,7 @@ class AtivoService
         'apelido' => ['label' => 'Apelido', 'ordenar' => 'apelido', 'padrao' => true],
         'tipo' => ['label' => 'Tipo', 'ordenar' => 'tipo', 'padrao' => true],
         'status' => ['label' => 'Status', 'ordenar' => 'status', 'padrao' => true],
-        'condicao' => ['label' => 'Condição', 'ordenar' => null, 'padrao' => true],
+        'condicao' => ['label' => 'Condição', 'ordenar' => 'condicao', 'padrao' => true],
         'setor' => ['label' => 'Setor', 'ordenar' => 'setor_nome', 'padrao' => true],
         'localizacao' => ['label' => 'Localização', 'ordenar' => 'localizacao_nome', 'padrao' => true],
         'unidade' => ['label' => 'Unidade', 'ordenar' => 'unidade_nome', 'padrao' => true],

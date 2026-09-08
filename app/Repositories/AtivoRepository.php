@@ -44,6 +44,10 @@ class AtivoRepository
         'responsavel' => 'a.responsavel',
         'ip' => 'a.ip',
         'sistema_operacional' => "JSON_UNQUOTE(JSON_EXTRACT(a.detalhes, '$.sistema_operacional'))",
+        // "Condição" (Ligado/Desligado) é calculada na hora a partir do heartbeat,
+        // não tem coluna própria -- ordenar pelo timestamp cru do último heartbeat
+        // já dá a mesma ordem na prática (mais recente = mais provável "Ligado").
+        'condicao' => 'a.ultimo_heartbeat',
     ];
 
     public function listar(array $filtros = []): array
