@@ -143,6 +143,11 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
 }
 .wifi-cliente-stat .rotulo { font-size: .68rem; color: #8b949e; text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
 .wifi-cliente-linha .icone { color: #58a6ff; width: 18px; display: inline-block; text-align: center; }
+
+.th-ordenavel { cursor: pointer; user-select: none; white-space: nowrap; }
+.th-ordenavel:hover { color: #0d6efd; }
+.th-ordenavel .icone-ordenar { font-size: .72rem; opacity: .4; margin-left: 2px; }
+.th-ordenavel.ordenado-asc .icone-ordenar, .th-ordenavel.ordenado-desc .icone-ordenar { opacity: 1; color: #0d6efd; }
 </style>
 
 <?= Alert::flash() ?>
@@ -812,17 +817,27 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                         <?php if (empty($clientesWifi)): ?>
                             <p class="text-muted p-3 mb-0">Nenhum cliente conectado neste AP no momento da última coleta.</p>
                         <?php else: ?>
-                            <table class="table table-sm mb-0">
-                                <thead><tr><th>Nome</th><th>Rede</th><th>IP</th><th>MAC</th><th>Sinal</th><th>Conectado desde</th><th></th></tr></thead>
+                            <table class="table table-sm mb-0" id="tabelaClientesWifi">
+                                <thead>
+                                    <tr>
+                                        <th class="th-ordenavel" data-tipo="texto">Nome <i class="bi bi-arrow-down-up icone-ordenar"></i></th>
+                                        <th class="th-ordenavel" data-tipo="texto">Rede <i class="bi bi-arrow-down-up icone-ordenar"></i></th>
+                                        <th class="th-ordenavel" data-tipo="ip">IP <i class="bi bi-arrow-down-up icone-ordenar"></i></th>
+                                        <th class="th-ordenavel" data-tipo="texto">MAC <i class="bi bi-arrow-down-up icone-ordenar"></i></th>
+                                        <th class="th-ordenavel" data-tipo="numero">Sinal <i class="bi bi-arrow-down-up icone-ordenar"></i></th>
+                                        <th class="th-ordenavel" data-tipo="data">Conectado desde <i class="bi bi-arrow-down-up icone-ordenar"></i></th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
                                 <tbody>
                                     <?php foreach ($clientesWifi as $cliente): ?>
                                         <tr class="linha-cliente-unifi" role="button" data-cliente="<?= htmlspecialchars(json_encode($cliente, JSON_UNESCAPED_UNICODE), ENT_QUOTES) ?>">
                                             <td><?= htmlspecialchars($cliente['nome'] ?? '—') ?></td>
                                             <td><?= htmlspecialchars($cliente['rede'] ?? '—') ?></td>
-                                            <td><?= htmlspecialchars($cliente['ip'] ?? '—') ?></td>
+                                            <td data-valor="<?= htmlspecialchars(implode('.', array_map(fn($o) => str_pad($o, 3, '0', STR_PAD_LEFT), explode('.', $cliente['ip'] ?? '0.0.0.0')))) ?>"><?= htmlspecialchars($cliente['ip'] ?? '—') ?></td>
                                             <td class="font-monospace small"><?= htmlspecialchars($cliente['mac'] ?? '—') ?></td>
-                                            <td><?= isset($cliente['sinal_dbm']) ? Badge::make($cliente['sinal_dbm'] . ' dBm', corSinalWifi((int)$cliente['sinal_dbm'])) : '—' ?></td>
-                                            <td><?= htmlspecialchars(data_br($cliente['conectado_em'] ?? null)) ?></td>
+                                            <td data-valor="<?= isset($cliente['sinal_dbm']) ? (int)$cliente['sinal_dbm'] : -999 ?>"><?= isset($cliente['sinal_dbm']) ? Badge::make($cliente['sinal_dbm'] . ' dBm', corSinalWifi((int)$cliente['sinal_dbm'])) : '—' ?></td>
+                                            <td data-valor="<?= htmlspecialchars($cliente['conectado_em'] ?? '') ?>"><?= htmlspecialchars(data_br($cliente['conectado_em'] ?? null)) ?></td>
                                             <td class="text-end text-nowrap">
                                                 <button type="button" class="btn btn-sm btn-outline-primary botao-ver-detalhe-cliente" title="Ver detalhes">
                                                     <i class="bi bi-eye"></i>
@@ -1668,6 +1683,55 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             corpo.innerHTML = html || '<tr><td class="text-muted p-3">Sem dados adicionais.</td></tr>';
             if (!modal) modal = new bootstrap.Modal(modalEl);
             modal.show();
+        });
+    });
+})();
+
+(function () {
+    const tabela = document.getElementById('tabelaClientesWifi');
+    if (!tabela) return;
+
+    const thead = tabela.querySelector('thead');
+    const tbody = tabela.querySelector('tbody');
+    const cabecalhos = Array.from(thead.querySelectorAll('.th-ordenavel'));
+    let colunaAtual = null;
+    let direcaoAsc = true;
+
+    cabecalhos.forEach(function (th, indice) {
+        th.addEventListener('click', function () {
+            direcaoAsc = colunaAtual === indice ? !direcaoAsc : true;
+            colunaAtual = indice;
+
+            const tipo = th.dataset.tipo;
+            const linhas = Array.from(tbody.querySelectorAll('tr'));
+
+            linhas.sort(function (a, b) {
+                const tdA = a.children[indice];
+                const tdB = b.children[indice];
+                let va = (tdA.dataset.valor !== undefined ? tdA.dataset.valor : tdA.textContent.trim());
+                let vb = (tdB.dataset.valor !== undefined ? tdB.dataset.valor : tdB.textContent.trim());
+
+                if (tipo === 'numero') {
+                    va = parseFloat(va);
+                    vb = parseFloat(vb);
+                    return direcaoAsc ? va - vb : vb - va;
+                }
+
+                va = va.toLowerCase();
+                vb = vb.toLowerCase();
+                if (va < vb) return direcaoAsc ? -1 : 1;
+                if (va > vb) return direcaoAsc ? 1 : -1;
+                return 0;
+            });
+
+            linhas.forEach(tr => tbody.appendChild(tr));
+
+            cabecalhos.forEach(function (outro) {
+                outro.classList.remove('ordenado-asc', 'ordenado-desc');
+                outro.querySelector('.icone-ordenar').className = 'bi bi-arrow-down-up icone-ordenar';
+            });
+            th.classList.add(direcaoAsc ? 'ordenado-asc' : 'ordenado-desc');
+            th.querySelector('.icone-ordenar').className = 'bi ' + (direcaoAsc ? 'bi-caret-up-fill' : 'bi-caret-down-fill') + ' icone-ordenar';
         });
     });
 })();
