@@ -232,6 +232,10 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     <li class="nav-item" role="presentation">
         <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#abaGeral" type="button">Visão Geral</button>
     </li>
+    <?php // Componentes/Memória/Volumes/Network/Portas/Programas/Atualizações vêm
+    // todos do agente Windows -- só fazem sentido pra computador/servidor.
+    // Um switch/AP/impressora nunca vai ter "Atualizações do Windows". ?>
+    <?php if (in_array($ativo['tipo_slug'] ?? '', ['computador', 'servidor'], true)): ?>
     <li class="nav-item" role="presentation">
         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaComponentes" type="button">Componentes</button>
     </li>
@@ -253,6 +257,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     <li class="nav-item" role="presentation">
         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaAtualizacoes" type="button">Atualizações do Windows <?= !empty($atualizacoesWindows) ? '<span class="badge text-bg-secondary ms-1">' . count($atualizacoesWindows) . '</span>' : '' ?></button>
     </li>
+    <?php endif; ?>
     <?php if ($ativo['origem'] === 'agente'): ?>
     <li class="nav-item" role="presentation">
         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaProcessos" type="button"><i class="bi bi-cpu"></i> Processos</button>
@@ -263,6 +268,13 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     <li class="nav-item" role="presentation">
         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaWifi" type="button">
             <i class="bi bi-wifi"></i> Wi-Fi <?= !empty($clientesWifi) ? '<span class="badge text-bg-secondary ms-1">' . count($clientesWifi) . '</span>' : '' ?>
+        </button>
+    </li>
+    <?php endif; ?>
+    <?php if (($ativo['tipo_slug'] ?? '') === 'roteador'): ?>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaRedeWan" type="button">
+            <i class="bi bi-diagram-3"></i> Rede/WAN
         </button>
     </li>
     <?php endif; ?>
@@ -843,6 +855,132 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     </div>
     <?php endif; ?>
 
+    <?php if (($ativo['tipo_slug'] ?? '') === 'roteador'): ?>
+    <!-- Rede/WAN (UniFi Gateway) -->
+    <div class="tab-pane fade" id="abaRedeWan">
+        <?php $wanConfig = $detalhes['unifi_wan_config'] ?? []; ?>
+        <?php $wanDiagnostico = $detalhes['unifi_wan_diagnostico'] ?? []; ?>
+        <?php $redesLan = $detalhes['unifi_redes_lan'] ?? []; ?>
+        <div class="row g-3">
+            <div class="col-12">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                        <strong>Conexões WAN</strong>
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="botaoAvaliarInternet" data-id="<?= (int)$ativo['id'] ?>">
+                            <i class="bi bi-speedometer2"></i> Avaliar internet agora
+                        </button>
+                    </div>
+                    <div class="card-body p-0">
+                        <?php if (empty($wanConfig)): ?>
+                            <p class="text-muted p-3 mb-0">Nenhum dado coletado ainda. Use o botão "Detectar e coletar automaticamente" na Visão Geral.</p>
+                        <?php else: ?>
+                            <table class="table table-sm mb-0">
+                                <thead><tr><th>Prioridade</th><th>Nome</th><th>Tipo</th><th>Modo</th><th>Status</th><th>Contratado</th><th>Credenciais</th></tr></thead>
+                                <tbody>
+                                    <?php foreach ($wanConfig as $i => $wan): ?>
+                                        <?php
+                                            $online = str_contains((string)($detalhes['unifi_wan_status'] ?? ''), ($wan['grupo'] ?? '') . ': Online');
+                                            $contratado = ($wan['download_contratado_mbps'] || $wan['upload_contratado_mbps'])
+                                                ? ($wan['download_contratado_mbps'] ?? '?') . ' / ' . ($wan['upload_contratado_mbps'] ?? '?') . ' Mbps'
+                                                : '—';
+                                        ?>
+                                        <tr>
+                                            <td><?= Badge::make($i === 0 ? 'Primária' : 'Secundária (' . (($wan['prioridade'] ?? $i + 1)) . 'ª)', $i === 0 ? 'primary' : 'secondary') ?></td>
+                                            <td><?= htmlspecialchars($wan['nome'] ?: $wan['grupo']) ?></td>
+                                            <td><?= htmlspecialchars($wan['tipo'] ?? '—') ?></td>
+                                            <td><?= htmlspecialchars($wan['modo'] ?? '—') ?></td>
+                                            <td><?= Badge::make($online ? 'Online' : 'Offline/Desconhecido', $online ? 'success' : 'secondary') ?></td>
+                                            <td><?= htmlspecialchars($contratado) ?></td>
+                                            <td>
+                                                <?php if (!empty($wan['pppoe_usuario']) || !empty($wan['pppoe_senha'])): ?>
+                                                    <div class="small">
+                                                        <div><span class="text-muted">Usuário:</span> <?= htmlspecialchars($wan['pppoe_usuario'] ?? '') ?></div>
+                                                        <div class="d-flex align-items-center gap-1">
+                                                            <span class="text-muted">Senha:</span>
+                                                            <span class="senha-pppoe font-monospace" data-senha="<?= htmlspecialchars($wan['pppoe_senha'] ?? '') ?>">••••••••</span>
+                                                            <button type="button" class="btn btn-sm btn-link p-0 botao-revelar-senha-pppoe" title="Mostrar/ocultar"><i class="bi bi-eye"></i></button>
+                                                        </div>
+                                                    </div>
+                                                <?php else: ?>
+                                                    <span class="text-muted">—</span>
+                                                <?php endif; ?>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-white">
+                        <strong>Diagnóstico da internet (últimas 24h)</strong>
+                        <span class="text-muted small">-- separa conectividade geral (ICMP) de resolução de nome (DNS), pra saber se um problema é de link ou de DNS</span>
+                    </div>
+                    <div class="card-body p-0">
+                        <?php if (empty($wanDiagnostico)): ?>
+                            <p class="text-muted p-3 mb-0">Nenhum dado coletado ainda.</p>
+                        <?php else: ?>
+                            <table class="table table-sm mb-0">
+                                <thead><tr><th>WAN</th><th>Alvo</th><th>Tipo</th><th>Disponibilidade (24h)</th><th>Latência média</th></tr></thead>
+                                <tbody>
+                                    <?php foreach ($wanDiagnostico as $grupo => $diag): ?>
+                                        <?php foreach ($diag['alvos'] as $j => $alvo): ?>
+                                            <tr>
+                                                <?php if ($j === 0): ?>
+                                                    <td rowspan="<?= count($diag['alvos']) ?>" class="align-middle">
+                                                        <strong><?= htmlspecialchars($grupo) ?></strong>
+                                                        <div class="small text-muted">Geral: <?= htmlspecialchars((string)($diag['disponibilidade_pct'] ?? '?')) ?>% / <?= htmlspecialchars((string)($diag['latencia_media_ms'] ?? '?')) ?>ms</div>
+                                                    </td>
+                                                <?php endif; ?>
+                                                <td><?= htmlspecialchars($alvo['alvo']) ?></td>
+                                                <td><?= Badge::make($alvo['tipo'], $alvo['tipo'] === 'DNS' ? 'info' : 'secondary') ?></td>
+                                                <td>
+                                                    <?php $disp = (float)($alvo['disponibilidade_pct'] ?? 100); ?>
+                                                    <?= Badge::make($disp . '%', $disp >= 99 ? 'success' : ($disp >= 90 ? 'warning' : 'danger')) ?>
+                                                </td>
+                                                <td><?= htmlspecialchars((string)($alvo['latencia_ms'] ?? '?')) ?> ms</td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-white"><strong>Redes locais</strong></div>
+                    <div class="card-body p-0">
+                        <?php if (empty($redesLan)): ?>
+                            <p class="text-muted p-3 mb-0">Nenhum dado coletado ainda.</p>
+                        <?php else: ?>
+                            <table class="table table-sm mb-0">
+                                <thead><tr><th>Nome</th><th>VLAN</th><th>Subnet</th><th>DHCP</th></tr></thead>
+                                <tbody>
+                                    <?php foreach ($redesLan as $rede): ?>
+                                        <tr>
+                                            <td><?= htmlspecialchars($rede['nome'] ?? '—') ?></td>
+                                            <td><?= htmlspecialchars((string)($rede['vlan'] ?? '—')) ?></td>
+                                            <td class="font-monospace small"><?= htmlspecialchars($rede['subnet'] ?? '—') ?></td>
+                                            <td><?= Badge::make($rede['dhcp_habilitado'] ? 'Servidor DHCP' : 'Sem DHCP', $rede['dhcp_habilitado'] ? 'success' : 'secondary') ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
+
     <!-- Programas -->
     <div class="tab-pane fade" id="abaProgramas">
         <div class="card border-0 shadow-sm">
@@ -1375,6 +1513,53 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                 botao.disabled = false;
             }
         });
+    });
+})();
+
+(function () {
+    document.querySelectorAll('.botao-revelar-senha-pppoe').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+            const span = botao.closest('.d-flex').querySelector('.senha-pppoe');
+            const icone = botao.querySelector('i');
+            const revelado = span.textContent !== '••••••••';
+
+            if (revelado) {
+                span.textContent = '••••••••';
+                icone.className = 'bi bi-eye';
+            } else {
+                span.textContent = span.dataset.senha || '(vazio)';
+                icone.className = 'bi bi-eye-slash';
+            }
+        });
+    });
+})();
+
+(function () {
+    const botao = document.getElementById('botaoAvaliarInternet');
+    if (!botao) return;
+
+    const textoOriginal = botao.innerHTML;
+
+    botao.addEventListener('click', async function () {
+        if (!confirm('Rodar um teste de velocidade agora? Leva uns 15-20 segundos e usa a banda da internet durante o teste.')) return;
+
+        botao.disabled = true;
+        botao.innerHTML = '<i class="bi bi-hourglass-split"></i> Testando (pode levar até 30s)...';
+
+        const dados = new URLSearchParams();
+        dados.set('id', botao.dataset.id);
+
+        try {
+            const res = await fetch(<?= json_encode(url('/ativos/unifi/avaliar-internet')) ?>, { method: 'POST', body: dados });
+            const resultado = await res.json();
+            alert(resultado.message || (resultado.success ? 'Concluído.' : 'Falha.'));
+            if (resultado.success) location.reload();
+        } catch (e) {
+            alert('Erro ao comunicar com o servidor.');
+        } finally {
+            botao.disabled = false;
+            botao.innerHTML = textoOriginal;
+        }
     });
 })();
 

@@ -937,6 +937,7 @@ $router->post('/ativos/coletar-snmp', [AtivoController::class, 'coletarSnmp']);
 $router->post('/ativos/snmp/config', [AtivoController::class, 'salvarConfigSnmp']);
 $router->post('/ativos/snmp/ativar-coleta', [AtivoController::class, 'ativarColetaSnmp']);
 $router->post('/ativos/coletar-automatico', [AtivoController::class, 'coletarAutomatico']);
+$router->post('/ativos/unifi/avaliar-internet', [AtivoController::class, 'avaliarInternetUnifi']);
 $router->post('/ativos/coletar-unifi', [AtivoController::class, 'coletarUnifi']);
 $router->post('/ativos/unifi/ativar-coleta', [AtivoController::class, 'ativarColetaUnifi']);
 $router->post('/ativos/coletar-omada', [AtivoController::class, 'coletarOmada']);

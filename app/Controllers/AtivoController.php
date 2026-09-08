@@ -367,6 +367,15 @@ class AtivoController extends Controller
         return false;
     }
 
+    public function avaliarInternetUnifi(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        echo json_encode($this->service->avaliarInternetUnifi($id));
+    }
+
     public function coletarAutomatico(): void
     {
         AuthMiddleware::checkModulo('ativos_lista');

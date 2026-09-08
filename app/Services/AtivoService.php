@@ -1117,6 +1117,80 @@ class AtivoService
                 $coletado['unifi_velocidade'] = "{$download} Mbps ↓ / {$upload} Mbps ↑"
                     . (!empty($speedtest['rundate']) ? ' (testado em ' . date('d/m/Y H:i', (int)$speedtest['rundate']) . ')' : '');
             }
+
+            // Só gateways têm wan1/wan2 -- o resto (config de failover/balanceamento,
+            // diagnóstico 24h por alvo, redes LAN/DHCP) só faz sentido pra eles.
+            if (isset($legadoDispositivo['wan1']) || isset($legadoDispositivo['wan2'])) {
+                $wanConfig = [];
+                foreach ($unifi->listarRedesConfiguradas() as $rede) {
+                    if (($rede['purpose'] ?? '') !== 'wan') {
+                        continue;
+                    }
+
+                    $item = [
+                        'grupo' => $rede['wan_networkgroup'] ?? '',
+                        'nome' => $rede['name'] ?? '',
+                        'tipo' => strtoupper((string)($rede['wan_type'] ?? '')),
+                        'prioridade' => $rede['wan_failover_priority'] ?? null,
+                        'modo' => ($rede['wan_load_balance_type'] ?? '') === 'weighted' ? 'Balanceamento de carga' : 'Failover',
+                        'download_contratado_mbps' => isset($rede['wan_provider_capabilities']['download_kilobits_per_second'])
+                            ? round($rede['wan_provider_capabilities']['download_kilobits_per_second'] / 1000, 1) : null,
+                        'upload_contratado_mbps' => isset($rede['wan_provider_capabilities']['upload_kilobits_per_second'])
+                            ? round($rede['wan_provider_capabilities']['upload_kilobits_per_second'] / 1000, 1) : null,
+                        'habilitada' => (bool)($rede['enabled'] ?? true),
+                    ];
+
+                    // PPPoE guarda usuário/senha do provedor em texto puro no próprio
+                    // UniFi -- o usuário pediu explicitamente pra poder ver aqui (confirmar
+                    // com o provedor em caso de problema), então passa direto, sem mascarar
+                    // no dado gravado. A view (ver.php) que decide mostrar oculto por padrão.
+                    if (($rede['wan_type'] ?? '') === 'pppoe') {
+                        $item['pppoe_usuario'] = $rede['wan_username'] ?? '';
+                        $item['pppoe_senha'] = $rede['x_wan_password'] ?? '';
+                    }
+
+                    $wanConfig[] = $item;
+                }
+                usort($wanConfig, fn($a, $b) => ($a['prioridade'] ?? 99) <=> ($b['prioridade'] ?? 99));
+                $coletado['unifi_wan_config'] = $wanConfig;
+
+                $diagnostico = [];
+                foreach (['WAN', 'WAN2'] as $grupo) {
+                    if (!isset($legadoDispositivo['uptime_stats'][$grupo])) {
+                        continue;
+                    }
+
+                    $stats = $legadoDispositivo['uptime_stats'][$grupo];
+                    $alvos = array_merge($stats['monitors'] ?? [], $stats['alerting_monitors'] ?? []);
+
+                    $diagnostico[$grupo] = [
+                        'disponibilidade_pct' => $stats['availability'] ?? null,
+                        'latencia_media_ms' => $stats['latency_average'] ?? null,
+                        'alvos' => array_map(fn($m) => [
+                            'alvo' => $m['target'] ?? '',
+                            'tipo' => strtoupper((string)($m['type'] ?? '')),
+                            'disponibilidade_pct' => $m['availability'] ?? null,
+                            'latencia_ms' => $m['latency_average'] ?? null,
+                        ], $alvos),
+                    ];
+                }
+                $coletado['unifi_wan_diagnostico'] = $diagnostico;
+
+                $redesLan = [];
+                foreach ($unifi->listarRedesConfiguradas() as $rede) {
+                    if (($rede['purpose'] ?? '') !== 'corporate') {
+                        continue;
+                    }
+
+                    $redesLan[] = [
+                        'nome' => $rede['name'] ?? '',
+                        'vlan' => $rede['vlan'] ?? null,
+                        'subnet' => $rede['ip_subnet'] ?? '',
+                        'dhcp_habilitado' => (bool)($rede['dhcpd_enabled'] ?? false),
+                    ];
+                }
+                $coletado['unifi_redes_lan'] = $redesLan;
+            }
         }
 
         $detalhesAtuais = json_decode($ativo['detalhes'] ?? '', true) ?: [];
@@ -1127,6 +1201,92 @@ class AtivoService
         AuditService::registrar('Ativos', 'Coleta UniFi', 'Dados coletados via API do UniFi Controller para ' . $ativo['codigo_patrimonio'] . '.');
 
         return ['success' => true, 'message' => 'Dados coletados com sucesso via UniFi Controller.'];
+    }
+
+    /**
+     * Dispara um speedtest de verdade no gateway (não é o valor salvo antigo)
+     * e espera o resultado -- o próprio Controller demora uns 15-20s pra
+     * rodar. Síncrono de propósito (mesmo padrão do "Testar conexão" do
+     * Backup, que também usa set_time_limit maior): é uma ação explícita
+     * do usuário clicando um botão, não algo que precise ser assíncrono.
+     */
+    public function avaliarInternetUnifi(int $id): array
+    {
+        $ativo = $this->repository->buscarPorId($id);
+
+        if (!$ativo) {
+            return ['success' => false, 'message' => 'Ativo não encontrado.'];
+        }
+
+        $unifi = new UnifiService();
+
+        if (!$unifi->configurado()) {
+            return ['success' => false, 'message' => 'Integração com o UniFi Controller ainda não configurada -- veja Integrações.'];
+        }
+
+        $dispositivo = null;
+        foreach ($unifi->listarDispositivos() as $d) {
+            if (($d['ipAddress'] ?? '') === $ativo['ip']) {
+                $dispositivo = $d;
+                break;
+            }
+        }
+
+        if ($dispositivo === null || empty($dispositivo['macAddress'])) {
+            return ['success' => false, 'message' => 'Dispositivo não encontrado no UniFi Controller -- colete os dados normais primeiro.'];
+        }
+
+        $mac = $dispositivo['macAddress'];
+
+        $antes = $unifi->buscarDispositivoLegado($mac);
+        $timestampAntes = $antes['speedtest-status']['timestamp'] ?? 0;
+
+        $disparo = $unifi->dispararSpeedtest();
+        if (!$disparo['success']) {
+            return $disparo;
+        }
+
+        set_time_limit(45);
+
+        $resultado = null;
+        for ($tentativa = 0; $tentativa < 10; $tentativa++) {
+            sleep(3);
+
+            $legado = $unifi->buscarDispositivoLegado($mac);
+            $pendente = !empty($legado['speedtest-pending-interfaces']);
+            $timestampAtual = $legado['speedtest-status']['timestamp'] ?? 0;
+
+            if (!$pendente && $timestampAtual > $timestampAntes) {
+                $resultado = $legado['speedtest-status'];
+                break;
+            }
+        }
+
+        if ($resultado === null) {
+            return ['success' => false, 'message' => 'O speedtest não terminou a tempo -- tente de novo em alguns instantes.'];
+        }
+
+        $download = round((float)($resultado['xput_download'] ?? 0), 1);
+        $upload = round((float)($resultado['xput_upload'] ?? 0), 1);
+        $latencia = $resultado['latency'] ?? null;
+        $provedor = $resultado['server']['provider'] ?? '';
+        $wanTestada = $resultado['wan_networkgroup'] ?? '';
+
+        $detalhesAtuais = json_decode($ativo['detalhes'] ?? '', true) ?: [];
+        $detalhesAtuais['unifi_velocidade'] = "{$download} Mbps ↓ / {$upload} Mbps ↑"
+            . (!empty($resultado['rundate']) ? ' (testado em ' . date('d/m/Y H:i', (int)$resultado['rundate']) . ')' : '');
+        $this->repository->atualizarDetalhesApi($id, json_encode($detalhesAtuais, JSON_UNESCAPED_UNICODE));
+
+        AuditService::registrar('Ativos', 'Avaliar internet (UniFi)', "Speedtest sob demanda em {$ativo['codigo_patrimonio']}: {$download}↓/{$upload}↑ Mbps, {$latencia}ms.");
+
+        $mensagem = "Resultado: {$download} Mbps de download, {$upload} Mbps de upload, {$latencia} ms de latência";
+        if ($wanTestada !== '') {
+            $mensagem .= " (via {$wanTestada}";
+            $mensagem .= $provedor !== '' ? ", {$provedor})" : ')';
+        }
+        $mensagem .= '.';
+
+        return ['success' => true, 'message' => $mensagem];
     }
 
     private static function rotuloBandaRadio(float $ghz): string

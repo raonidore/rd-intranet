@@ -215,6 +215,63 @@ class UnifiService
         return $resultado['dados']['data'] ?? [];
     }
 
+    /** Registro completo (API legada) de UM dispositivo específico por MAC -- traz system-stats, temperatura, uptime, wan1/wan2, uptime_stats (disponibilidade/latência por alvo, ICMP e DNS) e speedtest-status, nada disso existe em /integration/v1. */
+    public function buscarDispositivoLegado(string $mac): ?array
+    {
+        $ref = $this->siteRefAtual();
+
+        if ($ref === null) {
+            return null;
+        }
+
+        $resultado = $this->chamarApi('GET', "/proxy/network/api/s/{$ref}/stat/device/" . rawurlencode($mac));
+
+        return $resultado['sucesso'] ? ($resultado['dados']['data'][0] ?? null) : null;
+    }
+
+    /**
+     * Todas as redes configuradas no site (WAN e LAN) -- só os campos
+     * seguros pra guardar em `detalhes` e mostrar na ficha do ativo.
+     * Deliberadamente NUNCA inclui `x_wan_password`/`wan_password` aqui:
+     * a senha do PPPoE é sensível de verdade (credencial do provedor) e só
+     * é buscada sob demanda (ver AtivoService::coletarUnifi()), nunca
+     * ficando espalhada por outros métodos que não precisam dela.
+     */
+    public function listarRedesConfiguradas(): array
+    {
+        $ref = $this->siteRefAtual();
+
+        if ($ref === null) {
+            return [];
+        }
+
+        $resultado = $this->chamarApi('GET', "/proxy/network/api/s/{$ref}/rest/networkconf");
+
+        if (!$resultado['sucesso']) {
+            return [];
+        }
+
+        return $resultado['dados']['data'] ?? [];
+    }
+
+    /** Dispara um speedtest sob demanda no gateway (mesmo comando usado pelo próprio app oficial) -- ver AtivoService::avaliarInternetUnifi() pra acompanhar o resultado. */
+    public function dispararSpeedtest(): array
+    {
+        $ref = $this->siteRefAtual();
+
+        if ($ref === null) {
+            return ['success' => false, 'message' => 'Site do UniFi Controller ainda não identificado.'];
+        }
+
+        $resultado = $this->chamarApi('POST', "/proxy/network/api/s/{$ref}/cmd/devmgr", ['cmd' => 'speedtest']);
+
+        if (!$resultado['sucesso']) {
+            return ['success' => false, 'message' => $resultado['mensagem']];
+        }
+
+        return ['success' => true, 'message' => 'Speedtest disparado.'];
+    }
+
     /**
      * Todos os clientes já vistos pelo Controller (não só os conectados
      * agora) com `blocked = true` -- fonte pro botão "Desbloquear": um
