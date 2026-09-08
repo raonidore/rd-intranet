@@ -962,6 +962,50 @@ class AtivoService
      * de clientes ficam fora de CAMPOS_DETALHES (são arrays, não texto) --
      * ver.php lê essas duas chaves direto na aba "Wi-Fi".
      */
+    /**
+     * Casa um IP contra a lista de dispositivos do UniFi Controller --
+     * usado tanto por coletarUnifi() quanto por avaliarInternetUnifi(),
+     * num método só, exatamente pra não duplicar (e desalinhar, como já
+     * aconteceu uma vez) o fallback de gateway abaixo.
+     *
+     * Gateways (UCG etc.) reportam em 'ipAddress' o IP do WAN, não o de
+     * gerenciamento na LAN que a gente cadastra em Ativos -- quando o
+     * casamento direto falha, procura o IP entre as portas do dispositivo
+     * via API legada e casa por MAC.
+     */
+    private function buscarDispositivoUnifiPorIp(UnifiService $unifi, string $ip): ?array
+    {
+        $dispositivos = $unifi->listarDispositivos();
+
+        foreach ($dispositivos as $d) {
+            if (($d['ipAddress'] ?? '') === $ip) {
+                return $d;
+            }
+        }
+
+        foreach ($unifi->listarDispositivosLegado() as $legado) {
+            $temIp = false;
+            foreach ($legado['port_table'] ?? [] as $porta) {
+                if (($porta['ip'] ?? '') === $ip) {
+                    $temIp = true;
+                    break;
+                }
+            }
+
+            if (!$temIp) {
+                continue;
+            }
+
+            foreach ($dispositivos as $d) {
+                if (($d['macAddress'] ?? '') === ($legado['mac'] ?? '')) {
+                    return $d;
+                }
+            }
+        }
+
+        return null;
+    }
+
     public function coletarUnifi(int $id): array
     {
         $ativo = $this->repository->buscarPorId($id);
@@ -980,42 +1024,7 @@ class AtivoService
             return ['success' => false, 'message' => 'Integração com o UniFi Controller ainda não configurada -- veja Integrações.'];
         }
 
-        $dispositivos = $unifi->listarDispositivos();
-        $dispositivosLegados = $unifi->listarDispositivosLegado();
-
-        $dispositivo = null;
-        foreach ($dispositivos as $d) {
-            if (($d['ipAddress'] ?? '') === $ativo['ip']) {
-                $dispositivo = $d;
-                break;
-            }
-        }
-
-        // Gateways (UCG etc.) reportam em 'ipAddress' o IP do WAN, não o de
-        // gerenciamento na LAN que a gente cadastra em Ativos -- procura o
-        // IP entre as portas do dispositivo via API legada e casa por MAC.
-        if ($dispositivo === null) {
-            foreach ($dispositivosLegados as $legado) {
-                $temIp = false;
-                foreach ($legado['port_table'] ?? [] as $porta) {
-                    if (($porta['ip'] ?? '') === $ativo['ip']) {
-                        $temIp = true;
-                        break;
-                    }
-                }
-
-                if (!$temIp) {
-                    continue;
-                }
-
-                foreach ($dispositivos as $d) {
-                    if (($d['macAddress'] ?? '') === ($legado['mac'] ?? '')) {
-                        $dispositivo = $d;
-                        break 2;
-                    }
-                }
-            }
-        }
+        $dispositivo = $this->buscarDispositivoUnifiPorIp($unifi, $ativo['ip']);
 
         if ($dispositivo === null) {
             return ['success' => false, 'message' => 'Nenhum dispositivo com esse IP foi encontrado no UniFi Controller.'];
@@ -1028,7 +1037,7 @@ class AtivoService
         // gateways) status do WAN/IP público/último speedtest, nada disso
         // existe em /integration/v1.
         $legadoDispositivo = null;
-        foreach ($dispositivosLegados as $legado) {
+        foreach ($unifi->listarDispositivosLegado() as $legado) {
             if (($legado['mac'] ?? '') === ($dispositivo['macAddress'] ?? '')) {
                 $legadoDispositivo = $legado;
                 break;
@@ -1224,13 +1233,7 @@ class AtivoService
             return ['success' => false, 'message' => 'Integração com o UniFi Controller ainda não configurada -- veja Integrações.'];
         }
 
-        $dispositivo = null;
-        foreach ($unifi->listarDispositivos() as $d) {
-            if (($d['ipAddress'] ?? '') === $ativo['ip']) {
-                $dispositivo = $d;
-                break;
-            }
-        }
+        $dispositivo = $this->buscarDispositivoUnifiPorIp($unifi, (string)$ativo['ip']);
 
         if ($dispositivo === null || empty($dispositivo['macAddress'])) {
             return ['success' => false, 'message' => 'Dispositivo não encontrado no UniFi Controller -- colete os dados normais primeiro.'];
