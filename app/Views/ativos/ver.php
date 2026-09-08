@@ -128,6 +128,21 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
 }
 .hitech-btn:hover { border-color: #58a6ff; color: #58a6ff; }
 .hitech-btn-danger:hover { border-color: #f85149; color: #f85149; }
+
+/* Modal de detalhe do cliente Wi-Fi (UniFi) -- mesmo visual "console" do
+   hitech-panel acima, com um destaque de métricas (sinal/experiência/
+   retentativas) coloridas por faixa antes da tabela de detalhe. */
+.wifi-cliente-stats { display: flex; gap: 10px; margin-bottom: 14px; }
+.wifi-cliente-stat {
+    flex: 1; background: #161b22; border: 1px solid #30363d; border-radius: 10px;
+    padding: 10px 6px; text-align: center;
+}
+.wifi-cliente-stat .valor {
+    font-size: 1.25rem; font-weight: 700;
+    font-family: 'SFMono-Regular', Consolas, monospace;
+}
+.wifi-cliente-stat .rotulo { font-size: .68rem; color: #8b949e; text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
+.wifi-cliente-linha .icone { color: #58a6ff; width: 18px; display: inline-block; text-align: center; }
 </style>
 
 <?= Alert::flash() ?>
@@ -826,13 +841,17 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
 
                             <div class="modal fade" id="modalDetalheClienteWifi" tabindex="-1">
                                 <div class="modal-dialog modal-dialog-centered">
-                                    <div class="modal-content">
-                                        <div class="modal-header">
-                                            <h6 class="modal-title" id="modalDetalheClienteWifiTitulo">Cliente Wi-Fi</h6>
-                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    <div class="modal-content hitech-panel" style="border-radius:14px">
+                                        <div class="hitech-topbar" style="border-radius:14px 14px 0 0">
+                                            <div class="d-flex align-items-center gap-2">
+                                                <i class="bi bi-router" style="color:#58a6ff"></i>
+                                                <strong id="modalDetalheClienteWifiTitulo" style="color:#fff; font-family:system-ui, sans-serif">Cliente Wi-Fi</strong>
+                                            </div>
+                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                                         </div>
-                                        <div class="modal-body p-0">
-                                            <table class="table table-sm mb-0">
+                                        <div class="p-3">
+                                            <div class="wifi-cliente-stats" id="modalDetalheClienteWifiStats"></div>
+                                            <table class="hitech-table w-100 mb-0">
                                                 <tbody id="modalDetalheClienteWifiCorpo"></tbody>
                                             </table>
                                         </div>
@@ -1577,11 +1596,37 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     // documentado mais abaixo pro Tooltip). Cria só na hora do primeiro clique.
     let modal = null;
     const titulo = document.getElementById('modalDetalheClienteWifiTitulo');
+    const stats = document.getElementById('modalDetalheClienteWifiStats');
     const corpo = document.getElementById('modalDetalheClienteWifiCorpo');
 
-    function linha(rotulo, valor) {
+    // Mesmas faixas de corSinalWifi() (PHP, mais acima nesta página) --
+    // dBm mais próximo de 0 é sinal melhor.
+    function corSinal(dbm) {
+        if (dbm >= -60) return '#3fb950';
+        if (dbm >= -70) return '#d29922';
+        return '#f85149';
+    }
+    // Experiência/satisfação: quanto maior, melhor (oposto do sinal em dBm).
+    function corQualidadeAlta(pct) {
+        if (pct >= 90) return '#3fb950';
+        if (pct >= 70) return '#d29922';
+        return '#f85149';
+    }
+    // Retentativas TX: quanto menor, melhor.
+    function corQualidadeBaixa(pct) {
+        if (pct <= 1) return '#3fb950';
+        if (pct <= 5) return '#d29922';
+        return '#f85149';
+    }
+
+    function stat(valor, rotulo, cor) {
         if (valor === null || valor === undefined || valor === '') return '';
-        return `<tr><td class="text-muted" style="width:45%">${rotulo}</td><td>${valor}</td></tr>`;
+        return `<div class="wifi-cliente-stat"><div class="valor" style="color:${cor}">${valor}</div><div class="rotulo">${rotulo}</div></div>`;
+    }
+
+    function linha(icone, rotulo, valor) {
+        if (valor === null || valor === undefined || valor === '') return '';
+        return `<tr class="wifi-cliente-linha"><td class="text-muted" style="width:45%"><i class="bi ${icone} icone"></i>${rotulo}</td><td>${valor}</td></tr>`;
     }
 
     botoes.forEach(function (botao) {
@@ -1591,25 +1636,34 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
 
             titulo.textContent = cliente.nome || cliente.mac || 'Cliente Wi-Fi';
 
+            let statsHtml = '';
+            if (cliente.sinal_dbm !== null && cliente.sinal_dbm !== undefined) {
+                statsHtml += stat(cliente.sinal_dbm + ' dBm', 'Sinal', corSinal(cliente.sinal_dbm));
+            }
+            if (cliente.experiencia_pct !== null && cliente.experiencia_pct !== undefined) {
+                statsHtml += stat(cliente.experiencia_pct + '%', 'Experiência Wi-Fi', corQualidadeAlta(cliente.experiencia_pct));
+            }
+            if (cliente.retentativas_tx_pct !== null && cliente.retentativas_tx_pct !== undefined) {
+                statsHtml += stat(cliente.retentativas_tx_pct + '%', 'Retentativas TX', corQualidadeBaixa(cliente.retentativas_tx_pct));
+            }
+            stats.innerHTML = statsHtml;
+
             let html = '';
-            html += linha('MAC', `<span class="font-monospace small">${cliente.mac || '—'}</span>`);
-            html += linha('IP', cliente.ip);
-            html += linha('Rede (SSID)', cliente.rede);
-            html += linha('Rede lógica', cliente.rede_logica);
-            html += linha('VLAN', cliente.vlan);
-            html += linha('Ponto de acesso', cliente.ap_nome);
-            html += linha('Canal', (cliente.canal !== null && cliente.canal !== undefined)
+            html += linha('bi-fingerprint', 'MAC', `<span class="font-monospace small">${cliente.mac || '—'}</span>`);
+            html += linha('bi-hdd-network', 'IP', cliente.ip);
+            html += linha('bi-wifi', 'Rede (SSID)', cliente.rede);
+            html += linha('bi-diagram-3', 'Rede lógica', cliente.rede_logica);
+            html += linha('bi-tag', 'VLAN', cliente.vlan);
+            html += linha('bi-broadcast-pin', 'Ponto de acesso', cliente.ap_nome);
+            html += linha('bi-sliders', 'Canal', (cliente.canal !== null && cliente.canal !== undefined)
                 ? `${cliente.canal}${cliente.largura_canal_mhz ? ' (' + cliente.largura_canal_mhz + ' MHz)' : ''}` : '');
-            html += linha('Padrão Wi-Fi', cliente.padrao_wifi);
-            html += linha('Sinal', (cliente.sinal_dbm !== null && cliente.sinal_dbm !== undefined) ? `${cliente.sinal_dbm} dBm` : '');
-            html += linha('Taxa Rx / Tx', (cliente.rx_rate_mbps || cliente.tx_rate_mbps)
+            html += linha('bi-reception-4', 'Padrão Wi-Fi', cliente.padrao_wifi);
+            html += linha('bi-arrow-down-up', 'Taxa Rx / Tx', (cliente.rx_rate_mbps || cliente.tx_rate_mbps)
                 ? `${cliente.rx_rate_mbps ?? '?'} / ${cliente.tx_rate_mbps ?? '?'} Mbps` : '');
-            html += linha('Retentativas TX', (cliente.retentativas_tx_pct !== null && cliente.retentativas_tx_pct !== undefined) ? `${cliente.retentativas_tx_pct}%` : '');
-            html += linha('Experiência Wi-Fi', (cliente.experiencia_pct !== null && cliente.experiencia_pct !== undefined) ? `${cliente.experiencia_pct}%` : '');
-            html += linha('Conectado desde', cliente.conectado_em ? new Date(cliente.conectado_em).toLocaleString('pt-BR') : '');
-            html += linha('Tempo de sessão', cliente.uptime_sessao);
-            html += linha('Dados nesta sessão', cliente.dados_sessao);
-            html += linha('Fabricante', cliente.fabricante);
+            html += linha('bi-clock-history', 'Conectado desde', cliente.conectado_em ? new Date(cliente.conectado_em).toLocaleString('pt-BR') : '');
+            html += linha('bi-hourglass-split', 'Tempo de sessão', cliente.uptime_sessao);
+            html += linha('bi-cloud-arrow-down', 'Dados nesta sessão', cliente.dados_sessao);
+            html += linha('bi-building', 'Fabricante', cliente.fabricante);
 
             corpo.innerHTML = html || '<tr><td class="text-muted p-3">Sem dados adicionais.</td></tr>';
             if (!modal) modal = new bootstrap.Modal(modalEl);
