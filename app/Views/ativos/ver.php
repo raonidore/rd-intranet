@@ -861,11 +861,30 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
         <?php $wanConfig = $detalhes['unifi_wan_config'] ?? []; ?>
         <?php $wanDiagnostico = $detalhes['unifi_wan_diagnostico'] ?? []; ?>
         <?php $redesLan = $detalhes['unifi_redes_lan'] ?? []; ?>
+        <?php $wanModo = $detalhes['unifi_wan_modo'] ?? null; ?>
         <div class="row g-3">
             <div class="col-12">
                 <div class="card border-0 shadow-sm">
-                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                        <strong>Conexões WAN</strong>
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <strong>Conexões WAN</strong>
+                            <?php if (count($wanConfig) > 1 && $wanModo !== null): ?>
+                                <div class="btn-group btn-group-sm" role="group" aria-label="Modo WAN">
+                                    <button type="button"
+                                            class="btn <?= $wanModo === 'Failover' ? 'btn-dark' : 'btn-outline-secondary botao-trocar-modo-wan' ?>"
+                                            data-id="<?= (int)$ativo['id'] ?>" data-modo="failover" data-label="Failover"
+                                            <?= $wanModo === 'Failover' ? 'disabled title="Modo atual"' : '' ?>>
+                                        <i class="bi bi-signpost-split"></i> Failover
+                                    </button>
+                                    <button type="button"
+                                            class="btn <?= $wanModo === 'Balanceamento de carga' ? 'btn-dark' : 'btn-outline-secondary botao-trocar-modo-wan' ?>"
+                                            data-id="<?= (int)$ativo['id'] ?>" data-modo="balanceamento" data-label="Balanceamento de carga"
+                                            <?= $wanModo === 'Balanceamento de carga' ? 'disabled title="Modo atual"' : '' ?>>
+                                        <i class="bi bi-distribute-horizontal"></i> Balanceamento de carga
+                                    </button>
+                                </div>
+                            <?php endif; ?>
+                        </div>
                         <button type="button" class="btn btn-sm btn-outline-primary" id="botaoAvaliarInternet" data-id="<?= (int)$ativo['id'] ?>">
                             <i class="bi bi-speedometer2"></i> Avaliar internet agora
                         </button>
@@ -875,7 +894,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                             <p class="text-muted p-3 mb-0">Nenhum dado coletado ainda. Use o botão "Detectar e coletar automaticamente" na Visão Geral.</p>
                         <?php else: ?>
                             <table class="table table-sm mb-0 align-middle">
-                                <thead><tr><th>Prioridade</th><th>Nome</th><th>Tipo</th><th>Modo</th><th>Status</th><th>Contratado</th><th>Credenciais</th><?php if (count($wanConfig) > 1): ?><th class="text-end">Ação</th><?php endif; ?></tr></thead>
+                                <thead><tr><th>Prioridade</th><th>Nome</th><th>Tipo</th><th>Status</th><th>Contratado</th><th>Credenciais</th><?php if (count($wanConfig) > 1 && $wanModo === 'Failover'): ?><th class="text-end">Ação</th><?php endif; ?></tr></thead>
                                 <tbody>
                                     <?php foreach ($wanConfig as $i => $wan): ?>
                                         <?php
@@ -888,7 +907,6 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                             <td><?= Badge::make($i === 0 ? 'Primária' : 'Secundária (' . (($wan['prioridade'] ?? $i + 1)) . 'ª)', $i === 0 ? 'primary' : 'secondary') ?></td>
                                             <td><?= htmlspecialchars($wan['nome'] ?: $wan['grupo']) ?></td>
                                             <td><?= htmlspecialchars($wan['tipo'] ?? '—') ?></td>
-                                            <td><?= htmlspecialchars($wan['modo'] ?? '—') ?></td>
                                             <td><?= Badge::make($online ? 'Online' : 'Offline/Desconhecido', $online ? 'success' : 'secondary') ?></td>
                                             <td><?= htmlspecialchars($contratado) ?></td>
                                             <td>
@@ -905,9 +923,9 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                                     <span class="text-muted">—</span>
                                                 <?php endif; ?>
                                             </td>
-                                            <?php if (count($wanConfig) > 1): ?>
+                                            <?php if (count($wanConfig) > 1 && $wanModo === 'Failover'): ?>
                                                 <td class="text-end">
-                                                    <?php if ($i !== 0 && ($wan['modo'] ?? '') !== 'Balanceamento de carga'): ?>
+                                                    <?php if ($i !== 0): ?>
                                                         <button type="button" class="btn btn-sm btn-outline-primary botao-tornar-wan-primaria"
                                                                 data-id="<?= (int)$ativo['id'] ?>" data-grupo="<?= htmlspecialchars($wan['grupo']) ?>" data-nome="<?= htmlspecialchars($wan['nome'] ?: $wan['grupo']) ?>">
                                                             <i class="bi bi-arrow-repeat"></i> Tornar primária
@@ -919,8 +937,8 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                     <?php endforeach; ?>
                                 </tbody>
                             </table>
-                            <?php if (count($wanConfig) > 1 && ($wanConfig[0]['modo'] ?? '') === 'Balanceamento de carga'): ?>
-                                <p class="text-muted small p-2 mb-0"><i class="bi bi-info-circle"></i> Essas WANs estão em balanceamento de carga -- as duas são usadas ao mesmo tempo, então não existe uma "primária" pra trocar. Pra forçar o uso de só uma, mude o modo pra failover no UniFi Network.</p>
+                            <?php if (count($wanConfig) > 1 && $wanModo === 'Balanceamento de carga'): ?>
+                                <p class="text-muted small p-2 mb-0"><i class="bi bi-info-circle"></i> Essas WANs estão em balanceamento de carga -- as duas são usadas ao mesmo tempo, então não existe uma "primária" pra trocar. Use o botão "Failover" acima pra passar a usar só uma por vez.</p>
                             <?php endif; ?>
                         <?php endif; ?>
                     </div>
@@ -1543,6 +1561,40 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                 span.textContent = span.dataset.senha || '(vazio)';
                 icone.className = 'bi bi-eye-slash';
             }
+        });
+    });
+})();
+
+(function () {
+    document.querySelectorAll('.botao-trocar-modo-wan').forEach(function (botao) {
+        botao.addEventListener('click', async function () {
+            const mensagem = botao.dataset.modo === 'balanceamento'
+                ? 'Trocar pra balanceamento de carga? As duas WANs passam a ser usadas ao mesmo tempo, divididas pelo peso configurado em cada uma.'
+                : 'Trocar pra failover? Só a WAN primária carrega tráfego -- a outra só entra se ela cair.';
+            if (!confirm(mensagem)) return;
+
+            botao.disabled = true;
+            const textoOriginal = botao.innerHTML;
+            botao.innerHTML = '<i class="bi bi-hourglass-split"></i> Trocando...';
+
+            const dados = new URLSearchParams();
+            dados.set('id', botao.dataset.id);
+            dados.set('modo', botao.dataset.modo);
+
+            try {
+                const res = await fetch(<?= json_encode(url('/ativos/unifi/trocar-modo-wan')) ?>, { method: 'POST', body: dados });
+                const resultado = await res.json();
+                alert(resultado.message || (resultado.success ? 'Concluído.' : 'Falha.'));
+                if (resultado.success) {
+                    location.reload();
+                    return;
+                }
+            } catch (e) {
+                alert('Erro ao comunicar com o servidor.');
+            }
+
+            botao.disabled = false;
+            botao.innerHTML = textoOriginal;
         });
     });
 })();

@@ -1130,18 +1130,31 @@ class AtivoService
             // Só gateways têm wan1/wan2 -- o resto (config de failover/balanceamento,
             // diagnóstico 24h por alvo, redes LAN/DHCP) só faz sentido pra eles.
             if (isset($legadoDispositivo['wan1']) || isset($legadoDispositivo['wan2'])) {
-                $wanConfig = [];
-                foreach ($unifi->listarRedesConfiguradas() as $rede) {
-                    if (($rede['purpose'] ?? '') !== 'wan') {
-                        continue;
-                    }
+                $redesWan = array_values(array_filter(
+                    $unifi->listarRedesConfiguradas(),
+                    fn($r) => ($r['purpose'] ?? '') === 'wan'
+                ));
 
+                // wan_load_balance_type NÃO é "o modo dessa WAN" isolado -- o Controller
+                // marca a WAN de prioridade 1 como "weighted" e as demais como
+                // "failover-only" mesmo com "WAN Mode: Failover Only" selecionado (foi
+                // assim que descobri ao vivo: achava que "weighted" numa WAN só já
+                # significava balanceamento, e errava o modo sempre que a config real era
+                // failover). O modo de verdade é do SITE inteiro: só é balanceamento de
+                // carga quando TODAS as WANs estão "weighted" -- qualquer "failover-only"
+                // no meio indica failover.
+                $modoGlobal = (!empty($redesWan) && count($redesWan) === count(array_filter(
+                    $redesWan,
+                    fn($r) => ($r['wan_load_balance_type'] ?? '') === 'weighted'
+                ))) ? 'Balanceamento de carga' : 'Failover';
+
+                $wanConfig = [];
+                foreach ($redesWan as $rede) {
                     $item = [
                         'grupo' => $rede['wan_networkgroup'] ?? '',
                         'nome' => $rede['name'] ?? '',
                         'tipo' => strtoupper((string)($rede['wan_type'] ?? '')),
                         'prioridade' => $rede['wan_failover_priority'] ?? null,
-                        'modo' => ($rede['wan_load_balance_type'] ?? '') === 'weighted' ? 'Balanceamento de carga' : 'Failover',
                         'download_contratado_mbps' => isset($rede['wan_provider_capabilities']['download_kilobits_per_second'])
                             ? round($rede['wan_provider_capabilities']['download_kilobits_per_second'] / 1000, 1) : null,
                         'upload_contratado_mbps' => isset($rede['wan_provider_capabilities']['upload_kilobits_per_second'])
@@ -1162,6 +1175,7 @@ class AtivoService
                 }
                 usort($wanConfig, fn($a, $b) => ($a['prioridade'] ?? 99) <=> ($b['prioridade'] ?? 99));
                 $coletado['unifi_wan_config'] = $wanConfig;
+                $coletado['unifi_wan_modo'] = $modoGlobal;
 
                 $diagnostico = [];
                 foreach (['WAN', 'WAN2'] as $grupo) {
@@ -1320,6 +1334,34 @@ class AtivoService
 
         if ($resultado['success']) {
             AuditService::registrar('Ativos', 'Trocar WAN primária (UniFi)', "{$ativo['codigo_patrimonio']}: WAN primária alterada para {$grupo}.");
+            $this->coletarUnifi($id);
+        }
+
+        return $resultado;
+    }
+
+    /**
+     * Troca o modo global das WANs (Failover Only / Balanceamento de carga)
+     * direto do RD.Intranet -- mesmo controle de "WAN Mode" no app UniFi.
+     */
+    public function trocarModoWanUnifi(int $id, string $modo): array
+    {
+        $ativo = $this->repository->buscarPorId($id);
+
+        if (!$ativo) {
+            return ['success' => false, 'message' => 'Ativo não encontrado.'];
+        }
+
+        $unifi = new UnifiService();
+
+        if (!$unifi->configurado()) {
+            return ['success' => false, 'message' => 'Integração com o UniFi Controller ainda não configurada -- veja Integrações.'];
+        }
+
+        $resultado = $unifi->definirModoWan($modo);
+
+        if ($resultado['success']) {
+            AuditService::registrar('Ativos', 'Trocar modo WAN (UniFi)', "{$ativo['codigo_patrimonio']}: modo WAN alterado para {$modo}.");
             $this->coletarUnifi($id);
         }
 

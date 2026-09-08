@@ -319,6 +319,64 @@ class UnifiService
         return ['success' => true, 'message' => 'WAN primária alterada -- pode levar alguns segundos pra rede migrar de fato.'];
     }
 
+    /**
+     * Troca o modo global das WANs entre failover e balanceamento de carga --
+     * mesmo controle de "WAN Mode" em Internet > WAN Mode no app UniFi.
+     * Em failover, só a WAN de maior prioridade (menor wan_failover_priority)
+     * fica "weighted" (a que carrega o tráfego); as demais viram
+     * "failover-only" (só entram se ela cair) -- é assim que o próprio
+     * Controller já marca as WANs numa config de failover real, confirmado
+     * lendo os registros ao vivo. Em balanceamento, todas ficam "weighted"
+     * (usadas ao mesmo tempo, divididas pelo peso configurado em cada uma).
+     *
+     * @param string $modo 'failover' ou 'balanceamento'
+     * @return array{success:bool, message:string}
+     */
+    public function definirModoWan(string $modo): array
+    {
+        if (!in_array($modo, ['failover', 'balanceamento'], true)) {
+            return ['success' => false, 'message' => 'Modo inválido.'];
+        }
+
+        $ref = $this->siteRefAtual();
+
+        if ($ref === null) {
+            return ['success' => false, 'message' => 'Site do UniFi Controller ainda não identificado -- use "Testar conexão" em Integrações > UniFi.'];
+        }
+
+        $redes = array_values(array_filter(
+            $this->listarRedesConfiguradas(),
+            fn($r) => ($r['purpose'] ?? '') === 'wan'
+        ));
+
+        if (empty($redes)) {
+            return ['success' => false, 'message' => 'Nenhuma rede WAN encontrada no Controller.'];
+        }
+
+        usort($redes, fn($a, $b) => ($a['wan_failover_priority'] ?? 99) <=> ($b['wan_failover_priority'] ?? 99));
+
+        foreach ($redes as $i => $rede) {
+            $novoTipo = $modo === 'balanceamento' ? 'weighted' : ($i === 0 ? 'weighted' : 'failover-only');
+
+            if (($rede['wan_load_balance_type'] ?? '') === $novoTipo) {
+                continue;
+            }
+
+            $rede['wan_load_balance_type'] = $novoTipo;
+            $resultado = $this->chamarApi('PUT', "/proxy/network/api/s/{$ref}/rest/networkconf/{$rede['_id']}", $rede);
+
+            if (!$resultado['sucesso']) {
+                return ['success' => false, 'message' => 'Falha ao atualizar "' . ($rede['name'] ?? $rede['wan_networkgroup']) . '": ' . $resultado['mensagem']];
+            }
+        }
+
+        $mensagem = $modo === 'balanceamento'
+            ? 'Modo alterado para balanceamento de carga -- as WANs passam a ser usadas ao mesmo tempo.'
+            : 'Modo alterado para failover -- só a WAN primária carrega tráfego até ela cair.';
+
+        return ['success' => true, 'message' => $mensagem];
+    }
+
     /** Dispara um speedtest sob demanda no gateway (mesmo comando usado pelo próprio app oficial) -- ver AtivoService::avaliarInternetUnifi() pra acompanhar o resultado. */
     public function dispararSpeedtest(): array
     {

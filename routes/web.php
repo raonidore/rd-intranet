@@ -939,6 +939,7 @@ $router->post('/ativos/snmp/ativar-coleta', [AtivoController::class, 'ativarCole
 $router->post('/ativos/coletar-automatico', [AtivoController::class, 'coletarAutomatico']);
 $router->post('/ativos/unifi/avaliar-internet', [AtivoController::class, 'avaliarInternetUnifi']);
 $router->post('/ativos/unifi/trocar-wan-primaria', [AtivoController::class, 'trocarWanPrimariaUnifi']);
+$router->post('/ativos/unifi/trocar-modo-wan', [AtivoController::class, 'trocarModoWanUnifi']);
 $router->post('/ativos/coletar-unifi', [AtivoController::class, 'coletarUnifi']);
 $router->post('/ativos/unifi/ativar-coleta', [AtivoController::class, 'ativarColetaUnifi']);
 $router->post('/ativos/coletar-omada', [AtivoController::class, 'coletarOmada']);

@@ -392,6 +392,17 @@ class AtivoController extends Controller
         echo json_encode($this->service->trocarWanPrimariaUnifi($id, $grupo));
     }
 
+    public function trocarModoWanUnifi(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $modo = trim((string)($_POST['modo'] ?? ''));
+
+        echo json_encode($this->service->trocarModoWanUnifi($id, $modo));
+    }
+
     public function coletarAutomatico(): void
     {
         AuthMiddleware::checkModulo('ativos_lista');
