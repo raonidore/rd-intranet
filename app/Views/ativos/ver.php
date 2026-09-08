@@ -5,6 +5,7 @@ use App\Components\Alert;
 use App\Components\Badge;
 use App\Services\AtivoService;
 use App\Services\PermissionService;
+use App\Services\OmadaService;
 use App\Services\UnifiService;
 
 $statusCores = [
@@ -167,6 +168,11 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
         <?php if (in_array($ativo['tipo_slug'] ?? '', ['ponto_acesso', 'roteador'], true) && !empty($ativo['ip']) && (new UnifiService())->configurado()): ?>
             <button type="button" class="btn btn-outline-secondary" id="botaoColetarUnifi" data-id="<?= (int)$ativo['id'] ?>">
                 <i class="bi bi-arrow-repeat"></i> Coletar dados UniFi
+            </button>
+        <?php endif; ?>
+        <?php if (($ativo['tipo_slug'] ?? '') === 'switch' && !empty($ativo['ip']) && (new OmadaService())->configurado()): ?>
+            <button type="button" class="btn btn-outline-secondary" id="botaoColetarOmada" data-id="<?= (int)$ativo['id'] ?>">
+                <i class="bi bi-arrow-repeat"></i> Coletar dados Omada
             </button>
         <?php endif; ?>
         <?php if ($ativo['origem'] === 'agente'): ?>
@@ -1331,6 +1337,31 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
         } finally {
             botao.disabled = false;
             botao.innerHTML = '<i class="bi bi-arrow-repeat"></i> Coletar dados UniFi';
+        }
+    });
+})();
+
+(function () {
+    const botao = document.getElementById('botaoColetarOmada');
+    if (!botao) return;
+
+    botao.addEventListener('click', async function () {
+        botao.disabled = true;
+        botao.innerHTML = '<i class="bi bi-hourglass-split"></i> Coletando...';
+
+        const dados = new URLSearchParams();
+        dados.set('id', botao.dataset.id);
+
+        try {
+            const res = await fetch(<?= json_encode(url('/ativos/coletar-omada')) ?>, { method: 'POST', body: dados });
+            const resultado = await res.json();
+            alert(resultado.message || (resultado.success ? 'Coletado.' : 'Falha ao coletar.'));
+            if (resultado.success) location.reload();
+        } catch (e) {
+            alert('Erro ao comunicar com o servidor.');
+        } finally {
+            botao.disabled = false;
+            botao.innerHTML = '<i class="bi bi-arrow-repeat"></i> Coletar dados Omada';
         }
     });
 })();

@@ -7,6 +7,7 @@ use App\Middleware\AuthMiddleware;
 use App\Services\AuditService;
 use App\Services\KbService;
 use App\Services\NotificationService;
+use App\Services\OmadaService;
 use App\Services\UnifiService;
 
 /**
@@ -93,5 +94,55 @@ class IntegracoesController extends Controller
         set_time_limit(30);
 
         echo json_encode((new UnifiService())->testarConexao());
+    }
+
+    public function omadaForm(): void
+    {
+        AuthMiddleware::checkAdmin();
+
+        $service = new OmadaService();
+
+        $this->view('administracao/integracoes_omada', [
+            'urlAtual' => $service->urlAtual(),
+            'omadacIdAtual' => $service->omadacIdAtual(),
+            'clientIdAtual' => $service->clientIdAtual(),
+            'configurado' => $service->configurado(),
+            'siteId' => $service->siteIdAtual(),
+        ]);
+    }
+
+    public function omadaSalvar(): void
+    {
+        AuthMiddleware::checkAdmin();
+
+        (new OmadaService())->salvarConfiguracao(
+            $_POST['url'] ?? '',
+            $_POST['omadac_id'] ?? '',
+            $_POST['client_id'] ?? '',
+            $_POST['client_secret'] ?? ''
+        );
+
+        header('Location: ' . url('/administracao/integracoes/omada'));
+        exit;
+    }
+
+    public function omadaRemover(): void
+    {
+        AuthMiddleware::checkAdmin();
+
+        (new OmadaService())->removerConfiguracao();
+
+        header('Location: ' . url('/administracao/integracoes/omada'));
+        exit;
+    }
+
+    public function omadaTestar(): void
+    {
+        AuthMiddleware::checkAdmin();
+        header('Content-Type: application/json');
+
+        set_time_limit(30);
+
+        echo json_encode((new OmadaService())->testarConexao());
     }
 }

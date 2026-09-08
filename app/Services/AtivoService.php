@@ -105,6 +105,13 @@ class AtivoService
             'firmware' => 'Firmware',
             'snmp_sys_descr' => 'Descrição (SNMP)',
             'snmp_uptime' => 'Uptime (SNMP)',
+            // omada_* -- coletados via Omada Controller (TP-Link), não SNMP.
+            // Ficam ao lado dos campos manuais/SNMP acima, sem tirar nada:
+            // um switch TP-Link pode ter os dois preenchidos ao mesmo tempo.
+            'omada_model' => 'Modelo (Omada)',
+            'omada_firmware' => 'Versão de firmware (Omada)',
+            'omada_status' => 'Status no Controller',
+            'omada_uptime' => 'Uptime (Omada)',
         ],
         // 'unifi_radios', 'unifi_clientes' (arrays) e 'unifi_adotado_em'
         // (formatado com data_br() só na view, nunca no coletor -- data_br()
@@ -140,6 +147,7 @@ class AtivoService
 
     private const NOME_JOB_CRON_SNMP = 'Coleta SNMP de Ativos de TI';
     private const NOME_JOB_CRON_UNIFI = 'Coleta UniFi de Ativos de TI';
+    private const NOME_JOB_CRON_OMADA = 'Coleta Omada de Ativos de TI';
 
     public function __construct()
     {
@@ -1172,6 +1180,88 @@ class AtivoService
     public function nomeJobCronUnifi(): string
     {
         return self::NOME_JOB_CRON_UNIFI;
+    }
+
+    /**
+     * Casa o ativo (por IP -- a Open API do Omada já reporta o IP de
+     * gerenciamento direto, sem o problema de WAN/LAN que a UniFi tem pro
+     * gateway) com um dispositivo do Omada Controller, e grava
+     * modelo/firmware/status/uptime em `detalhes`. Mesmo tipo de ativo
+     * (`switch`) que já existe pra switches manuais/SNMP -- só acrescenta
+     * campos novos em CAMPOS_DETALHES, não cria tipo nem migration.
+     */
+    public function coletarOmada(int $id): array
+    {
+        $ativo = $this->repository->buscarPorId($id);
+
+        if (!$ativo) {
+            return ['success' => false, 'message' => 'Ativo não encontrado.'];
+        }
+
+        if (empty($ativo['ip'])) {
+            return ['success' => false, 'message' => 'Este ativo não tem IP cadastrado.'];
+        }
+
+        $omada = new OmadaService();
+
+        if (!$omada->configurado()) {
+            return ['success' => false, 'message' => 'Integração com o Omada Controller ainda não configurada -- veja Integrações.'];
+        }
+
+        $dispositivo = null;
+        foreach ($omada->listarDispositivos() as $d) {
+            if (($d['ip'] ?? '') === $ativo['ip']) {
+                $dispositivo = $d;
+                break;
+            }
+        }
+
+        if ($dispositivo === null) {
+            return ['success' => false, 'message' => 'Nenhum dispositivo com esse IP foi encontrado no Omada Controller.'];
+        }
+
+        $coletado = [
+            'omada_model' => $dispositivo['modelName'] ?? ($dispositivo['model'] ?? ''),
+            'omada_firmware' => $dispositivo['firmwareVersion'] ?? '',
+            // status 2 = conectado (confirmado ao vivo) -- qualquer outro valor mostra o código cru em vez de arriscar um rótulo errado.
+            'omada_status' => (int)($dispositivo['status'] ?? -1) === 2 ? 'Online' : ('Status ' . ($dispositivo['status'] ?? '?')),
+            // já vem pronto como texto ("42day(s) 18h 52m 21s") -- sem conversão nenhuma.
+            'omada_uptime' => $dispositivo['uptime'] ?? '',
+        ];
+
+        $detalhesAtuais = json_decode($ativo['detalhes'] ?? '', true) ?: [];
+        $detalhesNovos = array_merge($detalhesAtuais, $coletado);
+
+        $this->repository->atualizarDetalhesApi($id, json_encode($detalhesNovos, JSON_UNESCAPED_UNICODE));
+
+        AuditService::registrar('Ativos', 'Coleta Omada', 'Dados coletados via API do Omada Controller para ' . $ativo['codigo_patrimonio'] . '.');
+
+        return ['success' => true, 'message' => 'Dados coletados com sucesso via Omada Controller.'];
+    }
+
+    /**
+     * Roda a coleta Omada em todos os ativos do tipo "switch" com IP
+     * cadastrado -- chamado pelo cron (rd ativos:coletar-omada), mesmo
+     * padrão de coletarUnifiTodos()/coletarSnmpTodos().
+     */
+    public function coletarOmadaTodos(): array
+    {
+        $ativos = $this->repository->listarPorTipoSlugComIp('switch');
+        $sucesso = 0;
+
+        foreach ($ativos as $ativo) {
+            $resultado = $this->coletarOmada((int)$ativo['id']);
+            if ($resultado['success']) {
+                $sucesso++;
+            }
+        }
+
+        return ['total' => count($ativos), 'sucesso' => $sucesso];
+    }
+
+    public function nomeJobCronOmada(): string
+    {
+        return self::NOME_JOB_CRON_OMADA;
     }
 
     /**

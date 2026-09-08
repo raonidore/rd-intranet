@@ -367,6 +367,25 @@ $statusCores = [
             </div>
         </div>
 
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white"><strong>Coleta via Omada Controller (TP-Link)</strong></div>
+            <div class="card-body">
+                <p class="text-muted small mb-2">
+                    Modelo, firmware, status e uptime de switches TP-Link, via
+                    <a href="<?= url('/administracao/integracoes/omada') ?>">API do Omada Controller</a> -- esses switches não têm
+                    nenhuma API própria em modo standalone.
+                </p>
+                <div class="d-flex justify-content-between align-items-center small text-muted">
+                    <span><i class="bi bi-info-circle"></i> Coleta periódica (a cada 30 min) dos switches TP-Link cadastrados com IP.</span>
+                    <?php if ($coletaOmadaAtiva): ?>
+                        <span class="text-success"><i class="bi bi-check-circle"></i> Ativa</span>
+                    <?php else: ?>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="botaoAtivarColetaOmada">Ativar coleta periódica</button>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+
         <div class="card border-0 shadow-sm h-100">
             <div class="card-header bg-white d-flex justify-content-between align-items-center">
                 <strong>Cadastrados recentemente</strong>
@@ -424,6 +443,21 @@ $statusCores = [
                 location.reload();
             } catch (e) {
                 botaoUnifi.disabled = false;
+            }
+        });
+    }
+
+    const botaoOmada = document.getElementById('botaoAtivarColetaOmada');
+    if (botaoOmada) {
+        botaoOmada.addEventListener('click', async function () {
+            botaoOmada.disabled = true;
+            try {
+                const res = await fetch(<?= json_encode(url('/ativos/omada/ativar-coleta')) ?>, { method: 'POST' });
+                const dados = await res.json();
+                alert(dados.message || (dados.success ? 'Ativado.' : 'Falha ao ativar.'));
+                location.reload();
+            } catch (e) {
+                botaoOmada.disabled = false;
             }
         });
     }

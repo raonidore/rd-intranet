@@ -41,6 +41,7 @@ class AtivoController extends Controller
             'comunidadePadrao' => $this->service->comunidadePadrao(),
             'coletaSnmpAtiva' => $this->coletaSnmpAtiva(),
             'coletaUnifiAtiva' => $this->coletaUnifiAtiva(),
+            'coletaOmadaAtiva' => $this->coletaOmadaAtiva(),
             'chaveAgente' => $this->service->chaveAgente(),
             'historicoChaves' => $this->service->historicoChavesAgente(),
             'intervaloComunicacao' => $this->service->intervaloComunicacao(),
@@ -405,6 +406,52 @@ class AtivoController extends Controller
     {
         foreach ((new CronService())->listar() as $job) {
             if ($job['nome'] === $this->service->nomeJobCronUnifi()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function coletarOmada(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $resultado = $this->service->coletarOmada($id);
+
+        echo json_encode($resultado);
+    }
+
+    public function ativarColetaOmada(): void
+    {
+        AuthMiddleware::checkModulo('ativos_dashboard');
+        header('Content-Type: application/json');
+
+        if ($this->coletaOmadaAtiva()) {
+            echo json_encode(['success' => true, 'message' => 'Coleta já estava ativa.']);
+            return;
+        }
+
+        $resultado = (new CronService())->criar([
+            'nome' => $this->service->nomeJobCronOmada(),
+            'descricao' => 'Coleta dados via API do Omada Controller dos switches TP-Link cadastrados (Ativos de TI).',
+            'expressao' => '*/30 * * * *',
+            'usuario_execucao' => 'www-data',
+            'comando' => 'php /var/www/rd.intranet/rd ativos:coletar-omada',
+            'ativo' => true,
+        ]);
+
+        AuditService::registrar('Ativos', 'Ativar coleta Omada', $resultado['message']);
+
+        echo json_encode($resultado);
+    }
+
+    private function coletaOmadaAtiva(): bool
+    {
+        foreach ((new CronService())->listar() as $job) {
+            if ($job['nome'] === $this->service->nomeJobCronOmada()) {
                 return true;
             }
         }

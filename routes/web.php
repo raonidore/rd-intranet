@@ -459,6 +459,10 @@ $router->get('/administracao/integracoes/unifi', [IntegracoesController::class, 
 $router->post('/administracao/integracoes/unifi/salvar', [IntegracoesController::class, 'unifiSalvar']);
 $router->post('/administracao/integracoes/unifi/remover', [IntegracoesController::class, 'unifiRemover']);
 $router->post('/administracao/integracoes/unifi/testar', [IntegracoesController::class, 'unifiTestar']);
+$router->get('/administracao/integracoes/omada', [IntegracoesController::class, 'omadaForm']);
+$router->post('/administracao/integracoes/omada/salvar', [IntegracoesController::class, 'omadaSalvar']);
+$router->post('/administracao/integracoes/omada/remover', [IntegracoesController::class, 'omadaRemover']);
+$router->post('/administracao/integracoes/omada/testar', [IntegracoesController::class, 'omadaTestar']);
 
 $router->get('/administracao/integracoes/whatsapp', [WhatsAppIntegracaoController::class, 'form']);
 $router->post('/administracao/integracoes/whatsapp/tipo', [WhatsAppIntegracaoController::class, 'salvarTipo']);
@@ -934,6 +938,8 @@ $router->post('/ativos/snmp/config', [AtivoController::class, 'salvarConfigSnmp'
 $router->post('/ativos/snmp/ativar-coleta', [AtivoController::class, 'ativarColetaSnmp']);
 $router->post('/ativos/coletar-unifi', [AtivoController::class, 'coletarUnifi']);
 $router->post('/ativos/unifi/ativar-coleta', [AtivoController::class, 'ativarColetaUnifi']);
+$router->post('/ativos/coletar-omada', [AtivoController::class, 'coletarOmada']);
+$router->post('/ativos/omada/ativar-coleta', [AtivoController::class, 'ativarColetaOmada']);
 $router->post('/ativos/unifi/desconectar-cliente', [AtivoController::class, 'unifiDesconectarCliente']);
 $router->post('/ativos/unifi/bloquear-cliente', [AtivoController::class, 'unifiBloquearCliente']);
 $router->post('/ativos/unifi/desbloquear-cliente', [AtivoController::class, 'unifiDesbloquearCliente']);

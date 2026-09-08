@@ -333,6 +333,12 @@ switch ($comando) {
 
         break;
 
+    case 'ativos:coletar-omada':
+        $resultado = (new \App\Services\AtivoService())->coletarOmadaTodos();
+        echo "OK: Omada coletado em {$resultado['sucesso']}/{$resultado['total']} ativo(s).\n";
+
+        break;
+
     default:
         echo "Comando não encontrado: {$comando}\n";
         exit(1);
