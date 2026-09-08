@@ -1571,7 +1571,11 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     if (!botoes.length) return;
 
     const modalEl = document.getElementById('modalDetalheClienteWifi');
-    const modal = new bootstrap.Modal(modalEl);
+    // bootstrap.bundle.min.js só carrega no fim do layout (depois deste
+    // conteúdo) -- criar o modal aqui em cima (fora de um clique) lança
+    // ReferenceError e derruba o resto deste <script> (mesmo motivo já
+    // documentado mais abaixo pro Tooltip). Cria só na hora do primeiro clique.
+    let modal = null;
     const titulo = document.getElementById('modalDetalheClienteWifiTitulo');
     const corpo = document.getElementById('modalDetalheClienteWifiCorpo');
 
@@ -1608,6 +1612,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             html += linha('Fabricante', cliente.fabricante);
 
             corpo.innerHTML = html || '<tr><td class="text-muted p-3">Sem dados adicionais.</td></tr>';
+            if (!modal) modal = new bootstrap.Modal(modalEl);
             modal.show();
         });
     });
