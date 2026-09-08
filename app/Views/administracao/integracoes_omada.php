@@ -101,6 +101,7 @@ ob_start();
                 if (resultado.success) {
                     okBox.textContent = resultado.message;
                     okBox.classList.remove('d-none');
+                    setTimeout(() => location.reload(), 1200);
                 } else {
                     erroBox.textContent = resultado.message;
                     erroBox.classList.remove('d-none');

@@ -90,6 +90,11 @@ ob_start();
                 if (resultado.success) {
                     okBox.textContent = resultado.message;
                     okBox.classList.remove('d-none');
+                    // O site identificado é gravado no servidor, mas o parágrafo "Site
+                    // identificado: ..." abaixo é renderizado no carregamento da página --
+                    // sem recarregar, ficava mostrando o aviso antigo mesmo com o teste
+                    // já tendo dado certo.
+                    setTimeout(() => location.reload(), 1200);
                 } else {
                     erroBox.textContent = resultado.message;
                     erroBox.classList.remove('d-none');
