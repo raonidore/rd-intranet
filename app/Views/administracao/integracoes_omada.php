@@ -71,13 +71,54 @@ ob_start();
     </div>
 </div>
 
-<div class="card border-0 shadow-sm" style="max-width:720px">
+<div class="card border-0 shadow-sm mb-3" style="max-width:720px">
     <div class="card-body">
-        <strong><i class="bi bi-list-ol"></i> Como gerar o Client ID/Secret no Controller</strong>
+        <strong><i class="bi bi-list-ol"></i> Passo a passo completo</strong>
         <ol class="small text-muted mt-2 mb-0">
-            <li class="mb-2">No Omada Controller, abra <strong>Configurações (engrenagem) &gt; Integração de Plataforma &gt; Open API</strong>.</li>
-            <li class="mb-2">Clique em <strong>Add New App</strong>, dê um nome (ex: "RD.Intranet"), escolha o modo <strong>Client</strong> (não "Authorization Code") e função <strong>Super Admin</strong>.</li>
-            <li>Copie o Client ID e o Client Secret gerados, cole acima junto com a URL e o Omada ID, salve, e clique em "Testar conexão".</li>
+            <li class="mb-2">
+                <strong>Código atualizado</strong> -- se esta tela é nova pra você, atualize o servidor
+                primeiro (via SSH):
+                <br><code>cd /var/www/rd.intranet &amp;&amp; git pull --ff-only &amp;&amp; php rd migrate</code>
+            </li>
+            <li class="mb-2">
+                <strong>Omada Controller instalado e com o switch adotado</strong> -- diferente da UniFi
+                (Controller já embutido no gateway), switches TP-Link em modo standalone não têm API
+                própria nenhuma: precisa existir um Omada Network Application rodando em algum servidor
+                (instalação nativa via <code>.deb</code>) com o switch <strong>já adotado</strong> nele --
+                não basta aparecer como "descoberto"/pendente. Se um switch específico não trouxer dado
+                nenhum de porta/VLAN mesmo com tudo configurado certo, o motivo mais provável é esse:
+                confira o status dele dentro do próprio Omada (deve estar "Connected", não "Pending"/
+                "Adopt Failed").
+            </li>
+            <li class="mb-2">
+                <strong>Gere o Client ID/Secret</strong> -- no Omada Controller, abra
+                <strong>Configurações (engrenagem) &gt; Integração de Plataforma &gt; Open API</strong>,
+                clique em <strong>Add New App</strong>, dê um nome (ex: "RD.Intranet"), escolha o modo
+                <strong>Client</strong> (não "Authorization Code") e função <strong>Super Admin</strong>,
+                e copie o Client ID e o Client Secret gerados -- o segredo não é exibido de novo depois.
+            </li>
+            <li class="mb-2">
+                <strong>Descubra o Omada ID</strong> -- é o único dado que o Controller não expõe em
+                nenhuma tela: peça pra quem configurou a integração pela primeira vez, ou confira a
+                documentação interna deste projeto.
+            </li>
+            <li class="mb-2">
+                <strong>Configure aqui em cima</strong> -- cole URL, Omada ID, Client ID e Client Secret,
+                salve, e clique em <strong>"Testar conexão"</strong> -- identifica e grava o site sozinho.
+            </li>
+            <li class="mb-2">
+                <strong>Cadastre o switch como Ativo</strong> -- em Ativos &gt; Novo Ativo, informe o IP
+                de gerenciamento e clique em <strong>"Detectar"</strong> ao lado do campo IP: o sistema
+                identifica sozinho e preenche marca/modelo/firmware.
+            </li>
+            <li class="mb-2">
+                <strong>Colete os dados</strong> -- na ficha do ativo já salvo, clique em <strong>"Detectar
+                e coletar automaticamente"</strong> pra trazer modelo, firmware, status e uptime.
+            </li>
+            <li>
+                <strong>(Opcional) Ative a coleta periódica</strong> -- no Dashboard de Ativos, aba
+                "Integrações de rede", botão "Ativar coleta" no card Omada.
+            </li>
         </ol>
     </div>
 </div>

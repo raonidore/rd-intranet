@@ -62,11 +62,44 @@ ob_start();
 
 <div class="card border-0 shadow-sm" style="max-width:720px">
     <div class="card-body">
-        <strong><i class="bi bi-list-ol"></i> Como gerar a API Key no Controller</strong>
+        <strong><i class="bi bi-list-ol"></i> Passo a passo completo</strong>
         <ol class="small text-muted mt-2 mb-0">
-            <li class="mb-2">No próprio UniFi Controller (Cloud Gateway/Dream Machine), abra <strong>Configurações do Sistema &gt; Integração/Integrations</strong>.</li>
-            <li class="mb-2">Crie uma nova API Key (ex: "RD.Intranet") e copie o valor mostrado -- ele não é exibido de novo depois.</li>
-            <li>Cole a URL do Controller (ex: <code>https://192.168.10.1</code>) e a chave acima, salve, e clique em "Testar conexão".</li>
+            <li class="mb-2">
+                <strong>Código atualizado</strong> -- se esta tela é nova pra você, é sinal de que este
+                RD.Intranet ainda pode estar em uma versão anterior à da integração. Atualize primeiro
+                (via SSH, no servidor):
+                <br><code>cd /var/www/rd.intranet &amp;&amp; git pull --ff-only &amp;&amp; php rd migrate</code>
+                <br>A migration cria o tipo de ativo "Roteador/Gateway" -- sem ela, esse tipo não aparece
+                no cadastro de Ativos.
+            </li>
+            <li class="mb-2">
+                <strong>Gere a API Key no Controller</strong> -- no próprio UniFi Controller (Cloud
+                Gateway/Dream Machine), abra <strong>Configurações do Sistema &gt; Integração/Integrations</strong>,
+                crie uma chave nova (ex: "RD.Intranet") e copie o valor mostrado -- ele não é exibido de
+                novo depois.
+            </li>
+            <li class="mb-2">
+                <strong>Configure aqui em cima</strong> -- cole a URL do Controller (ex:
+                <code>https://192.168.10.1</code>) e a API Key, salve, e clique em <strong>"Testar
+                conexão"</strong> -- identifica e grava o site sozinho.
+            </li>
+            <li class="mb-2">
+                <strong>Cadastre o equipamento como Ativo</strong> -- em Ativos &gt; Novo Ativo, informe o
+                IP de gerenciamento na LAN (não o IP da WAN, no caso de gateway) e clique em
+                <strong>"Detectar"</strong> ao lado do campo IP: o sistema já identifica sozinho se é
+                Access Point, Switch ou Roteador/Gateway, e preenche marca/modelo/firmware.
+            </li>
+            <li class="mb-2">
+                <strong>Colete os dados completos</strong> -- na ficha do ativo já salvo, clique em
+                <strong>"Detectar e coletar automaticamente"</strong>. Pra pontos de acesso, preenche a
+                aba "Wi-Fi" (rádios/clientes); pra gateways, a aba "Rede/WAN" (conexões, diagnóstico de
+                24h e o seletor failover/balanceamento).
+            </li>
+            <li>
+                <strong>(Opcional) Ative a coleta periódica</strong> -- no Dashboard de Ativos, aba
+                "Integrações de rede", botão "Ativar coleta" no card UniFi, pra não precisar clicar
+                manualmente a cada equipamento.
+            </li>
         </ol>
     </div>
 </div>
