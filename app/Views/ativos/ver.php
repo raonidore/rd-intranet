@@ -801,7 +801,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                 <thead><tr><th>Nome</th><th>Rede</th><th>IP</th><th>MAC</th><th>Sinal</th><th>Conectado desde</th><th></th></tr></thead>
                                 <tbody>
                                     <?php foreach ($clientesWifi as $cliente): ?>
-                                        <tr>
+                                        <tr class="linha-cliente-unifi" role="button" data-cliente="<?= htmlspecialchars(json_encode($cliente, JSON_UNESCAPED_UNICODE), ENT_QUOTES) ?>">
                                             <td><?= htmlspecialchars($cliente['nome'] ?? '—') ?></td>
                                             <td><?= htmlspecialchars($cliente['rede'] ?? '—') ?></td>
                                             <td><?= htmlspecialchars($cliente['ip'] ?? '—') ?></td>
@@ -809,6 +809,9 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                             <td><?= isset($cliente['sinal_dbm']) ? Badge::make($cliente['sinal_dbm'] . ' dBm', corSinalWifi((int)$cliente['sinal_dbm'])) : '—' ?></td>
                                             <td><?= htmlspecialchars(data_br($cliente['conectado_em'] ?? null)) ?></td>
                                             <td class="text-end text-nowrap">
+                                                <button type="button" class="btn btn-sm btn-outline-primary botao-ver-detalhe-cliente" title="Ver detalhes">
+                                                    <i class="bi bi-eye"></i>
+                                                </button>
                                                 <button type="button" class="btn btn-sm btn-outline-secondary botao-unifi-cliente" data-acao="desconectar" data-mac="<?= htmlspecialchars($cliente['mac'] ?? '') ?>" data-nome="<?= htmlspecialchars($cliente['nome'] ?? '') ?>" title="Desconectar (reconecta sozinho)">
                                                     <i class="bi bi-x-circle"></i>
                                                 </button>
@@ -820,6 +823,22 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                     <?php endforeach; ?>
                                 </tbody>
                             </table>
+
+                            <div class="modal fade" id="modalDetalheClienteWifi" tabindex="-1">
+                                <div class="modal-dialog modal-dialog-centered">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h6 class="modal-title" id="modalDetalheClienteWifiTitulo">Cliente Wi-Fi</h6>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body p-0">
+                                            <table class="table table-sm mb-0">
+                                                <tbody id="modalDetalheClienteWifiCorpo"></tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -1543,6 +1562,53 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             } finally {
                 botao.disabled = false;
             }
+        });
+    });
+})();
+
+(function () {
+    const botoes = document.querySelectorAll('.botao-ver-detalhe-cliente');
+    if (!botoes.length) return;
+
+    const modalEl = document.getElementById('modalDetalheClienteWifi');
+    const modal = new bootstrap.Modal(modalEl);
+    const titulo = document.getElementById('modalDetalheClienteWifiTitulo');
+    const corpo = document.getElementById('modalDetalheClienteWifiCorpo');
+
+    function linha(rotulo, valor) {
+        if (valor === null || valor === undefined || valor === '') return '';
+        return `<tr><td class="text-muted" style="width:45%">${rotulo}</td><td>${valor}</td></tr>`;
+    }
+
+    botoes.forEach(function (botao) {
+        botao.addEventListener('click', function () {
+            const tr = botao.closest('tr');
+            const cliente = JSON.parse(tr.dataset.cliente || '{}');
+
+            titulo.textContent = cliente.nome || cliente.mac || 'Cliente Wi-Fi';
+
+            let html = '';
+            html += linha('MAC', `<span class="font-monospace small">${cliente.mac || '—'}</span>`);
+            html += linha('IP', cliente.ip);
+            html += linha('Rede (SSID)', cliente.rede);
+            html += linha('Rede lógica', cliente.rede_logica);
+            html += linha('VLAN', cliente.vlan);
+            html += linha('Ponto de acesso', cliente.ap_nome);
+            html += linha('Canal', (cliente.canal !== null && cliente.canal !== undefined)
+                ? `${cliente.canal}${cliente.largura_canal_mhz ? ' (' + cliente.largura_canal_mhz + ' MHz)' : ''}` : '');
+            html += linha('Padrão Wi-Fi', cliente.padrao_wifi);
+            html += linha('Sinal', (cliente.sinal_dbm !== null && cliente.sinal_dbm !== undefined) ? `${cliente.sinal_dbm} dBm` : '');
+            html += linha('Taxa Rx / Tx', (cliente.rx_rate_mbps || cliente.tx_rate_mbps)
+                ? `${cliente.rx_rate_mbps ?? '?'} / ${cliente.tx_rate_mbps ?? '?'} Mbps` : '');
+            html += linha('Retentativas TX', (cliente.retentativas_tx_pct !== null && cliente.retentativas_tx_pct !== undefined) ? `${cliente.retentativas_tx_pct}%` : '');
+            html += linha('Experiência Wi-Fi', (cliente.experiencia_pct !== null && cliente.experiencia_pct !== undefined) ? `${cliente.experiencia_pct}%` : '');
+            html += linha('Conectado desde', cliente.conectado_em ? new Date(cliente.conectado_em).toLocaleString('pt-BR') : '');
+            html += linha('Tempo de sessão', cliente.uptime_sessao);
+            html += linha('Dados nesta sessão', cliente.dados_sessao);
+            html += linha('Fabricante', cliente.fabricante);
+
+            corpo.innerHTML = html || '<tr><td class="text-muted p-3">Sem dados adicionais.</td></tr>';
+            modal.show();
         });
     });
 })();

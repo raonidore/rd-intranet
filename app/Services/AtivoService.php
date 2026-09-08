@@ -1056,7 +1056,10 @@ class AtivoService
 
         // API legada (stat/sta) em vez de /integration/v1/clients -- essa
         // traz 'essid' (rede Wi-Fi) e 'signal' (dBm), que a API nova ainda
-        // não expõe.
+        // não expõe. O mesmo registro já carrega praticamente tudo que o app
+        // oficial mostra na ficha do cliente (confirmei campo a campo contra
+        // um cliente real) -- guarda tudo junto, exibido num detalhe/modal na
+        // view em vez de aba nova, pra não pedir outro endpoint.
         $clientesWifi = [];
         foreach ($unifi->listarClientesLegado() as $c) {
             if (($c['ap_mac'] ?? '') === ($dispositivo['macAddress'] ?? '') && empty($c['is_wired'])) {
@@ -1069,6 +1072,22 @@ class AtivoService
                     // 'assoc_time' vem em epoch (segundos) -- date('c', ...) já formata
                     // em ISO 8601, sem depender de data_br() (não carregado no cron).
                     'conectado_em' => !empty($c['assoc_time']) ? date('c', (int)$c['assoc_time']) : '',
+                    'ap_nome' => $c['last_uplink_name'] ?? '',
+                    'canal' => $c['channel'] ?? null,
+                    'largura_canal_mhz' => $c['channel_width'] ?? null,
+                    'padrao_wifi' => self::rotuloPadraoWifi((string)($c['radio_proto'] ?? '')),
+                    'rx_rate_mbps' => isset($c['rx_rate']) ? round($c['rx_rate'] / 1000, 1) : null,
+                    'tx_rate_mbps' => isset($c['tx_rate']) ? round($c['tx_rate'] / 1000, 1) : null,
+                    'retentativas_tx_pct' => $c['wifi_tx_retries_percentage'] ?? null,
+                    'vlan' => $c['vlan'] ?? null,
+                    // 'satisfaction' é literalmente o score de "Experiência WiFi" (%) mostrado no app oficial.
+                    'experiencia_pct' => $c['satisfaction'] ?? null,
+                    'uptime_sessao' => !empty($c['uptime']) ? self::duracaoLegivel((int)$c['uptime']) : '',
+                    'dados_sessao' => (isset($c['tx_bytes']) || isset($c['rx_bytes']))
+                        ? self::tamanhoLegivel((int)($c['tx_bytes'] ?? 0) + (int)($c['rx_bytes'] ?? 0))
+                        : '',
+                    'rede_logica' => $c['network'] ?? '',
+                    'fabricante' => $c['oui'] ?? '',
                 ];
             }
         }
@@ -1366,6 +1385,35 @@ class AtivoService
         }
 
         return $resultado;
+    }
+
+    private static function rotuloPadraoWifi(string $radioProto): string
+    {
+        return match ($radioProto) {
+            'be' => 'WiFi 7',
+            'ax' => 'WiFi 6',
+            'ac' => 'WiFi 5',
+            'n' => 'WiFi 4',
+            'g' => 'WiFi 3 (g)',
+            'a' => 'WiFi 2 (a)',
+            'b' => 'WiFi 1 (b)',
+            default => $radioProto !== '' ? strtoupper($radioProto) : '—',
+        };
+    }
+
+    private static function tamanhoLegivel(int $bytes): string
+    {
+        $bytes = max(0, $bytes);
+        $unidades = ['B', 'KB', 'MB', 'GB', 'TB'];
+        $i = 0;
+        $valor = (float)$bytes;
+
+        while ($valor >= 1024 && $i < count($unidades) - 1) {
+            $valor /= 1024;
+            $i++;
+        }
+
+        return round($valor, $i === 0 ? 0 : 1) . ' ' . $unidades[$i];
     }
 
     private static function rotuloBandaRadio(float $ghz): string
