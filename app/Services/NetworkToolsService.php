@@ -393,7 +393,20 @@ class NetworkToolsService
         $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/ip_scanner_portas_web.sh', [$ip]);
         $dados = json_decode(trim($resultado['output']), true);
 
-        return is_array($dados) ? $dados : ['success' => false, 'message' => $resultado['output']];
+        if (!is_array($dados)) {
+            return ['success' => false, 'message' => $resultado['output']];
+        }
+
+        // nmap (acima) só varre TCP -- SNMP é UDP/161, checado à parte com a
+        // mesma community padrão usada na coleta de Ativos. Só sob demanda
+        // aqui (não na varredura da faixa inteira), porque UDP sem resposta
+        // não tem "fechado" rápido feito TCP -- deixaria o scan de /22 lento.
+        if ($dados['success'] ?? false) {
+            $comunidade = (new AtivoService())->comunidadePadrao();
+            $dados['snmp'] = (new SnmpService())->disponivel($ip, $comunidade);
+        }
+
+        return $dados;
     }
 
     public function enviarWol(string $mac): array

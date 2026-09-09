@@ -61,6 +61,24 @@ class SnmpService
         return $dados;
     }
 
+    /**
+     * Só testa se o dispositivo responde SNMP com essa community -- usado
+     * pelo IP Scanner (escaneio de portas por host) pra sinalizar quem já é
+     * elegível pra coleta automática de Ativos antes mesmo de cadastrar.
+     * Mesmo OID (sysDescr) e binário (snmpget) que coletar() já usa.
+     *
+     * @return array{disponivel:bool, sys_descr:?string}
+     */
+    public function disponivel(string $ip, string $community): array
+    {
+        $sysDescr = $this->get($ip, $community, self::OID_SYS_DESCR);
+
+        return [
+            'disponivel' => $sysDescr !== null,
+            'sys_descr' => $sysDescr,
+        ];
+    }
+
     private function get(string $ip, string $community, string $oid): ?string
     {
         $comando = 'snmpget -v2c -t 2 -r 1 -O qv -c '

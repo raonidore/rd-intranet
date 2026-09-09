@@ -706,13 +706,23 @@ use App\Components\Alert;
                 return;
             }
 
+            let html = '';
+
+            if (dados.snmp) {
+                html += dados.snmp.disponivel
+                    ? '<div class="alert alert-success py-2 mb-2"><i class="bi bi-check-circle"></i> Responde SNMP (community padrão) -- elegível pra coleta automática em Ativos.'
+                        + (dados.snmp.sys_descr ? '<div class="small font-monospace mt-1">' + dados.snmp.sys_descr + '</div>' : '') + '</div>'
+                    : '<div class="alert alert-secondary py-2 mb-2"><i class="bi bi-slash-circle"></i> Não respondeu SNMP com a community padrão -- pode não suportar SNMP, estar com SNMP desligado, ou usar uma community diferente.</div>';
+            }
+
             const portas = dados.portas || [];
             if (portas.length === 0) {
-                document.getElementById('modalPortasCorpo').innerHTML = '<div class="text-muted text-center py-3">Nenhuma porta aberta encontrada (entre as 100 mais comuns).</div>';
+                html += '<div class="text-muted text-center py-3">Nenhuma porta aberta encontrada (entre as 100 mais comuns).</div>';
+                document.getElementById('modalPortasCorpo').innerHTML = html;
                 return;
             }
 
-            let html = '<table class="table table-sm mb-0"><thead><tr><th>Porta</th><th>Protocolo</th><th>Serviço</th><th>Versão</th></tr></thead><tbody>';
+            html += '<table class="table table-sm mb-0"><thead><tr><th>Porta</th><th>Protocolo</th><th>Serviço</th><th>Versão</th></tr></thead><tbody>';
             portas.forEach(p => {
                 html += '<tr><td>' + p.porta + '</td><td>' + p.protocolo + '</td><td>' + (p.servico || '-') + '</td><td class="small text-muted">' + (p.versao || '-') + '</td></tr>';
             });
