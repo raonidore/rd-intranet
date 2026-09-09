@@ -155,7 +155,11 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
 
 <div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-2">
     <div>
-        <small class="text-muted"><a href="<?= url('/ativos/lista') ?>"><i class="bi bi-arrow-left"></i> Lista de Ativos</a></small>
+        <small class="text-muted">
+            <a href="#" id="linkVoltarAtivo"><i class="bi bi-arrow-left"></i> Voltar</a>
+            &middot;
+            <a href="<?= url('/ativos/lista') ?>">Lista de Ativos</a>
+        </small>
         <h4 class="mb-1 mt-1">
             <i class="bi <?= htmlspecialchars($ativo['tipo_icone']) ?> me-1"></i>
             <?= htmlspecialchars($ativo['apelido'] ?: $ativo['nome']) ?>
@@ -1579,6 +1583,26 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
 </div>
 
 <script>
+(function () {
+    const linkVoltar = document.getElementById('linkVoltarAtivo');
+    if (!linkVoltar) return;
+
+    linkVoltar.addEventListener('click', function (e) {
+        e.preventDefault();
+
+        // Volta pra tela de onde o usuário veio de verdade (Dashboard com
+        // filtro, Lista já filtrada, resultado de busca etc.) em vez de
+        // sempre mandar pra Lista de Ativos sem filtro nenhum -- só cai no
+        // fallback se não tiver de fato pra onde voltar (aba nova, link
+        // direto).
+        if (window.history.length > 1) {
+            window.history.back();
+        } else {
+            window.location.href = <?= json_encode(url('/ativos/lista')) ?>;
+        }
+    });
+})();
+
 (function () {
     const botao = document.getElementById('botaoColetarSnmp');
     if (!botao) return;
