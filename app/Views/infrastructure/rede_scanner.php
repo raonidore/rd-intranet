@@ -57,6 +57,20 @@ use App\Components\Alert;
 .ipscan-chip .chip-meta { color:#6c757d; }
 .ipscan-chip button { border:0; background:transparent; color:#0d6efd; padding:0 2px; line-height:1; }
 .ipscan-chip button:hover { color:#0a58ca; }
+
+.ipscan-tags-box {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    min-height: 38px; padding: 5px 8px; cursor: text;
+}
+.ipscan-tags-box:focus-within { border-color:#86b7fe; box-shadow:0 0 0 .25rem rgba(13,110,253,.25); }
+.ipscan-tag-faixa {
+    display:inline-flex; align-items:center; gap:5px; background:#0d6efd; color:#fff;
+    border-radius:6px; padding:3px 6px 3px 9px; font-size:.8rem; font-family:monospace; white-space:nowrap;
+}
+.ipscan-tag-faixa .remover-faixa { cursor:pointer; opacity:.75; font-size:.9rem; line-height:1; border:0; background:transparent; color:#fff; padding:0 2px; }
+.ipscan-tag-faixa .remover-faixa:hover { opacity:1; }
+.ipscan-tags-box input { border:0; outline:0; flex:1 1 140px; min-width:140px; font-family:monospace; padding:2px; }
+.ipscan-tags-erro { color:#dc3545; font-size:.78rem; }
 </style>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -76,14 +90,15 @@ use App\Components\Alert;
 <div class="card ipscan-card mb-4">
     <div class="card-body">
         <form id="form-scanner" class="d-flex gap-2 align-items-end flex-wrap">
-            <div class="flex-grow-1" style="min-width:220px">
+            <div class="flex-grow-1" style="min-width:280px">
                 <label class="form-label small mb-1">Faixa(s) de IP (CIDR)</label>
-                <input type="text" name="cidr" id="input-cidr" class="form-control font-monospace"
-                       value="<?= htmlspecialchars($faixaSugerida ?? '') ?>" placeholder="ex: 192.168.1.0/24, 192.168.20.0/24, 192.168.30.0/24" required>
-                <div class="field-help text-muted small mt-1">
-                    <?= $faixaSugerida ? 'Sugerido a partir da rede deste servidor.' : 'Informe a faixa da sua rede local.' ?>
-                    Pode informar mais de uma faixa separada por vírgula (até 8) -- sai tudo num resultado só.
-                    Só faixas privadas (RFC1918), cada uma até /22 (1024 endereços).
+                <div class="ipscan-tags-box form-control" id="caixa-faixas">
+                    <input type="text" id="input-faixa-novo" placeholder="ex: 192.168.1.0/24" autocomplete="off">
+                </div>
+                <input type="hidden" name="cidr" id="input-cidr" value="<?= htmlspecialchars($faixaSugerida ?? '') ?>" required>
+                <div class="field-help text-muted small mt-1" id="ajuda-faixas">
+                    <?= $faixaSugerida ? 'Sugerido a partir da rede deste servidor -- aperte Enter pra confirmar.' : 'Digite uma faixa e aperte Enter (ou vírgula) pra adicionar.' ?>
+                    Até 8 faixas na mesma varredura, cada uma privada (RFC1918) e no máximo /22 (1024 endereços).
                 </div>
             </div>
             <button type="submit" class="btn btn-primary" id="btn-iniciar">
@@ -297,6 +312,107 @@ use App\Components\Alert;
     let poll = null;
     let chartFabricantes = null;
 
+    // ── Campo de faixas em "tags" -- digitar e apertar Enter/vírgula vira um
+    // chip removível, em vez de depender de digitar vírgulas certinho numa
+    // string só (fácil de errar). O <input type="hidden" id="input-cidr">
+    // continua sendo a fonte da verdade pro resto do código (submit, recentes,
+    // "ver varredura salva") -- só passa a ser sincronizado por essa lista. ──
+    (function () {
+        const caixa = document.getElementById('caixa-faixas');
+        const campoNovo = document.getElementById('input-faixa-novo');
+        const campoOculto = document.getElementById('input-cidr');
+        const ajuda = document.getElementById('ajuda-faixas');
+        const ajudaTextoOriginal = ajuda.innerHTML;
+        let faixas = [];
+
+        const REGEX_CIDR = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/;
+
+        function sincronizar() {
+            campoOculto.value = faixas.join(',');
+        }
+
+        function mostrarErro(msg) {
+            ajuda.innerHTML = '<span class="ipscan-tags-erro"><i class="bi bi-exclamation-triangle"></i> ' + msg + '</span>';
+        }
+
+        function limparErro() {
+            ajuda.innerHTML = ajudaTextoOriginal;
+        }
+
+        function renderizar() {
+            caixa.querySelectorAll('.ipscan-tag-faixa').forEach(el => el.remove());
+            faixas.forEach(function (faixa, indice) {
+                const tag = document.createElement('span');
+                tag.className = 'ipscan-tag-faixa';
+                tag.innerHTML = faixa + ' <button type="button" class="remover-faixa" title="Remover">&times;</button>';
+                tag.querySelector('.remover-faixa').addEventListener('click', function () {
+                    faixas.splice(indice, 1);
+                    renderizar();
+                });
+                caixa.insertBefore(tag, campoNovo);
+            });
+            sincronizar();
+        }
+
+        function adicionar(valorBruto) {
+            const valor = valorBruto.trim().replace(/,$/, '');
+            if (valor === '') return true;
+
+            if (!REGEX_CIDR.test(valor)) {
+                mostrarErro('"' + valor + '" não parece uma faixa CIDR válida (ex: 192.168.1.0/24).');
+                return false;
+            }
+            const m = valor.match(REGEX_CIDR);
+            if ([m[1], m[2], m[3], m[4]].some(o => parseInt(o, 10) > 255) || parseInt(m[5], 10) > 32) {
+                mostrarErro('"' + valor + '" não parece uma faixa CIDR válida.');
+                return false;
+            }
+            if (faixas.includes(valor)) {
+                mostrarErro('"' + valor + '" já foi adicionada.');
+                return false;
+            }
+            if (faixas.length >= 8) {
+                mostrarErro('Máximo de 8 faixas por varredura.');
+                return false;
+            }
+
+            limparErro();
+            faixas.push(valor);
+            renderizar();
+            return true;
+        }
+
+        // Reconstrói os chips a partir de um valor salvo/sugerido (string
+        // com vírgula, espaço ou quebra de linha) -- usado no carregamento
+        // inicial da página, no "rescan" de uma faixa recente e ao reabrir
+        // uma varredura salva.
+        window.definirFaixasScanner = function (valor) {
+            faixas = [];
+            String(valor || '').split(/[\s,;]+/).map(v => v.trim()).filter(Boolean).forEach(function (v) {
+                if (!faixas.includes(v) && faixas.length < 8) faixas.push(v);
+            });
+            renderizar();
+        };
+
+        campoNovo.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ',') {
+                e.preventDefault();
+                if (adicionar(campoNovo.value)) campoNovo.value = '';
+            } else if (e.key === 'Backspace' && campoNovo.value === '' && faixas.length > 0) {
+                faixas.pop();
+                renderizar();
+            }
+        });
+        campoNovo.addEventListener('blur', function () {
+            if (campoNovo.value.trim() !== '' && adicionar(campoNovo.value)) campoNovo.value = '';
+        });
+        caixa.addEventListener('click', function (e) {
+            if (e.target === caixa) campoNovo.focus();
+        });
+
+        window.definirFaixasScanner(campoOculto.value);
+    })();
+
     function tempoRelativo(dataStr) {
         const diffMin = Math.max(0, Math.round((Date.now() - new Date(dataStr.replace(' ', 'T'))) / 60000));
         if (diffMin < 1) return 'agora';
@@ -326,7 +442,7 @@ use App\Components\Alert;
                 carregarExecucaoSalva(item.id);
             });
             chip.querySelector('[data-acao="rescan"]').addEventListener('click', function () {
-                document.getElementById('input-cidr').value = item.cidr;
+                window.definirFaixasScanner(item.cidr);
                 document.getElementById('form-scanner').requestSubmit();
             });
             container.appendChild(chip);
@@ -459,7 +575,7 @@ use App\Components\Alert;
             const banner = document.getElementById('banner-comparacao');
             banner.innerHTML = '<div class="alert alert-secondary mb-0"><i class="bi bi-clock-history me-1"></i> Mostrando varredura salva de <strong>' + dados.executado_em + '</strong> -- não é uma varredura nova.</div>';
 
-            document.getElementById('input-cidr').value = dados.cidr;
+            window.definirFaixasScanner(dados.cidr);
             renderizarResultado(dados.cidr);
             document.getElementById('painel-resultado').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         } catch (err) {
