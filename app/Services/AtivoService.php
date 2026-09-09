@@ -1571,6 +1571,55 @@ class AtivoService
         return self::NOME_JOB_CRON_OMADA;
     }
 
+    /**
+     * Lê + modifica + grava `detalhes` sob lock de linha (SELECT ... FOR
+     * UPDATE), pra evitar corrida quando duas ações na mesma ficha (ex:
+     * marcar "em uso" em vários canais rápido, ou uma coleta periódica
+     * caindo no meio de um clique) chegam quase juntas -- sem o lock, cada
+     * uma lê o "antes" da outra e a segunda grava por cima, perdendo a
+     * primeira mudança silenciosamente (foi exatamente esse o bug relatado:
+     * várias chaves marcadas em sequência, só a última ficava salva).
+     *
+     * $mutador recebe o array de detalhes já decodificado e devolve
+     * ['ok' => bool, 'detalhes' => array (se ok), 'message' => string|null].
+     *
+     * @return array{success:bool, message:string, codigo_patrimonio?:string}
+     */
+    private function alterarDetalhesComLock(int $id, callable $mutador): array
+    {
+        $pdo = Database::connection();
+        $pdo->beginTransaction();
+
+        try {
+            $stmt = $pdo->prepare('SELECT codigo_patrimonio, detalhes FROM ativos WHERE id = ? FOR UPDATE');
+            $stmt->execute([$id]);
+            $ativo = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+            if (!$ativo) {
+                $pdo->rollBack();
+                return ['success' => false, 'message' => 'Ativo não encontrado.'];
+            }
+
+            $detalhesAtuais = json_decode($ativo['detalhes'] ?? '', true) ?: [];
+            $resultado = $mutador($detalhesAtuais);
+
+            if (empty($resultado['ok'])) {
+                $pdo->rollBack();
+                return ['success' => false, 'message' => $resultado['message'] ?? 'Falha ao salvar.'];
+            }
+
+            $pdo->prepare('UPDATE ativos SET detalhes = ? WHERE id = ?')
+                ->execute([json_encode($resultado['detalhes'], JSON_UNESCAPED_UNICODE), $id]);
+
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            $pdo->rollBack();
+            return ['success' => false, 'message' => 'Falha ao salvar: ' . $e->getMessage()];
+        }
+
+        return ['success' => true, 'message' => $resultado['message'] ?? 'Salvo.', 'codigo_patrimonio' => $ativo['codigo_patrimonio']];
+    }
+
     public function coletarIntelbrasDvr(int $id): array
     {
         $ativo = $this->repository->buscarPorId($id);
@@ -1595,22 +1644,23 @@ class AtivoService
             return $resultado;
         }
 
-        $detalhesAtuais = json_decode($ativo['detalhes'] ?? '', true) ?: [];
-        $canaisMesclados = $this->mesclarCanaisDvr($ativo, $detalhesAtuais['dvr_canais'] ?? [], $resultado['canais'] ?? []);
+        $bloqueado = $this->alterarDetalhesComLock($id, function (array $detalhesAtuais) use ($ativo, $resultado) {
+            $coletado = [
+                'dvr_modelo' => $resultado['modelo'] ?? '',
+                'dvr_serial' => $resultado['serial'] ?? '',
+                'dvr_firmware' => $resultado['firmware'] ?? '',
+                'dvr_hardware' => $resultado['hardware'] ?? '',
+                'dvr_nome_dispositivo' => $resultado['nome_dispositivo'] ?? '',
+                'dvr_status_disco' => $resultado['status_disco'] ?? '',
+                'dvr_canais' => $this->mesclarCanaisDvr($ativo, $detalhesAtuais['dvr_canais'] ?? [], $resultado['canais'] ?? []),
+            ];
 
-        $coletado = [
-            'dvr_modelo' => $resultado['modelo'] ?? '',
-            'dvr_serial' => $resultado['serial'] ?? '',
-            'dvr_firmware' => $resultado['firmware'] ?? '',
-            'dvr_hardware' => $resultado['hardware'] ?? '',
-            'dvr_nome_dispositivo' => $resultado['nome_dispositivo'] ?? '',
-            'dvr_status_disco' => $resultado['status_disco'] ?? '',
-            'dvr_canais' => $canaisMesclados,
-        ];
+            return ['ok' => true, 'detalhes' => array_merge($detalhesAtuais, $coletado)];
+        });
 
-        $detalhesNovos = array_merge($detalhesAtuais, $coletado);
-
-        $this->repository->atualizarDetalhesApi($id, json_encode($detalhesNovos, JSON_UNESCAPED_UNICODE));
+        if (!$bloqueado['success']) {
+            return $bloqueado;
+        }
 
         AuditService::registrar('Ativos', 'Coleta DVR/NVR Intelbras', 'Dados coletados via API do DVR/NVR para ' . $ativo['codigo_patrimonio'] . '.');
 
@@ -1701,32 +1751,33 @@ class AtivoService
     /** Liga/desliga o monitoramento automático (chamado por sinal perdido) de um canal específico -- não mexe em mais nada do ativo. */
     public function definirCanalEmUsoDvr(int $id, int $canal, bool $emUso): array
     {
-        $ativo = $this->repository->buscarPorId($id);
+        $mensagemSucesso = $emUso
+            ? 'Canal marcado como em uso -- monitoramento automático ativo.'
+            : 'Canal marcado como fora de uso -- não vai mais abrir chamado automático.';
 
-        if (!$ativo) {
-            return ['success' => false, 'message' => 'Ativo não encontrado.'];
-        }
+        $resultado = $this->alterarDetalhesComLock($id, function (array $detalhes) use ($canal, $emUso, $mensagemSucesso) {
+            $encontrado = false;
 
-        $detalhesAtuais = json_decode($ativo['detalhes'] ?? '', true) ?: [];
-        $encontrado = false;
-
-        foreach ($detalhesAtuais['dvr_canais'] ?? [] as &$c) {
-            if ((int)($c['numero'] ?? 0) === $canal) {
-                $c['em_uso'] = $emUso;
-                $encontrado = true;
+            foreach ($detalhes['dvr_canais'] ?? [] as &$c) {
+                if ((int)($c['numero'] ?? 0) === $canal) {
+                    $c['em_uso'] = $emUso;
+                    $encontrado = true;
+                }
             }
+            unset($c);
+
+            if (!$encontrado) {
+                return ['ok' => false, 'message' => 'Canal não encontrado.'];
+            }
+
+            return ['ok' => true, 'detalhes' => $detalhes, 'message' => $mensagemSucesso];
+        });
+
+        if ($resultado['success']) {
+            AuditService::registrar('Ativos', 'DVR/NVR - Canal em uso', "{$resultado['codigo_patrimonio']}: canal {$canal} marcado como " . ($emUso ? 'em uso' : 'fora de uso') . '.');
         }
-        unset($c);
 
-        if (!$encontrado) {
-            return ['success' => false, 'message' => 'Canal não encontrado.'];
-        }
-
-        $this->repository->atualizarDetalhesApi($id, json_encode($detalhesAtuais, JSON_UNESCAPED_UNICODE));
-
-        AuditService::registrar('Ativos', 'DVR/NVR - Canal em uso', "{$ativo['codigo_patrimonio']}: canal {$canal} marcado como " . ($emUso ? 'em uso' : 'fora de uso') . '.');
-
-        return ['success' => true, 'message' => $emUso ? 'Canal marcado como em uso -- monitoramento automático ativo.' : 'Canal marcado como fora de uso -- não vai mais abrir chamado automático.'];
+        return $resultado;
     }
 
     /**
@@ -1792,14 +1843,17 @@ class AtivoService
 
         // Atualiza o nome já guardado em detalhes, sem esperar a próxima
         // coleta periódica -- a tela reflete a troca na hora.
-        $detalhesAtuais = json_decode($ativo['detalhes'] ?? '', true) ?: [];
-        foreach ($detalhesAtuais['dvr_canais'] ?? [] as &$c) {
-            if ((int)($c['numero'] ?? 0) === $canal) {
-                $c['nome'] = trim(str_replace('|', ' ', $novoNome));
+        $nomeFinal = trim(str_replace('|', ' ', $novoNome));
+        $this->alterarDetalhesComLock($id, function (array $detalhes) use ($canal, $nomeFinal) {
+            foreach ($detalhes['dvr_canais'] ?? [] as &$c) {
+                if ((int)($c['numero'] ?? 0) === $canal) {
+                    $c['nome'] = $nomeFinal;
+                }
             }
-        }
-        unset($c);
-        $this->repository->atualizarDetalhesApi($id, json_encode($detalhesAtuais, JSON_UNESCAPED_UNICODE));
+            unset($c);
+
+            return ['ok' => true, 'detalhes' => $detalhes];
+        });
 
         AuditService::registrar('Ativos', 'DVR/NVR - Renomear canal', "{$ativo['codigo_patrimonio']}: canal {$canal} renomeado para \"{$novoNome}\".");
 

@@ -1102,10 +1102,13 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                         <?php endif; ?>
                                     </td>
                                     <td>
-                                        <div class="form-check form-switch mb-0">
-                                            <input type="checkbox" class="form-check-input campo-canal-em-uso-dvr" role="switch"
-                                                   data-id="<?= (int)$ativo['id'] ?>" data-canal="<?= (int)($canal['numero'] ?? 0) ?>" <?= $emUsoDvr ? 'checked' : '' ?>
-                                                   title="Desmarque se essa câmera não existe/não está instalada -- para de abrir chamado automático quando perder sinal">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <div class="form-check form-switch mb-0">
+                                                <input type="checkbox" class="form-check-input campo-canal-em-uso-dvr" role="switch"
+                                                       data-id="<?= (int)$ativo['id'] ?>" data-canal="<?= (int)($canal['numero'] ?? 0) ?>" <?= $emUsoDvr ? 'checked' : '' ?>
+                                                       title="Desmarque se essa câmera não existe/não está instalada -- para de abrir chamado automático quando perder sinal">
+                                            </div>
+                                            <span class="small feedback-canal-em-uso-dvr"></span>
                                         </div>
                                     </td>
                                     <td class="text-end text-nowrap">
@@ -1869,6 +1872,9 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     document.querySelectorAll('.campo-canal-em-uso-dvr').forEach(function (campo) {
         campo.addEventListener('change', async function () {
             campo.disabled = true;
+            const feedback = campo.closest('.d-flex').querySelector('.feedback-canal-em-uso-dvr');
+            feedback.className = 'small feedback-canal-em-uso-dvr text-muted';
+            feedback.innerHTML = '<i class="bi bi-hourglass-split"></i>';
 
             const dados = new URLSearchParams();
             dados.set('id', campo.dataset.id);
@@ -1878,13 +1884,19 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             try {
                 const res = await fetch(<?= json_encode(url('/ativos/intelbras-dvr/canal-em-uso')) ?>, { method: 'POST', body: dados });
                 const resultado = await res.json();
-                if (!resultado.success) {
+                if (resultado.success) {
+                    feedback.className = 'small feedback-canal-em-uso-dvr text-success';
+                    feedback.innerHTML = '<i class="bi bi-check-lg"></i> Salvo';
+                    setTimeout(() => { feedback.innerHTML = ''; }, 2000);
+                } else {
                     alert(resultado.message || 'Falha ao salvar.');
                     campo.checked = !campo.checked;
+                    feedback.innerHTML = '';
                 }
             } catch (e) {
                 alert('Erro ao comunicar com o servidor.');
                 campo.checked = !campo.checked;
+                feedback.innerHTML = '';
             } finally {
                 campo.disabled = false;
             }
