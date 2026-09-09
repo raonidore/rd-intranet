@@ -1084,18 +1084,40 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                     <p class="text-muted p-3 mb-0">Nenhum dado coletado ainda. Use o botão "Detectar e coletar automaticamente" na Visão Geral.</p>
                 <?php else: ?>
                     <table class="table table-sm mb-0">
-                        <thead><tr><th>Canal</th><th>Nome</th><th>Status</th></tr></thead>
+                        <thead><tr><th>Canal</th><th>Nome</th><th>Status</th><th class="text-end">Ações</th></tr></thead>
                         <tbody>
                             <?php foreach ($canaisDvr as $canal): ?>
                                 <tr>
                                     <td>Canal <?= (int)($canal['numero'] ?? 0) ?></td>
-                                    <td><?= htmlspecialchars($canal['nome'] ?? '—') ?></td>
+                                    <td class="nome-canal-dvr"><?= htmlspecialchars($canal['nome'] ?? '—') ?></td>
                                     <td><?= !empty($canal['com_sinal']) ? Badge::make('Com sinal', 'success') : Badge::make('Sem sinal', 'danger') ?></td>
+                                    <td class="text-end text-nowrap">
+                                        <button type="button" class="btn btn-sm btn-outline-primary botao-ver-snapshot-dvr" data-id="<?= (int)$ativo['id'] ?>" data-canal="<?= (int)($canal['numero'] ?? 0) ?>" title="Ver imagem atual">
+                                            <i class="bi bi-camera-video"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary botao-renomear-canal-dvr" data-id="<?= (int)$ativo['id'] ?>" data-canal="<?= (int)($canal['numero'] ?? 0) ?>" data-nome="<?= htmlspecialchars($canal['nome'] ?? '') ?>" title="Renomear canal">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                    </td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
                     </table>
                 <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalSnapshotDvr" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h6 class="modal-title" id="modalSnapshotDvrTitulo">Canal</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body text-center" id="modalSnapshotDvrCorpo">
+                    <div class="spinner-border text-primary" role="status"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -1768,6 +1790,71 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             });
             th.classList.add(direcaoAsc ? 'ordenado-asc' : 'ordenado-desc');
             th.querySelector('.icone-ordenar').className = 'bi ' + (direcaoAsc ? 'bi-caret-up-fill' : 'bi-caret-down-fill') + ' icone-ordenar';
+        });
+    });
+})();
+
+(function () {
+    const botoesSnapshot = document.querySelectorAll('.botao-ver-snapshot-dvr');
+    if (!botoesSnapshot.length) return;
+
+    const modalEl = document.getElementById('modalSnapshotDvr');
+    let modal = null;
+    const titulo = document.getElementById('modalSnapshotDvrTitulo');
+    const corpo = document.getElementById('modalSnapshotDvrCorpo');
+
+    botoesSnapshot.forEach(function (botao) {
+        botao.addEventListener('click', async function () {
+            titulo.textContent = 'Canal ' + botao.dataset.canal;
+            corpo.innerHTML = '<div class="spinner-border text-primary" role="status"></div>';
+            if (!modal) modal = new bootstrap.Modal(modalEl);
+            modal.show();
+
+            const dados = new URLSearchParams();
+            dados.set('id', botao.dataset.id);
+            dados.set('canal', botao.dataset.canal);
+
+            try {
+                const res = await fetch(<?= json_encode(url('/ativos/intelbras-dvr/snapshot-canal')) ?>, { method: 'POST', body: dados });
+                const resultado = await res.json();
+
+                if (resultado.success) {
+                    corpo.innerHTML = '<img src="data:' + resultado.content_type + ';base64,' + resultado.imagem_base64 + '" class="img-fluid rounded" alt="Canal ' + botao.dataset.canal + '">';
+                } else {
+                    corpo.innerHTML = '<div class="alert alert-danger mb-0">' + (resultado.message || 'Falha ao buscar a imagem.') + '</div>';
+                }
+            } catch (e) {
+                corpo.innerHTML = '<div class="alert alert-danger mb-0">Erro ao comunicar com o servidor.</div>';
+            }
+        });
+    });
+
+    document.querySelectorAll('.botao-renomear-canal-dvr').forEach(function (botao) {
+        botao.addEventListener('click', async function () {
+            const nomeAtual = botao.dataset.nome || '';
+            const novoNome = prompt('Novo nome do canal ' + botao.dataset.canal + ':', nomeAtual);
+            if (novoNome === null || novoNome.trim() === '' || novoNome.trim() === nomeAtual) return;
+
+            botao.disabled = true;
+
+            const dados = new URLSearchParams();
+            dados.set('id', botao.dataset.id);
+            dados.set('canal', botao.dataset.canal);
+            dados.set('nome', novoNome.trim());
+
+            try {
+                const res = await fetch(<?= json_encode(url('/ativos/intelbras-dvr/renomear-canal')) ?>, { method: 'POST', body: dados });
+                const resultado = await res.json();
+                alert(resultado.message || (resultado.success ? 'Renomeado.' : 'Falha ao renomear.'));
+                if (resultado.success) {
+                    botao.closest('tr').querySelector('.nome-canal-dvr').textContent = novoNome.trim();
+                    botao.dataset.nome = novoNome.trim();
+                }
+            } catch (e) {
+                alert('Erro ao comunicar com o servidor.');
+            } finally {
+                botao.disabled = false;
+            }
         });
     });
 })();

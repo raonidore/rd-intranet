@@ -1639,6 +1639,58 @@ class AtivoService
         return self::NOME_JOB_CRON_INTELBRAS_DVR;
     }
 
+    /** @return array{success:bool, message?:string, imagem_base64?:string, content_type?:string} */
+    public function snapshotCanalDvr(int $id, int $canal): array
+    {
+        $ativo = $this->repository->buscarPorId($id);
+
+        if (!$ativo || empty($ativo['ip'])) {
+            return ['success' => false, 'message' => 'Ativo não encontrado ou sem IP cadastrado.'];
+        }
+
+        $resultado = (new IntelbrasDvrService())->snapshot($ativo['ip'], $canal);
+
+        if (!$resultado['success']) {
+            return $resultado;
+        }
+
+        return [
+            'success' => true,
+            'imagem_base64' => base64_encode($resultado['imagem']),
+            'content_type' => $resultado['content_type'],
+        ];
+    }
+
+    public function renomearCanalDvr(int $id, int $canal, string $novoNome): array
+    {
+        $ativo = $this->repository->buscarPorId($id);
+
+        if (!$ativo || empty($ativo['ip'])) {
+            return ['success' => false, 'message' => 'Ativo não encontrado ou sem IP cadastrado.'];
+        }
+
+        $resultado = (new IntelbrasDvrService())->renomearCanal($ativo['ip'], $canal, $novoNome);
+
+        if (!$resultado['success']) {
+            return $resultado;
+        }
+
+        // Atualiza o nome já guardado em detalhes, sem esperar a próxima
+        // coleta periódica -- a tela reflete a troca na hora.
+        $detalhesAtuais = json_decode($ativo['detalhes'] ?? '', true) ?: [];
+        foreach ($detalhesAtuais['dvr_canais'] ?? [] as &$c) {
+            if ((int)($c['numero'] ?? 0) === $canal) {
+                $c['nome'] = trim(str_replace('|', ' ', $novoNome));
+            }
+        }
+        unset($c);
+        $this->repository->atualizarDetalhesApi($id, json_encode($detalhesAtuais, JSON_UNESCAPED_UNICODE));
+
+        AuditService::registrar('Ativos', 'DVR/NVR - Renomear canal', "{$ativo['codigo_patrimonio']}: canal {$canal} renomeado para \"{$novoNome}\".");
+
+        return $resultado;
+    }
+
     /**
      * Mesma ideia de coletarAutomatico(), mas ANTES do ativo existir --
      * usada no formulário de "Novo Ativo" pra pré-preencher tipo/marca/

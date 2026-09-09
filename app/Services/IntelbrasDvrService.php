@@ -269,6 +269,82 @@ class IntelbrasDvrService
     }
 
     /**
+     * Foto (snapshot) atual de um canal -- confirmado ao vivo (JPEG real,
+     * 704x480, ~23KB) contra um MHDX 1116-C real. Binário puro, não passa
+     * pelo parser "chave=valor" de chamarApi() (que destruiria os bytes da
+     * imagem), por isso tem o próprio curl aqui.
+     *
+     * @return array{success:bool, imagem?:string, content_type?:string, message?:string}
+     */
+    public function snapshot(string $ip, int $canal): array
+    {
+        $credencial = $this->credencialParaIp($ip);
+
+        if ($credencial === null) {
+            return ['success' => false, 'message' => "Nenhuma credencial cadastrada para {$ip} -- veja Integrações."];
+        }
+
+        $url = "http://{$ip}/cgi-bin/snapshot.cgi?channel={$canal}&type=0";
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPAUTH => CURLAUTH_DIGEST,
+            CURLOPT_USERPWD => $credencial['usuario'] . ':' . $credencial['senha'],
+            CURLOPT_TIMEOUT => 8,
+            CURLOPT_CONNECTTIMEOUT => 4,
+        ]);
+
+        $resposta = curl_exec($ch);
+        $codigo = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $tipoConteudo = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+        $erroCurl = curl_error($ch);
+        curl_close($ch);
+
+        if ($resposta === false) {
+            return ['success' => false, 'message' => "Erro de comunicação com o DVR/NVR: {$erroCurl}"];
+        }
+
+        if ($codigo === 401) {
+            return ['success' => false, 'message' => 'Usuário/senha recusados pelo DVR/NVR.'];
+        }
+
+        if ($codigo < 200 || $codigo >= 300 || !str_starts_with((string)$tipoConteudo, 'image/')) {
+            return ['success' => false, 'message' => "Canal {$canal} não retornou uma imagem válida (câmera pode estar sem sinal)."];
+        }
+
+        return ['success' => true, 'imagem' => $resposta, 'content_type' => $tipoConteudo];
+    }
+
+    /**
+     * Renomeia um canal -- confirmado ao vivo (setConfig + getConfig de
+     * confirmação) contra um MHDX 1116-C real. '|' na API representa quebra
+     * de linha no nome exibido na tela do DVR (até 2 linhas) -- aqui só
+     * aceita uma linha, então tira qualquer '|' que venha do usuário antes
+     * de enviar.
+     *
+     * @return array{success:bool, message:string}
+     */
+    public function renomearCanal(string $ip, int $canal, string $novoNome): array
+    {
+        $novoNome = trim(str_replace('|', ' ', $novoNome));
+
+        if ($novoNome === '') {
+            return ['success' => false, 'message' => 'Informe um nome.'];
+        }
+
+        // índice do ChannelTitle é 0-based; "canal" na tela/API de leitura é 1-based.
+        $indice = $canal - 1;
+        $resultado = $this->chamarApi($ip, '/cgi-bin/configManager.cgi?action=setConfig&ChannelTitle%5B' . $indice . '%5D.Name=' . rawurlencode($novoNome));
+
+        if (!$resultado['sucesso']) {
+            return ['success' => false, 'message' => $resultado['mensagem']];
+        }
+
+        return ['success' => true, 'message' => "Canal {$canal} renomeado para \"{$novoNome}\"."];
+    }
+
+    /**
      * Chokepoint único de curl -- Digest auth e resposta em texto puro
      * "chave=valor" por linha (não JSON), confirmado ao vivo contra o
      * firmware real.

@@ -563,6 +563,29 @@ class AtivoController extends Controller
         return false;
     }
 
+    public function snapshotCanalDvr(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $canal = (int)($_POST['canal'] ?? 0);
+
+        echo json_encode($this->service->snapshotCanalDvr($id, $canal));
+    }
+
+    public function renomearCanalDvr(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $canal = (int)($_POST['canal'] ?? 0);
+        $nome = trim((string)($_POST['nome'] ?? ''));
+
+        echo json_encode($this->service->renomearCanalDvr($id, $canal, $nome));
+    }
+
     public function unifiDesconectarCliente(): void
     {
         AuthMiddleware::checkModulo('ativos_lista');
