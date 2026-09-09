@@ -100,6 +100,13 @@ class AtivoService
             'nivel_toner' => 'Nível de toner',
             'snmp_uptime' => 'Uptime (SNMP)',
         ],
+        'dvr_nvr' => [
+            'canais' => 'Número de canais',
+            'capacidade_hd' => 'Capacidade do HD',
+            'resolucao_gravacao' => 'Resolução de gravação',
+            'snmp_sys_descr' => 'Descrição (SNMP)',
+            'snmp_uptime' => 'Uptime (SNMP)',
+        ],
         'switch' => [
             'numero_portas' => 'Número de portas',
             'gerenciavel' => 'Gerenciável',
