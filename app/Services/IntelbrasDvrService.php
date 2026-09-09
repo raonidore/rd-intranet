@@ -208,7 +208,8 @@ class IntelbrasDvrService
 
     /**
      * @return array{success:bool, message?:string, modelo?:?string, serial?:?string, firmware?:?string,
-     *   hardware?:?string, nome_dispositivo?:?string, status_disco?:?string, canais?:array}
+     *   hardware?:?string, nome_dispositivo?:?string, status_disco?:?string, disco_total_gb?:?float,
+     *   disco_usado_gb?:?float, canais?:array}
      */
     public function coletar(string $ip): array
     {
@@ -251,6 +252,30 @@ class IntelbrasDvrService
             }
         }
 
+        // TotalBytes/UsedBytes são por partição (cada disco físico vem
+        // fatiado em várias "Detail[]", confirmado ao vivo: 4 partições de
+        // ~500GB somando ~2TB, batendo com um disco real de 2TB) -- soma
+        // tudo (todos os discos, todas as partições) pra virar uma
+        // capacidade só. Usado == Total é o normal aqui (grava em buffer
+        // circular, disco sempre cheio de gravação -- não é um alerta de
+        // disco quase lotado como seria num servidor comum).
+        $discoTotalBytes = 0.0;
+        $discoUsadoBytes = 0.0;
+        $temDisco = false;
+        if ($storage['sucesso']) {
+            $i = 0;
+            while (isset($storage['dados']["list.info[{$i}].Name"])) {
+                $j = 0;
+                while (isset($storage['dados']["list.info[{$i}].Detail[{$j}].TotalBytes"])) {
+                    $discoTotalBytes += (float)$storage['dados']["list.info[{$i}].Detail[{$j}].TotalBytes"];
+                    $discoUsadoBytes += (float)($storage['dados']["list.info[{$i}].Detail[{$j}].UsedBytes"] ?? 0);
+                    $temDisco = true;
+                    $j++;
+                }
+                $i++;
+            }
+        }
+
         return [
             'success' => true,
             'modelo' => $tipo['dados']['type'] ?? null,
@@ -259,11 +284,9 @@ class IntelbrasDvrService
             'firmware' => isset($sw['dados']['version']) ? explode(',', $sw['dados']['version'])[0] : null,
             'hardware' => $hw['dados']['version'] ?? null,
             'nome_dispositivo' => $geral['dados']['table.General.MachineName'] ?? null,
-            // 'State' (Success/Error) -- não tenta calcular capacidade usada em % aqui:
-            // os discos de DVR gravam em buffer circular (fica sempre ~100% "usado"
-            // por design), então um % de uso não significa a mesma coisa que num
-            // servidor comum -- mostrar isso sem contexto induziria a um alarme falso.
             'status_disco' => $storage['sucesso'] ? ($storage['dados']['list.info[0].State'] ?? null) : null,
+            'disco_total_gb' => $temDisco ? round($discoTotalBytes / 1_000_000_000, 1) : null,
+            'disco_usado_gb' => $temDisco ? round($discoUsadoBytes / 1_000_000_000, 1) : null,
             'canais' => $canais,
         ];
     }

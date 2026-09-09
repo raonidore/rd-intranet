@@ -1652,6 +1652,8 @@ class AtivoService
                 'dvr_hardware' => $resultado['hardware'] ?? '',
                 'dvr_nome_dispositivo' => $resultado['nome_dispositivo'] ?? '',
                 'dvr_status_disco' => $resultado['status_disco'] ?? '',
+                'dvr_disco_total_gb' => $resultado['disco_total_gb'] ?? null,
+                'dvr_disco_usado_gb' => $resultado['disco_usado_gb'] ?? null,
                 'dvr_canais' => $this->mesclarCanaisDvr($ativo, $detalhesAtuais['dvr_canais'] ?? [], $resultado['canais'] ?? []),
             ];
 

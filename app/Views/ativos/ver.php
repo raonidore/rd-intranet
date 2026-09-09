@@ -45,10 +45,14 @@ function corSinalWifi(int $dbm): string
     return 'danger';
 }
 
-function gaugeRadial(float $percentual, string $label, string $sublabel): string
+function gaugeRadial(float $percentual, string $label, string $sublabel, ?string $corForcada = null): string
 {
     $percentual = max(0, min(100, $percentual));
-    $cor = $percentual >= 90 ? '#ef4444' : ($percentual >= 75 ? '#f59e0b' : '#22c55e');
+    // $corForcada existe pro caso do DVR/NVR: lá 100% é o normal (grava em
+    // buffer circular, disco sempre cheio) -- pintar de vermelho seria um
+    // alarme falso, então usa uma cor neutra em vez da escala de "quanto
+    // mais alto, pior" que faz sentido pra RAM/disco de computador.
+    $cor = $corForcada ?? ($percentual >= 90 ? '#ef4444' : ($percentual >= 75 ? '#f59e0b' : '#22c55e'));
     $graus = $percentual * 3.6;
 
     return '
@@ -393,7 +397,16 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                 <div class="card border-0 shadow-sm h-100">
                     <div class="card-header bg-white"><strong>Uso do Volume Lógico</strong></div>
                     <div class="card-body d-flex flex-column align-items-center justify-content-center">
-                        <?php if ($discoPct !== null): ?>
+                        <?php if (($ativo['tipo_slug'] ?? '') === 'dvr_nvr'): ?>
+                            <?php $discoDvrTotal = $detalhes['dvr_disco_total_gb'] ?? null; ?>
+                            <?php $discoDvrUsado = $detalhes['dvr_disco_usado_gb'] ?? null; ?>
+                            <?php if ($discoDvrTotal !== null && $discoDvrTotal > 0): ?>
+                                <?= gaugeRadial(($discoDvrUsado / $discoDvrTotal) * 100, 'HD gravação', round((float)$discoDvrUsado, 1) . ' / ' . round((float)$discoDvrTotal, 1) . ' GB', '#0d6efd') ?>
+                                <p class="text-muted text-center mb-0" style="font-size:11px">Normal ficar ~100% -- DVR grava em buffer circular, sobrescreve o mais antigo</p>
+                            <?php else: ?>
+                                <p class="text-muted small mb-0 text-center py-4">Sem dado de HD ainda.<br>Use "Detectar e coletar automaticamente".</p>
+                            <?php endif; ?>
+                        <?php elseif ($discoPct !== null): ?>
                             <?= gaugeRadial($discoPct, 'Unidade ' . $volumePrincipal['unidade'], round((float)$volumePrincipal['usado_gb'], 1) . ' / ' . round((float)$volumePrincipal['total_gb'], 1) . ' GB') ?>
                             <?php if (count($volumes) > 1): ?>
                                 <p class="text-muted text-center mb-0" style="font-size:11px">+<?= count($volumes) - 1 ?> outra(s) na aba Volumes lógicos</p>
