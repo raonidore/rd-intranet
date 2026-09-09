@@ -52,7 +52,7 @@ class ChamadoService
     /** @return array{success: bool, message: string, id?: int} */
     public function abrir(array $post, string $canal = 'painel'): array
     {
-        if (!in_array($canal, ['painel', 'email', 'whatsapp', 'portal'], true)) {
+        if (!in_array($canal, ['painel', 'email', 'whatsapp', 'portal', 'sistema'], true)) {
             $canal = 'painel';
         }
 

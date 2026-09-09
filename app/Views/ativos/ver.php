@@ -1083,14 +1083,27 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                 <?php if (empty($canaisDvr)): ?>
                     <p class="text-muted p-3 mb-0">Nenhum dado coletado ainda. Use o botão "Detectar e coletar automaticamente" na Visão Geral.</p>
                 <?php else: ?>
-                    <table class="table table-sm mb-0">
-                        <thead><tr><th>Canal</th><th>Nome</th><th>Status</th><th class="text-end">Ações</th></tr></thead>
+                    <table class="table table-sm mb-0 align-middle">
+                        <thead><tr><th>Canal</th><th>Nome</th><th>Status</th><th>Em uso</th><th class="text-end">Ações</th></tr></thead>
                         <tbody>
                             <?php foreach ($canaisDvr as $canal): ?>
+                                <?php $emUsoDvr = $canal['em_uso'] ?? true; ?>
                                 <tr>
                                     <td>Canal <?= (int)($canal['numero'] ?? 0) ?></td>
                                     <td class="nome-canal-dvr"><?= htmlspecialchars($canal['nome'] ?? '—') ?></td>
-                                    <td><?= !empty($canal['com_sinal']) ? Badge::make('Com sinal', 'success') : Badge::make('Sem sinal', 'danger') ?></td>
+                                    <td>
+                                        <?= !empty($canal['com_sinal']) ? Badge::make('Com sinal', 'success') : Badge::make('Sem sinal', 'danger') ?>
+                                        <?php if (empty($canal['com_sinal']) && !empty($canal['chamado_aberto_id'])): ?>
+                                            <a href="<?= url('/chamados/atendimentos/ver?id=' . (int)$canal['chamado_aberto_id']) ?>" class="small ms-1" title="Ver chamado automático aberto"><i class="bi bi-ticket-perforated"></i></a>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <div class="form-check form-switch mb-0">
+                                            <input type="checkbox" class="form-check-input campo-canal-em-uso-dvr" role="switch"
+                                                   data-id="<?= (int)$ativo['id'] ?>" data-canal="<?= (int)($canal['numero'] ?? 0) ?>" <?= $emUsoDvr ? 'checked' : '' ?>
+                                                   title="Desmarque se essa câmera não existe/não está instalada -- para de abrir chamado automático quando perder sinal">
+                                        </div>
+                                    </td>
                                     <td class="text-end text-nowrap">
                                         <button type="button" class="btn btn-sm btn-outline-primary botao-ver-snapshot-dvr" data-id="<?= (int)$ativo['id'] ?>" data-canal="<?= (int)($canal['numero'] ?? 0) ?>" title="Ver imagem atual">
                                             <i class="bi bi-camera-video"></i>
@@ -1825,6 +1838,31 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                 }
             } catch (e) {
                 corpo.innerHTML = '<div class="alert alert-danger mb-0">Erro ao comunicar com o servidor.</div>';
+            }
+        });
+    });
+
+    document.querySelectorAll('.campo-canal-em-uso-dvr').forEach(function (campo) {
+        campo.addEventListener('change', async function () {
+            campo.disabled = true;
+
+            const dados = new URLSearchParams();
+            dados.set('id', campo.dataset.id);
+            dados.set('canal', campo.dataset.canal);
+            dados.set('em_uso', campo.checked ? '1' : '0');
+
+            try {
+                const res = await fetch(<?= json_encode(url('/ativos/intelbras-dvr/canal-em-uso')) ?>, { method: 'POST', body: dados });
+                const resultado = await res.json();
+                if (!resultado.success) {
+                    alert(resultado.message || 'Falha ao salvar.');
+                    campo.checked = !campo.checked;
+                }
+            } catch (e) {
+                alert('Erro ao comunicar com o servidor.');
+                campo.checked = !campo.checked;
+            } finally {
+                campo.disabled = false;
             }
         });
     });

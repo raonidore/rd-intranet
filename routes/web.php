@@ -954,6 +954,7 @@ $router->post('/ativos/coletar-intelbras-dvr', [AtivoController::class, 'coletar
 $router->post('/ativos/intelbras-dvr/ativar-coleta', [AtivoController::class, 'ativarColetaIntelbrasDvr']);
 $router->post('/ativos/intelbras-dvr/snapshot-canal', [AtivoController::class, 'snapshotCanalDvr']);
 $router->post('/ativos/intelbras-dvr/renomear-canal', [AtivoController::class, 'renomearCanalDvr']);
+$router->post('/ativos/intelbras-dvr/canal-em-uso', [AtivoController::class, 'definirCanalEmUsoDvr']);
 $router->post('/ativos/unifi/desconectar-cliente', [AtivoController::class, 'unifiDesconectarCliente']);
 $router->post('/ativos/unifi/bloquear-cliente', [AtivoController::class, 'unifiBloquearCliente']);
 $router->post('/ativos/unifi/desbloquear-cliente', [AtivoController::class, 'unifiDesbloquearCliente']);

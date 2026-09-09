@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Core\Database;
 use App\Repositories\AtivoRepository;
 
 class AtivoService
@@ -1594,6 +1595,9 @@ class AtivoService
             return $resultado;
         }
 
+        $detalhesAtuais = json_decode($ativo['detalhes'] ?? '', true) ?: [];
+        $canaisMesclados = $this->mesclarCanaisDvr($ativo, $detalhesAtuais['dvr_canais'] ?? [], $resultado['canais'] ?? []);
+
         $coletado = [
             'dvr_modelo' => $resultado['modelo'] ?? '',
             'dvr_serial' => $resultado['serial'] ?? '',
@@ -1601,10 +1605,9 @@ class AtivoService
             'dvr_hardware' => $resultado['hardware'] ?? '',
             'dvr_nome_dispositivo' => $resultado['nome_dispositivo'] ?? '',
             'dvr_status_disco' => $resultado['status_disco'] ?? '',
-            'dvr_canais' => $resultado['canais'] ?? [],
+            'dvr_canais' => $canaisMesclados,
         ];
 
-        $detalhesAtuais = json_decode($ativo['detalhes'] ?? '', true) ?: [];
         $detalhesNovos = array_merge($detalhesAtuais, $coletado);
 
         $this->repository->atualizarDetalhesApi($id, json_encode($detalhesNovos, JSON_UNESCAPED_UNICODE));
@@ -1612,6 +1615,118 @@ class AtivoService
         AuditService::registrar('Ativos', 'Coleta DVR/NVR Intelbras', 'Dados coletados via API do DVR/NVR para ' . $ativo['codigo_patrimonio'] . '.');
 
         return ['success' => true, 'message' => 'Dados coletados com sucesso via API do DVR/NVR.'];
+    }
+
+    /**
+     * Junta os canais recém-coletados com o estado que já tínhamos guardado
+     * (a API do DVR não sabe de "em uso" nem de qual chamado já está aberto
+     * pra cada canal -- isso é só nosso, precisa ser preservado entre
+     * coletas). Na mesma passada, detecta a transição Com sinal -> Sem sinal
+     * de um canal marcado "em uso" e abre um chamado automático (só quando
+     * ainda não tem um chamado em aberto pra esse canal -- evita duplicar a
+     * cada coleta de 30 em 30 min enquanto o problema não é resolvido).
+     */
+    private function mesclarCanaisDvr(array $ativo, array $canaisAnteriores, array $canaisNovos): array
+    {
+        $porNumero = [];
+        foreach ($canaisAnteriores as $c) {
+            $porNumero[(int)($c['numero'] ?? 0)] = $c;
+        }
+
+        $mesclados = [];
+        foreach ($canaisNovos as $canal) {
+            $numero = (int)($canal['numero'] ?? 0);
+            $anterior = $porNumero[$numero] ?? null;
+
+            $canal['em_uso'] = $anterior['em_uso'] ?? true;
+            $canal['chamado_aberto_id'] = $anterior['chamado_aberto_id'] ?? null;
+
+            $tinhaSinalAntes = $anterior !== null ? (bool)($anterior['com_sinal'] ?? true) : true;
+            $temSinalAgora = (bool)($canal['com_sinal'] ?? true);
+
+            if ($canal['em_uso'] && $tinhaSinalAntes && !$temSinalAgora && !$this->chamadoDvrAindaAberto($canal['chamado_aberto_id'])) {
+                $canal['chamado_aberto_id'] = $this->abrirChamadoCanalDvrSemSinal($ativo, $numero, $canal['nome'] ?? "Canal {$numero}");
+            }
+
+            $mesclados[] = $canal;
+        }
+
+        return $mesclados;
+    }
+
+    private function chamadoDvrAindaAberto(?int $chamadoId): bool
+    {
+        if ($chamadoId === null) {
+            return false;
+        }
+
+        $chamado = (new ChamadoService())->buscar($chamadoId);
+
+        return $chamado !== null && !in_array($chamado['status'], ['resolvido', 'fechado'], true);
+    }
+
+    /** @return int|null id do chamado aberto, ou null se não conseguiu abrir (categoria "DVR/NVR" ainda não existe, etc.) */
+    private function abrirChamadoCanalDvrSemSinal(array $ativo, int $numeroCanal, string $nomeCanal): ?int
+    {
+        $categoriaId = $this->categoriaChamadoDvrNvrId();
+
+        if ($categoriaId === null) {
+            return null;
+        }
+
+        $resultado = (new ChamadoService())->abrir([
+            'titulo' => "{$ativo['codigo_patrimonio']} -- Canal {$numeroCanal} ({$nomeCanal}) sem sinal",
+            'descricao' => "Detecção automática: o canal {$numeroCanal} (\"{$nomeCanal}\") do DVR/NVR {$ativo['codigo_patrimonio']} ({$ativo['nome']}, IP {$ativo['ip']}) estava \"Com sinal\" na última coleta e passou a \"Sem sinal\".\n\n"
+                . "Se a câmera desse canal realmente não existe/não está em uso, abra a ficha do ativo, aba \"Canais\", e desmarque \"Em uso\" pra esse canal -- assim ele para de gerar chamado automático. Se for uma falha de verdade, resolva e feche este chamado normalmente; se voltar a cair depois, um novo chamado é aberto na próxima detecção.",
+            'categoria_id' => $categoriaId,
+            'unidade_id' => $ativo['unidade_id'],
+            'ativo_id' => $ativo['id'],
+            'prioridade' => 'alta',
+            'solicitante_nome' => 'RD.Intranet - Robô',
+            'solicitante_email' => 'robo@rd.intranet',
+        ], 'sistema');
+
+        return $resultado['success'] ? (int)$resultado['id'] : null;
+    }
+
+    private function categoriaChamadoDvrNvrId(): ?int
+    {
+        $stmt = Database::connection()->prepare("SELECT id FROM chamados_categorias WHERE nome = 'DVR/NVR' LIMIT 1");
+        $stmt->execute();
+        $id = $stmt->fetchColumn();
+
+        return $id !== false ? (int)$id : null;
+    }
+
+    /** Liga/desliga o monitoramento automático (chamado por sinal perdido) de um canal específico -- não mexe em mais nada do ativo. */
+    public function definirCanalEmUsoDvr(int $id, int $canal, bool $emUso): array
+    {
+        $ativo = $this->repository->buscarPorId($id);
+
+        if (!$ativo) {
+            return ['success' => false, 'message' => 'Ativo não encontrado.'];
+        }
+
+        $detalhesAtuais = json_decode($ativo['detalhes'] ?? '', true) ?: [];
+        $encontrado = false;
+
+        foreach ($detalhesAtuais['dvr_canais'] ?? [] as &$c) {
+            if ((int)($c['numero'] ?? 0) === $canal) {
+                $c['em_uso'] = $emUso;
+                $encontrado = true;
+            }
+        }
+        unset($c);
+
+        if (!$encontrado) {
+            return ['success' => false, 'message' => 'Canal não encontrado.'];
+        }
+
+        $this->repository->atualizarDetalhesApi($id, json_encode($detalhesAtuais, JSON_UNESCAPED_UNICODE));
+
+        AuditService::registrar('Ativos', 'DVR/NVR - Canal em uso', "{$ativo['codigo_patrimonio']}: canal {$canal} marcado como " . ($emUso ? 'em uso' : 'fora de uso') . '.');
+
+        return ['success' => true, 'message' => $emUso ? 'Canal marcado como em uso -- monitoramento automático ativo.' : 'Canal marcado como fora de uso -- não vai mais abrir chamado automático.'];
     }
 
     /**
