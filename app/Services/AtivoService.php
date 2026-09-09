@@ -1671,10 +1671,14 @@ class AtivoService
      * Junta os canais recém-coletados com o estado que já tínhamos guardado
      * (a API do DVR não sabe de "em uso" nem de qual chamado já está aberto
      * pra cada canal -- isso é só nosso, precisa ser preservado entre
-     * coletas). Na mesma passada, detecta a transição Com sinal -> Sem sinal
-     * de um canal marcado "em uso" e abre um chamado automático (só quando
-     * ainda não tem um chamado em aberto pra esse canal -- evita duplicar a
-     * cada coleta de 30 em 30 min enquanto o problema não é resolvido).
+     * coletas). Na mesma passada, abre um chamado automático pra todo canal
+     * "em uso" que estiver sem sinal e ainda não tiver um chamado em aberto
+     * -- de propósito NÃO exige que ele "tivesse sinal antes": um canal que
+     * já estava sem sinal desde antes da coleta periódica existir também
+     * precisa ser avisado, não só quem "acabou de cair" enquanto estávamos
+     * olhando. O que evita duplicar a cada 30 min é só o chamado já aberto
+     * (chamadoDvrAindaAberto()) -- assim que ele for fechado, uma próxima
+     * coleta com o canal ainda/de novo sem sinal abre outro.
      */
     private function mesclarCanaisDvr(array $ativo, array $canaisAnteriores, array $canaisNovos): array
     {
@@ -1691,10 +1695,9 @@ class AtivoService
             $canal['em_uso'] = $anterior['em_uso'] ?? true;
             $canal['chamado_aberto_id'] = $anterior['chamado_aberto_id'] ?? null;
 
-            $tinhaSinalAntes = $anterior !== null ? (bool)($anterior['com_sinal'] ?? true) : true;
             $temSinalAgora = (bool)($canal['com_sinal'] ?? true);
 
-            if ($canal['em_uso'] && $tinhaSinalAntes && !$temSinalAgora && !$this->chamadoDvrAindaAberto($canal['chamado_aberto_id'])) {
+            if ($canal['em_uso'] && !$temSinalAgora && !$this->chamadoDvrAindaAberto($canal['chamado_aberto_id'])) {
                 $canal['chamado_aberto_id'] = $this->abrirChamadoCanalDvrSemSinal($ativo, $numero, $canal['nome'] ?? "Canal {$numero}");
             }
 
@@ -1726,7 +1729,7 @@ class AtivoService
 
         $resultado = (new ChamadoService())->abrir([
             'titulo' => "{$ativo['codigo_patrimonio']} -- Canal {$numeroCanal} ({$nomeCanal}) sem sinal",
-            'descricao' => "Detecção automática: o canal {$numeroCanal} (\"{$nomeCanal}\") do DVR/NVR {$ativo['codigo_patrimonio']} ({$ativo['nome']}, IP {$ativo['ip']}) estava \"Com sinal\" na última coleta e passou a \"Sem sinal\".\n\n"
+            'descricao' => "Detecção automática: o canal {$numeroCanal} (\"{$nomeCanal}\") do DVR/NVR {$ativo['codigo_patrimonio']} ({$ativo['nome']}, IP {$ativo['ip']}) está \"Sem sinal\" e marcado como \"Em uso\".\n\n"
                 . "Se a câmera desse canal realmente não existe/não está em uso, abra a ficha do ativo, aba \"Canais\", e desmarque \"Em uso\" pra esse canal -- assim ele para de gerar chamado automático. Se for uma falha de verdade, resolva e feche este chamado normalmente; se voltar a cair depois, um novo chamado é aberto na próxima detecção.",
             'categoria_id' => $categoriaId,
             'unidade_id' => $ativo['unidade_id'],

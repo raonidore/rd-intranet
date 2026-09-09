@@ -169,10 +169,12 @@ ob_start();
     <div class="card-body">
         <strong><i class="bi bi-exclamation-triangle"></i> Alerta automático de canal sem sinal</strong>
         <p class="text-muted small mt-2 mb-3">
-            A cada coleta periódica, o sistema compara o status de cada canal com o da coleta anterior.
-            Quando um canal passa de <strong>"Com sinal"</strong> pra <strong>"Sem sinal"</strong>, e esse
-            canal está marcado <strong>"Em uso"</strong> (chave na aba "Canais" da ficha do ativo, ligada
-            por padrão em todo canal novo), o sistema abre um chamado automático:
+            A cada coleta periódica, todo canal marcado <strong>"Em uso"</strong> (chave na aba "Canais"
+            da ficha do ativo, ligada por padrão em todo canal novo) que estiver <strong>"Sem
+            sinal"</strong> e ainda não tiver um chamado em aberto abre um chamado automático --
+            <strong>não precisa ter "acabado de cair"</strong>: um canal que já estava sem sinal antes
+            mesmo da coleta periódica ser ativada também é avisado na primeira coleta depois disso, não
+            só quem falha depois de já estar sendo monitorado.
         </p>
         <ul class="small text-muted mb-3">
             <li>Solicitante: <strong>RD.Intranet - Robô</strong> (<code>robo@rd.intranet</code>), canal de
