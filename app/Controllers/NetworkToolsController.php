@@ -225,7 +225,17 @@ class NetworkToolsController extends Controller
 
         $usuarioId = isset($_SESSION['usuario']['id']) ? (int)$_SESSION['usuario']['id'] : null;
         $hosts = $status['resultados'] ?? [];
-        $comparacao = $this->service->registrarResultadoEComparar($cidr, $hosts, $usuarioId);
+
+        // Salvar o histórico/comparação nunca deve derrubar a resposta inteira --
+        // 'resultados' (com o casamento com Ativos já cadastrados) é o dado que
+        // importa pra tela; se o histórico falhar (ex: erro de banco), melhor
+        // mostrar o resultado sem comparação do que quebrar tudo com um 500.
+        try {
+            $comparacao = $this->service->registrarResultadoEComparar($cidr, $hosts, $usuarioId);
+        } catch (\Throwable $e) {
+            error_log('IP Scanner: falha ao salvar histórico da varredura -- ' . $e->getMessage());
+            $comparacao = null;
+        }
 
         AuditService::registrar('Rede', 'IP Scanner', "Varredura de {$cidr} concluída: " . count($hosts) . ' dispositivo(s).');
 
