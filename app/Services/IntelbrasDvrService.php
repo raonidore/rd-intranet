@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Core\Database;
+
 /**
  * Coleta somente-leitura de DVR/NVR Intelbras via a API HTTP CGI que o
  * próprio firmware já expõe -- confirmado ao vivo contra um MHDX 1116-C
@@ -11,21 +13,30 @@ namespace App\Services;
  * nem X-API-KEY/Bearer como UniFi/Omada), e a resposta vem em texto puro
  * "chave=valor" por linha -- não JSON.
  *
- * Credencial é uma só, GLOBAL (usuário/senha admin do DVR) -- aplicada a
- * todos os ativos tipo dvr_nvr com IP cadastrado, mesmo modelo da
- * community padrão do SNMP (a grande maioria dos clientes usa a mesma
- * senha admin em todos os DVR/NVR do site). Não existe um "site"/URL fixo
- * pra testar como UniFi/Omada -- o teste de verdade acontece na coleta em
- * si, contra o IP de cada ativo.
+ * Credencial é POR IP -- diferente de UniFi/Omada (um Controller central
+ * pra tudo), cada DVR/NVR tem o próprio login/senha admin, e nem sempre
+ * são iguais entre equipamentos do mesmo cliente. Guarda cada uma na
+ * tabela `intelbras_dvr_credenciais` (chave = IP). Existe também uma
+ * credencial "padrão" global (mesma ideia da community padrão do SNMP),
+ * usada só como fallback quando o IP não tem credencial própria --
+ * cobre os casos (comuns, mas não garantidos) onde vários equipamentos
+ * do site realmente compartilham a mesma senha admin.
  */
 class IntelbrasDvrService
 {
     private const CHAVE_USUARIO = 'intelbras_dvr_usuario';
     private const CHAVE_SENHA_CIFRADA = 'intelbras_dvr_senha_cifrada';
 
+    /** Configurado = existe ALGUMA fonte de credencial (padrão global ou pelo menos uma por IP) -- usado só pra decidir se vale tentar essa integração. */
     public function configurado(): bool
     {
-        return ConfigService::get(self::CHAVE_USUARIO, '') !== '' && ConfigService::get(self::CHAVE_SENHA_CIFRADA, '') !== '';
+        if (ConfigService::get(self::CHAVE_USUARIO, '') !== '' && ConfigService::get(self::CHAVE_SENHA_CIFRADA, '') !== '') {
+            return true;
+        }
+
+        $stmt = Database::connection()->query('SELECT COUNT(*) FROM intelbras_dvr_credenciais');
+
+        return (int)$stmt->fetchColumn() > 0;
     }
 
     public function usuarioAtual(): string
@@ -82,6 +93,103 @@ class IntelbrasDvrService
         } catch (\RuntimeException $e) {
             return null;
         }
+    }
+
+    /**
+     * Todas as credenciais por IP cadastradas, com a senha já decifrada --
+     * usada só pra tela de Integrações mostrar/revelar (o pedido explícito
+     * foi poder conferir a senha de cada DVR quando precisar confirmar com
+     * quem instalou o equipamento). Nunca exposta em nenhum outro lugar.
+     *
+     * @return array<int, array{id:int, ip:string, usuario:string, senha:string, atualizado_em:string}>
+     */
+    public function listarCredenciais(): array
+    {
+        $stmt = Database::connection()->query('SELECT id, ip, usuario, senha_cifrada, atualizado_em FROM intelbras_dvr_credenciais ORDER BY ip');
+
+        $credenciais = [];
+        foreach ($stmt->fetchAll(\PDO::FETCH_ASSOC) as $linha) {
+            try {
+                $senha = CryptoService::decriptar($linha['senha_cifrada']);
+            } catch (\RuntimeException $e) {
+                $senha = '';
+            }
+
+            $credenciais[] = [
+                'id' => (int)$linha['id'],
+                'ip' => $linha['ip'],
+                'usuario' => $linha['usuario'],
+                'senha' => $senha,
+                'atualizado_em' => $linha['atualizado_em'],
+            ];
+        }
+
+        return $credenciais;
+    }
+
+    /** @return array{success:bool, message:string} */
+    public function salvarCredencialPorIp(string $ip, string $usuario, string $senha): array
+    {
+        $ip = trim($ip);
+        $usuario = trim($usuario);
+        $senha = trim($senha);
+
+        if (filter_var($ip, FILTER_VALIDATE_IP) === false) {
+            return ['success' => false, 'message' => 'IP inválido.'];
+        }
+
+        if ($usuario === '' || $senha === '') {
+            return ['success' => false, 'message' => 'Informe usuário e senha.'];
+        }
+
+        $pdo = Database::connection();
+        $stmt = $pdo->prepare('
+            INSERT INTO intelbras_dvr_credenciais (ip, usuario, senha_cifrada)
+            VALUES (:ip, :usuario, :senha_cifrada)
+            ON DUPLICATE KEY UPDATE usuario = VALUES(usuario), senha_cifrada = VALUES(senha_cifrada)
+        ');
+        $stmt->execute([
+            'ip' => $ip,
+            'usuario' => $usuario,
+            'senha_cifrada' => CryptoService::encriptar($senha),
+        ]);
+
+        AuditService::registrar('Intelbras DVR/NVR', 'Credencial por IP', "Credencial de {$ip} salva (usuário: {$usuario}).");
+
+        return ['success' => true, 'message' => "Credencial de {$ip} salva."];
+    }
+
+    public function removerCredencialPorIp(string $ip): void
+    {
+        $stmt = Database::connection()->prepare('DELETE FROM intelbras_dvr_credenciais WHERE ip = ?');
+        $stmt->execute([$ip]);
+
+        AuditService::registrar('Intelbras DVR/NVR', 'Credencial por IP', "Credencial de {$ip} removida.");
+    }
+
+    /** Credencial própria do IP tem prioridade; sem ela, cai pra padrão global (se houver). */
+    private function credencialParaIp(string $ip): ?array
+    {
+        $stmt = Database::connection()->prepare('SELECT usuario, senha_cifrada FROM intelbras_dvr_credenciais WHERE ip = ?');
+        $stmt->execute([$ip]);
+        $linha = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if ($linha) {
+            try {
+                return ['usuario' => $linha['usuario'], 'senha' => CryptoService::decriptar($linha['senha_cifrada'])];
+            } catch (\RuntimeException $e) {
+                return null;
+            }
+        }
+
+        $usuarioPadrao = $this->usuarioAtual();
+        $senhaPadrao = $this->senhaAtual();
+
+        if ($usuarioPadrao !== '' && $senhaPadrao !== null) {
+            return ['usuario' => $usuarioPadrao, 'senha' => $senhaPadrao];
+        }
+
+        return null;
     }
 
     /** @return array{success:bool, message:string} */
@@ -169,14 +277,10 @@ class IntelbrasDvrService
      */
     private function chamarApi(string $ip, string $caminho): array
     {
-        if (!$this->configurado()) {
-            return ['sucesso' => false, 'dados' => [], 'mensagem' => 'Integração com DVR/NVR Intelbras ainda não configurada -- veja Integrações.'];
-        }
+        $credencial = $this->credencialParaIp($ip);
 
-        $senha = $this->senhaAtual();
-
-        if ($senha === null) {
-            return ['sucesso' => false, 'dados' => [], 'mensagem' => 'Não foi possível ler a senha configurada.'];
+        if ($credencial === null) {
+            return ['sucesso' => false, 'dados' => [], 'mensagem' => "Nenhuma credencial cadastrada para {$ip} (nem padrão) -- veja Integrações."];
         }
 
         $url = "http://{$ip}{$caminho}";
@@ -185,7 +289,7 @@ class IntelbrasDvrService
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_HTTPAUTH => CURLAUTH_DIGEST,
-            CURLOPT_USERPWD => $this->usuarioAtual() . ':' . $senha,
+            CURLOPT_USERPWD => $credencial['usuario'] . ':' . $credencial['senha'],
             CURLOPT_TIMEOUT => 8,
             CURLOPT_CONNECTTIMEOUT => 4,
         ]);

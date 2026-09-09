@@ -466,6 +466,8 @@ $router->post('/administracao/integracoes/omada/testar', [IntegracoesController:
 $router->get('/administracao/integracoes/intelbras-dvr', [IntegracoesController::class, 'intelbrasDvrForm']);
 $router->post('/administracao/integracoes/intelbras-dvr/salvar', [IntegracoesController::class, 'intelbrasDvrSalvar']);
 $router->post('/administracao/integracoes/intelbras-dvr/remover', [IntegracoesController::class, 'intelbrasDvrRemover']);
+$router->post('/administracao/integracoes/intelbras-dvr/credenciais/salvar', [IntegracoesController::class, 'intelbrasDvrCredencialSalvar']);
+$router->post('/administracao/integracoes/intelbras-dvr/credenciais/remover', [IntegracoesController::class, 'intelbrasDvrCredencialRemover']);
 
 $router->get('/administracao/integracoes/whatsapp', [WhatsAppIntegracaoController::class, 'form']);
 $router->post('/administracao/integracoes/whatsapp/tipo', [WhatsAppIntegracaoController::class, 'salvarTipo']);

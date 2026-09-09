@@ -156,6 +156,7 @@ class IntegracoesController extends Controller
         $this->view('administracao/integracoes_intelbras_dvr', [
             'usuarioAtual' => $service->usuarioAtual(),
             'configurado' => $service->configurado(),
+            'credenciais' => $service->listarCredenciais(),
         ]);
     }
 
@@ -174,6 +175,38 @@ class IntegracoesController extends Controller
         AuthMiddleware::checkAdmin();
 
         (new IntelbrasDvrService())->removerConfiguracao();
+
+        header('Location: ' . url('/administracao/integracoes/intelbras-dvr'));
+        exit;
+    }
+
+    public function intelbrasDvrCredencialSalvar(): void
+    {
+        AuthMiddleware::checkAdmin();
+
+        $resultado = (new IntelbrasDvrService())->salvarCredencialPorIp(
+            $_POST['ip'] ?? '',
+            $_POST['usuario'] ?? '',
+            $_POST['senha'] ?? ''
+        );
+
+        if ($resultado['success']) {
+            NotificationService::success($resultado['message']);
+        } else {
+            NotificationService::error($resultado['message']);
+        }
+
+        header('Location: ' . url('/administracao/integracoes/intelbras-dvr'));
+        exit;
+    }
+
+    public function intelbrasDvrCredencialRemover(): void
+    {
+        AuthMiddleware::checkAdmin();
+
+        (new IntelbrasDvrService())->removerCredencialPorIp($_POST['ip'] ?? '');
+
+        NotificationService::success('Credencial removida.');
 
         header('Location: ' . url('/administracao/integracoes/intelbras-dvr'));
         exit;
