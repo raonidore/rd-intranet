@@ -1756,9 +1756,16 @@ class AtivoService
             : 'Canal marcado como fora de uso -- não vai mais abrir chamado automático.';
 
         $resultado = $this->alterarDetalhesComLock($id, function (array $detalhes) use ($canal, $emUso, $mensagemSucesso) {
+            // Precisa passar por uma variável de verdade antes do foreach por
+            // referência -- "foreach ($x['y'] ?? [] as &$c)" NÃO propaga a
+            // mutação de volta pra $x['y'] (o "??" devolve uma cópia solta,
+            // não uma referência ao array original), mesmo quando $x['y']
+            // já existe e a chave nunca cai no fallback. Foi esse o bug real
+            // por trás de "a chave não salva" -- não era corrida.
+            $canais = $detalhes['dvr_canais'] ?? [];
             $encontrado = false;
 
-            foreach ($detalhes['dvr_canais'] ?? [] as &$c) {
+            foreach ($canais as &$c) {
                 if ((int)($c['numero'] ?? 0) === $canal) {
                     $c['em_uso'] = $emUso;
                     $encontrado = true;
@@ -1769,6 +1776,8 @@ class AtivoService
             if (!$encontrado) {
                 return ['ok' => false, 'message' => 'Canal não encontrado.'];
             }
+
+            $detalhes['dvr_canais'] = $canais;
 
             return ['ok' => true, 'detalhes' => $detalhes, 'message' => $mensagemSucesso];
         });
@@ -1845,12 +1854,17 @@ class AtivoService
         // coleta periódica -- a tela reflete a troca na hora.
         $nomeFinal = trim(str_replace('|', ' ', $novoNome));
         $this->alterarDetalhesComLock($id, function (array $detalhes) use ($canal, $nomeFinal) {
-            foreach ($detalhes['dvr_canais'] ?? [] as &$c) {
+            // Mesmo cuidado de definirCanalEmUsoDvr() -- "foreach ($x['y'] ?? [] as &$c)" não propaga a mutação de volta.
+            $canais = $detalhes['dvr_canais'] ?? [];
+
+            foreach ($canais as &$c) {
                 if ((int)($c['numero'] ?? 0) === $canal) {
                     $c['nome'] = $nomeFinal;
                 }
             }
             unset($c);
+
+            $detalhes['dvr_canais'] = $canais;
 
             return ['ok' => true, 'detalhes' => $detalhes];
         });
