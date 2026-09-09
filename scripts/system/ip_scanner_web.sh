@@ -1,13 +1,18 @@
 #!/bin/bash
-# ip_scanner_web.sh <execucao_id> <cidr>
+# ip_scanner_web.sh <execucao_id> <cidr1> [cidr2] [cidr3] ...
 #
-# Varre uma faixa de IP privada em busca de dispositivos ativos (IP,
-# hostname, MAC, fabricante) via "nmap -sn -R". Roda em segundo plano
+# Varre uma ou mais faixas de IP privada em busca de dispositivos ativos
+# (IP, hostname, MAC, fabricante) via "nmap -sn -R". Roda em segundo plano
 # (LinuxService::executarScriptEmSegundoPlano) porque pode levar dezenas
 # de segundos a poucos minutos numa faixa grande -- escreve o proprio
 # progresso em storage/ip_scanner_status/<execucao_id>.json, mesmo
 # contrato (status/percentual/mensagem) ja usado em
 # lote_arquivos_samba_web.sh e samba_dc_provisionar_web.sh.
+#
+# Varias faixas viram uma unica chamada do nmap (nao um loop de chamadas
+# separadas) -- o nmap ja aceita multiplos alvos na mesma linha de comando
+# e o resultado (e o percentual de progresso) sai naturalmente combinado,
+# em vez de precisar somar/mesclar XML de execucoes distintas depois.
 #
 # O percentual reportado enquanto roda e REAL (nao estimado): vem de
 # "nmap --stats-every 2s", que imprime periodicamente no stderr algo como
@@ -22,7 +27,8 @@ STATUS_DIR="/var/www/rd.intranet/storage/ip_scanner_status"
 mkdir -p "$STATUS_DIR"
 
 EXECUCAO_ID="$1"
-CIDR="$2"
+shift
+CIDRS=("$@")
 
 STATUS_FILE="$STATUS_DIR/${EXECUCAO_ID}.json"
 
@@ -49,53 +55,66 @@ if [[ ! "$EXECUCAO_ID" =~ ^[a-f0-9]+$ ]]; then
   exit 1
 fi
 
-# ── Validacao do CIDR (redundante a validacao do PHP -- nunca confiar
+if [ "${#CIDRS[@]}" -eq 0 ]; then
+  escrever_status "erro" 0 "Informe pelo menos uma faixa de IP."
+  exit 1
+fi
+
+if [ "${#CIDRS[@]}" -gt 8 ]; then
+  escrever_status "erro" 0 "Máximo de 8 faixas por varredura."
+  exit 1
+fi
+
+# ── Validacao de cada CIDR (redundante a validacao do PHP -- nunca confiar
 # so nela): formato basico + rede privada (RFC1918) ou link-local +
 # tamanho maximo /22 (1024 enderecos) ────────────────────────────────
-if [[ ! "$CIDR" =~ ^([0-9]{1,3})\.([0-9]{1,3})\.[0-9]{1,3}\.[0-9]{1,3}/([0-9]{1,2})$ ]]; then
-  escrever_status "erro" 0 "Faixa de IP inválida."
-  exit 1
-fi
+for CIDR in "${CIDRS[@]}"; do
+  if [[ ! "$CIDR" =~ ^([0-9]{1,3})\.([0-9]{1,3})\.[0-9]{1,3}\.[0-9]{1,3}/([0-9]{1,2})$ ]]; then
+    escrever_status "erro" 0 "Faixa de IP inválida: ${CIDR}."
+    exit 1
+  fi
 
-OCTETO1="${BASH_REMATCH[1]}"
-OCTETO2="${BASH_REMATCH[2]}"
-PREFIXO="${BASH_REMATCH[3]}"
+  OCTETO1="${BASH_REMATCH[1]}"
+  OCTETO2="${BASH_REMATCH[2]}"
+  PREFIXO="${BASH_REMATCH[3]}"
 
-PRIVADA=0
-if [ "$OCTETO1" -eq 10 ]; then
-  PRIVADA=1
-elif [ "$OCTETO1" -eq 172 ] && [ "$OCTETO2" -ge 16 ] && [ "$OCTETO2" -le 31 ]; then
-  PRIVADA=1
-elif [ "$OCTETO1" -eq 192 ] && [ "$OCTETO2" -eq 168 ]; then
-  PRIVADA=1
-elif [ "$OCTETO1" -eq 169 ] && [ "$OCTETO2" -eq 254 ]; then
-  PRIVADA=1
-fi
+  PRIVADA=0
+  if [ "$OCTETO1" -eq 10 ]; then
+    PRIVADA=1
+  elif [ "$OCTETO1" -eq 172 ] && [ "$OCTETO2" -ge 16 ] && [ "$OCTETO2" -le 31 ]; then
+    PRIVADA=1
+  elif [ "$OCTETO1" -eq 192 ] && [ "$OCTETO2" -eq 168 ]; then
+    PRIVADA=1
+  elif [ "$OCTETO1" -eq 169 ] && [ "$OCTETO2" -eq 254 ]; then
+    PRIVADA=1
+  fi
 
-if [ "$PRIVADA" -eq 0 ]; then
-  escrever_status "erro" 0 "Só é permitido varrer faixas de rede privada (RFC1918) ou link-local."
-  exit 1
-fi
+  if [ "$PRIVADA" -eq 0 ]; then
+    escrever_status "erro" 0 "Só é permitido varrer faixas de rede privada (RFC1918) ou link-local: ${CIDR}."
+    exit 1
+  fi
 
-if [ "$PREFIXO" -lt 22 ]; then
-  escrever_status "erro" 0 "Faixa grande demais -- use no máximo /22 (1024 endereços)."
-  exit 1
-fi
+  if [ "$PREFIXO" -lt 22 ]; then
+    escrever_status "erro" 0 "Faixa grande demais (máx. /22): ${CIDR}."
+    exit 1
+  fi
+done
 
 command -v nmap >/dev/null 2>&1 || { escrever_status "erro" 0 "nmap não está instalado. Instale em Infraestrutura > Dependências."; exit 1; }
 
-escrever_status "rodando" 0 "Iniciando varredura de ${CIDR}..."
+CIDRS_LABEL=$(IFS=', '; echo "${CIDRS[*]}")
+escrever_status "rodando" 0 "Iniciando varredura de ${CIDRS_LABEL}..."
 
 XML_TMP="/tmp/rd_ipscan_${EXECUCAO_ID}.xml"
 STATS_TMP="/tmp/rd_ipscan_stats_${EXECUCAO_ID}.log"
 
-nmap -sn -R --stats-every 2s -oX "$XML_TMP" "$CIDR" >"$STATS_TMP" 2>&1 &
+nmap -sn -R --stats-every 2s -oX "$XML_TMP" "${CIDRS[@]}" >"$STATS_TMP" 2>&1 &
 NMAP_PID=$!
 
 while kill -0 "$NMAP_PID" 2>/dev/null; do
   PCT=$(grep -oE 'About [0-9]+\.[0-9]+% done' "$STATS_TMP" 2>/dev/null | tail -1 | grep -oE '[0-9]+\.[0-9]+' | cut -d. -f1)
   if [ -n "${PCT:-}" ]; then
-    escrever_status "rodando" "$PCT" "Varrendo ${CIDR}... (${PCT}%)"
+    escrever_status "rodando" "$PCT" "Varrendo ${CIDRS_LABEL}... (${PCT}%)"
   fi
   sleep 1
 done

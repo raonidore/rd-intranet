@@ -77,12 +77,13 @@ use App\Components\Alert;
     <div class="card-body">
         <form id="form-scanner" class="d-flex gap-2 align-items-end flex-wrap">
             <div class="flex-grow-1" style="min-width:220px">
-                <label class="form-label small mb-1">Faixa de IP (CIDR)</label>
+                <label class="form-label small mb-1">Faixa(s) de IP (CIDR)</label>
                 <input type="text" name="cidr" id="input-cidr" class="form-control font-monospace"
-                       value="<?= htmlspecialchars($faixaSugerida ?? '') ?>" placeholder="ex: 192.168.1.0/24" required>
+                       value="<?= htmlspecialchars($faixaSugerida ?? '') ?>" placeholder="ex: 192.168.1.0/24, 192.168.20.0/24, 192.168.30.0/24" required>
                 <div class="field-help text-muted small mt-1">
                     <?= $faixaSugerida ? 'Sugerido a partir da rede deste servidor.' : 'Informe a faixa da sua rede local.' ?>
-                    Só faixas privadas (RFC1918), até /22 (1024 endereços).
+                    Pode informar mais de uma faixa separada por vírgula (até 8) -- sai tudo num resultado só.
+                    Só faixas privadas (RFC1918), cada uma até /22 (1024 endereços).
                 </div>
             </div>
             <button type="submit" class="btn btn-primary" id="btn-iniciar">

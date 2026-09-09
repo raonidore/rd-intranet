@@ -351,23 +351,49 @@ class NetworkToolsService
         return ['valido' => true, 'mensagem' => ''];
     }
 
-    public function iniciarScan(string $cidr): array
+    /**
+     * Aceita uma ou várias faixas no mesmo campo (separadas por vírgula,
+     * ponto-e-vírgula ou quebra de linha) -- nmap escaneia todas juntas
+     * numa única chamada (não uma varredura por faixa em sequência), então
+     * o resultado já sai combinado, com um progresso só. Útil pra clientes
+     * com várias VLANs/sub-redes (ex: Infra/Interno/Funcionários/Diretoria).
+     */
+    public function iniciarScan(string $cidrsRaw): array
     {
-        $validacao = $this->validarFaixaScan($cidr);
-        if (!$validacao['valido']) {
-            return ['success' => false, 'message' => $validacao['mensagem']];
+        $cidrs = $this->parsearFaixas($cidrsRaw);
+
+        if (empty($cidrs)) {
+            return ['success' => false, 'message' => 'Informe pelo menos uma faixa de IP.'];
+        }
+
+        if (count($cidrs) > 8) {
+            return ['success' => false, 'message' => 'Máximo de 8 faixas por varredura.'];
+        }
+
+        foreach ($cidrs as $cidr) {
+            $validacao = $this->validarFaixaScan($cidr);
+            if (!$validacao['valido']) {
+                return ['success' => false, 'message' => "{$cidr}: {$validacao['mensagem']}"];
+            }
         }
 
         $execucaoId = bin2hex(random_bytes(8));
 
         $this->linux->executarScriptEmSegundoPlano(
             '/opt/rdtecnologia/scripts/ip_scanner_web.sh',
-            [$execucaoId, $cidr]
+            array_merge([$execucaoId], $cidrs)
         );
 
-        AuditService::registrar('Rede', 'IP Scanner', "Varredura iniciada em {$cidr}.");
+        AuditService::registrar('Rede', 'IP Scanner', 'Varredura iniciada em ' . implode(', ', $cidrs) . '.');
 
         return ['success' => true, 'execucao_id' => $execucaoId];
+    }
+
+    private function parsearFaixas(string $raw): array
+    {
+        $partes = preg_split('/[\s,;]+/', trim($raw)) ?: [];
+
+        return array_values(array_unique(array_filter(array_map('trim', $partes))));
     }
 
     public function statusScan(string $execucaoId): array
