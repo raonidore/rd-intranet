@@ -3,6 +3,7 @@
 namespace App\Controllers;
 
 use App\Core\Controller;
+use App\Core\Database;
 use App\Middleware\AuthMiddleware;
 use App\Services\AuditService;
 use App\Services\KbService;
@@ -153,10 +154,20 @@ class IntegracoesController extends Controller
 
         $service = new IntelbrasDvrService();
 
+        $stmt = Database::connection()->query("
+            SELECT cc.nome, cs.nome AS setor_nome
+            FROM chamados_categorias cc
+            LEFT JOIN chamados_setores cs ON cs.id = cc.setor_padrao_id
+            WHERE cc.nome = 'DVR/NVR'
+            LIMIT 1
+        ");
+        $categoriaAlerta = $stmt->fetch(\PDO::FETCH_ASSOC) ?: null;
+
         $this->view('administracao/integracoes_intelbras_dvr', [
             'usuarioAtual' => $service->usuarioAtual(),
             'configurado' => $service->configurado(),
             'credenciais' => $service->listarCredenciais(),
+            'categoriaAlerta' => $categoriaAlerta,
         ]);
     }
 

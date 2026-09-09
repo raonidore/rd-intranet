@@ -144,10 +144,51 @@ ob_start();
                 câmera).
             </li>
             <li>
-                <strong>(Opcional) Ative a coleta periódica</strong> -- no Dashboard de Ativos, aba
-                "Integrações de rede", botão "Ativar coleta" no card DVR/NVR Intelbras.
+                <strong>Ative a coleta periódica</strong> -- no Dashboard de Ativos, aba "Integrações de
+                rede", botão "Ativar coleta" no card DVR/NVR Intelbras. <strong>Necessário</strong> pro
+                alerta automático de canal sem sinal funcionar (veja abaixo) -- sem a coleta rodando
+                sozinha a cada 30 min, ninguém detecta a queda de sinal.
             </li>
         </ol>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mt-3" style="max-width:900px">
+    <div class="card-body">
+        <strong><i class="bi bi-camera-video"></i> Ver canal, renomear canal</strong>
+        <p class="text-muted small mt-2 mb-0">
+            Na aba "Canais" da ficha do ativo, cada canal tem dois botões: o de câmera abre uma
+            <strong>foto do momento</strong> (não é vídeo ao vivo contínuo -- transmitir vídeo de verdade
+            no navegador exige um servidor de mídia à parte, RTSP não roda direto em HTML); o lápis
+            renomeia o canal de verdade no próprio DVR (mesmo nome que aparece na tela dele).
+        </p>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mt-3" style="max-width:900px">
+    <div class="card-body">
+        <strong><i class="bi bi-exclamation-triangle"></i> Alerta automático de canal sem sinal</strong>
+        <p class="text-muted small mt-2 mb-3">
+            A cada coleta periódica, o sistema compara o status de cada canal com o da coleta anterior.
+            Quando um canal passa de <strong>"Com sinal"</strong> pra <strong>"Sem sinal"</strong>, e esse
+            canal está marcado <strong>"Em uso"</strong> (chave na aba "Canais" da ficha do ativo, ligada
+            por padrão em todo canal novo), o sistema abre um chamado automático:
+        </p>
+        <ul class="small text-muted mb-3">
+            <li>Solicitante: <strong>RD.Intranet - Robô</strong> (<code>robo@rd.intranet</code>), canal de
+                abertura "sistema" -- pra ficar claro na lista de chamados que ninguém abriu isso na mão.</li>
+            <li>Categoria: <strong><?= htmlspecialchars($categoriaAlerta['nome'] ?? 'DVR/NVR') ?></strong>
+                <?php if (!empty($categoriaAlerta['setor_nome'])): ?>
+                    -- setor padrão dessa categoria hoje: <strong><?= htmlspecialchars($categoriaAlerta['setor_nome']) ?></strong>.
+                <?php else: ?>
+                    -- <span class="text-danger">essa categoria ainda não tem setor padrão configurado</span>, o chamado abre sem setor.
+                <?php endif; ?>
+                Pra trocar, edite a categoria "DVR/NVR" em <a href="<?= url('/chamados/categorias') ?>">Chamados &gt; Categorias</a> (o sistema busca essa categoria pelo <strong>nome</strong>, não muda o comportamento se você mudar o setor dela).
+            </li>
+            <li><strong>Não duplica</strong> -- enquanto já existir um chamado aberto (fila/em atendimento/aguardando cliente) pra aquele canal, a próxima coleta não abre outro, mesmo que continue sem sinal.</li>
+            <li><strong>Não fecha sozinho</strong> quando o sinal volta -- fechar (ou reabrir, se cair de novo depois de fechado) é sempre manual.</li>
+            <li>Câmera que <strong>não existe de verdade</strong> (canal sobrando, nunca vai ter sinal)? Desmarque "Em uso" nesse canal -- ele para de gerar chamado, mas continua aparecendo na lista normalmente.</li>
+        </ul>
     </div>
 </div>
 
@@ -159,10 +200,12 @@ ob_start();
             contra um equipamento real: o endpoint <code>/cgi-bin/magicBox.cgi</code> responde
             normalmente, só pedindo autenticação (Digest, com o usuário/senha configurados acima). A
             Intelbras trata a documentação oficial dessa API como confidencial (exige acordo de
-            confidencialidade assinado com o CNPJ da empresa pra liberar), mas o protocolo em si é o
-            mesmo já documentado publicamente fora dos canais da Intelbras -- por isso construímos essa
-            integração testando os comandos direto contra o equipamento, em vez de aguardar
-            documentação oficial.
+            confidencialidade assinado com o CNPJ da empresa pra liberar) -- mas o próprio PDF
+            "API of HTTP Protocol Specification V3.35_Intelbras" (a documentação oficial, com a marca
+            Intelbras na capa) está publicamente hospedado, e confirma ser o mesmo protocolo HTTP da
+            Dahua. Cada comando novo (snapshot, renomear canal, etc.) foi testado ao vivo contra um
+            equipamento real antes de entrar no sistema -- inclusive os que escrevem algo no DVR (ex:
+            renomear canal) foram testados e revertidos manualmente antes de qualquer linha de código.
         </p>
     </div>
 </div>
