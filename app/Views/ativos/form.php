@@ -273,9 +273,13 @@ $idsTiposComSnmp = array_column(array_filter($tipos, fn (array $t) => (bool)$t['
                 // Pré-preenche o par modelo/firmware certo pro tipo detectado, se
                 // já estiver visível no bloco de Detalhes técnicos (evita repetir
                 // no card de baixo o que acabou de vir pro card de cima).
-                const prefixo = resultado.tipo_slug === 'switch' ? 'omada' : 'unifi';
-                const campoModeloDetalhe = document.querySelector(`input[name="${prefixo}_model"]`);
-                const campoFirmwareDetalhe = document.querySelector(`input[name="${prefixo}_firmware"]`);
+                const camposPorTipo = {
+                    switch: ['omada_model', 'omada_firmware'],
+                    dvr_nvr: ['dvr_modelo', 'dvr_firmware'],
+                };
+                const [nomeCampoModelo, nomeCampoFirmware] = camposPorTipo[resultado.tipo_slug] || ['unifi_model', 'unifi_firmware'];
+                const campoModeloDetalhe = document.querySelector(`input[name="${nomeCampoModelo}"]`);
+                const campoFirmwareDetalhe = document.querySelector(`input[name="${nomeCampoFirmware}"]`);
                 if (campoModeloDetalhe && resultado.modelo) campoModeloDetalhe.value = resultado.modelo;
                 if (campoFirmwareDetalhe && resultado.firmware) campoFirmwareDetalhe.value = resultado.firmware;
             }

@@ -86,6 +86,19 @@ ob_start();
             </div>
         </a>
     </div>
+    <div class="col-md-4">
+        <a href="<?= url('/administracao/integracoes/intelbras-dvr') ?>" class="metodo-card">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="mb-2" style="font-size:28px; color:#E8590C;"><i class="bi bi-camera-video"></i></div>
+                    <h6 class="mb-1">DVR/NVR Intelbras</h6>
+                    <p class="text-muted small mb-0">
+                        Usuário/senha admin dos DVR/NVR Intelbras -- usada pra coletar modelo, firmware, status do HD e canais/câmeras cadastrados em Ativos.
+                    </p>
+                </div>
+            </div>
+        </a>
+    </div>
 </div>
 
 <?php

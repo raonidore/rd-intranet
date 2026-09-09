@@ -42,6 +42,7 @@ class AtivoController extends Controller
             'coletaSnmpAtiva' => $this->coletaSnmpAtiva(),
             'coletaUnifiAtiva' => $this->coletaUnifiAtiva(),
             'coletaOmadaAtiva' => $this->coletaOmadaAtiva(),
+            'coletaIntelbrasDvrAtiva' => $this->coletaIntelbrasDvrAtiva(),
             'chaveAgente' => $this->service->chaveAgente(),
             'historicoChaves' => $this->service->historicoChavesAgente(),
             'intervaloComunicacao' => $this->service->intervaloComunicacao(),
@@ -509,6 +510,52 @@ class AtivoController extends Controller
     {
         foreach ((new CronService())->listar() as $job) {
             if ($job['nome'] === $this->service->nomeJobCronOmada()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function coletarIntelbrasDvr(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $resultado = $this->service->coletarIntelbrasDvr($id);
+
+        echo json_encode($resultado);
+    }
+
+    public function ativarColetaIntelbrasDvr(): void
+    {
+        AuthMiddleware::checkModulo('ativos_dashboard');
+        header('Content-Type: application/json');
+
+        if ($this->coletaIntelbrasDvrAtiva()) {
+            echo json_encode(['success' => true, 'message' => 'Coleta já estava ativa.']);
+            return;
+        }
+
+        $resultado = (new CronService())->criar([
+            'nome' => $this->service->nomeJobCronIntelbrasDvr(),
+            'descricao' => 'Coleta dados via API HTTP dos DVR/NVR Intelbras cadastrados (Ativos de TI).',
+            'expressao' => '*/30 * * * *',
+            'usuario_execucao' => 'www-data',
+            'comando' => 'php /var/www/rd.intranet/rd ativos:coletar-intelbras-dvr',
+            'ativo' => true,
+        ]);
+
+        AuditService::registrar('Ativos', 'Ativar coleta DVR/NVR Intelbras', $resultado['message']);
+
+        echo json_encode($resultado);
+    }
+
+    private function coletaIntelbrasDvrAtiva(): bool
+    {
+        foreach ((new CronService())->listar() as $job) {
+            if ($job['nome'] === $this->service->nomeJobCronIntelbrasDvr()) {
                 return true;
             }
         }

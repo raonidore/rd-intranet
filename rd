@@ -339,6 +339,12 @@ switch ($comando) {
 
         break;
 
+    case 'ativos:coletar-intelbras-dvr':
+        $resultado = (new \App\Services\AtivoService())->coletarIntelbrasDvrTodos();
+        echo "OK: DVR/NVR Intelbras coletado em {$resultado['sucesso']}/{$resultado['total']} ativo(s).\n";
+
+        break;
+
     default:
         echo "Comando não encontrado: {$comando}\n";
         exit(1);

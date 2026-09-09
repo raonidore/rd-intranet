@@ -100,10 +100,20 @@ class AtivoService
             'nivel_toner' => 'Nível de toner',
             'snmp_uptime' => 'Uptime (SNMP)',
         ],
+        // 'dvr_canais' (array) fica FORA daqui de propósito -- mesmo motivo de
+        // 'unifi_clientes'/'unifi_wan_config': o loop genérico da Visão Geral só
+        // sabe exibir texto simples. Lido direto de $detalhes numa aba própria
+        // ("Canais"), condicionada a tipo_slug === 'dvr_nvr' em ver.php.
         'dvr_nvr' => [
-            'canais' => 'Número de canais',
-            'capacidade_hd' => 'Capacidade do HD',
+            'canais' => 'Número de canais (manual)',
+            'capacidade_hd' => 'Capacidade do HD (manual)',
             'resolucao_gravacao' => 'Resolução de gravação',
+            'dvr_modelo' => 'Modelo (Intelbras)',
+            'dvr_serial' => 'Número de série (Intelbras)',
+            'dvr_firmware' => 'Versão de firmware (Intelbras)',
+            'dvr_hardware' => 'Versão de hardware (Intelbras)',
+            'dvr_nome_dispositivo' => 'Nome no dispositivo',
+            'dvr_status_disco' => 'Status do HD',
             'snmp_sys_descr' => 'Descrição (SNMP)',
             'snmp_uptime' => 'Uptime (SNMP)',
         ],
@@ -156,6 +166,7 @@ class AtivoService
     private const NOME_JOB_CRON_SNMP = 'Coleta SNMP de Ativos de TI';
     private const NOME_JOB_CRON_UNIFI = 'Coleta UniFi de Ativos de TI';
     private const NOME_JOB_CRON_OMADA = 'Coleta Omada de Ativos de TI';
+    private const NOME_JOB_CRON_INTELBRAS_DVR = 'Coleta DVR/NVR Intelbras de Ativos de TI';
 
     public function __construct()
     {
@@ -1559,6 +1570,75 @@ class AtivoService
         return self::NOME_JOB_CRON_OMADA;
     }
 
+    public function coletarIntelbrasDvr(int $id): array
+    {
+        $ativo = $this->repository->buscarPorId($id);
+
+        if (!$ativo) {
+            return ['success' => false, 'message' => 'Ativo não encontrado.'];
+        }
+
+        if (empty($ativo['ip'])) {
+            return ['success' => false, 'message' => 'Este ativo não tem IP cadastrado.'];
+        }
+
+        $dvr = new IntelbrasDvrService();
+
+        if (!$dvr->configurado()) {
+            return ['success' => false, 'message' => 'Integração com DVR/NVR Intelbras ainda não configurada -- veja Integrações.'];
+        }
+
+        $resultado = $dvr->coletar($ativo['ip']);
+
+        if (!$resultado['success']) {
+            return $resultado;
+        }
+
+        $coletado = [
+            'dvr_modelo' => $resultado['modelo'] ?? '',
+            'dvr_serial' => $resultado['serial'] ?? '',
+            'dvr_firmware' => $resultado['firmware'] ?? '',
+            'dvr_hardware' => $resultado['hardware'] ?? '',
+            'dvr_nome_dispositivo' => $resultado['nome_dispositivo'] ?? '',
+            'dvr_status_disco' => $resultado['status_disco'] ?? '',
+            'dvr_canais' => $resultado['canais'] ?? [],
+        ];
+
+        $detalhesAtuais = json_decode($ativo['detalhes'] ?? '', true) ?: [];
+        $detalhesNovos = array_merge($detalhesAtuais, $coletado);
+
+        $this->repository->atualizarDetalhesApi($id, json_encode($detalhesNovos, JSON_UNESCAPED_UNICODE));
+
+        AuditService::registrar('Ativos', 'Coleta DVR/NVR Intelbras', 'Dados coletados via API do DVR/NVR para ' . $ativo['codigo_patrimonio'] . '.');
+
+        return ['success' => true, 'message' => 'Dados coletados com sucesso via API do DVR/NVR.'];
+    }
+
+    /**
+     * Roda a coleta Intelbras DVR/NVR em todos os ativos do tipo "dvr_nvr"
+     * com IP cadastrado -- chamado pelo cron (rd ativos:coletar-intelbras-dvr),
+     * mesmo padrão de coletarOmadaTodos()/coletarUnifiTodos().
+     */
+    public function coletarIntelbrasDvrTodos(): array
+    {
+        $ativos = $this->repository->listarPorTipoSlugComIp('dvr_nvr');
+        $sucesso = 0;
+
+        foreach ($ativos as $ativo) {
+            $resultado = $this->coletarIntelbrasDvr((int)$ativo['id']);
+            if ($resultado['success']) {
+                $sucesso++;
+            }
+        }
+
+        return ['total' => count($ativos), 'sucesso' => $sucesso];
+    }
+
+    public function nomeJobCronIntelbrasDvr(): string
+    {
+        return self::NOME_JOB_CRON_INTELBRAS_DVR;
+    }
+
     /**
      * Mesma ideia de coletarAutomatico(), mas ANTES do ativo existir --
      * usada no formulário de "Novo Ativo" pra pré-preencher tipo/marca/
@@ -1633,8 +1713,26 @@ class AtivoService
             }
         }
 
+        $dvr = new IntelbrasDvrService();
+        if ($dvr->configurado()) {
+            $integracoesTentadas[] = 'DVR/NVR Intelbras';
+            $resultado = $dvr->coletar($ip);
+
+            if ($resultado['success']) {
+                return [
+                    'success' => true,
+                    'tipo_slug' => 'dvr_nvr',
+                    'nome' => $resultado['nome_dispositivo'] ?: ($resultado['modelo'] ?? ''),
+                    'marca' => 'Intelbras',
+                    'modelo' => $resultado['modelo'] ?? '',
+                    'firmware' => $resultado['firmware'] ?? '',
+                    'message' => 'Encontrado como DVR/NVR Intelbras: ' . ($resultado['modelo'] ?? 'dispositivo') . '.',
+                ];
+            }
+        }
+
         if (empty($integracoesTentadas)) {
-            return ['success' => false, 'message' => 'Nenhuma integração de rede configurada (UniFi/Omada) -- veja Integrações.'];
+            return ['success' => false, 'message' => 'Nenhuma integração de rede configurada (UniFi/Omada/DVR-NVR Intelbras) -- veja Integrações.'];
         }
 
         return ['success' => false, 'message' => 'Nenhum dispositivo com esse IP foi encontrado em: ' . implode(', ', $integracoesTentadas) . '.'];
@@ -1678,8 +1776,16 @@ class AtivoService
             }
         }
 
+        if ((new IntelbrasDvrService())->configurado()) {
+            $integracoesTentadas[] = 'DVR/NVR Intelbras';
+            $resultado = $this->coletarIntelbrasDvr($id);
+            if ($resultado['success']) {
+                return ['success' => true, 'message' => 'Detectado como DVR/NVR Intelbras -- ' . $resultado['message']];
+            }
+        }
+
         if (empty($integracoesTentadas)) {
-            return ['success' => false, 'message' => 'Nenhuma integração (UniFi, TP-Link/Omada) está configurada ainda -- veja Integrações.'];
+            return ['success' => false, 'message' => 'Nenhuma integração (UniFi, TP-Link/Omada, DVR/NVR Intelbras) está configurada ainda -- veja Integrações.'];
         }
 
         return [

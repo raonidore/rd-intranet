@@ -7,6 +7,7 @@ use App\Middleware\AuthMiddleware;
 use App\Services\AuditService;
 use App\Services\KbService;
 use App\Services\NotificationService;
+use App\Services\IntelbrasDvrService;
 use App\Services\OmadaService;
 use App\Services\UnifiService;
 
@@ -144,5 +145,37 @@ class IntegracoesController extends Controller
         set_time_limit(30);
 
         echo json_encode((new OmadaService())->testarConexao());
+    }
+
+    public function intelbrasDvrForm(): void
+    {
+        AuthMiddleware::checkAdmin();
+
+        $service = new IntelbrasDvrService();
+
+        $this->view('administracao/integracoes_intelbras_dvr', [
+            'usuarioAtual' => $service->usuarioAtual(),
+            'configurado' => $service->configurado(),
+        ]);
+    }
+
+    public function intelbrasDvrSalvar(): void
+    {
+        AuthMiddleware::checkAdmin();
+
+        (new IntelbrasDvrService())->salvarConfiguracao($_POST['usuario'] ?? '', $_POST['senha'] ?? '');
+
+        header('Location: ' . url('/administracao/integracoes/intelbras-dvr'));
+        exit;
+    }
+
+    public function intelbrasDvrRemover(): void
+    {
+        AuthMiddleware::checkAdmin();
+
+        (new IntelbrasDvrService())->removerConfiguracao();
+
+        header('Location: ' . url('/administracao/integracoes/intelbras-dvr'));
+        exit;
     }
 }

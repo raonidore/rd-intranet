@@ -5,6 +5,7 @@ use App\Components\Alert;
 use App\Components\Badge;
 use App\Services\AtivoService;
 use App\Services\PermissionService;
+use App\Services\IntelbrasDvrService;
 use App\Services\OmadaService;
 use App\Services\UnifiService;
 
@@ -185,8 +186,8 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                 <i class="bi bi-arrow-repeat"></i> Coletar via SNMP
             </button>
         <?php endif; ?>
-        <?php if (in_array($ativo['tipo_slug'] ?? '', ['switch', 'ponto_acesso', 'roteador'], true) && !empty($ativo['ip']) && ((new UnifiService())->configurado() || (new OmadaService())->configurado())): ?>
-            <button type="button" class="btn btn-outline-secondary" id="botaoColetarAutomatico" data-id="<?= (int)$ativo['id'] ?>" title="Testa as integrações configuradas (UniFi, TP-Link/Omada) por IP -- não precisa saber o fabricante">
+        <?php if (in_array($ativo['tipo_slug'] ?? '', ['switch', 'ponto_acesso', 'roteador', 'dvr_nvr'], true) && !empty($ativo['ip']) && ((new UnifiService())->configurado() || (new OmadaService())->configurado() || (new IntelbrasDvrService())->configurado())): ?>
+            <button type="button" class="btn btn-outline-secondary" id="botaoColetarAutomatico" data-id="<?= (int)$ativo['id'] ?>" title="Testa as integrações configuradas (UniFi, TP-Link/Omada, DVR/NVR Intelbras) por IP -- não precisa saber o fabricante">
                 <i class="bi bi-arrow-repeat"></i> Detectar e coletar automaticamente
             </button>
         <?php endif; ?>
@@ -295,6 +296,14 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     <li class="nav-item" role="presentation">
         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaRedeWan" type="button">
             <i class="bi bi-diagram-3"></i> Rede/WAN
+        </button>
+    </li>
+    <?php endif; ?>
+    <?php if (($ativo['tipo_slug'] ?? '') === 'dvr_nvr'): ?>
+    <?php $canaisDvr = $detalhes['dvr_canais'] ?? []; ?>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaCanaisDvr" type="button">
+            <i class="bi bi-camera-video"></i> Canais <?= !empty($canaisDvr) ? '<span class="badge text-bg-secondary ms-1">' . count($canaisDvr) . '</span>' : '' ?>
         </button>
     </li>
     <?php endif; ?>
@@ -1060,6 +1069,33 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                         <?php endif; ?>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <?php if (($ativo['tipo_slug'] ?? '') === 'dvr_nvr'): ?>
+    <!-- Canais (DVR/NVR Intelbras) -->
+    <div class="tab-pane fade" id="abaCanaisDvr">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white"><strong>Canais</strong></div>
+            <div class="card-body p-0">
+                <?php if (empty($canaisDvr)): ?>
+                    <p class="text-muted p-3 mb-0">Nenhum dado coletado ainda. Use o botão "Detectar e coletar automaticamente" na Visão Geral.</p>
+                <?php else: ?>
+                    <table class="table table-sm mb-0">
+                        <thead><tr><th>Canal</th><th>Nome</th><th>Status</th></tr></thead>
+                        <tbody>
+                            <?php foreach ($canaisDvr as $canal): ?>
+                                <tr>
+                                    <td>Canal <?= (int)($canal['numero'] ?? 0) ?></td>
+                                    <td><?= htmlspecialchars($canal['nome'] ?? '—') ?></td>
+                                    <td><?= !empty($canal['com_sinal']) ? Badge::make('Com sinal', 'success') : Badge::make('Sem sinal', 'danger') ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                <?php endif; ?>
             </div>
         </div>
     </div>

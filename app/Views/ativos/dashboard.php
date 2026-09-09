@@ -488,6 +488,27 @@ $statusCores = [
                                 </div>
                             </div>
                         </div>
+
+                        <div class="col-md-4">
+                            <div class="integration-tile">
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="integration-icon" style="background:rgba(232,89,12,.18); color:#e8590c"><i class="bi bi-camera-video"></i></div>
+                                    <div>
+                                        <div class="integration-name">DVR/NVR Intelbras</div>
+                                        <div class="integration-status <?= $coletaIntelbrasDvrAtiva ? 'is-ativa' : '' ?>">
+                                            <span class="status-dot"></span> <?= $coletaIntelbrasDvrAtiva ? 'Ativa' : 'Inativa' ?>
+                                        </div>
+                                    </div>
+                                </div>
+                                <p class="integration-desc">Modelo, firmware, status do HD e canais/câmeras dos DVR/NVR Intelbras cadastrados.</p>
+                                <div class="d-flex justify-content-between align-items-center mt-auto">
+                                    <a href="<?= url('/administracao/integracoes/intelbras-dvr') ?>" class="small">Configurar credenciais</a>
+                                    <?php if (!$coletaIntelbrasDvrAtiva): ?>
+                                        <button type="button" class="btn btn-sm btn-outline-light" id="botaoAtivarColetaIntelbrasDvr">Ativar coleta</button>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -574,6 +595,21 @@ $statusCores = [
                 location.reload();
             } catch (e) {
                 botaoOmada.disabled = false;
+            }
+        });
+    }
+
+    const botaoIntelbrasDvr = document.getElementById('botaoAtivarColetaIntelbrasDvr');
+    if (botaoIntelbrasDvr) {
+        botaoIntelbrasDvr.addEventListener('click', async function () {
+            botaoIntelbrasDvr.disabled = true;
+            try {
+                const res = await fetch(<?= json_encode(url('/ativos/intelbras-dvr/ativar-coleta')) ?>, { method: 'POST' });
+                const dados = await res.json();
+                alert(dados.message || (dados.success ? 'Ativado.' : 'Falha ao ativar.'));
+                location.reload();
+            } catch (e) {
+                botaoIntelbrasDvr.disabled = false;
             }
         });
     }
