@@ -1106,7 +1106,18 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             </div>
         <?php endif; ?>
         <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white"><strong>Canais</strong></div>
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <strong>Canais</strong>
+                <div class="d-flex align-items-center gap-2">
+                    <div class="form-check form-switch mb-0">
+                        <input type="checkbox" class="form-check-input" role="switch" id="campoDeteccaoTampadaDvr"
+                               data-id="<?= (int)$ativo['id'] ?>" <?= ($detalhes['dvr_deteccao_tampada_ativa'] ?? true) ? 'checked' : '' ?>
+                               title="Consulta o evento VideoBlind do DVR a cada coleta e mostra o badge 'Tampada'. Sem chamado automático -- só sinalização.">
+                        <label class="form-check-label small" for="campoDeteccaoTampadaDvr">Detecção de câmera tampada</label>
+                    </div>
+                    <span class="small feedback-deteccao-tampada-dvr"></span>
+                </div>
+            </div>
             <div class="card-body p-0">
                 <?php if (empty($canaisDvr)): ?>
                     <p class="text-muted p-3 mb-0">Nenhum dado coletado ainda. Use o botão "Detectar e coletar automaticamente" na Visão Geral.</p>
@@ -1149,6 +1160,9 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                                         <option value="<?= $n ?>" <?= (int)$canal['sensibilidade_tampada'] === $n ? 'selected' : '' ?>><?= $n ?></option>
                                                     <?php endfor; ?>
                                                 </select>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary botao-testar-tampada-dvr" data-id="<?= (int)$ativo['id'] ?>" data-canal="<?= (int)($canal['numero'] ?? 0) ?>" title="Checar agora se o canal ainda dispara 'Tampada' com essa sensibilidade -- sem esperar a próxima coleta">
+                                                    <i class="bi bi-arrow-repeat"></i> Testar
+                                                </button>
                                                 <span class="small feedback-sensibilidade-tampada-dvr"></span>
                                             </div>
                                         <?php else: ?>
@@ -1983,6 +1997,70 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             }
         });
     });
+
+    document.querySelectorAll('.botao-testar-tampada-dvr').forEach(function (botao) {
+        botao.addEventListener('click', async function () {
+            botao.disabled = true;
+            const feedback = botao.closest('.d-flex').querySelector('.feedback-sensibilidade-tampada-dvr');
+            feedback.className = 'small feedback-sensibilidade-tampada-dvr text-muted';
+            feedback.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+
+            const dados = new URLSearchParams();
+            dados.set('id', botao.dataset.id);
+            dados.set('canal', botao.dataset.canal);
+
+            try {
+                const res = await fetch(<?= json_encode(url('/ativos/intelbras-dvr/testar-tampada')) ?>, { method: 'POST', body: dados });
+                const resultado = await res.json();
+                if (resultado.success) {
+                    feedback.className = resultado.tampada ? 'small feedback-sensibilidade-tampada-dvr text-warning' : 'small feedback-sensibilidade-tampada-dvr text-success';
+                    feedback.innerHTML = resultado.tampada ? '<i class="bi bi-camera-video-off"></i> Ainda tampada' : '<i class="bi bi-check-lg"></i> OK agora';
+                } else {
+                    feedback.innerHTML = '';
+                    alert(resultado.message || 'Falha ao testar.');
+                }
+            } catch (e) {
+                feedback.innerHTML = '';
+                alert('Erro ao comunicar com o servidor.');
+            } finally {
+                botao.disabled = false;
+            }
+        });
+    });
+
+    const campoDeteccaoTampadaDvr = document.getElementById('campoDeteccaoTampadaDvr');
+    if (campoDeteccaoTampadaDvr) {
+        campoDeteccaoTampadaDvr.addEventListener('change', async function () {
+            campoDeteccaoTampadaDvr.disabled = true;
+            const feedback = document.querySelector('.feedback-deteccao-tampada-dvr');
+            feedback.className = 'small feedback-deteccao-tampada-dvr text-muted';
+            feedback.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+
+            const dados = new URLSearchParams();
+            dados.set('id', campoDeteccaoTampadaDvr.dataset.id);
+            dados.set('ativo', campoDeteccaoTampadaDvr.checked ? '1' : '0');
+
+            try {
+                const res = await fetch(<?= json_encode(url('/ativos/intelbras-dvr/deteccao-tampada')) ?>, { method: 'POST', body: dados });
+                const resultado = await res.json();
+                if (resultado.success) {
+                    feedback.className = 'small feedback-deteccao-tampada-dvr text-success';
+                    feedback.innerHTML = '<i class="bi bi-check-lg"></i> Salvo';
+                    setTimeout(() => { feedback.innerHTML = ''; }, 2000);
+                } else {
+                    alert(resultado.message || 'Falha ao salvar.');
+                    campoDeteccaoTampadaDvr.checked = !campoDeteccaoTampadaDvr.checked;
+                    feedback.innerHTML = '';
+                }
+            } catch (e) {
+                alert('Erro ao comunicar com o servidor.');
+                campoDeteccaoTampadaDvr.checked = !campoDeteccaoTampadaDvr.checked;
+                feedback.innerHTML = '';
+            } finally {
+                campoDeteccaoTampadaDvr.disabled = false;
+            }
+        });
+    }
 
     document.querySelectorAll('.botao-renomear-canal-dvr').forEach(function (botao) {
         botao.addEventListener('click', async function () {

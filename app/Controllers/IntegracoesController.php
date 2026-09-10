@@ -168,7 +168,6 @@ class IntegracoesController extends Controller
             'configurado' => $service->configurado(),
             'credenciais' => $service->listarCredenciais(),
             'categoriaAlerta' => $categoriaAlerta,
-            'deteccaoTampadaAtiva' => $service->deteccaoTampadaAtiva(),
         ]);
     }
 
@@ -224,13 +223,4 @@ class IntegracoesController extends Controller
         exit;
     }
 
-    public function intelbrasDvrDeteccaoTampada(): void
-    {
-        AuthMiddleware::checkAdmin();
-
-        (new IntelbrasDvrService())->definirDeteccaoTampadaAtiva(($_POST['ativo'] ?? '') === '1');
-
-        header('Location: ' . url('/administracao/integracoes/intelbras-dvr'));
-        exit;
-    }
 }

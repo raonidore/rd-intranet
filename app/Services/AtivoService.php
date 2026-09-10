@@ -1639,7 +1639,14 @@ class AtivoService
             return ['success' => false, 'message' => 'Integração com DVR/NVR Intelbras ainda não configurada -- veja Integrações.'];
         }
 
-        $resultado = $dvr->coletar($ativo['ip']);
+        // Chave de "detecção de câmera tampada" é por Ativo (cada DVR fica
+        // num ambiente diferente -- iluminação/contraste que causam falso
+        // positivo num não necessariamente se repetem no outro), não global
+        // nem do equipamento em si.
+        $detalhesExistentes = json_decode($ativo['detalhes'] ?? '', true) ?: [];
+        $deteccaoTampadaAtiva = (bool)($detalhesExistentes['dvr_deteccao_tampada_ativa'] ?? true);
+
+        $resultado = $dvr->coletar($ativo['ip'], $deteccaoTampadaAtiva);
 
         if (!$resultado['success']) {
             return $resultado;
@@ -1957,6 +1964,42 @@ class AtivoService
         });
 
         AuditService::registrar('Ativos', 'DVR/NVR - Sensibilidade de tampada', "{$ativo['codigo_patrimonio']}: canal {$canal} ajustado pra sensibilidade {$nivel}.");
+
+        return $resultado;
+    }
+
+    /**
+     * Checagem avulsa e imediata (sem esperar os até 30 min da coleta
+     * periódica) de "tampada" pra um canal -- pra dar feedback na hora
+     * depois de ajustar a sensibilidade.
+     */
+    public function testarTampadaCanalDvr(int $id, int $canal): array
+    {
+        $ativo = $this->repository->buscarPorId($id);
+
+        if (!$ativo || empty($ativo['ip'])) {
+            return ['success' => false, 'message' => 'Ativo não encontrado ou sem IP cadastrado.'];
+        }
+
+        return (new IntelbrasDvrService())->testarTampadaCanal($ativo['ip'], $canal);
+    }
+
+    /** Liga/desliga a detecção de "câmera tampada" (VideoBlind) pra esse DVR/NVR específico -- é uma chave por Ativo, não do sistema todo. */
+    public function definirDeteccaoTampadaDvr(int $id, bool $ativoFlag): array
+    {
+        $mensagemSucesso = $ativoFlag
+            ? 'Detecção de câmera tampada ativada pra este DVR/NVR.'
+            : 'Detecção de câmera tampada desativada pra este DVR/NVR -- o badge "Tampada" some da tela.';
+
+        $resultado = $this->alterarDetalhesComLock($id, function (array $detalhes) use ($ativoFlag, $mensagemSucesso) {
+            $detalhes['dvr_deteccao_tampada_ativa'] = $ativoFlag;
+
+            return ['ok' => true, 'detalhes' => $detalhes, 'message' => $mensagemSucesso];
+        });
+
+        if ($resultado['success']) {
+            AuditService::registrar('Ativos', 'DVR/NVR - Detecção de tampada', "{$resultado['codigo_patrimonio']}: detecção de câmera tampada " . ($ativoFlag ? 'ativada' : 'desativada') . '.');
+        }
 
         return $resultado;
     }

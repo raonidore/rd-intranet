@@ -610,6 +610,28 @@ class AtivoController extends Controller
         echo json_encode($this->service->definirSensibilidadeCanalDvr($id, $canal, $nivel));
     }
 
+    public function testarTampadaCanalDvr(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $canal = (int)($_POST['canal'] ?? 0);
+
+        echo json_encode($this->service->testarTampadaCanalDvr($id, $canal));
+    }
+
+    public function definirDeteccaoTampadaDvr(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $ativoFlag = ($_POST['ativo'] ?? '') === '1';
+
+        echo json_encode($this->service->definirDeteccaoTampadaDvr($id, $ativoFlag));
+    }
+
     public function unifiDesconectarCliente(): void
     {
         AuthMiddleware::checkModulo('ativos_lista');

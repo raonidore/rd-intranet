@@ -196,16 +196,7 @@ ob_start();
 
 <div class="card border-0 shadow-sm mt-3" style="max-width:900px">
     <div class="card-body">
-        <div class="d-flex justify-content-between align-items-start gap-3">
-            <strong><i class="bi bi-camera-video-off"></i> Detecção de câmera tampada (revisão manual, sem chamado automático)</strong>
-            <form method="post" action="<?= url('/administracao/integracoes/intelbras-dvr/deteccao-tampada') ?>" id="formDeteccaoTampada">
-                <input type="hidden" name="ativo" id="campoDeteccaoTampadaAtivo" value="<?= $deteccaoTampadaAtiva ? '1' : '0' ?>">
-                <div class="form-check form-switch mb-0">
-                    <input type="checkbox" class="form-check-input" role="switch" id="campoDeteccaoTampadaSwitch" <?= $deteccaoTampadaAtiva ? 'checked' : '' ?>>
-                    <label class="form-check-label small" for="campoDeteccaoTampadaSwitch"><?= $deteccaoTampadaAtiva ? 'Ativada' : 'Desativada' ?></label>
-                </div>
-            </form>
-        </div>
+        <strong><i class="bi bi-camera-video-off"></i> Detecção de câmera tampada (revisão manual, sem chamado automático)</strong>
         <p class="text-muted small mt-2 mb-3">
             A cada coleta, o sistema também consulta o evento <strong>VideoBlind</strong> do DVR/NVR
             (lente coberta/desfocada de propósito, diferente de "Sem sinal") e mostra um badge amarelo
@@ -223,18 +214,19 @@ ob_start();
             como sinalização pro operador conferir o snapshot e decidir -- o mesmo processo manual que já
             vinha sendo usado antes dessa tela existir.
         </p>
-        <p class="text-muted small mt-2 mb-0">
+        <p class="text-muted small mt-2 mb-3">
             <strong>Sensibilidade ajustável por canal</strong> -- a aba "Canais" da ficha de cada ativo tem
             uma coluna "Sensibilidade tampada" (1 a 6, padrão de fábrica 3) que grava direto na
-            configuração "BlindDetect" do próprio DVR. Baixando pra 1 ou 2 no canal que fica de frente pra
-            uma cena escura/de baixo contraste, o próprio detector do DVR fica menos propenso a disparar
-            falso positivo -- ataca o problema na origem, sem depender só da chave acima.
+            configuração "BlindDetect" do próprio DVR, e um botão "Testar" que checa na hora (sem esperar
+            a próxima coleta) se o canal ainda está disparando com o nível atual. Baixando pra 1 ou 2 no
+            canal que fica de frente pra uma cena escura/de baixo contraste, o próprio detector do DVR
+            fica menos propenso a disparar falso positivo -- ataca o problema na origem.
         </p>
         <p class="text-muted small mt-2 mb-0">
-            Essa chave é <strong>geral pro sistema</strong> (todos os DVR/NVR cadastrados) -- desativada,
-            o sistema nem consulta mais o VideoBlind na coleta (badge some da tela). Existe porque essa
-            função ainda é nova e pode, na prática, gerar mais ruído do que ajuda -- se achar que está
-            atrapalhando mais do que ajudando, desligue aqui sem precisar mexer em cada canal.
+            <strong>A chave de ativar/desativar é por DVR/NVR</strong>, não geral do sistema -- cada
+            equipamento fica num ambiente diferente (iluminação, contraste), então o quanto essa detecção
+            atrapalha ou ajuda pode variar de um pro outro. Fica na aba "Canais" da ficha de cada ativo, ao
+            lado do título "Canais".
         </p>
     </div>
 </div>
@@ -276,16 +268,6 @@ ob_start();
 </div>
 
 <script>
-(function () {
-    const switchDeteccaoTampada = document.getElementById('campoDeteccaoTampadaSwitch');
-    if (switchDeteccaoTampada) {
-        switchDeteccaoTampada.addEventListener('change', function () {
-            document.getElementById('campoDeteccaoTampadaAtivo').value = switchDeteccaoTampada.checked ? '1' : '0';
-            document.getElementById('formDeteccaoTampada').submit();
-        });
-    }
-})();
-
 (function () {
     const botaoRemover = document.getElementById('botaoRemoverConfigIntelbrasDvr');
     if (botaoRemover) {
