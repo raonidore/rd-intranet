@@ -26,6 +26,7 @@ class IntelbrasDvrService
 {
     private const CHAVE_USUARIO = 'intelbras_dvr_usuario';
     private const CHAVE_SENHA_CIFRADA = 'intelbras_dvr_senha_cifrada';
+    private const CHAVE_DETECCAO_TAMPADA_ATIVA = 'intelbras_dvr_deteccao_tampada_ativa';
 
     /** Configurado = existe ALGUMA fonte de credencial (padrão global ou pelo menos uma por IP) -- usado só pra decidir se vale tentar essa integração. */
     public function configurado(): bool
@@ -78,6 +79,26 @@ class IntelbrasDvrService
 
         AuditService::registrar('Intelbras DVR/NVR', 'Configuração', 'Configuração removida.');
         NotificationService::success('Configuração removida.');
+    }
+
+    /**
+     * Chave geral pra ligar/desligar a detecção de "câmera tampada"
+     * (VideoBlind) em todo o sistema -- default ativo, mas o próprio
+     * detector do DVR (BlindDetect) já provou dar falso positivo com
+     * frequência em cena escura/baixo contraste, então é bom ter como
+     * desligar rápido sem precisar mexer em cada canal.
+     */
+    public function deteccaoTampadaAtiva(): bool
+    {
+        return ConfigService::get(self::CHAVE_DETECCAO_TAMPADA_ATIVA, '1') === '1';
+    }
+
+    public function definirDeteccaoTampadaAtiva(bool $ativo): void
+    {
+        ConfigService::set(self::CHAVE_DETECCAO_TAMPADA_ATIVA, $ativo ? '1' : '0');
+
+        AuditService::registrar('Intelbras DVR/NVR', 'Configuração', 'Detecção de câmera tampada ' . ($ativo ? 'ativada' : 'desativada') . '.');
+        NotificationService::success('Detecção de câmera tampada ' . ($ativo ? 'ativada' : 'desativada') . '.');
     }
 
     private function senhaAtual(): ?string
@@ -226,12 +247,25 @@ class IntelbrasDvrService
         $canaisNome = $this->chamarApi($ip, '/cgi-bin/configManager.cgi?action=getConfig&name=ChannelTitle');
         $storage = $this->chamarApi($ip, '/cgi-bin/storageDevice.cgi?action=getDeviceAllInfo');
         $videoLoss = $this->chamarApi($ip, '/cgi-bin/eventManager.cgi?action=getEventIndexes&code=VideoLoss');
-        // VideoBlind = câmera tampada/obstruída (lente coberta, fora de foco
-        // de propósito) -- diferente de VideoLoss (sem sinal nenhum). Testado
-        // ao vivo: resultado estável em consultas repetidas e sem
-        // sobreposição de canais com VideoLoss, então é mesmo um estado
-        // "atual" (não um histórico de eventos já resolvidos).
-        $videoBlind = $this->chamarApi($ip, '/cgi-bin/eventManager.cgi?action=getEventIndexes&code=VideoBlind');
+
+        // Chave geral desligada = nem consulta o VideoBlind nem a
+        // sensibilidade -- o próprio detector do DVR (BlindDetect) provou
+        // dar falso positivo com frequência em cena escura/baixo contraste
+        // (confirmado ao vivo comparando com o snapshot real), então quem
+        // desligar a chave não paga nem o custo das 2 chamadas HTTP extras.
+        $deteccaoTampadaAtiva = $this->deteccaoTampadaAtiva();
+        $canaisComBlind = [];
+        $blindConfig = null;
+        if ($deteccaoTampadaAtiva) {
+            $videoBlind = $this->chamarApi($ip, '/cgi-bin/eventManager.cgi?action=getEventIndexes&code=VideoBlind');
+            $canaisComBlind = $this->extrairCanaisDoEvento($videoBlind);
+            // Level = sensibilidade do detector de blind, 1 (menos sensível)
+            // a 6 (mais sensível), 3 é o padrão de fábrica -- vem junto de
+            // BlindDetect[N].Enable etc. numa única chamada, um índice por
+            // canal (0-based), documentado na API oficial da Intelbras/Dahua.
+            $blindConfig = $this->chamarApi($ip, '/cgi-bin/configManager.cgi?action=getConfig&name=BlindDetect');
+        }
+
         // Ausência/falha de HD e pouco espaço livre -- quando responde
         // "Error: No Events" (nunca aconteceu), o parser genérico de
         // chamarApi() já trata como sucesso com $dados vazio (não é erro de
@@ -242,18 +276,21 @@ class IntelbrasDvrService
         // Dahua reporta o canal em índice 0 -- some 1 pra bater com a
         // numeração "Canal 1..N" que o próprio DVR mostra na tela dele.
         $canaisComPerda = $this->extrairCanaisDoEvento($videoLoss);
-        $canaisComBlind = $this->extrairCanaisDoEvento($videoBlind);
 
         $canais = [];
         if ($canaisNome['sucesso']) {
             $i = 0;
             while (isset($canaisNome['dados']["table.ChannelTitle[{$i}].Name"])) {
                 $numero = $i + 1;
+                $nivelSensibilidade = $blindConfig && $blindConfig['sucesso'] && isset($blindConfig['dados']["table.BlindDetect[{$i}].Level"])
+                    ? (int)$blindConfig['dados']["table.BlindDetect[{$i}].Level"]
+                    : null;
                 $canais[] = [
                     'numero' => $numero,
                     'nome' => $canaisNome['dados']["table.ChannelTitle[{$i}].Name"],
                     'com_sinal' => !in_array($numero, $canaisComPerda, true),
-                    'tampada' => in_array($numero, $canaisComBlind, true),
+                    'tampada' => $deteccaoTampadaAtiva && in_array($numero, $canaisComBlind, true),
+                    'sensibilidade_tampada' => $nivelSensibilidade,
                 ];
                 $i++;
             }
@@ -411,6 +448,31 @@ class IntelbrasDvrService
         }
 
         return ['success' => true, 'message' => "Canal {$canal} renomeado para \"{$novoNome}\"."];
+    }
+
+    /**
+     * Sensibilidade do detector de "tampada" (BlindDetect) do próprio DVR,
+     * por canal -- 1 (menos sensível, dispara só com bloqueio bem óbvio) a
+     * 6 (mais sensível, dispara com qualquer mudança pequena de cena),
+     * faixa documentada oficialmente. Baixar o nível é o jeito de reduzir
+     * falso positivo em canal que fica de frente pra cena escura/baixo
+     * contraste sem mexer no "com_sinal"/resto da coleta.
+     */
+    public function definirSensibilidadeTampada(string $ip, int $canal, int $nivel): array
+    {
+        if ($nivel < 1 || $nivel > 6) {
+            return ['success' => false, 'message' => 'Sensibilidade precisa estar entre 1 e 6.'];
+        }
+
+        // índice do BlindDetect é 0-based; "canal" na tela/API de leitura é 1-based.
+        $indice = $canal - 1;
+        $resultado = $this->chamarApi($ip, '/cgi-bin/configManager.cgi?action=setConfig&BlindDetect%5B' . $indice . '%5D.Level=' . $nivel);
+
+        if (!$resultado['sucesso']) {
+            return ['success' => false, 'message' => $resultado['mensagem']];
+        }
+
+        return ['success' => true, 'message' => "Sensibilidade do canal {$canal} ajustada pra {$nivel}."];
     }
 
     /**

@@ -196,14 +196,23 @@ ob_start();
 
 <div class="card border-0 shadow-sm mt-3" style="max-width:900px">
     <div class="card-body">
-        <strong><i class="bi bi-camera-video-off"></i> Detecção de câmera tampada (revisão manual, sem chamado automático)</strong>
+        <div class="d-flex justify-content-between align-items-start gap-3">
+            <strong><i class="bi bi-camera-video-off"></i> Detecção de câmera tampada (revisão manual, sem chamado automático)</strong>
+            <form method="post" action="<?= url('/administracao/integracoes/intelbras-dvr/deteccao-tampada') ?>" id="formDeteccaoTampada">
+                <input type="hidden" name="ativo" id="campoDeteccaoTampadaAtivo" value="<?= $deteccaoTampadaAtiva ? '1' : '0' ?>">
+                <div class="form-check form-switch mb-0">
+                    <input type="checkbox" class="form-check-input" role="switch" id="campoDeteccaoTampadaSwitch" <?= $deteccaoTampadaAtiva ? 'checked' : '' ?>>
+                    <label class="form-check-label small" for="campoDeteccaoTampadaSwitch"><?= $deteccaoTampadaAtiva ? 'Ativada' : 'Desativada' ?></label>
+                </div>
+            </form>
+        </div>
         <p class="text-muted small mt-2 mb-3">
             A cada coleta, o sistema também consulta o evento <strong>VideoBlind</strong> do DVR/NVR
             (lente coberta/desfocada de propósito, diferente de "Sem sinal") e mostra um badge amarelo
             <strong>"Tampada"</strong> na aba "Canais" pra todo canal que o próprio DVR estiver reportando
             assim.
         </p>
-        <p class="text-muted small mt-2 mb-0">
+        <p class="text-muted small mt-2 mb-3">
             <strong>De propósito NÃO abre chamado automático</strong> como o de "Sem sinal" -- testado ao
             vivo contra os 3 DVRs em produção e conferido canal por canal comparando com a imagem real
             (botão de câmera): o algoritmo de detecção do próprio DVR (configuração "BlindDetect",
@@ -213,6 +222,19 @@ ob_start();
             chamado em cima desse sinal geraria chamado sem necessidade com frequência. O badge fica só
             como sinalização pro operador conferir o snapshot e decidir -- o mesmo processo manual que já
             vinha sendo usado antes dessa tela existir.
+        </p>
+        <p class="text-muted small mt-2 mb-0">
+            <strong>Sensibilidade ajustável por canal</strong> -- a aba "Canais" da ficha de cada ativo tem
+            uma coluna "Sensibilidade tampada" (1 a 6, padrão de fábrica 3) que grava direto na
+            configuração "BlindDetect" do próprio DVR. Baixando pra 1 ou 2 no canal que fica de frente pra
+            uma cena escura/de baixo contraste, o próprio detector do DVR fica menos propenso a disparar
+            falso positivo -- ataca o problema na origem, sem depender só da chave acima.
+        </p>
+        <p class="text-muted small mt-2 mb-0">
+            Essa chave é <strong>geral pro sistema</strong> (todos os DVR/NVR cadastrados) -- desativada,
+            o sistema nem consulta mais o VideoBlind na coleta (badge some da tela). Existe porque essa
+            função ainda é nova e pode, na prática, gerar mais ruído do que ajuda -- se achar que está
+            atrapalhando mais do que ajudando, desligue aqui sem precisar mexer em cada canal.
         </p>
     </div>
 </div>
@@ -254,6 +276,16 @@ ob_start();
 </div>
 
 <script>
+(function () {
+    const switchDeteccaoTampada = document.getElementById('campoDeteccaoTampadaSwitch');
+    if (switchDeteccaoTampada) {
+        switchDeteccaoTampada.addEventListener('change', function () {
+            document.getElementById('campoDeteccaoTampadaAtivo').value = switchDeteccaoTampada.checked ? '1' : '0';
+            document.getElementById('formDeteccaoTampada').submit();
+        });
+    }
+})();
+
 (function () {
     const botaoRemover = document.getElementById('botaoRemoverConfigIntelbrasDvr');
     if (botaoRemover) {

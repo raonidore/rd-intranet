@@ -598,6 +598,18 @@ class AtivoController extends Controller
         echo json_encode($this->service->definirCanalEmUsoDvr($id, $canal, $emUso));
     }
 
+    public function definirSensibilidadeCanalDvr(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $canal = (int)($_POST['canal'] ?? 0);
+        $nivel = (int)($_POST['nivel'] ?? 0);
+
+        echo json_encode($this->service->definirSensibilidadeCanalDvr($id, $canal, $nivel));
+    }
+
     public function unifiDesconectarCliente(): void
     {
         AuthMiddleware::checkModulo('ativos_lista');

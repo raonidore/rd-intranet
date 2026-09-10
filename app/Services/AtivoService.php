@@ -1923,6 +1923,44 @@ class AtivoService
         return $resultado;
     }
 
+    /** Ajusta a sensibilidade (1-6) do detector de "tampada" no próprio DVR pra esse canal -- ver IntelbrasDvrService::definirSensibilidadeTampada(). */
+    public function definirSensibilidadeCanalDvr(int $id, int $canal, int $nivel): array
+    {
+        $ativo = $this->repository->buscarPorId($id);
+
+        if (!$ativo || empty($ativo['ip'])) {
+            return ['success' => false, 'message' => 'Ativo não encontrado ou sem IP cadastrado.'];
+        }
+
+        $resultado = (new IntelbrasDvrService())->definirSensibilidadeTampada($ativo['ip'], $canal, $nivel);
+
+        if (!$resultado['success']) {
+            return $resultado;
+        }
+
+        // Atualiza o nível já guardado em detalhes, sem esperar a próxima
+        // coleta periódica -- a tela reflete a troca na hora.
+        $this->alterarDetalhesComLock($id, function (array $detalhes) use ($canal, $nivel) {
+            // Mesmo cuidado de definirCanalEmUsoDvr() -- "foreach ($x['y'] ?? [] as &$c)" não propaga a mutação de volta.
+            $canais = $detalhes['dvr_canais'] ?? [];
+
+            foreach ($canais as &$c) {
+                if ((int)($c['numero'] ?? 0) === $canal) {
+                    $c['sensibilidade_tampada'] = $nivel;
+                }
+            }
+            unset($c);
+
+            $detalhes['dvr_canais'] = $canais;
+
+            return ['ok' => true, 'detalhes' => $detalhes];
+        });
+
+        AuditService::registrar('Ativos', 'DVR/NVR - Sensibilidade de tampada', "{$ativo['codigo_patrimonio']}: canal {$canal} ajustado pra sensibilidade {$nivel}.");
+
+        return $resultado;
+    }
+
     /**
      * Mesma ideia de coletarAutomatico(), mas ANTES do ativo existir --
      * usada no formulário de "Novo Ativo" pra pré-preencher tipo/marca/

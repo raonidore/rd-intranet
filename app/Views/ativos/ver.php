@@ -1112,7 +1112,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                     <p class="text-muted p-3 mb-0">Nenhum dado coletado ainda. Use o botão "Detectar e coletar automaticamente" na Visão Geral.</p>
                 <?php else: ?>
                     <table class="table table-sm mb-0 align-middle">
-                        <thead><tr><th>Canal</th><th>Nome</th><th>Status</th><th>Em uso</th><th class="text-end">Ações</th></tr></thead>
+                        <thead><tr><th>Canal</th><th>Nome</th><th>Status</th><th>Em uso</th><th>Sensibilidade tampada</th><th class="text-end">Ações</th></tr></thead>
                         <tbody>
                             <?php foreach ($canaisDvr as $canal): ?>
                                 <?php $emUsoDvr = $canal['em_uso'] ?? true; ?>
@@ -1138,6 +1138,22 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                             </div>
                                             <span class="small feedback-canal-em-uso-dvr"></span>
                                         </div>
+                                    </td>
+                                    <td>
+                                        <?php if ($canal['sensibilidade_tampada'] ?? null): ?>
+                                            <div class="d-flex align-items-center gap-2">
+                                                <select class="form-select form-select-sm campo-sensibilidade-tampada-dvr" style="width:auto"
+                                                        data-id="<?= (int)$ativo['id'] ?>" data-canal="<?= (int)($canal['numero'] ?? 0) ?>"
+                                                        title="1 = menos sensível (só bloqueio óbvio) -- 6 = mais sensível (padrão de fábrica: 3)">
+                                                    <?php for ($n = 1; $n <= 6; $n++): ?>
+                                                        <option value="<?= $n ?>" <?= (int)$canal['sensibilidade_tampada'] === $n ? 'selected' : '' ?>><?= $n ?></option>
+                                                    <?php endfor; ?>
+                                                </select>
+                                                <span class="small feedback-sensibilidade-tampada-dvr"></span>
+                                            </div>
+                                        <?php else: ?>
+                                            <span class="text-muted small">—</span>
+                                        <?php endif; ?>
                                     </td>
                                     <td class="text-end text-nowrap">
                                         <button type="button" class="btn btn-sm btn-outline-primary botao-ver-snapshot-dvr" data-id="<?= (int)$ativo['id'] ?>" data-canal="<?= (int)($canal['numero'] ?? 0) ?>" title="Ver imagem atual">
@@ -1924,6 +1940,43 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             } catch (e) {
                 alert('Erro ao comunicar com o servidor.');
                 campo.checked = !campo.checked;
+                feedback.innerHTML = '';
+            } finally {
+                campo.disabled = false;
+            }
+        });
+    });
+
+    document.querySelectorAll('.campo-sensibilidade-tampada-dvr').forEach(function (campo) {
+        campo.dataset.nivelAtual = campo.value;
+        campo.addEventListener('change', async function () {
+            const valorAnterior = campo.dataset.nivelAtual;
+            campo.disabled = true;
+            const feedback = campo.closest('.d-flex').querySelector('.feedback-sensibilidade-tampada-dvr');
+            feedback.className = 'small feedback-sensibilidade-tampada-dvr text-muted';
+            feedback.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+
+            const dados = new URLSearchParams();
+            dados.set('id', campo.dataset.id);
+            dados.set('canal', campo.dataset.canal);
+            dados.set('nivel', campo.value);
+
+            try {
+                const res = await fetch(<?= json_encode(url('/ativos/intelbras-dvr/canal-sensibilidade')) ?>, { method: 'POST', body: dados });
+                const resultado = await res.json();
+                if (resultado.success) {
+                    campo.dataset.nivelAtual = campo.value;
+                    feedback.className = 'small feedback-sensibilidade-tampada-dvr text-success';
+                    feedback.innerHTML = '<i class="bi bi-check-lg"></i> Salvo';
+                    setTimeout(() => { feedback.innerHTML = ''; }, 2000);
+                } else {
+                    alert(resultado.message || 'Falha ao salvar.');
+                    campo.value = valorAnterior;
+                    feedback.innerHTML = '';
+                }
+            } catch (e) {
+                alert('Erro ao comunicar com o servidor.');
+                campo.value = valorAnterior;
                 feedback.innerHTML = '';
             } finally {
                 campo.disabled = false;

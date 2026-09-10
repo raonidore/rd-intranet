@@ -468,6 +468,7 @@ $router->post('/administracao/integracoes/intelbras-dvr/salvar', [IntegracoesCon
 $router->post('/administracao/integracoes/intelbras-dvr/remover', [IntegracoesController::class, 'intelbrasDvrRemover']);
 $router->post('/administracao/integracoes/intelbras-dvr/credenciais/salvar', [IntegracoesController::class, 'intelbrasDvrCredencialSalvar']);
 $router->post('/administracao/integracoes/intelbras-dvr/credenciais/remover', [IntegracoesController::class, 'intelbrasDvrCredencialRemover']);
+$router->post('/administracao/integracoes/intelbras-dvr/deteccao-tampada', [IntegracoesController::class, 'intelbrasDvrDeteccaoTampada']);
 
 $router->get('/administracao/integracoes/whatsapp', [WhatsAppIntegracaoController::class, 'form']);
 $router->post('/administracao/integracoes/whatsapp/tipo', [WhatsAppIntegracaoController::class, 'salvarTipo']);
@@ -955,6 +956,7 @@ $router->post('/ativos/intelbras-dvr/ativar-coleta', [AtivoController::class, 'a
 $router->post('/ativos/intelbras-dvr/snapshot-canal', [AtivoController::class, 'snapshotCanalDvr']);
 $router->post('/ativos/intelbras-dvr/renomear-canal', [AtivoController::class, 'renomearCanalDvr']);
 $router->post('/ativos/intelbras-dvr/canal-em-uso', [AtivoController::class, 'definirCanalEmUsoDvr']);
+$router->post('/ativos/intelbras-dvr/canal-sensibilidade', [AtivoController::class, 'definirSensibilidadeCanalDvr']);
 $router->post('/ativos/unifi/desconectar-cliente', [AtivoController::class, 'unifiDesconectarCliente']);
 $router->post('/ativos/unifi/bloquear-cliente', [AtivoController::class, 'unifiBloquearCliente']);
 $router->post('/ativos/unifi/desbloquear-cliente', [AtivoController::class, 'unifiDesbloquearCliente']);

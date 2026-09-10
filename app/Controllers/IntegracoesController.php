@@ -168,6 +168,7 @@ class IntegracoesController extends Controller
             'configurado' => $service->configurado(),
             'credenciais' => $service->listarCredenciais(),
             'categoriaAlerta' => $categoriaAlerta,
+            'deteccaoTampadaAtiva' => $service->deteccaoTampadaAtiva(),
         ]);
     }
 
@@ -218,6 +219,16 @@ class IntegracoesController extends Controller
         (new IntelbrasDvrService())->removerCredencialPorIp($_POST['ip'] ?? '');
 
         NotificationService::success('Credencial removida.');
+
+        header('Location: ' . url('/administracao/integracoes/intelbras-dvr'));
+        exit;
+    }
+
+    public function intelbrasDvrDeteccaoTampada(): void
+    {
+        AuthMiddleware::checkAdmin();
+
+        (new IntelbrasDvrService())->definirDeteccaoTampadaAtiva(($_POST['ativo'] ?? '') === '1');
 
         header('Location: ' . url('/administracao/integracoes/intelbras-dvr'));
         exit;
