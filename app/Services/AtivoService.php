@@ -1690,8 +1690,18 @@ class AtivoService
      * precisa ser avisado, não só quem "acabou de cair" enquanto estávamos
      * olhando. O que evita duplicar a cada 30 min é só o chamado já aberto
      * (chamadoDvrAindaAberto()) -- assim que ele for fechado, uma próxima
-     * coleta com o canal ainda/de novo sem sinal abre outro. Mesma lógica,
-     * chamado e id de chamado separados, pra "tampada" (VideoBlind).
+     * coleta com o canal ainda/de novo sem sinal abre outro.
+     *
+     * "Tampada" (VideoBlind) NÃO abre chamado automático -- testado ao vivo
+     * contra os 3 DVRs reais e confirmado com o usuário canal por canal
+     * comparando com a imagem de verdade (snapshot): o próprio algoritmo de
+     * detecção do DVR (BlindDetect, sensibilidade "Level" default 3 em todo
+     * canal) dispara falso positivo com frequência em cena escura/de baixo
+     * contraste (chão liso à noite, parede escura) mesmo sem nada
+     * cobrindo a lente de verdade -- de 5 canais checados nos 3 DVRs, só 2
+     * eram problema real. Fica só como sinalização (campo 'tampada' exposto
+     * na aba "Canais") pra o operador conferir o snapshot e decidir, igual
+     * ao processo manual que já vinha sendo feito.
      */
     private function mesclarCanaisDvr(array $ativo, array $canaisAnteriores, array $canaisNovos): array
     {
@@ -1707,17 +1717,11 @@ class AtivoService
 
             $canal['em_uso'] = $anterior['em_uso'] ?? true;
             $canal['chamado_aberto_id'] = $anterior['chamado_aberto_id'] ?? null;
-            $canal['chamado_blind_aberto_id'] = $anterior['chamado_blind_aberto_id'] ?? null;
 
             $temSinalAgora = (bool)($canal['com_sinal'] ?? true);
-            $tampadaAgora = (bool)($canal['tampada'] ?? false);
 
             if ($canal['em_uso'] && !$temSinalAgora && !$this->chamadoDvrAindaAberto($canal['chamado_aberto_id'])) {
                 $canal['chamado_aberto_id'] = $this->abrirChamadoCanalDvrSemSinal($ativo, $numero, $canal['nome'] ?? "Canal {$numero}");
-            }
-
-            if ($canal['em_uso'] && $tampadaAgora && !$this->chamadoDvrAindaAberto($canal['chamado_blind_aberto_id'])) {
-                $canal['chamado_blind_aberto_id'] = $this->abrirChamadoCanalDvrTampada($ativo, $numero, $canal['nome'] ?? "Canal {$numero}");
             }
 
             $mesclados[] = $canal;
@@ -1750,30 +1754,6 @@ class AtivoService
             'titulo' => "{$ativo['codigo_patrimonio']} -- Canal {$numeroCanal} ({$nomeCanal}) sem sinal",
             'descricao' => "Detecção automática: o canal {$numeroCanal} (\"{$nomeCanal}\") do DVR/NVR {$ativo['codigo_patrimonio']} ({$ativo['nome']}, IP {$ativo['ip']}) está \"Sem sinal\" e marcado como \"Em uso\".\n\n"
                 . "Se a câmera desse canal realmente não existe/não está em uso, abra a ficha do ativo, aba \"Canais\", e desmarque \"Em uso\" pra esse canal -- assim ele para de gerar chamado automático. Se for uma falha de verdade, resolva e feche este chamado normalmente; se voltar a cair depois, um novo chamado é aberto na próxima detecção.",
-            'categoria_id' => $categoriaId,
-            'unidade_id' => $ativo['unidade_id'],
-            'ativo_id' => $ativo['id'],
-            'prioridade' => 'alta',
-            'solicitante_nome' => 'RD.Intranet - Robô',
-            'solicitante_email' => 'robo@rd.intranet',
-        ], 'sistema');
-
-        return $resultado['success'] ? (int)$resultado['id'] : null;
-    }
-
-    /** @return int|null id do chamado aberto, ou null se não conseguiu abrir */
-    private function abrirChamadoCanalDvrTampada(array $ativo, int $numeroCanal, string $nomeCanal): ?int
-    {
-        $categoriaId = $this->categoriaChamadoDvrNvrId();
-
-        if ($categoriaId === null) {
-            return null;
-        }
-
-        $resultado = (new ChamadoService())->abrir([
-            'titulo' => "{$ativo['codigo_patrimonio']} -- Canal {$numeroCanal} ({$nomeCanal}) com câmera tampada/obstruída",
-            'descricao' => "Detecção automática: o canal {$numeroCanal} (\"{$nomeCanal}\") do DVR/NVR {$ativo['codigo_patrimonio']} ({$ativo['nome']}, IP {$ativo['ip']}) está reportando \"Tampada\" (VideoBlind -- lente coberta/desfocada de propósito ou obstrução) e marcado como \"Em uso\".\n\n"
-                . "Verifique a câmera fisicamente. Se ela realmente não existe/não está em uso, abra a ficha do ativo, aba \"Canais\", e desmarque \"Em uso\" pra esse canal -- assim ele para de gerar chamado automático.",
             'categoria_id' => $categoriaId,
             'unidade_id' => $ativo['unidade_id'],
             'ativo_id' => $ativo['id'],

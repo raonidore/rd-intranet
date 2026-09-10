@@ -196,18 +196,24 @@ ob_start();
 
 <div class="card border-0 shadow-sm mt-3" style="max-width:900px">
     <div class="card-body">
-        <strong><i class="bi bi-camera-video-off"></i> Alerta automático de câmera tampada</strong>
+        <strong><i class="bi bi-camera-video-off"></i> Detecção de câmera tampada (revisão manual, sem chamado automático)</strong>
         <p class="text-muted small mt-2 mb-3">
-            Mesma lógica do alerta de "Sem sinal" acima, só que pro evento <strong>VideoBlind</strong> do
-            DVR/NVR: câmera com a lente coberta ou fora de foco de propósito (diferente de "Sem sinal",
-            que é ausência de sinal nenhum). Todo canal marcado "Em uso" que estiver reportando
-            <strong>"Tampada"</strong> e ainda não tiver um chamado em aberto pra isso abre um chamado
-            automático -- badge amarelo "Tampada" na aba "Canais", ao lado do status normal de sinal.
+            A cada coleta, o sistema também consulta o evento <strong>VideoBlind</strong> do DVR/NVR
+            (lente coberta/desfocada de propósito, diferente de "Sem sinal") e mostra um badge amarelo
+            <strong>"Tampada"</strong> na aba "Canais" pra todo canal que o próprio DVR estiver reportando
+            assim.
         </p>
-        <ul class="small text-muted mb-0">
-            <li>Mesmo solicitante, categoria/setor e regra de "não duplica" do alerta de sinal acima -- o chamado de "Tampada" é rastreado separado do de "Sem sinal" (um canal pode ter os dois abertos ao mesmo tempo, se for o caso).</li>
-            <li><strong>Não fecha sozinho</strong> quando a câmera volta a enquadrar normalmente -- fechar é sempre manual.</li>
-        </ul>
+        <p class="text-muted small mt-2 mb-0">
+            <strong>De propósito NÃO abre chamado automático</strong> como o de "Sem sinal" -- testado ao
+            vivo contra os 3 DVRs em produção e conferido canal por canal comparando com a imagem real
+            (botão de câmera): o algoritmo de detecção do próprio DVR (configuração "BlindDetect",
+            sensibilidade padrão "Level 3" em todo canal) dispara falso positivo com frequência em cenas
+            escuras ou de baixo contraste (chão liso à noite, parede escura) mesmo sem nada cobrindo a
+            lente de verdade -- de 5 canais checados, só 2 eram problema real. Automatizar a abertura de
+            chamado em cima desse sinal geraria chamado sem necessidade com frequência. O badge fica só
+            como sinalização pro operador conferir o snapshot e decidir -- o mesmo processo manual que já
+            vinha sendo usado antes dessa tela existir.
+        </p>
     </div>
 </div>
 

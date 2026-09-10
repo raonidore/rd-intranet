@@ -1126,9 +1126,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                         <?php endif; ?>
                                         <?php if (!empty($canal['tampada'])): ?>
                                             <?= Badge::make('Tampada', 'warning') ?>
-                                            <?php if (!empty($canal['chamado_blind_aberto_id'])): ?>
-                                                <a href="<?= url('/chamados/atendimentos/ver?id=' . (int)$canal['chamado_blind_aberto_id']) ?>" class="small ms-1" title="Ver chamado automático aberto"><i class="bi bi-ticket-perforated"></i></a>
-                                            <?php endif; ?>
+                                            <i class="bi bi-info-circle text-muted small" data-bs-toggle="tooltip" title="Sinalização automática, sem chamado -- confira a imagem (botão de câmera) antes de agir: o detector do próprio DVR gera falso positivo em cenas escuras/de baixo contraste."></i>
                                         <?php endif; ?>
                                     </td>
                                     <td>
