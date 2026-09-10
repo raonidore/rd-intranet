@@ -1094,6 +1094,17 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     <?php if (($ativo['tipo_slug'] ?? '') === 'dvr_nvr'): ?>
     <!-- Canais (DVR/NVR Intelbras) -->
     <div class="tab-pane fade" id="abaCanaisDvr">
+        <?php if (!empty($detalhes['dvr_hd_problema'])): ?>
+            <div class="alert alert-danger d-flex align-items-center gap-2 mb-3">
+                <i class="bi bi-hdd-network fs-4"></i>
+                <div>
+                    <strong>Problema no HD:</strong> <?= htmlspecialchars($detalhes['dvr_hd_problema']) ?>
+                    <?php if (!empty($detalhes['dvr_hd_chamado_aberto_id'])): ?>
+                        -- <a href="<?= url('/chamados/atendimentos/ver?id=' . (int)$detalhes['dvr_hd_chamado_aberto_id']) ?>">ver chamado automático aberto</a>
+                    <?php endif; ?>
+                </div>
+            </div>
+        <?php endif; ?>
         <div class="card border-0 shadow-sm">
             <div class="card-header bg-white"><strong>Canais</strong></div>
             <div class="card-body p-0">
@@ -1112,6 +1123,12 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                         <?= !empty($canal['com_sinal']) ? Badge::make('Com sinal', 'success') : Badge::make('Sem sinal', 'danger') ?>
                                         <?php if (empty($canal['com_sinal']) && !empty($canal['chamado_aberto_id'])): ?>
                                             <a href="<?= url('/chamados/atendimentos/ver?id=' . (int)$canal['chamado_aberto_id']) ?>" class="small ms-1" title="Ver chamado automático aberto"><i class="bi bi-ticket-perforated"></i></a>
+                                        <?php endif; ?>
+                                        <?php if (!empty($canal['tampada'])): ?>
+                                            <?= Badge::make('Tampada', 'warning') ?>
+                                            <?php if (!empty($canal['chamado_blind_aberto_id'])): ?>
+                                                <a href="<?= url('/chamados/atendimentos/ver?id=' . (int)$canal['chamado_blind_aberto_id']) ?>" class="small ms-1" title="Ver chamado automático aberto"><i class="bi bi-ticket-perforated"></i></a>
+                                            <?php endif; ?>
                                         <?php endif; ?>
                                     </td>
                                     <td>

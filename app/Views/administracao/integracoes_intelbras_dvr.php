@@ -194,6 +194,41 @@ ob_start();
     </div>
 </div>
 
+<div class="card border-0 shadow-sm mt-3" style="max-width:900px">
+    <div class="card-body">
+        <strong><i class="bi bi-camera-video-off"></i> Alerta automático de câmera tampada</strong>
+        <p class="text-muted small mt-2 mb-3">
+            Mesma lógica do alerta de "Sem sinal" acima, só que pro evento <strong>VideoBlind</strong> do
+            DVR/NVR: câmera com a lente coberta ou fora de foco de propósito (diferente de "Sem sinal",
+            que é ausência de sinal nenhum). Todo canal marcado "Em uso" que estiver reportando
+            <strong>"Tampada"</strong> e ainda não tiver um chamado em aberto pra isso abre um chamado
+            automático -- badge amarelo "Tampada" na aba "Canais", ao lado do status normal de sinal.
+        </p>
+        <ul class="small text-muted mb-0">
+            <li>Mesmo solicitante, categoria/setor e regra de "não duplica" do alerta de sinal acima -- o chamado de "Tampada" é rastreado separado do de "Sem sinal" (um canal pode ter os dois abertos ao mesmo tempo, se for o caso).</li>
+            <li><strong>Não fecha sozinho</strong> quando a câmera volta a enquadrar normalmente -- fechar é sempre manual.</li>
+        </ul>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mt-3" style="max-width:900px">
+    <div class="card-body">
+        <strong><i class="bi bi-hdd-network"></i> Alerta automático de problema no HD</strong>
+        <p class="text-muted small mt-2 mb-3">
+            A cada coleta periódica, o sistema também consulta os eventos <strong>StorageNotExist</strong>
+            (disco não encontrado/desconectado) e <strong>StorageLowSpace</strong> (pouco espaço livre) do
+            DVR/NVR. Diferente do alerta por canal, esse é <strong>por equipamento</strong> (o HD é
+            compartilhado por todos os canais) -- aparece como um aviso vermelho no topo da aba "Canais"
+            da ficha do ativo, com link pro chamado automático aberto.
+        </p>
+        <ul class="small text-muted mb-0">
+            <li>Mesmo solicitante e categoria/setor dos outros dois alertas; prioridade <strong>Urgente</strong> (perda de gravação é mais grave que uma câmera fora do ar).</li>
+            <li><strong>Não duplica</strong> nem fecha sozinho, mesma regra dos outros alertas.</li>
+            <li>Nunca observamos ao vivo uma resposta positiva desses dois eventos (os DVRs em produção sempre reportam "sem ocorrência") -- o alerta está pronto e vai disparar no primeiro caso real, mas o formato exato da resposta da Intelbras nesse cenário não pôde ser confirmado por falta de um HD com falha pra testar.</li>
+        </ul>
+    </div>
+</div>
+
 <div class="card border-0 shadow-sm mt-3" style="max-width:720px">
     <div class="card-body">
         <strong><i class="bi bi-info-circle"></i> Como isso funciona por baixo dos panos</strong>

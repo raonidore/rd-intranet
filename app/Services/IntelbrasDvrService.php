@@ -209,7 +209,7 @@ class IntelbrasDvrService
     /**
      * @return array{success:bool, message?:string, modelo?:?string, serial?:?string, firmware?:?string,
      *   hardware?:?string, nome_dispositivo?:?string, status_disco?:?string, disco_total_gb?:?float,
-     *   disco_usado_gb?:?float, canais?:array}
+     *   disco_usado_gb?:?float, hd_problema?:?string, canais?:array}
      */
     public function coletar(string $ip): array
     {
@@ -226,17 +226,23 @@ class IntelbrasDvrService
         $canaisNome = $this->chamarApi($ip, '/cgi-bin/configManager.cgi?action=getConfig&name=ChannelTitle');
         $storage = $this->chamarApi($ip, '/cgi-bin/storageDevice.cgi?action=getDeviceAllInfo');
         $videoLoss = $this->chamarApi($ip, '/cgi-bin/eventManager.cgi?action=getEventIndexes&code=VideoLoss');
+        // VideoBlind = câmera tampada/obstruída (lente coberta, fora de foco
+        // de propósito) -- diferente de VideoLoss (sem sinal nenhum). Testado
+        // ao vivo: resultado estável em consultas repetidas e sem
+        // sobreposição de canais com VideoLoss, então é mesmo um estado
+        // "atual" (não um histórico de eventos já resolvidos).
+        $videoBlind = $this->chamarApi($ip, '/cgi-bin/eventManager.cgi?action=getEventIndexes&code=VideoBlind');
+        // Ausência/falha de HD e pouco espaço livre -- quando responde
+        // "Error: No Events" (nunca aconteceu), o parser genérico de
+        // chamarApi() já trata como sucesso com $dados vazio (não é erro de
+        // comunicação de verdade, só "sem ocorrência").
+        $semHd = $this->chamarApi($ip, '/cgi-bin/eventManager.cgi?action=getEventIndexes&code=StorageNotExist');
+        $poucoEspaco = $this->chamarApi($ip, '/cgi-bin/eventManager.cgi?action=getEventIndexes&code=StorageLowSpace');
 
         // Dahua reporta o canal em índice 0 -- some 1 pra bater com a
         // numeração "Canal 1..N" que o próprio DVR mostra na tela dele.
-        $canaisComPerda = [];
-        if ($videoLoss['sucesso']) {
-            foreach ($videoLoss['dados'] as $chave => $valor) {
-                if (str_starts_with($chave, 'channels[')) {
-                    $canaisComPerda[] = (int)$valor + 1;
-                }
-            }
-        }
+        $canaisComPerda = $this->extrairCanaisDoEvento($videoLoss);
+        $canaisComBlind = $this->extrairCanaisDoEvento($videoBlind);
 
         $canais = [];
         if ($canaisNome['sucesso']) {
@@ -247,9 +253,24 @@ class IntelbrasDvrService
                     'numero' => $numero,
                     'nome' => $canaisNome['dados']["table.ChannelTitle[{$i}].Name"],
                     'com_sinal' => !in_array($numero, $canaisComPerda, true),
+                    'tampada' => in_array($numero, $canaisComBlind, true),
                 ];
                 $i++;
             }
+        }
+
+        // Não temos como testar a forma exata de uma resposta POSITIVA desses
+        // dois (não vamos tirar o HD de um DVR em produção só pra ver o
+        // formato) -- por isso não tenta reconhecer um "channels[]" como no
+        // VideoLoss/VideoBlind. "Error: No Events" (o caso sem ocorrência,
+        // confirmado ao vivo) vira $dados vazio no parser genérico; qualquer
+        // outra coisa que não seja esse vazio já é sinal de problema, seja
+        // qual for o formato exato.
+        $hdProblema = null;
+        if ($semHd['sucesso'] && !empty($semHd['dados'])) {
+            $hdProblema = 'Disco não encontrado';
+        } elseif ($poucoEspaco['sucesso'] && !empty($poucoEspaco['dados'])) {
+            $hdProblema = 'Pouco espaço livre no disco';
         }
 
         // TotalBytes/UsedBytes são por partição (cada disco físico vem
@@ -287,8 +308,32 @@ class IntelbrasDvrService
             'status_disco' => $storage['sucesso'] ? ($storage['dados']['list.info[0].State'] ?? null) : null,
             'disco_total_gb' => $temDisco ? round($discoTotalBytes / 1_000_000_000, 1) : null,
             'disco_usado_gb' => $temDisco ? round($discoUsadoBytes / 1_000_000_000, 1) : null,
+            'hd_problema' => $hdProblema,
             'canais' => $canais,
         ];
+    }
+
+    /**
+     * A resposta de getEventIndexes vem como "channels[N]=X" (N = índice
+     * 0-based do canal). Soma 1 pra bater com a numeração "Canal 1..N" que o
+     * próprio DVR mostra.
+     *
+     * @return int[]
+     */
+    private function extrairCanaisDoEvento(array $resultado): array
+    {
+        if (!$resultado['sucesso']) {
+            return [];
+        }
+
+        $canais = [];
+        foreach ($resultado['dados'] as $chave => $valor) {
+            if (preg_match('/^channels\[(\d+)\]$/', $chave, $m)) {
+                $canais[] = (int)$m[1] + 1;
+            }
+        }
+
+        return $canais;
     }
 
     /**

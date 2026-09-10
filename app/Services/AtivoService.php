@@ -115,6 +115,7 @@ class AtivoService
             'dvr_hardware' => 'Versão de hardware (Intelbras)',
             'dvr_nome_dispositivo' => 'Nome no dispositivo',
             'dvr_status_disco' => 'Status do HD',
+            'dvr_hd_problema' => 'Problema no HD (Intelbras)',
             'snmp_sys_descr' => 'Descrição (SNMP)',
             'snmp_uptime' => 'Uptime (SNMP)',
         ],
@@ -1645,6 +1646,13 @@ class AtivoService
         }
 
         $bloqueado = $this->alterarDetalhesComLock($id, function (array $detalhesAtuais) use ($ativo, $resultado) {
+            $hdProblemaAtual = $resultado['hd_problema'] ?? null;
+            $hdChamadoId = $detalhesAtuais['dvr_hd_chamado_aberto_id'] ?? null;
+
+            if ($hdProblemaAtual !== null && !$this->chamadoDvrAindaAberto($hdChamadoId)) {
+                $hdChamadoId = $this->abrirChamadoHdProblemaDvr($ativo, $hdProblemaAtual);
+            }
+
             $coletado = [
                 'dvr_modelo' => $resultado['modelo'] ?? '',
                 'dvr_serial' => $resultado['serial'] ?? '',
@@ -1654,6 +1662,8 @@ class AtivoService
                 'dvr_status_disco' => $resultado['status_disco'] ?? '',
                 'dvr_disco_total_gb' => $resultado['disco_total_gb'] ?? null,
                 'dvr_disco_usado_gb' => $resultado['disco_usado_gb'] ?? null,
+                'dvr_hd_problema' => $hdProblemaAtual,
+                'dvr_hd_chamado_aberto_id' => $hdChamadoId,
                 'dvr_canais' => $this->mesclarCanaisDvr($ativo, $detalhesAtuais['dvr_canais'] ?? [], $resultado['canais'] ?? []),
             ];
 
@@ -1680,7 +1690,8 @@ class AtivoService
      * precisa ser avisado, não só quem "acabou de cair" enquanto estávamos
      * olhando. O que evita duplicar a cada 30 min é só o chamado já aberto
      * (chamadoDvrAindaAberto()) -- assim que ele for fechado, uma próxima
-     * coleta com o canal ainda/de novo sem sinal abre outro.
+     * coleta com o canal ainda/de novo sem sinal abre outro. Mesma lógica,
+     * chamado e id de chamado separados, pra "tampada" (VideoBlind).
      */
     private function mesclarCanaisDvr(array $ativo, array $canaisAnteriores, array $canaisNovos): array
     {
@@ -1696,11 +1707,17 @@ class AtivoService
 
             $canal['em_uso'] = $anterior['em_uso'] ?? true;
             $canal['chamado_aberto_id'] = $anterior['chamado_aberto_id'] ?? null;
+            $canal['chamado_blind_aberto_id'] = $anterior['chamado_blind_aberto_id'] ?? null;
 
             $temSinalAgora = (bool)($canal['com_sinal'] ?? true);
+            $tampadaAgora = (bool)($canal['tampada'] ?? false);
 
             if ($canal['em_uso'] && !$temSinalAgora && !$this->chamadoDvrAindaAberto($canal['chamado_aberto_id'])) {
                 $canal['chamado_aberto_id'] = $this->abrirChamadoCanalDvrSemSinal($ativo, $numero, $canal['nome'] ?? "Canal {$numero}");
+            }
+
+            if ($canal['em_uso'] && $tampadaAgora && !$this->chamadoDvrAindaAberto($canal['chamado_blind_aberto_id'])) {
+                $canal['chamado_blind_aberto_id'] = $this->abrirChamadoCanalDvrTampada($ativo, $numero, $canal['nome'] ?? "Canal {$numero}");
             }
 
             $mesclados[] = $canal;
@@ -1737,6 +1754,53 @@ class AtivoService
             'unidade_id' => $ativo['unidade_id'],
             'ativo_id' => $ativo['id'],
             'prioridade' => 'alta',
+            'solicitante_nome' => 'RD.Intranet - Robô',
+            'solicitante_email' => 'robo@rd.intranet',
+        ], 'sistema');
+
+        return $resultado['success'] ? (int)$resultado['id'] : null;
+    }
+
+    /** @return int|null id do chamado aberto, ou null se não conseguiu abrir */
+    private function abrirChamadoCanalDvrTampada(array $ativo, int $numeroCanal, string $nomeCanal): ?int
+    {
+        $categoriaId = $this->categoriaChamadoDvrNvrId();
+
+        if ($categoriaId === null) {
+            return null;
+        }
+
+        $resultado = (new ChamadoService())->abrir([
+            'titulo' => "{$ativo['codigo_patrimonio']} -- Canal {$numeroCanal} ({$nomeCanal}) com câmera tampada/obstruída",
+            'descricao' => "Detecção automática: o canal {$numeroCanal} (\"{$nomeCanal}\") do DVR/NVR {$ativo['codigo_patrimonio']} ({$ativo['nome']}, IP {$ativo['ip']}) está reportando \"Tampada\" (VideoBlind -- lente coberta/desfocada de propósito ou obstrução) e marcado como \"Em uso\".\n\n"
+                . "Verifique a câmera fisicamente. Se ela realmente não existe/não está em uso, abra a ficha do ativo, aba \"Canais\", e desmarque \"Em uso\" pra esse canal -- assim ele para de gerar chamado automático.",
+            'categoria_id' => $categoriaId,
+            'unidade_id' => $ativo['unidade_id'],
+            'ativo_id' => $ativo['id'],
+            'prioridade' => 'alta',
+            'solicitante_nome' => 'RD.Intranet - Robô',
+            'solicitante_email' => 'robo@rd.intranet',
+        ], 'sistema');
+
+        return $resultado['success'] ? (int)$resultado['id'] : null;
+    }
+
+    /** @return int|null id do chamado aberto, ou null se não conseguiu abrir */
+    private function abrirChamadoHdProblemaDvr(array $ativo, string $problema): ?int
+    {
+        $categoriaId = $this->categoriaChamadoDvrNvrId();
+
+        if ($categoriaId === null) {
+            return null;
+        }
+
+        $resultado = (new ChamadoService())->abrir([
+            'titulo' => "{$ativo['codigo_patrimonio']} -- Problema no HD: {$problema}",
+            'descricao' => "Detecção automática: o DVR/NVR {$ativo['codigo_patrimonio']} ({$ativo['nome']}, IP {$ativo['ip']}) reportou \"{$problema}\" via API. Isso normalmente significa perda de gravação -- verifique o disco físico o quanto antes.",
+            'categoria_id' => $categoriaId,
+            'unidade_id' => $ativo['unidade_id'],
+            'ativo_id' => $ativo['id'],
+            'prioridade' => 'urgente',
             'solicitante_nome' => 'RD.Intranet - Robô',
             'solicitante_email' => 'robo@rd.intranet',
         ], 'sistema');
