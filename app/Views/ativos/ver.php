@@ -1202,6 +1202,15 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                 <div class="modal-body text-center" id="modalSnapshotDvrCorpo">
                     <div class="spinner-border text-primary" role="status"></div>
                 </div>
+                <div class="modal-footer">
+                    <span class="small text-muted me-auto" id="modalSnapshotDvrHora"></span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="botaoAtualizarSnapshotDvr">
+                        <i class="bi bi-arrow-repeat"></i> Atualizar
+                    </button>
+                    <a href="#" class="btn btn-sm btn-outline-primary disabled" id="botaoBaixarSnapshotDvr" download>
+                        <i class="bi bi-download"></i> Baixar imagem
+                    </a>
+                </div>
             </div>
         </div>
     </div>
@@ -1906,31 +1915,54 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     let modal = null;
     const titulo = document.getElementById('modalSnapshotDvrTitulo');
     const corpo = document.getElementById('modalSnapshotDvrCorpo');
+    const hora = document.getElementById('modalSnapshotDvrHora');
+    const botaoAtualizar = document.getElementById('botaoAtualizarSnapshotDvr');
+    const botaoBaixar = document.getElementById('botaoBaixarSnapshotDvr');
+    let canalAberto = null;
+
+    async function carregarSnapshot(id, canal) {
+        corpo.innerHTML = '<div class="spinner-border text-primary" role="status"></div>';
+        hora.textContent = '';
+        botaoBaixar.classList.add('disabled');
+        botaoAtualizar.disabled = true;
+
+        const dados = new URLSearchParams();
+        dados.set('id', id);
+        dados.set('canal', canal);
+
+        try {
+            const res = await fetch(<?= json_encode(url('/ativos/intelbras-dvr/snapshot-canal')) ?>, { method: 'POST', body: dados });
+            const resultado = await res.json();
+
+            if (resultado.success) {
+                const dataUri = 'data:' + resultado.content_type + ';base64,' + resultado.imagem_base64;
+                corpo.innerHTML = '<img src="' + dataUri + '" class="img-fluid rounded" alt="Canal ' + canal + '">';
+                hora.textContent = 'Atualizado às ' + new Date().toLocaleTimeString('pt-BR');
+                botaoBaixar.href = dataUri;
+                botaoBaixar.download = 'canal-' + canal + '-' + Date.now() + '.jpg';
+                botaoBaixar.classList.remove('disabled');
+            } else {
+                corpo.innerHTML = '<div class="alert alert-danger mb-0">' + (resultado.message || 'Falha ao buscar a imagem.') + '</div>';
+            }
+        } catch (e) {
+            corpo.innerHTML = '<div class="alert alert-danger mb-0">Erro ao comunicar com o servidor.</div>';
+        } finally {
+            botaoAtualizar.disabled = false;
+        }
+    }
 
     botoesSnapshot.forEach(function (botao) {
-        botao.addEventListener('click', async function () {
+        botao.addEventListener('click', function () {
+            canalAberto = { id: botao.dataset.id, canal: botao.dataset.canal };
             titulo.textContent = 'Canal ' + botao.dataset.canal;
-            corpo.innerHTML = '<div class="spinner-border text-primary" role="status"></div>';
             if (!modal) modal = new bootstrap.Modal(modalEl);
             modal.show();
-
-            const dados = new URLSearchParams();
-            dados.set('id', botao.dataset.id);
-            dados.set('canal', botao.dataset.canal);
-
-            try {
-                const res = await fetch(<?= json_encode(url('/ativos/intelbras-dvr/snapshot-canal')) ?>, { method: 'POST', body: dados });
-                const resultado = await res.json();
-
-                if (resultado.success) {
-                    corpo.innerHTML = '<img src="data:' + resultado.content_type + ';base64,' + resultado.imagem_base64 + '" class="img-fluid rounded" alt="Canal ' + botao.dataset.canal + '">';
-                } else {
-                    corpo.innerHTML = '<div class="alert alert-danger mb-0">' + (resultado.message || 'Falha ao buscar a imagem.') + '</div>';
-                }
-            } catch (e) {
-                corpo.innerHTML = '<div class="alert alert-danger mb-0">Erro ao comunicar com o servidor.</div>';
-            }
+            carregarSnapshot(canalAberto.id, canalAberto.canal);
         });
+    });
+
+    botaoAtualizar.addEventListener('click', function () {
+        if (canalAberto) carregarSnapshot(canalAberto.id, canalAberto.canal);
     });
 
     document.querySelectorAll('.campo-canal-em-uso-dvr').forEach(function (campo) {
