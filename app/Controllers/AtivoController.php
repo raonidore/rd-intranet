@@ -610,6 +610,18 @@ class AtivoController extends Controller
         echo json_encode($this->service->definirSensibilidadeCanalDvr($id, $canal, $nivel));
     }
 
+    public function definirDeteccaoTampadaCanalDvr(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $canal = (int)($_POST['canal'] ?? 0);
+        $ativoFlag = ($_POST['ativo'] ?? '') === '1';
+
+        echo json_encode($this->service->definirDeteccaoTampadaCanalDvr($id, $canal, $ativoFlag));
+    }
+
     public function testarTampadaCanalDvr(): void
     {
         AuthMiddleware::checkModulo('ativos_lista');

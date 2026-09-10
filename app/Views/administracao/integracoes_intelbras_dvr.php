@@ -222,11 +222,21 @@ ob_start();
             canal que fica de frente pra uma cena escura/de baixo contraste, o próprio detector do DVR
             fica menos propenso a disparar falso positivo -- ataca o problema na origem.
         </p>
-        <p class="text-muted small mt-2 mb-0">
+        <p class="text-muted small mt-2 mb-3">
             <strong>A chave de ativar/desativar é por DVR/NVR</strong>, não geral do sistema -- cada
             equipamento fica num ambiente diferente (iluminação, contraste), então o quanto essa detecção
             atrapalha ou ajuda pode variar de um pro outro. Fica na aba "Canais" da ficha de cada ativo, ao
             lado do título "Canais".
+        </p>
+        <p class="text-muted small mt-2 mb-0">
+            <strong>E também existe uma chave por canal</strong> (ícone de sino ao lado do "Testar") -- em
+            alguns casos, baixar a sensibilidade pra 1 (a mais baixa possível) ainda não é suficiente pra
+            parar o falso positivo naquele canal específico (isso já foi observado ao vivo: parece uma
+            limitação do próprio algoritmo de detecção do DVR em cenas de infravermelho/baixa luz, não
+            necessariamente um "bug" no sentido de erro de software -- mais uma fraqueza conhecida desse
+            tipo de análise embarcada barata em cena noturna). Nesse caso, desligar a detecção só daquele
+            canal problemático evita ficar recebendo sinalização inútil sem precisar desligar o DVR
+            inteiro.
         </p>
     </div>
 </div>

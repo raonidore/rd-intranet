@@ -1135,10 +1135,10 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                         <?php if (empty($canal['com_sinal']) && !empty($canal['chamado_aberto_id'])): ?>
                                             <a href="<?= url('/chamados/atendimentos/ver?id=' . (int)$canal['chamado_aberto_id']) ?>" class="small ms-1" title="Ver chamado automático aberto"><i class="bi bi-ticket-perforated"></i></a>
                                         <?php endif; ?>
-                                        <?php if (!empty($canal['tampada'])): ?>
+                                        <span class="badge-tampada-dvr" style="<?= !empty($canal['tampada']) ? '' : 'display:none' ?>">
                                             <?= Badge::make('Tampada', 'warning') ?>
-                                            <i class="bi bi-info-circle text-muted small" data-bs-toggle="tooltip" title="Sinalização automática, sem chamado -- confira a imagem (botão de câmera) antes de agir: o detector do próprio DVR gera falso positivo em cenas escuras/de baixo contraste."></i>
-                                        <?php endif; ?>
+                                            <i class="bi bi-info-circle text-muted small" data-bs-toggle="tooltip" title="Sinalização automática, sem chamado -- confira a imagem (botão de câmera) antes de agir: o detector do próprio DVR gera falso positivo em cenas escuras/de baixo contraste. Pode estar desatualizado -- use 'Testar' na coluna de sensibilidade pra conferir na hora."></i>
+                                        </span>
                                     </td>
                                     <td>
                                         <div class="d-flex align-items-center gap-2">
@@ -1152,16 +1152,22 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                     </td>
                                     <td>
                                         <?php if ($canal['sensibilidade_tampada'] ?? null): ?>
+                                            <?php $deteccaoCanalAtiva = $canal['deteccao_tampada_canal_ativa'] ?? true; ?>
                                             <div class="d-flex align-items-center gap-2">
                                                 <select class="form-select form-select-sm campo-sensibilidade-tampada-dvr" style="width:auto"
-                                                        data-id="<?= (int)$ativo['id'] ?>" data-canal="<?= (int)($canal['numero'] ?? 0) ?>"
+                                                        data-id="<?= (int)$ativo['id'] ?>" data-canal="<?= (int)($canal['numero'] ?? 0) ?>" <?= $deteccaoCanalAtiva ? '' : 'disabled' ?>
                                                         title="1 = menos sensível (só bloqueio óbvio) -- 6 = mais sensível (padrão de fábrica: 3)">
                                                     <?php for ($n = 1; $n <= 6; $n++): ?>
                                                         <option value="<?= $n ?>" <?= (int)$canal['sensibilidade_tampada'] === $n ? 'selected' : '' ?>><?= $n ?></option>
                                                     <?php endfor; ?>
                                                 </select>
-                                                <button type="button" class="btn btn-sm btn-outline-secondary botao-testar-tampada-dvr" data-id="<?= (int)$ativo['id'] ?>" data-canal="<?= (int)($canal['numero'] ?? 0) ?>" title="Checar agora se o canal ainda dispara 'Tampada' com essa sensibilidade -- sem esperar a próxima coleta">
+                                                <button type="button" class="btn btn-sm btn-outline-secondary botao-testar-tampada-dvr" data-id="<?= (int)$ativo['id'] ?>" data-canal="<?= (int)($canal['numero'] ?? 0) ?>" <?= $deteccaoCanalAtiva ? '' : 'disabled' ?> title="Checar agora se o canal ainda dispara 'Tampada' com essa sensibilidade -- sem esperar a próxima coleta">
                                                     <i class="bi bi-arrow-repeat"></i> Testar
+                                                </button>
+                                                <button type="button" class="btn btn-sm <?= $deteccaoCanalAtiva ? 'btn-outline-secondary' : 'btn-outline-danger' ?> botao-alternar-deteccao-tampada-canal-dvr"
+                                                        data-id="<?= (int)$ativo['id'] ?>" data-canal="<?= (int)($canal['numero'] ?? 0) ?>" data-ativo="<?= $deteccaoCanalAtiva ? '1' : '0' ?>"
+                                                        title="<?= $deteccaoCanalAtiva ? 'Detecção ligada nesse canal -- clique pra desligar (canal que insiste em falso positivo mesmo com sensibilidade baixa)' : 'Detecção desligada nesse canal -- clique pra religar' ?>">
+                                                    <i class="bi <?= $deteccaoCanalAtiva ? 'bi-bell' : 'bi-bell-slash' ?>"></i>
                                                 </button>
                                                 <span class="small feedback-sensibilidade-tampada-dvr"></span>
                                             </div>
@@ -2015,6 +2021,14 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                 if (resultado.success) {
                     feedback.className = resultado.tampada ? 'small feedback-sensibilidade-tampada-dvr text-warning' : 'small feedback-sensibilidade-tampada-dvr text-success';
                     feedback.innerHTML = resultado.tampada ? '<i class="bi bi-camera-video-off"></i> Ainda tampada' : '<i class="bi bi-check-lg"></i> OK agora';
+                    // O badge "Tampada" na coluna de Status só é atualizado na
+                    // coleta periódica (até 30 min) -- sincroniza aqui com o
+                    // resultado do teste avulso pra não ficar mostrando estado
+                    // antigo depois de mexer na sensibilidade.
+                    const badgeTampada = botao.closest('tr').querySelector('.badge-tampada-dvr');
+                    if (badgeTampada) {
+                        badgeTampada.style.display = resultado.tampada ? '' : 'none';
+                    }
                 } else {
                     feedback.innerHTML = '';
                     alert(resultado.message || 'Falha ao testar.');
@@ -2022,6 +2036,59 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             } catch (e) {
                 feedback.innerHTML = '';
                 alert('Erro ao comunicar com o servidor.');
+            } finally {
+                botao.disabled = false;
+            }
+        });
+    });
+
+    document.querySelectorAll('.botao-alternar-deteccao-tampada-canal-dvr').forEach(function (botao) {
+        botao.addEventListener('click', async function () {
+            const novoValor = botao.dataset.ativo === '1' ? '0' : '1';
+            botao.disabled = true;
+            const linha = botao.closest('tr');
+            const feedback = linha.querySelector('.feedback-sensibilidade-tampada-dvr');
+            feedback.className = 'small feedback-sensibilidade-tampada-dvr text-muted';
+            feedback.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+
+            const dados = new URLSearchParams();
+            dados.set('id', botao.dataset.id);
+            dados.set('canal', botao.dataset.canal);
+            dados.set('ativo', novoValor);
+
+            try {
+                const res = await fetch(<?= json_encode(url('/ativos/intelbras-dvr/canal-deteccao-tampada')) ?>, { method: 'POST', body: dados });
+                const resultado = await res.json();
+                if (resultado.success) {
+                    botao.dataset.ativo = novoValor;
+                    const ligado = novoValor === '1';
+                    botao.classList.toggle('btn-outline-secondary', ligado);
+                    botao.classList.toggle('btn-outline-danger', !ligado);
+                    botao.querySelector('i').className = ligado ? 'bi bi-bell' : 'bi bi-bell-slash';
+                    botao.title = ligado
+                        ? 'Detecção ligada nesse canal -- clique pra desligar (canal que insiste em falso positivo mesmo com sensibilidade baixa)'
+                        : 'Detecção desligada nesse canal -- clique pra religar';
+
+                    const select = linha.querySelector('.campo-sensibilidade-tampada-dvr');
+                    const botaoTestar = linha.querySelector('.botao-testar-tampada-dvr');
+                    if (select) select.disabled = !ligado;
+                    if (botaoTestar) botaoTestar.disabled = !ligado;
+
+                    if (!ligado) {
+                        const badgeTampada = linha.querySelector('.badge-tampada-dvr');
+                        if (badgeTampada) badgeTampada.style.display = 'none';
+                    }
+
+                    feedback.className = 'small feedback-sensibilidade-tampada-dvr text-success';
+                    feedback.innerHTML = '<i class="bi bi-check-lg"></i> Salvo';
+                    setTimeout(() => { feedback.innerHTML = ''; }, 2000);
+                } else {
+                    alert(resultado.message || 'Falha ao salvar.');
+                    feedback.innerHTML = '';
+                }
+            } catch (e) {
+                alert('Erro ao comunicar com o servidor.');
+                feedback.innerHTML = '';
             } finally {
                 botao.disabled = false;
             }

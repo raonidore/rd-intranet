@@ -1725,6 +1725,14 @@ class AtivoService
             $canal['em_uso'] = $anterior['em_uso'] ?? true;
             $canal['chamado_aberto_id'] = $anterior['chamado_aberto_id'] ?? null;
 
+            // Chave de "detecção de tampada" por canal (além da chave por
+            // DVR inteiro) -- alguns canais continuam disparando falso
+            // positivo mesmo no nível de sensibilidade mais baixo (1), e o
+            // operador pode preferir desligar só aquele canal problemático
+            // sem perder a detecção nos outros.
+            $canal['deteccao_tampada_canal_ativa'] = $anterior['deteccao_tampada_canal_ativa'] ?? true;
+            $canal['tampada'] = $canal['deteccao_tampada_canal_ativa'] && ($canal['tampada'] ?? false);
+
             $temSinalAgora = (bool)($canal['com_sinal'] ?? true);
 
             if ($canal['em_uso'] && !$temSinalAgora && !$this->chamadoDvrAindaAberto($canal['chamado_aberto_id'])) {
@@ -1840,6 +1848,45 @@ class AtivoService
 
         if ($resultado['success']) {
             AuditService::registrar('Ativos', 'DVR/NVR - Canal em uso', "{$resultado['codigo_patrimonio']}: canal {$canal} marcado como " . ($emUso ? 'em uso' : 'fora de uso') . '.');
+        }
+
+        return $resultado;
+    }
+
+    /** Liga/desliga a detecção de "câmera tampada" (VideoBlind) só nesse canal -- pra quando um canal específico continua disparando falso positivo mesmo no nível de sensibilidade mais baixo. */
+    public function definirDeteccaoTampadaCanalDvr(int $id, int $canal, bool $ativoFlag): array
+    {
+        $mensagemSucesso = $ativoFlag
+            ? 'Detecção de câmera tampada ativada pra esse canal.'
+            : 'Detecção de câmera tampada desativada pra esse canal -- badge "Tampada" não aparece mais nele.';
+
+        $resultado = $this->alterarDetalhesComLock($id, function (array $detalhes) use ($canal, $ativoFlag, $mensagemSucesso) {
+            // Mesmo cuidado de definirCanalEmUsoDvr() -- "foreach ($x['y'] ?? [] as &$c)" não propaga a mutação de volta.
+            $canais = $detalhes['dvr_canais'] ?? [];
+            $encontrado = false;
+
+            foreach ($canais as &$c) {
+                if ((int)($c['numero'] ?? 0) === $canal) {
+                    $c['deteccao_tampada_canal_ativa'] = $ativoFlag;
+                    if (!$ativoFlag) {
+                        $c['tampada'] = false;
+                    }
+                    $encontrado = true;
+                }
+            }
+            unset($c);
+
+            if (!$encontrado) {
+                return ['ok' => false, 'message' => 'Canal não encontrado.'];
+            }
+
+            $detalhes['dvr_canais'] = $canais;
+
+            return ['ok' => true, 'detalhes' => $detalhes, 'message' => $mensagemSucesso];
+        });
+
+        if ($resultado['success']) {
+            AuditService::registrar('Ativos', 'DVR/NVR - Detecção de tampada por canal', "{$resultado['codigo_patrimonio']}: canal {$canal} -- detecção de tampada " . ($ativoFlag ? 'ativada' : 'desativada') . '.');
         }
 
         return $resultado;
