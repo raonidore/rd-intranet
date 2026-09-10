@@ -314,9 +314,10 @@ class IntelbrasDvrService
     }
 
     /**
-     * A resposta de getEventIndexes vem como "channels[N]=X" (N = índice
-     * 0-based do canal). Soma 1 pra bater com a numeração "Canal 1..N" que o
-     * próprio DVR mostra.
+     * A resposta de getEventIndexes vem como "channels[N]=X" -- N é só a
+     * posição na lista (0, 1, 2...), o canal afetado de verdade é o VALOR X
+     * (0-based). Soma 1 pra bater com a numeração "Canal 1..N" que o próprio
+     * DVR mostra.
      *
      * @return int[]
      */
@@ -328,8 +329,8 @@ class IntelbrasDvrService
 
         $canais = [];
         foreach ($resultado['dados'] as $chave => $valor) {
-            if (preg_match('/^channels\[(\d+)\]$/', $chave, $m)) {
-                $canais[] = (int)$m[1] + 1;
+            if (str_starts_with($chave, 'channels[')) {
+                $canais[] = (int)$valor + 1;
             }
         }
 
