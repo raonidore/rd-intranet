@@ -200,6 +200,51 @@ ob_start();
 
 <div class="card border-0 shadow-sm mt-3 dvr-doc-card" style="max-width:960px">
     <div class="card-body">
+        <strong><i class="bi bi-palette me-2"></i> Legenda dos ícones -- aba "Canais"</strong>
+        <p class="text-muted small mt-2 mb-3">Os botões abaixo usam exatamente as mesmas cores da tela real -- bate o olho e já reconhece.</p>
+        <div class="dvr-legenda">
+            <div class="dvr-legenda-item">
+                <button type="button" class="btn btn-sm btn-outline-primary" tabindex="-1"><i class="bi bi-camera-video"></i></button>
+                <span>Ver imagem atual (foto do momento, ao vivo)</span>
+            </div>
+            <div class="dvr-legenda-item">
+                <button type="button" class="btn btn-sm btn-outline-warning" tabindex="-1"><i class="bi bi-bookmark-star"></i></button>
+                <span>Imagem de referência -- esse canal <strong>ainda não tem</strong> uma salva</span>
+            </div>
+            <div class="dvr-legenda-item">
+                <button type="button" class="btn btn-sm btn-outline-success" tabindex="-1"><i class="bi bi-bookmark-star"></i></button>
+                <span>Imagem de referência -- esse canal <strong>já tem</strong> uma salva</span>
+            </div>
+            <div class="dvr-legenda-item">
+                <button type="button" class="btn btn-sm btn-outline-secondary" tabindex="-1"><i class="bi bi-pencil"></i></button>
+                <span>Renomear canal (grava direto no DVR)</span>
+            </div>
+            <div class="dvr-legenda-item">
+                <button type="button" class="btn btn-sm btn-outline-secondary" tabindex="-1"><i class="bi bi-arrow-repeat"></i> Testar</button>
+                <span>Confere <strong>agora</strong> se o canal ainda dispara "Tampada" com a sensibilidade atual</span>
+            </div>
+            <div class="dvr-legenda-item">
+                <button type="button" class="btn btn-sm btn-outline-secondary" tabindex="-1"><i class="bi bi-bell"></i></button>
+                <span>Detecção de tampada <strong class="text-success">ligada</strong> nesse canal -- clique pra desligar</span>
+            </div>
+            <div class="dvr-legenda-item">
+                <button type="button" class="btn btn-sm btn-outline-danger" tabindex="-1"><i class="bi bi-bell-slash"></i></button>
+                <span>Detecção de tampada <strong class="text-danger">desligada</strong> nesse canal -- clique pra religar</span>
+            </div>
+            <div class="dvr-legenda-item">
+                <div class="form-check form-switch mb-0"><input type="checkbox" class="form-check-input" checked disabled tabindex="-1"></div>
+                <span>Detecção de tampada ligada pro <strong>DVR/NVR inteiro</strong> (cabeçalho da aba "Canais")</span>
+            </div>
+            <div class="dvr-legenda-item">
+                <button type="button" class="btn btn-sm btn-outline-primary" tabindex="-1"><i class="bi bi-images"></i> Auto-preencher imagens de referência</button>
+                <span>Tira foto de <strong>todo canal que ainda não tem</strong> imagem de referência salva -- quem está sem sinal no momento é ignorado, nada é sobrescrito</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mt-3 dvr-doc-card" style="max-width:960px">
+    <div class="card-body">
         <strong><i class="bi bi-book"></i> Documentação técnica</strong>
         <p class="text-muted small mt-2 mb-3">Detalhe de cada alerta, como usar os canais e como a integração conversa com o equipamento por baixo dos panos.</p>
 
@@ -401,6 +446,11 @@ ob_start();
 
 .dvr-tabela-alertas th { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: #6c757d; border-top: none; }
 .dvr-tabela-alertas td { font-size: .85rem; }
+
+.dvr-legenda { display: flex; flex-direction: column; gap: .65rem; }
+.dvr-legenda-item { display: flex; align-items: center; gap: .75rem; }
+.dvr-legenda-item > .btn, .dvr-legenda-item > .form-check { flex: 0 0 auto; pointer-events: none; }
+.dvr-legenda-item > span { font-size: .85rem; color: #495057; }
 
 .dvr-accordion .accordion-button {
     font-size: .88rem; font-weight: 600; background: #f8f9fa;
