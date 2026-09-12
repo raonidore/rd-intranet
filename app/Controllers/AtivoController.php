@@ -677,6 +677,123 @@ class AtivoController extends Controller
         echo json_encode($this->service->definirDeteccaoTampadaDvr($id, $ativoFlag));
     }
 
+    public function usuariosDvr(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+
+        echo json_encode($this->service->listarUsuariosDvr($id));
+    }
+
+    public function usuariosAtivosDvr(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+
+        echo json_encode($this->service->buscarUsuariosAtivosDvr($id));
+    }
+
+    public function criarUsuarioDvr(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $nome = trim((string)($_POST['nome'] ?? ''));
+        $senha = (string)($_POST['senha'] ?? '');
+        $grupo = trim((string)($_POST['grupo'] ?? 'user'));
+        $memo = trim((string)($_POST['memo'] ?? ''));
+
+        echo json_encode($this->service->criarUsuarioDvr($id, $nome, $senha, $grupo, $memo));
+    }
+
+    public function editarUsuarioDvr(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $nome = trim((string)($_POST['nome'] ?? ''));
+        $grupo = trim((string)($_POST['grupo'] ?? 'user'));
+        $memo = trim((string)($_POST['memo'] ?? ''));
+        $compartilhavel = ($_POST['compartilhavel'] ?? '') === '1';
+
+        echo json_encode($this->service->editarUsuarioDvr($id, $nome, $grupo, $memo, $compartilhavel));
+    }
+
+    public function excluirUsuarioDvr(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $nome = trim((string)($_POST['nome'] ?? ''));
+
+        echo json_encode($this->service->excluirUsuarioDvr($id, $nome));
+    }
+
+    public function trocarSenhaUsuarioDvr(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $nome = trim((string)($_POST['nome'] ?? ''));
+        $novaSenha = (string)($_POST['nova_senha'] ?? '');
+
+        echo json_encode($this->service->trocarSenhaUsuarioDvr($id, $nome, $novaSenha));
+    }
+
+    public function redeDvr(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+
+        echo json_encode($this->service->buscarRedeDvr($id));
+    }
+
+    public function definirRedeSeguraDvr(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $hostname = trim((string)($_POST['hostname'] ?? ''));
+        $dns = array_filter([
+            trim((string)($_POST['dns1'] ?? '')),
+            trim((string)($_POST['dns2'] ?? '')),
+        ], fn ($v) => $v !== '');
+
+        echo json_encode($this->service->definirRedeSeguraDvr($id, $hostname, $dns));
+    }
+
+    public function segurancaAcessoDvr(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+
+        echo json_encode($this->service->buscarSegurancaAcessoDvr($id));
+    }
+
+    public function definirAlertaLoginFalhoDvr(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $ativoFlag = ($_POST['ativo'] ?? '') === '1';
+
+        echo json_encode($this->service->definirAlertaLoginFalhoDvr($id, $ativoFlag));
+    }
+
     public function unifiDesconectarCliente(): void
     {
         AuthMiddleware::checkModulo('ativos_lista');

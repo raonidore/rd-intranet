@@ -963,6 +963,16 @@ $router->post('/ativos/intelbras-dvr/imagem-referencia/salvar', [AtivoController
 $router->post('/ativos/intelbras-dvr/imagem-referencia/auto-preencher', [AtivoController::class, 'autoPreencherImagemReferenciaDvr']);
 $router->post('/ativos/intelbras-dvr/canal-deteccao-tampada', [AtivoController::class, 'definirDeteccaoTampadaCanalDvr']);
 $router->post('/ativos/intelbras-dvr/deteccao-tampada', [AtivoController::class, 'definirDeteccaoTampadaDvr']);
+$router->post('/ativos/intelbras-dvr/usuarios', [AtivoController::class, 'usuariosDvr']);
+$router->post('/ativos/intelbras-dvr/usuarios-ativos', [AtivoController::class, 'usuariosAtivosDvr']);
+$router->post('/ativos/intelbras-dvr/usuarios/criar', [AtivoController::class, 'criarUsuarioDvr']);
+$router->post('/ativos/intelbras-dvr/usuarios/editar', [AtivoController::class, 'editarUsuarioDvr']);
+$router->post('/ativos/intelbras-dvr/usuarios/excluir', [AtivoController::class, 'excluirUsuarioDvr']);
+$router->post('/ativos/intelbras-dvr/usuarios/trocar-senha', [AtivoController::class, 'trocarSenhaUsuarioDvr']);
+$router->post('/ativos/intelbras-dvr/rede', [AtivoController::class, 'redeDvr']);
+$router->post('/ativos/intelbras-dvr/rede/salvar', [AtivoController::class, 'definirRedeSeguraDvr']);
+$router->post('/ativos/intelbras-dvr/seguranca', [AtivoController::class, 'segurancaAcessoDvr']);
+$router->post('/ativos/intelbras-dvr/seguranca/alerta-login-falho', [AtivoController::class, 'definirAlertaLoginFalhoDvr']);
 $router->post('/ativos/unifi/desconectar-cliente', [AtivoController::class, 'unifiDesconectarCliente']);
 $router->post('/ativos/unifi/bloquear-cliente', [AtivoController::class, 'unifiBloquearCliente']);
 $router->post('/ativos/unifi/desbloquear-cliente', [AtivoController::class, 'unifiDesbloquearCliente']);

@@ -27,6 +27,18 @@ class IntelbrasDvrService
     private const CHAVE_USUARIO = 'intelbras_dvr_usuario';
     private const CHAVE_SENHA_CIFRADA = 'intelbras_dvr_senha_cifrada';
 
+    /**
+     * O "Type" do log de conta vem localizado pelo próprio firmware (ex:
+     * "Usuário Logado", "Fazer logoff" -- confirmado ao vivo, nem bate com o
+     * inglês do manual oficial), então não dá pra fazer uma lista positiva
+     * de "isso é falha de login" por string exata. Em vez disso, qualquer
+     * "Type" que contenha uma destas palavras (case-insensitive) é tratado
+     * como suspeito -- o resto (login/logoff normal, troca de config etc.)
+     * fica de fora de propósito, mesma filosofia de "só alerta com
+     * confiança" usada pro VideoBlind (evita alarme falso).
+     */
+    private const PALAVRAS_EVENTO_CONTA_SUSPEITO = ['falha', 'fail', 'incorret', 'wrong', 'bloque', 'lock', 'invalid', 'invál', 'negad', 'denied', 'error', 'erro'];
+
     /** Configurado = existe ALGUMA fonte de credencial (padrão global ou pelo menos uma por IP) -- usado só pra decidir se vale tentar essa integração. */
     public function configurado(): bool
     {
@@ -249,6 +261,17 @@ class IntelbrasDvrService
         // (0-based), documentado na API oficial da Intelbras/Dahua.
         $blindConfig = $this->chamarApi($ip, '/cgi-bin/configManager.cgi?action=getConfig&name=BlindDetect');
 
+        // Substituto viável do "status de gravação ao vivo" que a API mais
+        // nova (recordManager/getStateAll, JSON) prometia -- confirmado ao
+        // vivo contra os 3 DVR/NVR reais do cliente que aquele endpoint
+        // devolve 400/501 (não implementado nesse firmware, nos dois
+        // modelos testados). RecordMode é config clássica (mesma família já
+        // comprovada) e não diz "está gravando agora" com certeza, mas diz
+        // se o canal está CONFIGURADO pra nunca gravar (Mode=2) -- uma
+        // câmera com sinal nesse estado está com um problema real e
+        // silencioso (ninguém percebe olhando a imagem ao vivo).
+        $recordMode = $this->chamarApi($ip, '/cgi-bin/configManager.cgi?action=getConfig&name=RecordMode');
+
         // Ausência/falha de HD e pouco espaço livre -- quando responde
         // "Error: No Events" (nunca aconteceu), o parser genérico de
         // chamarApi() já trata como sucesso com $dados vazio (não é erro de
@@ -268,12 +291,21 @@ class IntelbrasDvrService
                 $nivelSensibilidade = $blindConfig && $blindConfig['sucesso'] && isset($blindConfig['dados']["table.BlindDetect[{$i}].Level"])
                     ? (int)$blindConfig['dados']["table.BlindDetect[{$i}].Level"]
                     : null;
+                $modoGravacao = $recordMode['sucesso'] && isset($recordMode['dados']["table.RecordMode[{$i}].Mode"])
+                    ? match ((int)$recordMode['dados']["table.RecordMode[{$i}].Mode"]) {
+                        0 => 'automatico',
+                        1 => 'manual',
+                        2 => 'parado',
+                        default => null,
+                    }
+                    : null;
                 $canais[] = [
                     'numero' => $numero,
                     'nome' => $canaisNome['dados']["table.ChannelTitle[{$i}].Name"],
                     'com_sinal' => !in_array($numero, $canaisComPerda, true),
                     'tampada' => $deteccaoTampadaAtiva && in_array($numero, $canaisComBlind, true),
                     'sensibilidade_tampada' => $nivelSensibilidade,
+                    'modo_gravacao' => $modoGravacao,
                 ];
                 $i++;
             }
@@ -476,6 +508,404 @@ class IntelbrasDvrService
         $canaisComBlind = $this->extrairCanaisDoEvento($videoBlind);
 
         return ['success' => true, 'tampada' => in_array($canal, $canaisComBlind, true)];
+    }
+
+    /**
+     * Agrupa um bloco "chave=valor" tipo `prefixo[0].Campo=valor` numa lista
+     * de arrays associativos [0 => ['Campo' => 'valor', ...], 1 => [...]] --
+     * só pega campos ESCALARES de primeiro nível (ex: ignora de propósito
+     * "users[0].AuthorityList[3]", que é um array dentro do índice, ou
+     * "users[0].AccessSchedule[0][0]") -- exatamente o que sobra depois
+     * disso (Name, Group, Memo, ClientAddress etc.) é o que interessa aqui.
+     *
+     * @return array<int, array<string,string>>
+     */
+    private function agruparPorIndice(array $dados, string $prefixo): array
+    {
+        $itens = [];
+        $padrao = '/^' . preg_quote($prefixo, '/') . '\[(\d+)\]\.([A-Za-z0-9]+)$/';
+
+        foreach ($dados as $chave => $valor) {
+            if (!preg_match($padrao, $chave, $m)) {
+                continue;
+            }
+            $itens[(int)$m[1]][$m[2]] = $valor;
+        }
+
+        ksort($itens);
+
+        return array_values($itens);
+    }
+
+    /**
+     * Impede excluir/trocar a senha do usuário que É a credencial cadastrada
+     * pra esse IP -- fazer isso por aqui deixaria a própria integração sem
+     * acesso ao DVR na próxima chamada (a senha nova nunca seria refletida
+     * na credencial cifrada que a gente guarda, e excluir o usuário derruba
+     * o login de vez).
+     */
+    private function usuarioEhCredencialAtual(string $ip, string $nome): bool
+    {
+        $credencial = $this->credencialParaIp($ip);
+
+        return $credencial !== null && strcasecmp($credencial['usuario'], $nome) === 0;
+    }
+
+    /** @return array{success:bool, usuarios?:array, message?:string} */
+    public function listarUsuarios(string $ip): array
+    {
+        $resultado = $this->chamarApi($ip, '/cgi-bin/userManager.cgi?action=getUserInfoAll');
+
+        if (!$resultado['sucesso']) {
+            return ['success' => false, 'message' => $resultado['mensagem']];
+        }
+
+        $usuarios = [];
+        foreach ($this->agruparPorIndice($resultado['dados'], 'users') as $u) {
+            if (empty($u['Name'])) {
+                continue;
+            }
+            $usuarios[] = [
+                'nome' => $u['Name'],
+                'grupo' => $u['Group'] ?? '',
+                'memo' => $u['Memo'] ?? '',
+                'compartilhavel' => ($u['Sharable'] ?? 'false') === 'true',
+                'reservado' => ($u['Reserved'] ?? 'false') === 'true',
+            ];
+        }
+
+        return ['success' => true, 'usuarios' => $usuarios];
+    }
+
+    /** @return array{success:bool, grupos?:string[], message?:string} */
+    public function listarGrupos(string $ip): array
+    {
+        $resultado = $this->chamarApi($ip, '/cgi-bin/userManager.cgi?action=getGroupInfoAll');
+
+        if (!$resultado['sucesso']) {
+            return ['success' => false, 'message' => $resultado['mensagem']];
+        }
+
+        $grupos = [];
+        foreach ($this->agruparPorIndice($resultado['dados'], 'group') as $g) {
+            if (!empty($g['Name'])) {
+                $grupos[] = $g['Name'];
+            }
+        }
+
+        return ['success' => true, 'grupos' => $grupos];
+    }
+
+    /**
+     * Quem está logado no DVR agora -- inclui a própria sessão CGI usada
+     * pela nossa integração (ClientType "CGI") e a sessão local do monitor
+     * físico conectado nele (ClientAddress "Local"), confirmado ao vivo.
+     *
+     * @return array{success:bool, usuarios?:array, message?:string}
+     */
+    public function buscarUsuariosAtivos(string $ip): array
+    {
+        $resultado = $this->chamarApi($ip, '/cgi-bin/userManager.cgi?action=getActiveUserInfoAll');
+
+        if (!$resultado['sucesso']) {
+            return ['success' => false, 'message' => $resultado['mensagem']];
+        }
+
+        $usuarios = [];
+        foreach ($this->agruparPorIndice($resultado['dados'], 'users') as $u) {
+            if (empty($u['Name'])) {
+                continue;
+            }
+            $usuarios[] = [
+                'nome' => $u['Name'],
+                'ip' => $u['ClientAddress'] ?? '',
+                'grupo' => $u['Group'] ?? '',
+                'tipo_cliente' => $u['ClientType'] ?? '',
+                'login_em' => $u['LoginTime'] ?? '',
+            ];
+        }
+
+        return ['success' => true, 'usuarios' => $usuarios];
+    }
+
+    public function criarUsuario(string $ip, string $nome, string $senha, string $grupo, string $memo = ''): array
+    {
+        $nome = trim($nome);
+        $senha = trim($senha);
+        $grupo = trim($grupo) ?: 'user';
+
+        if ($nome === '' || $senha === '') {
+            return ['success' => false, 'message' => 'Informe usuário e senha.'];
+        }
+
+        $query = 'user.Name=' . rawurlencode($nome)
+            . '&user.Password=' . rawurlencode($senha)
+            . '&user.Group=' . rawurlencode($grupo)
+            . '&user.Memo=' . rawurlencode($memo)
+            . '&user.Sharable=true&user.Reserved=false';
+
+        $resultado = $this->chamarApi($ip, '/cgi-bin/userManager.cgi?action=addUser&' . $query);
+
+        if (!$resultado['sucesso']) {
+            return ['success' => false, 'message' => $resultado['mensagem']];
+        }
+
+        return ['success' => true, 'message' => "Usuário \"{$nome}\" criado."];
+    }
+
+    public function editarUsuario(string $ip, string $nome, string $grupo, string $memo, bool $compartilhavel): array
+    {
+        $grupo = trim($grupo) ?: 'user';
+
+        $query = 'user.Group=' . rawurlencode($grupo)
+            . '&user.Memo=' . rawurlencode($memo)
+            . '&user.Sharable=' . ($compartilhavel ? 'true' : 'false')
+            . '&user.Reserved=false';
+
+        $resultado = $this->chamarApi($ip, '/cgi-bin/userManager.cgi?action=modifyUser&name=' . rawurlencode($nome) . '&' . $query);
+
+        if (!$resultado['sucesso']) {
+            return ['success' => false, 'message' => $resultado['mensagem']];
+        }
+
+        return ['success' => true, 'message' => "Usuário \"{$nome}\" atualizado."];
+    }
+
+    public function excluirUsuario(string $ip, string $nome): array
+    {
+        if ($this->usuarioEhCredencialAtual($ip, $nome)) {
+            return ['success' => false, 'message' => "Não é possível excluir \"{$nome}\" por aqui -- é o usuário usado pela integração com este DVR/NVR (veja Integrações antes de removê-lo)."];
+        }
+
+        $resultado = $this->chamarApi($ip, '/cgi-bin/userManager.cgi?action=deleteUser&name=' . rawurlencode($nome));
+
+        if (!$resultado['sucesso']) {
+            return ['success' => false, 'message' => $resultado['mensagem']];
+        }
+
+        return ['success' => true, 'message' => "Usuário \"{$nome}\" excluído."];
+    }
+
+    /**
+     * Troca a senha de OUTRO usuário usando a credencial admin já cadastrada
+     * pra esse IP (modifyPasswordByManager -- não precisa da senha antiga do
+     * usuário alvo). Recusa trocar a senha do próprio usuário-credencial: a
+     * senha nova nunca seria refletida no valor cifrado que guardamos,
+     * quebrando a integração na próxima chamada.
+     */
+    public function trocarSenhaUsuario(string $ip, string $nomeAlvo, string $novaSenha): array
+    {
+        if ($this->usuarioEhCredencialAtual($ip, $nomeAlvo)) {
+            return ['success' => false, 'message' => "Não é possível trocar a senha de \"{$nomeAlvo}\" por aqui -- é o usuário usado pela integração com este DVR/NVR (troque em Integrações, que atualiza os dois lados)."];
+        }
+
+        $novaSenha = trim($novaSenha);
+
+        if ($novaSenha === '') {
+            return ['success' => false, 'message' => 'Informe a nova senha.'];
+        }
+
+        $credencial = $this->credencialParaIp($ip);
+
+        if ($credencial === null) {
+            return ['success' => false, 'message' => "Nenhuma credencial cadastrada para {$ip} -- veja Integrações."];
+        }
+
+        $query = 'userName=' . rawurlencode($nomeAlvo)
+            . '&pwd=' . rawurlencode($novaSenha)
+            . '&managerName=' . rawurlencode($credencial['usuario'])
+            . '&managerPwd=' . rawurlencode($credencial['senha'])
+            . '&accountType=0';
+
+        $resultado = $this->chamarApi($ip, '/cgi-bin/userManager.cgi?action=modifyPasswordByManager&' . $query);
+
+        if (!$resultado['sucesso']) {
+            return ['success' => false, 'message' => $resultado['mensagem']];
+        }
+
+        return ['success' => true, 'message' => "Senha de \"{$nomeAlvo}\" alterada."];
+    }
+
+    /**
+     * TCP/IP do DVR -- confirmado ao vivo contra os 3 equipamentos reais.
+     * Junta Network (IP/máscara/gateway/DNS/hostname) com netApp (status do
+     * link/velocidade), que vêm de dois comandos clássicos diferentes.
+     *
+     * @return array{success:bool, message?:string, hostname?:string, dominio?:string, dhcp?:bool, ip?:string,
+     *   mascara?:string, gateway?:string, dns?:string[], mac?:string, mtu?:?int, status_link?:?string,
+     *   velocidade_mbps?:?int, tipo_interface?:?string}
+     */
+    public function buscarRede(string $ip): array
+    {
+        $rede = $this->chamarApi($ip, '/cgi-bin/configManager.cgi?action=getConfig&name=Network');
+
+        if (!$rede['sucesso']) {
+            return ['success' => false, 'message' => $rede['mensagem']];
+        }
+
+        $interfaces = $this->chamarApi($ip, '/cgi-bin/netApp.cgi?action=getInterfaces');
+        $iface = $interfaces['sucesso'] ? ($this->agruparPorIndice($interfaces['dados'], 'netInterface')[0] ?? []) : [];
+
+        $d = $rede['dados'];
+        $dns = [];
+        foreach ([0, 1] as $i) {
+            if (!empty($d["table.Network.eth0.DnsServers[{$i}]"])) {
+                $dns[] = $d["table.Network.eth0.DnsServers[{$i}]"];
+            }
+        }
+
+        return [
+            'success' => true,
+            'hostname' => $d['table.Network.Hostname'] ?? '',
+            'dominio' => $d['table.Network.Domain'] ?? '',
+            'dhcp' => ($d['table.Network.eth0.DhcpEnable'] ?? 'false') === 'true',
+            'ip' => $d['table.Network.eth0.IPAddress'] ?? '',
+            'mascara' => $d['table.Network.eth0.SubnetMask'] ?? '',
+            'gateway' => $d['table.Network.eth0.DefaultGateway'] ?? '',
+            'dns' => $dns,
+            'mac' => $d['table.Network.eth0.PhysicalAddress'] ?? '',
+            'mtu' => isset($d['table.Network.eth0.MTU']) ? (int)$d['table.Network.eth0.MTU'] : null,
+            'status_link' => $iface['ConnStatus'] ?? null,
+            'velocidade_mbps' => isset($iface['Speed']) ? (int)$iface['Speed'] : null,
+            'tipo_interface' => $iface['Type'] ?? null,
+        ];
+    }
+
+    /**
+     * Só troca hostname e DNS -- IP/máscara/gateway/DHCP ficam de fora DE
+     * PROPÓSITO (decisão explícita, dado o risco: um valor errado nesses
+     * campos pode deixar o DVR inacessível pela rede, exigindo alguém ir
+     * até o equipamento fisicamente pra corrigir).
+     */
+    public function definirRedeSegura(string $ip, string $hostname, array $dnsServers): array
+    {
+        $hostname = trim($hostname);
+
+        if ($hostname === '') {
+            return ['success' => false, 'message' => 'Informe um nome de host.'];
+        }
+
+        $dnsServers = array_values(array_filter(array_map('trim', $dnsServers)));
+        foreach ($dnsServers as $dns) {
+            if (filter_var($dns, FILTER_VALIDATE_IP) === false) {
+                return ['success' => false, 'message' => "\"{$dns}\" não é um IP válido pra servidor DNS."];
+            }
+        }
+
+        // Índice do array vai como %5B/%5D (bracket percent-encoded) -- mesmo
+        // padrão já usado (e confirmado ao vivo) em renomearCanal()/
+        // definirSensibilidadeTampada(), evita depender de como cada
+        // implementação de CGI tolera "[" "]" crus na query string.
+        $query = 'Network.Hostname=' . rawurlencode($hostname);
+        foreach ($dnsServers as $i => $dns) {
+            $query .= "&Network.eth0.DnsServers%5B{$i}%5D=" . rawurlencode($dns);
+        }
+
+        $resultado = $this->chamarApi($ip, '/cgi-bin/configManager.cgi?action=setConfig&' . $query);
+
+        if (!$resultado['sucesso']) {
+            return ['success' => false, 'message' => $resultado['mensagem']];
+        }
+
+        return ['success' => true, 'message' => 'Configuração de rede (hostname/DNS) salva.'];
+    }
+
+    /**
+     * Política de acesso do DVR -- LoginFailureAlarm já vem ligada de
+     * fábrica/instalação nos 3 equipamentos testados ao vivo, e
+     * LockLoginEnable/Times/Time (bloqueio temporário após N tentativas)
+     * mora em General, não junto -- confirmado ao vivo.
+     *
+     * @return array{success:bool, message?:string, alerta_login_falho_ativo?:bool, bloqueio_ativo?:bool,
+     *   bloqueio_tentativas?:?int, bloqueio_duracao_segundos?:?int}
+     */
+    public function buscarSegurancaAcesso(string $ip): array
+    {
+        $loginFailure = $this->chamarApi($ip, '/cgi-bin/configManager.cgi?action=getConfig&name=LoginFailureAlarm');
+
+        if (!$loginFailure['sucesso']) {
+            return ['success' => false, 'message' => $loginFailure['mensagem']];
+        }
+
+        $geral = $this->chamarApi($ip, '/cgi-bin/configManager.cgi?action=getConfig&name=General');
+
+        return [
+            'success' => true,
+            'alerta_login_falho_ativo' => ($loginFailure['dados']['table.LoginFailureAlarm.Enable'] ?? 'false') === 'true',
+            'bloqueio_ativo' => $geral['sucesso'] ? (($geral['dados']['table.General.LockLoginEnable'] ?? 'false') === 'true') : null,
+            'bloqueio_tentativas' => $geral['sucesso'] && isset($geral['dados']['table.General.LockLoginTimes']) ? (int)$geral['dados']['table.General.LockLoginTimes'] : null,
+            'bloqueio_duracao_segundos' => $geral['sucesso'] && isset($geral['dados']['table.General.LoginFailLockTime']) ? (int)$geral['dados']['table.General.LoginFailLockTime'] : null,
+        ];
+    }
+
+    public function definirAlertaLoginFalho(string $ip, bool $ativo): array
+    {
+        $resultado = $this->chamarApi($ip, '/cgi-bin/configManager.cgi?action=setConfig&LoginFailureAlarm.Enable=' . ($ativo ? 'true' : 'false'));
+
+        if (!$resultado['sucesso']) {
+            return ['success' => false, 'message' => $resultado['mensagem']];
+        }
+
+        return ['success' => true, 'message' => $ativo ? 'Alerta de login falho ativado no DVR/NVR.' : 'Alerta de login falho desativado no DVR/NVR.'];
+    }
+
+    /**
+     * Log de conta (login/logoff/troca de senha etc.) dos últimos N dias --
+     * protocolo clássico de 3 passos (startFind/doFind/stopFind), confirmado
+     * ao vivo contra os 3 DVR/NVR reais (retorna "Usuário Logado"/"Fazer
+     * logoff" já traduzido pelo firmware). Cada item vem marcado com
+     * 'suspeito' via PALAVRAS_EVENTO_CONTA_SUSPEITO -- ver o comentário da
+     * constante pra entender por que é por palavra-chave e não string exata.
+     *
+     * @return array{success:bool, message?:string, eventos?:array}
+     */
+    public function buscarEventosConta(string $ip, int $dias = 7): array
+    {
+        $inicio = date('Y-m-d H:i:s', strtotime("-{$dias} days"));
+        $fim = date('Y-m-d H:i:s');
+
+        $inicioParam = rawurlencode($inicio);
+        $fimParam = rawurlencode($fim);
+        $start = $this->chamarApi($ip, "/cgi-bin/log.cgi?action=startFind&condition.Type=Account&condition.StartTime={$inicioParam}&condition.EndTime={$fimParam}");
+
+        if (!$start['sucesso'] || !isset($start['dados']['token'])) {
+            return ['success' => false, 'message' => $start['sucesso'] ? 'Não foi possível iniciar a consulta de log.' : $start['mensagem']];
+        }
+
+        $token = $start['dados']['token'];
+        $doFind = $this->chamarApi($ip, "/cgi-bin/log.cgi?action=doFind&token={$token}&count=30");
+        $this->chamarApi($ip, "/cgi-bin/log.cgi?action=stopFind&token={$token}");
+
+        if (!$doFind['sucesso']) {
+            return ['success' => false, 'message' => $doFind['mensagem']];
+        }
+
+        $eventos = [];
+        foreach ($this->agruparPorIndice($doFind['dados'], 'items') as $item) {
+            $tipo = $item['Type'] ?? '';
+            $tipoBusca = strtolower($tipo);
+
+            $suspeito = false;
+            foreach (self::PALAVRAS_EVENTO_CONTA_SUSPEITO as $palavra) {
+                if (str_contains($tipoBusca, $palavra)) {
+                    $suspeito = true;
+                    break;
+                }
+            }
+
+            $eventos[] = [
+                'rec_no' => isset($item['RecNo']) ? (int)$item['RecNo'] : 0,
+                'data' => $item['Time'] ?? '',
+                'usuario' => $item['User'] ?? '',
+                'tipo' => $tipo,
+                'suspeito' => $suspeito,
+            ];
+        }
+
+        // O DVR devolve em ordem crescente de RecNo -- mais recente primeiro fica melhor pra exibir.
+        usort($eventos, fn ($a, $b) => $b['rec_no'] <=> $a['rec_no']);
+
+        return ['success' => true, 'eventos' => $eventos];
     }
 
     /**

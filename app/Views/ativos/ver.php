@@ -317,6 +317,27 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             <i class="bi bi-camera-video"></i> Canais <?= !empty($canaisDvr) ? '<span class="badge text-bg-secondary ms-1">' . count($canaisDvr) . '</span>' : '' ?>
         </button>
     </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaUsuariosDvr" type="button">
+            <i class="bi bi-people"></i> Usuários
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaRedeDvr" type="button">
+            <i class="bi bi-ethernet"></i> Rede
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <?php
+            $eventosSuspeitosDvr = array_filter($detalhes['dvr_eventos_conta_recentes'] ?? [], fn ($e) => !empty($e['suspeito']));
+        ?>
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaSegurancaDvr" type="button">
+            <i class="bi bi-shield-lock"></i> Segurança
+            <?php if (!empty($eventosSuspeitosDvr)): ?>
+                <span class="badge text-bg-danger ms-1"><?= count($eventosSuspeitosDvr) ?></span>
+            <?php endif; ?>
+        </button>
+    </li>
     <?php endif; ?>
     <?php if ($temAcessoChamadosInternos || $temAcessoChamadosExternos): ?>
     <li class="nav-item" role="presentation">
@@ -1132,7 +1153,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                     <p class="text-muted p-3 mb-0">Nenhum dado coletado ainda. Use o botão "Detectar e coletar automaticamente" na Visão Geral.</p>
                 <?php else: ?>
                     <table class="table table-sm mb-0 align-middle">
-                        <thead><tr><th>Canal</th><th>Nome</th><th>Status</th><th>Em uso</th><th>Sensibilidade tampada</th><th class="text-end">Ações</th></tr></thead>
+                        <thead><tr><th>Canal</th><th>Nome</th><th>Status</th><th>Gravação</th><th>Em uso</th><th>Sensibilidade tampada</th><th class="text-end">Ações</th></tr></thead>
                         <tbody>
                             <?php foreach ($canaisDvr as $canal): ?>
                                 <?php $emUsoDvr = $canal['em_uso'] ?? true; ?>
@@ -1148,6 +1169,17 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                             <?= Badge::make('Tampada', 'warning') ?>
                                             <i class="bi bi-info-circle text-muted small" data-bs-toggle="tooltip" title="Sinalização automática, sem chamado -- confira a imagem (botão de câmera) antes de agir: o detector do próprio DVR gera falso positivo em cenas escuras/de baixo contraste. Pode estar desatualizado -- use 'Testar' na coluna de sensibilidade pra conferir na hora."></i>
                                         </span>
+                                    </td>
+                                    <td>
+                                        <?php
+                                            $modoGravacaoCanal = $canal['modo_gravacao'] ?? null;
+                                            $rotuloGravacao = ['automatico' => 'Automático', 'manual' => 'Manual', 'parado' => 'Parado'][$modoGravacaoCanal] ?? '—';
+                                            $corGravacao = $modoGravacaoCanal === 'parado' ? 'danger' : ($modoGravacaoCanal ? 'success' : 'secondary');
+                                        ?>
+                                        <?= Badge::make($rotuloGravacao, $corGravacao) ?>
+                                        <?php if ($modoGravacaoCanal === 'parado' && !empty($canal['chamado_gravacao_parada_id'])): ?>
+                                            <a href="<?= url('/chamados/atendimentos/ver?id=' . (int)$canal['chamado_gravacao_parada_id']) ?>" class="small ms-1" title="Ver chamado automático aberto"><i class="bi bi-ticket-perforated"></i></a>
+                                        <?php endif; ?>
                                     </td>
                                     <td>
                                         <div class="d-flex align-items-center gap-2">
@@ -1264,6 +1296,239 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Usuários (DVR/NVR Intelbras) -->
+    <div class="tab-pane fade" id="abaUsuariosDvr">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <strong>Usuários cadastrados no equipamento</strong>
+                <button type="button" class="btn btn-sm btn-outline-primary" id="botaoNovoUsuarioDvr" data-id="<?= (int)$ativo['id'] ?>">
+                    <i class="bi bi-person-plus"></i> Novo usuário
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="small text-muted mb-3" id="usuariosDvrCarregando"><div class="spinner-border spinner-border-sm"></div> Carregando usuários do equipamento...</div>
+                <div class="table-responsive" style="display:none" id="usuariosDvrTabelaWrap">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Usuário</th>
+                                <th>Grupo</th>
+                                <th>Observação</th>
+                                <th>Multi-login</th>
+                                <th class="text-end">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usuariosDvrCorpo"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="card border-0 shadow-sm mt-3">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <strong>Conectados agora</strong>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="botaoAtualizarUsuariosAtivosDvr" data-id="<?= (int)$ativo['id'] ?>">
+                    <i class="bi bi-arrow-repeat"></i> Atualizar
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Usuário</th>
+                                <th>IP</th>
+                                <th>Grupo</th>
+                                <th>Cliente</th>
+                                <th>Login em</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usuariosAtivosDvrCorpo">
+                            <?php foreach (($detalhes['dvr_usuarios_ativos'] ?? []) as $ua): ?>
+                                <tr>
+                                    <td><?= htmlspecialchars($ua['nome'] ?? '') ?></td>
+                                    <td><?= htmlspecialchars($ua['ip'] ?? '') ?></td>
+                                    <td><?= htmlspecialchars($ua['grupo'] ?? '') ?></td>
+                                    <td><?= htmlspecialchars($ua['tipo_cliente'] ?? '') ?></td>
+                                    <td><?= htmlspecialchars($ua['login_em'] ?? '') ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                            <?php if (empty($detalhes['dvr_usuarios_ativos'])): ?>
+                                <tr><td colspan="5" class="text-muted small">Nenhum dado ainda -- clique em "Atualizar" ou espere a próxima coleta periódica.</td></tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="small text-muted mt-2">Lista atualizada na última coleta periódica -- use "Atualizar" pra ver em tempo real.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rede/TCP-IP (DVR/NVR Intelbras) -->
+    <div class="tab-pane fade" id="abaRedeDvr">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white"><strong>TCP/IP</strong></div>
+            <div class="card-body">
+                <div class="small text-muted mb-3" id="redeDvrCarregando"><div class="spinner-border spinner-border-sm"></div> Consultando o equipamento...</div>
+                <div id="redeDvrConteudo" style="display:none">
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-3"><div class="text-muted small">Endereço IP</div><div class="fw-semibold" id="redeDvrIp">—</div></div>
+                        <div class="col-md-3"><div class="text-muted small">Máscara de sub-rede</div><div class="fw-semibold" id="redeDvrMascara">—</div></div>
+                        <div class="col-md-3"><div class="text-muted small">Gateway padrão</div><div class="fw-semibold" id="redeDvrGateway">—</div></div>
+                        <div class="col-md-3"><div class="text-muted small">DHCP</div><div class="fw-semibold" id="redeDvrDhcp">—</div></div>
+                        <div class="col-md-3"><div class="text-muted small">Endereço MAC</div><div class="fw-semibold" id="redeDvrMac">—</div></div>
+                        <div class="col-md-3"><div class="text-muted small">Status do link</div><div class="fw-semibold" id="redeDvrLink">—</div></div>
+                        <div class="col-md-3"><div class="text-muted small">Velocidade</div><div class="fw-semibold" id="redeDvrVelocidade">—</div></div>
+                        <div class="col-md-3"><div class="text-muted small">MTU</div><div class="fw-semibold" id="redeDvrMtu">—</div></div>
+                    </div>
+                    <div class="alert alert-secondary small mb-3">
+                        <i class="bi bi-info-circle"></i> IP, máscara, gateway e DHCP são só leitura por aqui -- um valor errado nesses campos pode deixar o DVR inacessível pela rede, exigindo acesso físico pro equipamento pra corrigir. Só nome do equipamento e DNS podem ser editados.
+                    </div>
+                    <form id="formRedeSeguraDvr" class="row g-2 align-items-end" data-id="<?= (int)$ativo['id'] ?>">
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Nome do equipamento (hostname)</label>
+                            <input type="text" class="form-control form-control-sm" id="redeDvrHostnameInput" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-1">DNS primário</label>
+                            <input type="text" class="form-control form-control-sm" id="redeDvrDns1Input" placeholder="8.8.8.8">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-1">DNS secundário</label>
+                            <input type="text" class="form-control form-control-sm" id="redeDvrDns2Input" placeholder="1.1.1.1">
+                        </div>
+                        <div class="col-md-2">
+                            <button type="submit" class="btn btn-sm btn-outline-primary w-100"><i class="bi bi-save"></i> Salvar</button>
+                        </div>
+                    </form>
+                    <div class="small mt-2" id="redeDvrFeedback"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Segurança de acesso (DVR/NVR Intelbras) -->
+    <div class="tab-pane fade" id="abaSegurancaDvr">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white"><strong>Política de acesso do equipamento</strong></div>
+            <div class="card-body">
+                <div class="small text-muted mb-3" id="segurancaDvrCarregando"><div class="spinner-border spinner-border-sm"></div> Consultando o equipamento...</div>
+                <div id="segurancaDvrConteudo" style="display:none">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <div class="form-check form-switch mb-0">
+                            <input type="checkbox" class="form-check-input" role="switch" id="campoAlertaLoginFalhoDvr" data-id="<?= (int)$ativo['id'] ?>"
+                                   title="Liga/desliga o alerta de login falho no próprio DVR (LoginFailureAlarm) -- independente disso, o log de contas continua sendo verificado na nossa coleta periódica.">
+                        </div>
+                        <label class="form-check-label small" for="campoAlertaLoginFalhoDvr">Alertar login falho (no próprio DVR)</label>
+                        <span class="small" id="segurancaDvrFeedback"></span>
+                    </div>
+                    <div class="small text-muted" id="segurancaDvrBloqueioInfo"></div>
+                </div>
+            </div>
+        </div>
+        <div class="card border-0 shadow-sm mt-3">
+            <div class="card-header bg-white"><strong>Eventos de conta recentes (últimos 7 dias)</strong></div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th>Usuário</th>
+                                <th>Evento</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach (($detalhes['dvr_eventos_conta_recentes'] ?? []) as $evento): ?>
+                                <tr class="<?= !empty($evento['suspeito']) ? 'table-danger' : '' ?>">
+                                    <td><?= htmlspecialchars($evento['data'] ?? '') ?></td>
+                                    <td><?= htmlspecialchars($evento['usuario'] ?? '') ?></td>
+                                    <td>
+                                        <?= htmlspecialchars($evento['tipo'] ?? '') ?>
+                                        <?php if (!empty($evento['suspeito'])): ?>
+                                            <i class="bi bi-exclamation-triangle-fill text-danger ms-1" title="Marcado como possível tentativa de acesso indevida"></i>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                            <?php if (empty($detalhes['dvr_eventos_conta_recentes'])): ?>
+                                <tr><td colspan="3" class="text-muted small">Nenhum evento ainda -- aparece após a próxima coleta periódica.</td></tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+                <?php if (!empty($detalhes['dvr_seguranca_chamado_aberto_id'])): ?>
+                    <div class="alert alert-danger mt-3 mb-0 small">
+                        <i class="bi bi-shield-exclamation"></i> Chamado automático aberto por evento suspeito --
+                        <a href="<?= url('/chamados/atendimentos/ver?id=' . (int)$detalhes['dvr_seguranca_chamado_aberto_id']) ?>">ver chamado</a>.
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
+    <!-- Novo/editar usuário do DVR/NVR -->
+    <div class="modal fade" id="modalUsuarioDvr" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <form class="modal-content" id="formUsuarioDvr">
+                <div class="modal-header">
+                    <h6 class="modal-title" id="modalUsuarioDvrTitulo">Novo usuário</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-2">
+                        <label class="form-label small mb-1">Usuário</label>
+                        <input type="text" class="form-control form-control-sm" id="usuarioDvrNomeInput" required>
+                    </div>
+                    <div class="mb-2" id="usuarioDvrSenhaWrap">
+                        <label class="form-label small mb-1">Senha</label>
+                        <input type="password" class="form-control form-control-sm" id="usuarioDvrSenhaInput">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small mb-1">Grupo</label>
+                        <select class="form-select form-select-sm" id="usuarioDvrGrupoInput">
+                            <option value="admin">admin</option>
+                            <option value="user" selected>user</option>
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small mb-1">Observação</label>
+                        <input type="text" class="form-control form-control-sm" id="usuarioDvrMemoInput">
+                    </div>
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="usuarioDvrCompartilhavelInput" checked>
+                        <label class="form-check-label small" for="usuarioDvrCompartilhavelInput">Permitir login simultâneo de vários endereços</label>
+                    </div>
+                    <div class="small text-danger mt-2" id="usuarioDvrErro"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-sm btn-outline-primary" id="usuarioDvrBotaoSalvar">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Trocar senha de um usuário do DVR/NVR -->
+    <div class="modal fade" id="modalTrocarSenhaUsuarioDvr" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <form class="modal-content" id="formTrocarSenhaUsuarioDvr">
+                <div class="modal-header">
+                    <h6 class="modal-title">Trocar senha -- <span id="trocarSenhaUsuarioDvrNome"></span></h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label small mb-1">Nova senha</label>
+                    <input type="password" class="form-control form-control-sm" id="trocarSenhaUsuarioDvrInput" required>
+                    <div class="small text-danger mt-2" id="trocarSenhaUsuarioDvrErro"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-sm btn-outline-primary">Salvar</button>
+                </div>
+            </form>
         </div>
     </div>
     <?php endif; ?>
@@ -2431,6 +2696,369 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
                 }
             }
         );
+    });
+})();
+
+// Usuários do DVR/NVR -- carrega só quando a aba é aberta (chamada de
+// verdade no equipamento, sem sentido cachear em `detalhes`).
+(function () {
+    const navUsuarios = document.querySelector('.nav-link[data-bs-target="#abaUsuariosDvr"]');
+    if (!navUsuarios) return;
+
+    const botaoNovo = document.getElementById('botaoNovoUsuarioDvr');
+    const idAtivoReal = botaoNovo.dataset.id;
+    const carregando = document.getElementById('usuariosDvrCarregando');
+    const tabelaWrap = document.getElementById('usuariosDvrTabelaWrap');
+    const corpo = document.getElementById('usuariosDvrCorpo');
+    let carregadoUmaVez = false;
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    function linhaUsuario(u) {
+        return '<tr>' +
+            '<td>' + escapeHtml(u.nome) + (u.reservado ? ' <span class="badge text-bg-secondary">reservado</span>' : '') + '</td>' +
+            '<td>' + escapeHtml(u.grupo) + '</td>' +
+            '<td>' + escapeHtml(u.memo || '') + '</td>' +
+            '<td>' + (u.compartilhavel ? 'Sim' : 'Não') + '</td>' +
+            '<td class="text-end text-nowrap">' +
+                '<button type="button" class="btn btn-sm btn-outline-secondary botao-editar-usuario-dvr" data-nome="' + escapeHtml(u.nome) + '" data-grupo="' + escapeHtml(u.grupo) + '" data-memo="' + escapeHtml(u.memo || '') + '" data-compartilhavel="' + (u.compartilhavel ? '1' : '0') + '" title="Editar"><i class="bi bi-pencil"></i></button> ' +
+                '<button type="button" class="btn btn-sm btn-outline-warning botao-trocar-senha-usuario-dvr" data-nome="' + escapeHtml(u.nome) + '" title="Trocar senha"><i class="bi bi-key"></i></button> ' +
+                '<button type="button" class="btn btn-sm btn-outline-danger botao-excluir-usuario-dvr" data-nome="' + escapeHtml(u.nome) + '" title="Excluir"><i class="bi bi-trash"></i></button>' +
+            '</td>' +
+        '</tr>';
+    }
+
+    function vincularAcoesLinha() {
+        corpo.querySelectorAll('.botao-editar-usuario-dvr').forEach(function (botao) {
+            botao.addEventListener('click', function () {
+                abrirModalUsuario('editar', botao.dataset);
+            });
+        });
+        corpo.querySelectorAll('.botao-trocar-senha-usuario-dvr').forEach(function (botao) {
+            botao.addEventListener('click', function () {
+                document.getElementById('trocarSenhaUsuarioDvrNome').textContent = botao.dataset.nome;
+                document.getElementById('trocarSenhaUsuarioDvrInput').value = '';
+                document.getElementById('trocarSenhaUsuarioDvrErro').textContent = '';
+                document.getElementById('formTrocarSenhaUsuarioDvr').dataset.nome = botao.dataset.nome;
+                new bootstrap.Modal(document.getElementById('modalTrocarSenhaUsuarioDvr')).show();
+            });
+        });
+        corpo.querySelectorAll('.botao-excluir-usuario-dvr').forEach(function (botao) {
+            botao.addEventListener('click', function () {
+                abrirConfirmacaoHitech(
+                    'Excluir usuário',
+                    'Confirma excluir o usuário <strong>' + escapeHtml(botao.dataset.nome) + '</strong> do equipamento? Essa ação é feita direto no DVR/NVR e não pode ser desfeita por aqui.',
+                    async function () {
+                        const dados = new URLSearchParams();
+                        dados.set('id', idAtivoReal);
+                        dados.set('nome', botao.dataset.nome);
+                        const res = await fetch(<?= json_encode(url('/ativos/intelbras-dvr/usuarios/excluir')) ?>, { method: 'POST', body: dados });
+                        const resultado = await res.json();
+                        if (resultado.success) {
+                            carregarUsuarios();
+                        } else {
+                            alert(resultado.message || 'Falha ao excluir usuário.');
+                        }
+                    }
+                );
+            });
+        });
+    }
+
+    async function carregarUsuarios() {
+        carregando.style.display = '';
+        carregando.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Carregando usuários do equipamento...';
+        tabelaWrap.style.display = 'none';
+
+        const dados = new URLSearchParams();
+        dados.set('id', idAtivoReal);
+        const res = await fetch(<?= json_encode(url('/ativos/intelbras-dvr/usuarios')) ?>, { method: 'POST', body: dados });
+        const resultado = await res.json();
+
+        if (!resultado.success) {
+            carregando.innerHTML = '<span class="text-danger">' + escapeHtml(resultado.message || 'Falha ao consultar usuários.') + '</span>';
+            return;
+        }
+
+        carregando.style.display = 'none';
+        corpo.innerHTML = resultado.usuarios.map(linhaUsuario).join('') || '<tr><td colspan="5" class="text-muted small">Nenhum usuário encontrado.</td></tr>';
+        tabelaWrap.style.display = '';
+        vincularAcoesLinha();
+    }
+
+    navUsuarios.addEventListener('shown.bs.tab', function () {
+        if (!carregadoUmaVez) {
+            carregadoUmaVez = true;
+            carregarUsuarios();
+        }
+    });
+
+    function abrirModalUsuario(modo, dataset) {
+        const modalEl = document.getElementById('modalUsuarioDvr');
+        const form = document.getElementById('formUsuarioDvr');
+        form.dataset.modo = modo;
+        document.getElementById('usuarioDvrErro').textContent = '';
+
+        const nomeInput = document.getElementById('usuarioDvrNomeInput');
+        const senhaWrap = document.getElementById('usuarioDvrSenhaWrap');
+        const senhaInput = document.getElementById('usuarioDvrSenhaInput');
+        const grupoInput = document.getElementById('usuarioDvrGrupoInput');
+        const memoInput = document.getElementById('usuarioDvrMemoInput');
+        const compartilhavelInput = document.getElementById('usuarioDvrCompartilhavelInput');
+
+        if (modo === 'novo') {
+            document.getElementById('modalUsuarioDvrTitulo').textContent = 'Novo usuário';
+            nomeInput.value = '';
+            nomeInput.disabled = false;
+            senhaWrap.style.display = '';
+            senhaInput.value = '';
+            grupoInput.value = 'user';
+            memoInput.value = '';
+            compartilhavelInput.checked = true;
+        } else {
+            document.getElementById('modalUsuarioDvrTitulo').textContent = 'Editar usuário -- ' + dataset.nome;
+            nomeInput.value = dataset.nome;
+            nomeInput.disabled = true;
+            senhaWrap.style.display = 'none';
+            grupoInput.value = dataset.grupo || 'user';
+            memoInput.value = dataset.memo || '';
+            compartilhavelInput.checked = dataset.compartilhavel === '1';
+        }
+
+        new bootstrap.Modal(modalEl).show();
+    }
+
+    if (botaoNovo) {
+        botaoNovo.addEventListener('click', function () {
+            abrirModalUsuario('novo', {});
+        });
+    }
+
+    const formUsuario = document.getElementById('formUsuarioDvr');
+    formUsuario.addEventListener('submit', async function (ev) {
+        ev.preventDefault();
+        const erro = document.getElementById('usuarioDvrErro');
+        erro.textContent = '';
+
+        const nome = document.getElementById('usuarioDvrNomeInput').value.trim();
+        const grupo = document.getElementById('usuarioDvrGrupoInput').value;
+        const memo = document.getElementById('usuarioDvrMemoInput').value.trim();
+        const compartilhavel = document.getElementById('usuarioDvrCompartilhavelInput').checked ? '1' : '0';
+
+        const dados = new URLSearchParams();
+        dados.set('id', idAtivoReal);
+        dados.set('nome', nome);
+        dados.set('grupo', grupo);
+        dados.set('memo', memo);
+        dados.set('compartilhavel', compartilhavel);
+
+        let destino;
+        if (formUsuario.dataset.modo === 'novo') {
+            dados.set('senha', document.getElementById('usuarioDvrSenhaInput').value);
+            destino = <?= json_encode(url('/ativos/intelbras-dvr/usuarios/criar')) ?>;
+        } else {
+            destino = <?= json_encode(url('/ativos/intelbras-dvr/usuarios/editar')) ?>;
+        }
+
+        const res = await fetch(destino, { method: 'POST', body: dados });
+        const resultado = await res.json();
+
+        if (resultado.success) {
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('modalUsuarioDvr')).hide();
+            carregarUsuarios();
+        } else {
+            erro.textContent = resultado.message || 'Falha ao salvar usuário.';
+        }
+    });
+
+    const formTrocarSenha = document.getElementById('formTrocarSenhaUsuarioDvr');
+    formTrocarSenha.addEventListener('submit', async function (ev) {
+        ev.preventDefault();
+        const erro = document.getElementById('trocarSenhaUsuarioDvrErro');
+        erro.textContent = '';
+
+        const dados = new URLSearchParams();
+        dados.set('id', idAtivoReal);
+        dados.set('nome', formTrocarSenha.dataset.nome);
+        dados.set('nova_senha', document.getElementById('trocarSenhaUsuarioDvrInput').value);
+
+        const res = await fetch(<?= json_encode(url('/ativos/intelbras-dvr/usuarios/trocar-senha')) ?>, { method: 'POST', body: dados });
+        const resultado = await res.json();
+
+        if (resultado.success) {
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('modalTrocarSenhaUsuarioDvr')).hide();
+        } else {
+            erro.textContent = resultado.message || 'Falha ao trocar senha.';
+        }
+    });
+
+    const botaoAtualizarAtivos = document.getElementById('botaoAtualizarUsuariosAtivosDvr');
+    if (botaoAtualizarAtivos) {
+        botaoAtualizarAtivos.addEventListener('click', async function () {
+            botaoAtualizarAtivos.disabled = true;
+            try {
+                const dados = new URLSearchParams();
+                dados.set('id', botaoAtualizarAtivos.dataset.id);
+                const res = await fetch(<?= json_encode(url('/ativos/intelbras-dvr/usuarios-ativos')) ?>, { method: 'POST', body: dados });
+                const resultado = await res.json();
+                const corpoAtivos = document.getElementById('usuariosAtivosDvrCorpo');
+                if (resultado.success) {
+                    corpoAtivos.innerHTML = resultado.usuarios.map(function (u) {
+                        return '<tr><td>' + escapeHtml(u.nome) + '</td><td>' + escapeHtml(u.ip) + '</td><td>' + escapeHtml(u.grupo) + '</td><td>' + escapeHtml(u.tipo_cliente) + '</td><td>' + escapeHtml(u.login_em) + '</td></tr>';
+                    }).join('') || '<tr><td colspan="5" class="text-muted small">Nenhum usuário conectado agora.</td></tr>';
+                } else {
+                    alert(resultado.message || 'Falha ao consultar usuários ativos.');
+                }
+            } finally {
+                botaoAtualizarAtivos.disabled = false;
+            }
+        });
+    }
+})();
+
+// Rede/TCP-IP -- leitura completa + edição só de hostname/DNS, carregada
+// sob demanda quando a aba é aberta.
+(function () {
+    const navRede = document.querySelector('.nav-link[data-bs-target="#abaRedeDvr"]');
+    const form = document.getElementById('formRedeSeguraDvr');
+    if (!navRede || !form) return;
+
+    const idAtivo = form.dataset.id;
+    const carregando = document.getElementById('redeDvrCarregando');
+    const conteudo = document.getElementById('redeDvrConteudo');
+    let carregadoUmaVez = false;
+
+    async function carregarRede() {
+        carregando.style.display = '';
+        carregando.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Consultando o equipamento...';
+        conteudo.style.display = 'none';
+
+        const dados = new URLSearchParams();
+        dados.set('id', idAtivo);
+        const res = await fetch(<?= json_encode(url('/ativos/intelbras-dvr/rede')) ?>, { method: 'POST', body: dados });
+        const resultado = await res.json();
+
+        if (!resultado.success) {
+            carregando.innerHTML = '<span class="text-danger">' + (resultado.message || 'Falha ao consultar a rede.') + '</span>';
+            return;
+        }
+
+        document.getElementById('redeDvrIp').textContent = resultado.ip || '—';
+        document.getElementById('redeDvrMascara').textContent = resultado.mascara || '—';
+        document.getElementById('redeDvrGateway').textContent = resultado.gateway || '—';
+        document.getElementById('redeDvrDhcp').textContent = resultado.dhcp ? 'Ativado' : 'Desativado (IP fixo)';
+        document.getElementById('redeDvrMac').textContent = resultado.mac || '—';
+        document.getElementById('redeDvrLink').textContent = resultado.status_link || '—';
+        document.getElementById('redeDvrVelocidade').textContent = resultado.velocidade_mbps ? (resultado.velocidade_mbps + ' Mbps') : '—';
+        document.getElementById('redeDvrMtu').textContent = resultado.mtu || '—';
+        document.getElementById('redeDvrHostnameInput').value = resultado.hostname || '';
+        document.getElementById('redeDvrDns1Input').value = (resultado.dns && resultado.dns[0]) || '';
+        document.getElementById('redeDvrDns2Input').value = (resultado.dns && resultado.dns[1]) || '';
+
+        carregando.style.display = 'none';
+        conteudo.style.display = '';
+    }
+
+    navRede.addEventListener('shown.bs.tab', function () {
+        if (!carregadoUmaVez) {
+            carregadoUmaVez = true;
+            carregarRede();
+        }
+    });
+
+    form.addEventListener('submit', async function (ev) {
+        ev.preventDefault();
+        const feedback = document.getElementById('redeDvrFeedback');
+        feedback.textContent = '';
+
+        const dados = new URLSearchParams();
+        dados.set('id', idAtivo);
+        dados.set('hostname', document.getElementById('redeDvrHostnameInput').value.trim());
+        dados.set('dns1', document.getElementById('redeDvrDns1Input').value.trim());
+        dados.set('dns2', document.getElementById('redeDvrDns2Input').value.trim());
+
+        const res = await fetch(<?= json_encode(url('/ativos/intelbras-dvr/rede/salvar')) ?>, { method: 'POST', body: dados });
+        const resultado = await res.json();
+
+        feedback.innerHTML = resultado.success
+            ? '<span class="text-success"><i class="bi bi-check-circle"></i> ' + resultado.message + '</span>'
+            : '<span class="text-danger">' + (resultado.message || 'Falha ao salvar.') + '</span>';
+    });
+})();
+
+// Segurança de acesso -- política do DVR (alerta de login falho) sob
+// demanda; os eventos de conta recentes já vêm renderizados server-side
+// (parte da coleta periódica).
+(function () {
+    const navSeguranca = document.querySelector('.nav-link[data-bs-target="#abaSegurancaDvr"]');
+    const campoAlerta = document.getElementById('campoAlertaLoginFalhoDvr');
+    if (!navSeguranca || !campoAlerta) return;
+
+    const idAtivo = campoAlerta.dataset.id;
+    const carregando = document.getElementById('segurancaDvrCarregando');
+    const conteudo = document.getElementById('segurancaDvrConteudo');
+    let carregadoUmaVez = false;
+
+    async function carregarSeguranca() {
+        carregando.style.display = '';
+        conteudo.style.display = 'none';
+
+        const dados = new URLSearchParams();
+        dados.set('id', idAtivo);
+        const res = await fetch(<?= json_encode(url('/ativos/intelbras-dvr/seguranca')) ?>, { method: 'POST', body: dados });
+        const resultado = await res.json();
+
+        if (!resultado.success) {
+            carregando.innerHTML = '<span class="text-danger">' + (resultado.message || 'Falha ao consultar segurança.') + '</span>';
+            return;
+        }
+
+        campoAlerta.checked = !!resultado.alerta_login_falho_ativo;
+
+        const infoEl = document.getElementById('segurancaDvrBloqueioInfo');
+        if (resultado.bloqueio_ativo) {
+            const minutos = resultado.bloqueio_duracao_segundos ? Math.round(resultado.bloqueio_duracao_segundos / 60) : null;
+            infoEl.textContent = 'Bloqueio automático ativo no DVR: após ' + resultado.bloqueio_tentativas + ' tentativa(s) de login incorretas, o acesso fica bloqueado' + (minutos ? ' por ' + minutos + ' minuto(s).' : '.');
+        } else {
+            infoEl.textContent = 'Bloqueio automático por tentativas incorretas está desativado no DVR.';
+        }
+
+        carregando.style.display = 'none';
+        conteudo.style.display = '';
+    }
+
+    navSeguranca.addEventListener('shown.bs.tab', function () {
+        if (!carregadoUmaVez) {
+            carregadoUmaVez = true;
+            carregarSeguranca();
+        }
+    });
+
+    campoAlerta.addEventListener('change', async function () {
+        const feedback = document.getElementById('segurancaDvrFeedback');
+        feedback.textContent = '';
+        campoAlerta.disabled = true;
+
+        const dados = new URLSearchParams();
+        dados.set('id', idAtivo);
+        dados.set('ativo', campoAlerta.checked ? '1' : '0');
+
+        try {
+            const res = await fetch(<?= json_encode(url('/ativos/intelbras-dvr/seguranca/alerta-login-falho')) ?>, { method: 'POST', body: dados });
+            const resultado = await res.json();
+            feedback.innerHTML = resultado.success
+                ? '<span class="text-success"><i class="bi bi-check-circle"></i></span>'
+                : '<span class="text-danger">' + (resultado.message || 'Falha ao salvar.') + '</span>';
+            if (!resultado.success) {
+                campoAlerta.checked = !campoAlerta.checked;
+            }
+        } finally {
+            campoAlerta.disabled = false;
+        }
     });
 })();
 

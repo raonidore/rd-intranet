@@ -1653,12 +1653,42 @@ class AtivoService
             return $resultado;
         }
 
-        $bloqueado = $this->alterarDetalhesComLock($id, function (array $detalhesAtuais) use ($ativo, $resultado) {
+        // Usuários ativos agora e eventos recentes de conta (login/logoff/
+        // possível falha) -- mesma cadência da coleta principal (mais 2-3
+        // chamadas HTTP curtas na LAN), dão visibilidade de segurança que a
+        // tela não tinha antes.
+        $usuariosAtivos = $dvr->buscarUsuariosAtivos($ativo['ip']);
+        $eventosConta = $dvr->buscarEventosConta($ativo['ip']);
+
+        $bloqueado = $this->alterarDetalhesComLock($id, function (array $detalhesAtuais) use ($ativo, $resultado, $usuariosAtivos, $eventosConta) {
             $hdProblemaAtual = $resultado['hd_problema'] ?? null;
             $hdChamadoId = $detalhesAtuais['dvr_hd_chamado_aberto_id'] ?? null;
 
             if ($hdProblemaAtual !== null && !$this->chamadoDvrAindaAberto($hdChamadoId)) {
                 $hdChamadoId = $this->abrirChamadoHdProblemaDvr($ativo, $hdProblemaAtual);
+            }
+
+            // Só abre chamado pra evento com RecNo MAIOR que o último já
+            // verificado -- o log do DVR mantém histórico (não é "desde a
+            // última coleta"), então sem essa marca o mesmo evento antigo
+            // reabriria alerta pra sempre, a cada ~30 min.
+            $ultimoRecNoVisto = (int)($detalhesAtuais['dvr_ultimo_recno_conta_verificado'] ?? 0);
+            $maiorRecNo = $ultimoRecNoVisto;
+            $novosSuspeitos = [];
+            if ($eventosConta['success']) {
+                foreach ($eventosConta['eventos'] as $evento) {
+                    if ($evento['rec_no'] > $maiorRecNo) {
+                        $maiorRecNo = $evento['rec_no'];
+                    }
+                    if ($evento['suspeito'] && $evento['rec_no'] > $ultimoRecNoVisto) {
+                        $novosSuspeitos[] = $evento;
+                    }
+                }
+            }
+
+            $segurancaChamadoId = $detalhesAtuais['dvr_seguranca_chamado_aberto_id'] ?? null;
+            if (!empty($novosSuspeitos) && !$this->chamadoDvrAindaAberto($segurancaChamadoId)) {
+                $segurancaChamadoId = $this->abrirChamadoSegurancaDvr($ativo, $novosSuspeitos);
             }
 
             $coletado = [
@@ -1673,6 +1703,10 @@ class AtivoService
                 'dvr_hd_problema' => $hdProblemaAtual,
                 'dvr_hd_chamado_aberto_id' => $hdChamadoId,
                 'dvr_canais' => $this->mesclarCanaisDvr($ativo, $detalhesAtuais['dvr_canais'] ?? [], $resultado['canais'] ?? []),
+                'dvr_usuarios_ativos' => $usuariosAtivos['success'] ? $usuariosAtivos['usuarios'] : ($detalhesAtuais['dvr_usuarios_ativos'] ?? []),
+                'dvr_eventos_conta_recentes' => $eventosConta['success'] ? array_slice($eventosConta['eventos'], 0, 15) : ($detalhesAtuais['dvr_eventos_conta_recentes'] ?? []),
+                'dvr_ultimo_recno_conta_verificado' => $maiorRecNo,
+                'dvr_seguranca_chamado_aberto_id' => $segurancaChamadoId,
             ];
 
             return ['ok' => true, 'detalhes' => array_merge($detalhesAtuais, $coletado)];
@@ -1733,11 +1767,23 @@ class AtivoService
             // sem perder a detecção nos outros.
             $canal['deteccao_tampada_canal_ativa'] = $anterior['deteccao_tampada_canal_ativa'] ?? true;
             $canal['tampada'] = $canal['deteccao_tampada_canal_ativa'] && ($canal['tampada'] ?? false);
+            $canal['chamado_gravacao_parada_id'] = $anterior['chamado_gravacao_parada_id'] ?? null;
 
             $temSinalAgora = (bool)($canal['com_sinal'] ?? true);
 
             if ($canal['em_uso'] && !$temSinalAgora && !$this->chamadoDvrAindaAberto($canal['chamado_aberto_id'])) {
                 $canal['chamado_aberto_id'] = $this->abrirChamadoCanalDvrSemSinal($ativo, $numero, $canal['nome'] ?? "Canal {$numero}");
+            }
+
+            // Canal configurado pra NUNCA gravar (RecordMode "parado") --
+            // diferente de "sem sinal", ninguém percebe isso só olhando a
+            // imagem ao vivo (a câmera aparece normal na tela), por isso
+            // merece alerta próprio. Ver o comentário em
+            // IntelbrasDvrService::coletar() sobre por que RecordMode é o
+            // substituto usado (a API de status de gravação em tempo real
+            // não existe nesse firmware).
+            if ($canal['em_uso'] && ($canal['modo_gravacao'] ?? null) === 'parado' && !$this->chamadoDvrAindaAberto($canal['chamado_gravacao_parada_id'])) {
+                $canal['chamado_gravacao_parada_id'] = $this->abrirChamadoGravacaoParadaDvr($ativo, $numero, $canal['nome'] ?? "Canal {$numero}");
             }
 
             $mesclados[] = $canal;
@@ -1793,6 +1839,60 @@ class AtivoService
         $resultado = (new ChamadoService())->abrir([
             'titulo' => "{$ativo['codigo_patrimonio']} -- Problema no HD: {$problema}",
             'descricao' => "Detecção automática: o DVR/NVR {$ativo['codigo_patrimonio']} ({$ativo['nome']}, IP {$ativo['ip']}) reportou \"{$problema}\" via API. Isso normalmente significa perda de gravação -- verifique o disco físico o quanto antes.",
+            'categoria_id' => $categoriaId,
+            'unidade_id' => $ativo['unidade_id'],
+            'ativo_id' => $ativo['id'],
+            'prioridade' => 'urgente',
+            'solicitante_nome' => 'RD.Intranet - Robô',
+            'solicitante_email' => 'robo@rd.intranet',
+        ], 'sistema');
+
+        return $resultado['success'] ? (int)$resultado['id'] : null;
+    }
+
+    /** @return int|null id do chamado aberto, ou null se não conseguiu abrir */
+    private function abrirChamadoGravacaoParadaDvr(array $ativo, int $numeroCanal, string $nomeCanal): ?int
+    {
+        $categoriaId = $this->categoriaChamadoDvrNvrId();
+
+        if ($categoriaId === null) {
+            return null;
+        }
+
+        $resultado = (new ChamadoService())->abrir([
+            'titulo' => "{$ativo['codigo_patrimonio']} -- Canal {$numeroCanal} ({$nomeCanal}) configurado pra NÃO gravar",
+            'descricao' => "Detecção automática: o canal {$numeroCanal} (\"{$nomeCanal}\") do DVR/NVR {$ativo['codigo_patrimonio']} ({$ativo['nome']}, IP {$ativo['ip']}) está com o modo de gravação configurado como \"Parado\" -- mesmo com sinal de vídeo normal na tela, nada está sendo gravado nesse canal.\n\n"
+                . "Verifique se isso foi intencional; se não foi, ajuste o modo de gravação de volta pra \"Automático\" ou \"Manual\" na configuração do DVR.",
+            'categoria_id' => $categoriaId,
+            'unidade_id' => $ativo['unidade_id'],
+            'ativo_id' => $ativo['id'],
+            'prioridade' => 'alta',
+            'solicitante_nome' => 'RD.Intranet - Robô',
+            'solicitante_email' => 'robo@rd.intranet',
+        ], 'sistema');
+
+        return $resultado['success'] ? (int)$resultado['id'] : null;
+    }
+
+    /** @return int|null id do chamado aberto, ou null se não conseguiu abrir */
+    private function abrirChamadoSegurancaDvr(array $ativo, array $eventosSuspeitos): ?int
+    {
+        $categoriaId = $this->categoriaChamadoDvrNvrId();
+
+        if ($categoriaId === null) {
+            return null;
+        }
+
+        $linhas = array_map(
+            static fn (array $e) => "- {$e['data']} -- usuário \"{$e['usuario']}\": {$e['tipo']}",
+            $eventosSuspeitos
+        );
+
+        $resultado = (new ChamadoService())->abrir([
+            'titulo' => "{$ativo['codigo_patrimonio']} -- Possível tentativa de acesso indevida",
+            'descricao' => "Detecção automática: o log de contas do DVR/NVR {$ativo['codigo_patrimonio']} ({$ativo['nome']}, IP {$ativo['ip']}) registrou evento(s) que podem indicar tentativa de login mal-sucedida:\n\n"
+                . implode("\n", $linhas)
+                . "\n\nConfira na aba \"Segurança\" do ativo -- pode ser uma tentativa de acesso indevido, ou só um erro de digitação de alguém autorizado.",
             'categoria_id' => $categoriaId,
             'unidade_id' => $ativo['unidade_id'],
             'ativo_id' => $ativo['id'],
@@ -2198,6 +2298,194 @@ class AtivoService
 
         if ($resultado['success']) {
             AuditService::registrar('Ativos', 'DVR/NVR - Detecção de tampada', "{$resultado['codigo_patrimonio']}: detecção de câmera tampada " . ($ativoFlag ? 'ativada' : 'desativada') . '.');
+        }
+
+        return $resultado;
+    }
+
+    /*
+     |---------------------------------------------------------
+     | Usuários do DVR/NVR -- CRUD direto no equipamento (userManager.cgi),
+     | sempre em tempo real (nunca fica guardado em `detalhes`: é estado
+     | mutável do próprio DVR, não faz sentido cachear). Cada wrapper só
+     | resolve o $ativo (id -> ip) e delega pro IntelbrasDvrService.
+     |---------------------------------------------------------
+     */
+
+    private function ativoComIpOuErro(int $id): array
+    {
+        $ativo = $this->repository->buscarPorId($id);
+
+        if (!$ativo || empty($ativo['ip'])) {
+            return ['success' => false, 'message' => 'Ativo não encontrado ou sem IP cadastrado.'];
+        }
+
+        return ['success' => true, 'ativo' => $ativo];
+    }
+
+    /** @return array{success:bool, usuarios?:array, grupos?:string[], message?:string} */
+    public function listarUsuariosDvr(int $id): array
+    {
+        $base = $this->ativoComIpOuErro($id);
+        if (!$base['success']) {
+            return $base;
+        }
+
+        $dvr = new IntelbrasDvrService();
+        $usuarios = $dvr->listarUsuarios($base['ativo']['ip']);
+        if (!$usuarios['success']) {
+            return $usuarios;
+        }
+
+        $grupos = $dvr->listarGrupos($base['ativo']['ip']);
+
+        return [
+            'success' => true,
+            'usuarios' => $usuarios['usuarios'],
+            'grupos' => $grupos['success'] ? $grupos['grupos'] : ['admin', 'user'],
+        ];
+    }
+
+    public function buscarUsuariosAtivosDvr(int $id): array
+    {
+        $base = $this->ativoComIpOuErro($id);
+        if (!$base['success']) {
+            return $base;
+        }
+
+        return (new IntelbrasDvrService())->buscarUsuariosAtivos($base['ativo']['ip']);
+    }
+
+    public function criarUsuarioDvr(int $id, string $nome, string $senha, string $grupo, string $memo): array
+    {
+        $base = $this->ativoComIpOuErro($id);
+        if (!$base['success']) {
+            return $base;
+        }
+
+        $resultado = (new IntelbrasDvrService())->criarUsuario($base['ativo']['ip'], $nome, $senha, $grupo, $memo);
+
+        if ($resultado['success']) {
+            AuditService::registrar('Ativos', 'DVR/NVR - Usuário', "{$base['ativo']['codigo_patrimonio']}: usuário \"{$nome}\" criado no equipamento.");
+        }
+
+        return $resultado;
+    }
+
+    public function editarUsuarioDvr(int $id, string $nome, string $grupo, string $memo, bool $compartilhavel): array
+    {
+        $base = $this->ativoComIpOuErro($id);
+        if (!$base['success']) {
+            return $base;
+        }
+
+        $resultado = (new IntelbrasDvrService())->editarUsuario($base['ativo']['ip'], $nome, $grupo, $memo, $compartilhavel);
+
+        if ($resultado['success']) {
+            AuditService::registrar('Ativos', 'DVR/NVR - Usuário', "{$base['ativo']['codigo_patrimonio']}: usuário \"{$nome}\" atualizado no equipamento.");
+        }
+
+        return $resultado;
+    }
+
+    public function excluirUsuarioDvr(int $id, string $nome): array
+    {
+        $base = $this->ativoComIpOuErro($id);
+        if (!$base['success']) {
+            return $base;
+        }
+
+        $resultado = (new IntelbrasDvrService())->excluirUsuario($base['ativo']['ip'], $nome);
+
+        if ($resultado['success']) {
+            AuditService::registrar('Ativos', 'DVR/NVR - Usuário', "{$base['ativo']['codigo_patrimonio']}: usuário \"{$nome}\" excluído do equipamento.");
+        }
+
+        return $resultado;
+    }
+
+    public function trocarSenhaUsuarioDvr(int $id, string $nome, string $novaSenha): array
+    {
+        $base = $this->ativoComIpOuErro($id);
+        if (!$base['success']) {
+            return $base;
+        }
+
+        $resultado = (new IntelbrasDvrService())->trocarSenhaUsuario($base['ativo']['ip'], $nome, $novaSenha);
+
+        if ($resultado['success']) {
+            AuditService::registrar('Ativos', 'DVR/NVR - Usuário', "{$base['ativo']['codigo_patrimonio']}: senha do usuário \"{$nome}\" alterada no equipamento.");
+        }
+
+        return $resultado;
+    }
+
+    /*
+     |---------------------------------------------------------
+     | TCP/IP do DVR/NVR -- leitura completa (IP/máscara/gateway/DNS/DHCP/
+     | link) + edição só dos campos "seguros" (hostname/DNS). IP/máscara/
+     | gateway/DHCP ficam de fora de propósito -- ver o comentário em
+     | IntelbrasDvrService::definirRedeSegura().
+     |---------------------------------------------------------
+     */
+
+    public function buscarRedeDvr(int $id): array
+    {
+        $base = $this->ativoComIpOuErro($id);
+        if (!$base['success']) {
+            return $base;
+        }
+
+        return (new IntelbrasDvrService())->buscarRede($base['ativo']['ip']);
+    }
+
+    public function definirRedeSeguraDvr(int $id, string $hostname, array $dnsServers): array
+    {
+        $base = $this->ativoComIpOuErro($id);
+        if (!$base['success']) {
+            return $base;
+        }
+
+        $resultado = (new IntelbrasDvrService())->definirRedeSegura($base['ativo']['ip'], $hostname, $dnsServers);
+
+        if ($resultado['success']) {
+            AuditService::registrar('Ativos', 'DVR/NVR - Rede', "{$base['ativo']['codigo_patrimonio']}: hostname/DNS atualizados no equipamento.");
+        }
+
+        return $resultado;
+    }
+
+    /*
+     |---------------------------------------------------------
+     | Segurança de acesso -- política do próprio DVR (alerta de login
+     | falho, bloqueio por tentativas) + log de contas recentes. A parte
+     * periódica (eventos + chamado automático) já roda dentro de
+     * coletarIntelbrasDvr()/mesclarCanaisDvr(); isto aqui é só a
+     * tela/toggle sob demanda.
+     |---------------------------------------------------------
+     */
+
+    public function buscarSegurancaAcessoDvr(int $id): array
+    {
+        $base = $this->ativoComIpOuErro($id);
+        if (!$base['success']) {
+            return $base;
+        }
+
+        return (new IntelbrasDvrService())->buscarSegurancaAcesso($base['ativo']['ip']);
+    }
+
+    public function definirAlertaLoginFalhoDvr(int $id, bool $ativoFlag): array
+    {
+        $base = $this->ativoComIpOuErro($id);
+        if (!$base['success']) {
+            return $base;
+        }
+
+        $resultado = (new IntelbrasDvrService())->definirAlertaLoginFalho($base['ativo']['ip'], $ativoFlag);
+
+        if ($resultado['success']) {
+            AuditService::registrar('Ativos', 'DVR/NVR - Segurança', "{$base['ativo']['codigo_patrimonio']}: alerta de login falho " . ($ativoFlag ? 'ativado' : 'desativado') . ' no equipamento.');
         }
 
         return $resultado;
