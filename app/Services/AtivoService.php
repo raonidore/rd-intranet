@@ -1668,19 +1668,28 @@ class AtivoService
                 $hdChamadoId = $this->abrirChamadoHdProblemaDvr($ativo, $hdProblemaAtual);
             }
 
-            // Só abre chamado pra evento com RecNo MAIOR que o último já
+            // Só abre chamado pra evento com timestamp MAIOR que o último já
             // verificado -- o log do DVR mantém histórico (não é "desde a
             // última coleta"), então sem essa marca o mesmo evento antigo
-            // reabriria alerta pra sempre, a cada ~30 min.
-            $ultimoRecNoVisto = (int)($detalhesAtuais['dvr_ultimo_recno_conta_verificado'] ?? 0);
-            $maiorRecNo = $ultimoRecNoVisto;
+            // reabriria alerta pra sempre, a cada ~30 min. (Não existe RecNo
+            // nesse firmware -- ver o comentário em
+            // IntelbrasDvrService::buscarEventosConta().)
+            //
+            // Na PRIMEIRA coleta desse Ativo (chave ainda não existe em
+            // detalhes) só estabelece a marca -- não abre chamado pra
+            // histórico de dias atrás que o log já tinha antes da gente
+            // começar a olhar; só a partir da segunda coleta um evento
+            // suspeito de verdade novo dispara o alerta.
+            $primeiraColetaDeConta = !array_key_exists('dvr_ultimo_ts_conta_verificado', $detalhesAtuais);
+            $ultimoTsVisto = (int)($detalhesAtuais['dvr_ultimo_ts_conta_verificado'] ?? 0);
+            $maiorTs = $ultimoTsVisto;
             $novosSuspeitos = [];
             if ($eventosConta['success']) {
                 foreach ($eventosConta['eventos'] as $evento) {
-                    if ($evento['rec_no'] > $maiorRecNo) {
-                        $maiorRecNo = $evento['rec_no'];
+                    if ($evento['ts'] > $maiorTs) {
+                        $maiorTs = $evento['ts'];
                     }
-                    if ($evento['suspeito'] && $evento['rec_no'] > $ultimoRecNoVisto) {
+                    if (!$primeiraColetaDeConta && $evento['suspeito'] && $evento['ts'] > $ultimoTsVisto) {
                         $novosSuspeitos[] = $evento;
                     }
                 }
@@ -1705,7 +1714,7 @@ class AtivoService
                 'dvr_canais' => $this->mesclarCanaisDvr($ativo, $detalhesAtuais['dvr_canais'] ?? [], $resultado['canais'] ?? []),
                 'dvr_usuarios_ativos' => $usuariosAtivos['success'] ? $usuariosAtivos['usuarios'] : ($detalhesAtuais['dvr_usuarios_ativos'] ?? []),
                 'dvr_eventos_conta_recentes' => $eventosConta['success'] ? array_slice($eventosConta['eventos'], 0, 15) : ($detalhesAtuais['dvr_eventos_conta_recentes'] ?? []),
-                'dvr_ultimo_recno_conta_verificado' => $maiorRecNo,
+                'dvr_ultimo_ts_conta_verificado' => $maiorTs,
                 'dvr_seguranca_chamado_aberto_id' => $segurancaChamadoId,
             ];
 

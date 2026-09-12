@@ -511,6 +511,21 @@ class IntelbrasDvrService
     }
 
     /**
+     * O log devolve a data em "dd-mm-yyyy hh:mm:ss" (confirmado ao vivo),
+     * não "yyyy-mm-dd hh:mm:ss" como no exemplo do manual oficial -- tenta
+     * os dois formatos, na ordem confirmada primeiro. Sem isso, cai pro
+     * timestamp atual (nunca fica pra trás pra sempre por causa de uma
+     * linha que não bateu com nenhum formato, mas também não trava a
+     * ordenação/dedup por completo).
+     */
+    private static function converterDataHoraLog(string $texto): int
+    {
+        $formato = \DateTime::createFromFormat('d-m-Y H:i:s', $texto) ?: \DateTime::createFromFormat('Y-m-d H:i:s', $texto);
+
+        return $formato !== false ? $formato->getTimestamp() : time();
+    }
+
+    /**
      * Agrupa um bloco "chave=valor" tipo `prefixo[0].Campo=valor` numa lista
      * de arrays associativos [0 => ['Campo' => 'valor', ...], 1 => [...]] --
      * só pega campos ESCALARES de primeiro nível (ex: ignora de propósito
@@ -893,17 +908,25 @@ class IntelbrasDvrService
                 }
             }
 
+            $tempo = $item['Time'] ?? '';
+
             $eventos[] = [
-                'rec_no' => isset($item['RecNo']) ? (int)$item['RecNo'] : 0,
-                'data' => $item['Time'] ?? '',
+                // O manual oficial documenta um campo "RecNo" (log number)
+                // nos itens de log -- confirmado ao vivo contra os 3
+                // DVR/NVR reais que ele NÃO existe nessa versão de firmware
+                // (só vêm Time/Type/User/Detail). Por isso o "identificador"
+                // de dedup usado aqui é o timestamp do próprio evento
+                // (dd-mm-yyyy, formato confirmado ao vivo -- diferente do
+                // yyyy-mm-dd do manual), não um RecNo que nunca chega.
+                'ts' => self::converterDataHoraLog($tempo),
+                'data' => $tempo,
                 'usuario' => $item['User'] ?? '',
                 'tipo' => $tipo,
                 'suspeito' => $suspeito,
             ];
         }
 
-        // O DVR devolve em ordem crescente de RecNo -- mais recente primeiro fica melhor pra exibir.
-        usort($eventos, fn ($a, $b) => $b['rec_no'] <=> $a['rec_no']);
+        usort($eventos, fn ($a, $b) => $b['ts'] <=> $a['ts']);
 
         return ['success' => true, 'eventos' => $eventos];
     }
