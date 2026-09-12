@@ -1764,20 +1764,29 @@ function formatarDataHoraReferencia(dataStr) {
 // Sem isso, qualquer location.reload() (ex: depois do auto-preenchimento
 // de imagens de referência) sempre volta pra aba "Visão Geral" -- guarda
 // a aba ativa no hash da URL pra restaurar depois de recarregar.
-(function () {
+//
+// A restauração em si (bootstrap.Tab...) só pode rodar depois do "load":
+// bootstrap.bundle.min.js só carrega no fim do layout (depois deste
+// conteúdo) -- chamar new bootstrap.Tab(...)/getOrCreateInstance direto
+// aqui lançaria ReferenceError e derrubaria o resto deste <script>,
+// incluindo TODOS os botões registrados depois (imagens, renomear,
+// Voltar etc.) -- mesmo cuidado já documentado mais abaixo pros
+// tooltips. Só o addEventListener (evento nativo do DOM, sem tocar em
+// "bootstrap") é seguro registrar direto.
+window.addEventListener('load', function () {
     if (location.hash) {
         const gatilho = document.querySelector('.nav-link[data-bs-target="' + location.hash + '"]');
         if (gatilho) {
             bootstrap.Tab.getOrCreateInstance(gatilho).show();
         }
     }
+});
 
-    document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (gatilho) {
-        gatilho.addEventListener('shown.bs.tab', function () {
-            history.replaceState(null, '', gatilho.dataset.bsTarget);
-        });
+document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (gatilho) {
+    gatilho.addEventListener('shown.bs.tab', function () {
+        history.replaceState(null, '', gatilho.dataset.bsTarget);
     });
-})();
+});
 
 (function () {
     const linkVoltar = document.getElementById('linkVoltarAtivo');
