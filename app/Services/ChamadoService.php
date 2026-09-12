@@ -240,6 +240,28 @@ class ChamadoService
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /** Mesmo filtro de listarFila(), mas só a contagem -- usado pro badge do menu (polling), sem o custo do SELECT_ENRIQUECIDO. */
+    public function contarFila(?array $setorIds): int
+    {
+        $sql = "SELECT COUNT(*) FROM chamados c WHERE c.status = 'fila'";
+        $params = [];
+
+        if ($setorIds !== null) {
+            if (empty($setorIds)) {
+                $sql .= ' AND c.setor_id IS NULL';
+            } else {
+                $marcadores = implode(',', array_fill(0, count($setorIds), '?'));
+                $sql .= " AND (c.setor_id IN ({$marcadores}) OR c.setor_id IS NULL)";
+                $params = $setorIds;
+            }
+        }
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+
+        return (int)$stmt->fetchColumn();
+    }
+
     public function listarDoUsuario(int $usuarioId): array
     {
         $stmt = $this->pdo->prepare(

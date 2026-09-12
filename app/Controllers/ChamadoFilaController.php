@@ -24,6 +24,21 @@ class ChamadoFilaController extends Controller
         ]);
     }
 
+    public function contadorApi(): void
+    {
+        AuthMiddleware::checkModulo('chamados_fila');
+        header('Content-Type: application/json');
+
+        $usuario = $_SESSION['usuario'];
+        $ehAdmin = ($usuario['perfil'] ?? '') === 'admin';
+        $setorIds = $ehAdmin ? null : (new ChamadoSetorService())->idsSetoresDoUsuario((int)$usuario['id']);
+
+        echo json_encode([
+            'success' => true,
+            'total' => (new ChamadoService())->contarFila($setorIds),
+        ]);
+    }
+
     public function assumir(): void
     {
         AuthMiddleware::checkModulo('chamados_fila');

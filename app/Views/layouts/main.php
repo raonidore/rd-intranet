@@ -5,6 +5,7 @@ use App\Services\AvisoService;
 use App\Services\PermissionService;
 use App\Services\WhatsAppAtendimentoService;
 use App\Services\ChamadoService;
+use App\Services\ChamadoSetorService;
 use App\Services\ChatService;
 use App\Services\ModuloCatalogo;
 
@@ -351,11 +352,22 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
     if (PermissionService::temAcesso('chamados_atendimentos') && isset($_SESSION['usuario']['id'])) {
         $chamadosAguardando = (new ChamadoService())->contarAguardandoResposta((int)$_SESSION['usuario']['id']);
     }
+    $chamadosFila = 0;
+    if (PermissionService::temAcesso('chamados_fila') && isset($_SESSION['usuario']['id'])) {
+        $usuarioSessao = $_SESSION['usuario'];
+        $setorIdsFila = ($usuarioSessao['perfil'] ?? '') === 'admin' ? null : (new ChamadoSetorService())->idsSetoresDoUsuario((int)$usuarioSessao['id']);
+        $chamadosFila = (new ChamadoService())->contarFila($setorIdsFila);
+    }
     ?>
     <?php if ($temChamados): ?>
     <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuChamados"
             aria-expanded="<?= $abrirChamados ? 'true' : 'false' ?>">
-        <span><i class="bi bi-ticket-perforated me-2"></i>Chamados</span>
+        <span>
+            <i class="bi bi-ticket-perforated me-2"></i>Chamados
+            <i class="bi bi-exclamation-circle-fill text-danger ms-1" id="rdChamadosAlertaGeral"
+               style="<?= ($chamadosAguardando + $chamadosFila) > 0 ? '' : 'display:none' ?>"
+               title="Há chamados aguardando resposta ou parados na fila"></i>
+        </span>
         <i class="bi bi-chevron-right chevron"></i>
     </button>
     <div class="collapse <?= $abrirChamados ? 'show' : '' ?>" id="menuChamados">
@@ -366,8 +378,9 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         </a>
         <?php endif; ?>
         <?php if (PermissionService::temAcesso('chamados_fila')): ?>
-        <a href="<?= url('/chamados/fila') ?>" class="<?= $uriAtual === '/chamados/fila' ? 'active' : '' ?>">
-            <i class="bi bi-hourglass-split me-2"></i> Fila
+        <a href="<?= url('/chamados/fila') ?>" class="rd-menu-item-badge <?= $uriAtual === '/chamados/fila' ? 'active' : '' ?>">
+            <span><i class="bi bi-hourglass-split me-2"></i> Fila</span>
+            <span class="rd-menu-badge" id="rdChamadosBadgeFila" style="<?= $chamadosFila > 0 ? '' : 'display:none' ?>"><?= $chamadosFila ?></span>
         </a>
         <?php endif; ?>
         <?php if (PermissionService::temAcesso('chamados_externos_atendimentos')): ?>
@@ -1150,6 +1163,27 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
 </script>
 <?php endif; ?>
 
+<?php if ($temChamados): ?>
+<script>
+// Acende/apaga o alerta geral (ícone de exclamação) ao lado de "Chamados"
+// no menu, agregando os dois contadores (Atendimentos + Fila) -- cada um
+// é atualizado por um polling independente (gated pela permissão de cada
+// um), então lê o texto já renderizado dos dois badges em vez de manter
+// estado duplicado entre os dois <script> separados.
+function atualizarAlertaGeralChamados() {
+    const alertaGeral = document.getElementById('rdChamadosAlertaGeral');
+    if (!alertaGeral) return;
+
+    const badgeAtendimentos = document.getElementById('rdChamadosBadgeAtendimentos');
+    const badgeFila = document.getElementById('rdChamadosBadgeFila');
+    const totalAguardando = parseInt(badgeAtendimentos ? badgeAtendimentos.textContent : '0', 10) || 0;
+    const totalFila = parseInt(badgeFila ? badgeFila.textContent : '0', 10) || 0;
+
+    alertaGeral.style.display = (totalAguardando + totalFila) > 0 ? '' : 'none';
+}
+</script>
+<?php endif; ?>
+
 <?php if (PermissionService::temAcesso('chamados_atendimentos') && isset($_SESSION['usuario']['id'])): ?>
 <script>
 (function () {
@@ -1186,6 +1220,7 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
                 badgeMenu.textContent = dados.aguardando;
                 badgeMenu.style.display = dados.aguardando > 0 ? '' : 'none';
             }
+            atualizarAlertaGeralChamados();
         } catch (e) {
             // rede instável -- tenta de novo no próximo ciclo
         }
@@ -1193,6 +1228,35 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
 
     verificarChamados();
     setInterval(verificarChamados, 15000);
+})();
+</script>
+<?php endif; ?>
+
+<?php if (PermissionService::temAcesso('chamados_fila') && isset($_SESSION['usuario']['id'])): ?>
+<script>
+(function () {
+    const badgeMenu = document.getElementById('rdChamadosBadgeFila');
+
+    async function verificarFila() {
+        try {
+            const resp = await fetch('<?= url('/chamados/fila/contador') ?>');
+            const dados = await resp.json();
+            if (!dados.success) {
+                return;
+            }
+
+            if (badgeMenu) {
+                badgeMenu.textContent = dados.total;
+                badgeMenu.style.display = dados.total > 0 ? '' : 'none';
+            }
+            atualizarAlertaGeralChamados();
+        } catch (e) {
+            // rede instável -- tenta de novo no próximo ciclo
+        }
+    }
+
+    verificarFila();
+    setInterval(verificarFila, 15000);
 })();
 </script>
 <?php endif; ?>

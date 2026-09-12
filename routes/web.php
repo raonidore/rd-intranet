@@ -398,6 +398,7 @@ $router->post('/chamados/setores/excluir', [ChamadoSetorController::class, 'excl
 $router->post('/chamados/setores/usuarios', [ChamadoSetorController::class, 'salvarUsuarios']);
 
 $router->get('/chamados/fila', [ChamadoFilaController::class, 'index']);
+$router->get('/chamados/fila/contador', [ChamadoFilaController::class, 'contadorApi']);
 $router->post('/chamados/fila/assumir', [ChamadoFilaController::class, 'assumir']);
 
 $router->get('/chamados/atendimentos', [ChamadoController::class, 'index']);
