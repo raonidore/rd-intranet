@@ -957,6 +957,9 @@ $router->post('/ativos/intelbras-dvr/renomear-canal', [AtivoController::class, '
 $router->post('/ativos/intelbras-dvr/canal-em-uso', [AtivoController::class, 'definirCanalEmUsoDvr']);
 $router->post('/ativos/intelbras-dvr/canal-sensibilidade', [AtivoController::class, 'definirSensibilidadeCanalDvr']);
 $router->post('/ativos/intelbras-dvr/testar-tampada', [AtivoController::class, 'testarTampadaCanalDvr']);
+$router->post('/ativos/intelbras-dvr/imagem-referencia', [AtivoController::class, 'imagemReferenciaCanalDvr']);
+$router->post('/ativos/intelbras-dvr/imagem-referencia/salvar', [AtivoController::class, 'salvarImagemReferenciaCanalDvr']);
+$router->post('/ativos/intelbras-dvr/imagem-referencia/auto-preencher', [AtivoController::class, 'autoPreencherImagemReferenciaDvr']);
 $router->post('/ativos/intelbras-dvr/canal-deteccao-tampada', [AtivoController::class, 'definirDeteccaoTampadaCanalDvr']);
 $router->post('/ativos/intelbras-dvr/deteccao-tampada', [AtivoController::class, 'definirDeteccaoTampadaDvr']);
 $router->post('/ativos/unifi/desconectar-cliente', [AtivoController::class, 'unifiDesconectarCliente']);

@@ -133,6 +133,9 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
 }
 .hitech-btn:hover { border-color: #58a6ff; color: #58a6ff; }
 .hitech-btn-danger:hover { border-color: #f85149; color: #f85149; }
+.hitech-btn-confirmar { border-color: #238636; color: #3fb950; }
+.hitech-btn-confirmar:hover { background: rgba(63,185,80,.12); border-color: #3fb950; }
+.hitech-btn-confirmar:disabled { opacity: .6; }
 
 /* Modal de detalhe do cliente Wi-Fi (UniFi) -- mesmo visual "console" do
    hitech-panel acima, com um destaque de métricas (sinal/experiência/
@@ -1106,16 +1109,22 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             </div>
         <?php endif; ?>
         <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <strong>Canais</strong>
-                <div class="d-flex align-items-center gap-2">
-                    <div class="form-check form-switch mb-0">
-                        <input type="checkbox" class="form-check-input" role="switch" id="campoDeteccaoTampadaDvr"
-                               data-id="<?= (int)$ativo['id'] ?>" <?= ($detalhes['dvr_deteccao_tampada_ativa'] ?? true) ? 'checked' : '' ?>
-                               title="Consulta o evento VideoBlind do DVR a cada coleta e mostra o badge 'Tampada'. Sem chamado automático -- só sinalização.">
-                        <label class="form-check-label small" for="campoDeteccaoTampadaDvr">Detecção de câmera tampada</label>
+                <div class="d-flex align-items-center gap-3 flex-wrap">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="form-check form-switch mb-0">
+                            <input type="checkbox" class="form-check-input" role="switch" id="campoDeteccaoTampadaDvr"
+                                   data-id="<?= (int)$ativo['id'] ?>" <?= ($detalhes['dvr_deteccao_tampada_ativa'] ?? true) ? 'checked' : '' ?>
+                                   title="Consulta o evento VideoBlind do DVR a cada coleta e mostra o badge 'Tampada'. Sem chamado automático -- só sinalização.">
+                            <label class="form-check-label small" for="campoDeteccaoTampadaDvr">Detecção de câmera tampada</label>
+                        </div>
+                        <span class="small feedback-deteccao-tampada-dvr"></span>
                     </div>
-                    <span class="small feedback-deteccao-tampada-dvr"></span>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="botaoAutoPreencherImagemReferenciaDvr" data-id="<?= (int)$ativo['id'] ?>"
+                            title="Tira uma foto de cada canal com sinal que ainda não tem imagem de referência salva">
+                        <i class="bi bi-images"></i> Auto-preencher imagens de referência
+                    </button>
                 </div>
             </div>
             <div class="card-body p-0">
@@ -1179,6 +1188,9 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                         <button type="button" class="btn btn-sm btn-outline-primary botao-ver-snapshot-dvr" data-id="<?= (int)$ativo['id'] ?>" data-canal="<?= (int)($canal['numero'] ?? 0) ?>" title="Ver imagem atual">
                                             <i class="bi bi-camera-video"></i>
                                         </button>
+                                        <button type="button" class="btn btn-sm <?= !empty($canal['imagem_referencia_atualizada_em']) ? 'btn-outline-success' : 'btn-outline-warning' ?> botao-imagem-referencia-dvr" data-id="<?= (int)$ativo['id'] ?>" data-canal="<?= (int)($canal['numero'] ?? 0) ?>" title="Imagem de referência (como a câmera deveria estar)">
+                                            <i class="bi bi-bookmark-star"></i>
+                                        </button>
                                         <button type="button" class="btn btn-sm btn-outline-secondary botao-renomear-canal-dvr" data-id="<?= (int)$ativo['id'] ?>" data-canal="<?= (int)($canal['numero'] ?? 0) ?>" data-nome="<?= htmlspecialchars($canal['nome'] ?? '') ?>" title="Renomear canal">
                                             <i class="bi bi-pencil"></i>
                                         </button>
@@ -1210,6 +1222,46 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                     <a href="#" class="btn btn-sm btn-outline-primary disabled" id="botaoBaixarSnapshotDvr" download>
                         <i class="bi bi-download"></i> Baixar imagem
                     </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Imagem de referência do canal -- "como a câmera deveria estar", curada manualmente (nunca sobrescrita sozinha). -->
+    <div class="modal fade" id="modalImagemReferenciaDvr" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content hitech-panel" style="border-radius:14px">
+                <div class="hitech-topbar" style="border-radius:14px 14px 0 0">
+                    <span class="hitech-breadcrumb"><i class="bi bi-bookmark-star"></i> <span id="modalImagemReferenciaTitulo">Imagem de referência</span></span>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="text-center p-3" id="modalImagemReferenciaCorpo" style="min-height:120px">
+                    <div class="spinner-border" role="status" style="color:#58a6ff"></div>
+                </div>
+                <div class="hitech-topbar" style="border-top:1px solid #30363d; border-bottom:0; border-radius:0 0 14px 14px">
+                    <span class="small" id="modalImagemReferenciaHora" style="color:#8b949e"></span>
+                    <button type="button" class="btn btn-sm hitech-btn" id="botaoAtualizarImagemReferenciaDvr">
+                        <i class="bi bi-arrow-repeat"></i> <span id="textoBotaoAtualizarImagemReferenciaDvr">Atualizar imagem</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmação genérica "high-tech" -- reaproveitada pra qualquer ação que reescreve algo salvo (imagem de referência de um canal, auto-preenchimento em lote). -->
+    <div class="modal fade" id="modalConfirmacaoHitech" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content hitech-panel" style="border-radius:14px">
+                <div class="hitech-topbar" style="border-radius:14px 14px 0 0">
+                    <span class="hitech-breadcrumb"><i class="bi bi-shield-exclamation"></i> <span id="modalConfirmacaoHitechTitulo">Confirmar ação</span></span>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="p-3">
+                    <p class="mb-3" id="modalConfirmacaoHitechMensagem" style="font-size:13px; line-height:1.6"></p>
+                    <div class="d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-sm hitech-btn" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="button" class="btn btn-sm hitech-btn hitech-btn-confirmar" id="botaoConfirmarHitech"><i class="bi bi-check-lg"></i> Confirmar</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1659,6 +1711,43 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
 </div>
 
 <script>
+// Popup de confirmação "high-tech" (mesmo visual dos painéis de console
+// já usados no Explorador de Arquivos/Gerenciador de Processos) --
+// reaproveitado por qualquer ação que reescreve algo salvo. Cada
+// chamada troca o listener de "Confirmar" pra evitar empilhar handlers
+// de uma abertura pra outra.
+function abrirConfirmacaoHitech(titulo, mensagem, aoConfirmar) {
+    const modalEl = document.getElementById('modalConfirmacaoHitech');
+    if (!modalEl) return;
+
+    document.getElementById('modalConfirmacaoHitechTitulo').textContent = titulo;
+    document.getElementById('modalConfirmacaoHitechMensagem').innerHTML = mensagem;
+
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    const botaoAntigo = document.getElementById('botaoConfirmarHitech');
+    const botao = botaoAntigo.cloneNode(true);
+    botaoAntigo.parentNode.replaceChild(botao, botaoAntigo);
+
+    botao.addEventListener('click', async function () {
+        botao.disabled = true;
+        try {
+            await aoConfirmar();
+        } finally {
+            botao.disabled = false;
+            modal.hide();
+        }
+    });
+
+    modal.show();
+}
+
+function formatarDataHoraReferencia(dataStr) {
+    if (!dataStr) return '';
+    const [data, hora] = dataStr.split(' ');
+    const [ano, mes, dia] = (data || '').split('-');
+    return 'Imagem atualizada em ' + hora + ' do dia ' + dia + '/' + mes + '/' + ano;
+}
+
 (function () {
     const linkVoltar = document.getElementById('linkVoltarAtivo');
     if (!linkVoltar) return;
@@ -2188,6 +2277,119 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                 botao.disabled = false;
             }
         });
+    });
+})();
+
+(function () {
+    const botoesReferencia = document.querySelectorAll('.botao-imagem-referencia-dvr');
+    if (!botoesReferencia.length) return;
+
+    const modalEl = document.getElementById('modalImagemReferenciaDvr');
+    let modal = null;
+    const titulo = document.getElementById('modalImagemReferenciaTitulo');
+    const corpo = document.getElementById('modalImagemReferenciaCorpo');
+    const hora = document.getElementById('modalImagemReferenciaHora');
+    const botaoAtualizar = document.getElementById('botaoAtualizarImagemReferenciaDvr');
+    const textoBotaoAtualizar = document.getElementById('textoBotaoAtualizarImagemReferenciaDvr');
+    let canalAberto = null;
+
+    async function carregarImagemReferencia(id, canal) {
+        corpo.innerHTML = '<div class="spinner-border" role="status" style="color:#58a6ff"></div>';
+        hora.textContent = '';
+        botaoAtualizar.disabled = true;
+
+        const dados = new URLSearchParams();
+        dados.set('id', id);
+        dados.set('canal', canal);
+
+        try {
+            const res = await fetch(<?= json_encode(url('/ativos/intelbras-dvr/imagem-referencia')) ?>, { method: 'POST', body: dados });
+            const resultado = await res.json();
+
+            if (!resultado.success) {
+                corpo.innerHTML = '<div class="hitech-erro">' + (resultado.message || 'Falha ao buscar a imagem de referência.') + '</div>';
+                return;
+            }
+
+            if (resultado.existe) {
+                corpo.innerHTML = '<img src="data:' + resultado.content_type + ';base64,' + resultado.imagem_base64 + '" class="img-fluid rounded" alt="Referência canal ' + canal + '">';
+                hora.textContent = formatarDataHoraReferencia(resultado.atualizada_em);
+                textoBotaoAtualizar.textContent = 'Atualizar imagem';
+            } else {
+                corpo.innerHTML = '<div class="hitech-empty"><i class="bi bi-bookmark" style="font-size:1.8rem"></i><div class="mt-2">Nenhuma imagem de referência salva ainda pra esse canal.</div></div>';
+                textoBotaoAtualizar.textContent = 'Salvar como referência';
+            }
+        } catch (e) {
+            corpo.innerHTML = '<div class="hitech-erro">Erro ao comunicar com o servidor.</div>';
+        } finally {
+            botaoAtualizar.disabled = false;
+        }
+    }
+
+    botoesReferencia.forEach(function (botao) {
+        botao.addEventListener('click', function () {
+            canalAberto = { id: botao.dataset.id, canal: botao.dataset.canal };
+            titulo.textContent = 'Imagem de referência -- Canal ' + botao.dataset.canal;
+            if (!modal) modal = new bootstrap.Modal(modalEl);
+            modal.show();
+            carregarImagemReferencia(canalAberto.id, canalAberto.canal);
+        });
+    });
+
+    botaoAtualizar.addEventListener('click', function () {
+        if (!canalAberto) return;
+
+        abrirConfirmacaoHitech(
+            'Atualizar imagem de referência',
+            'Confirma atualizar a imagem de referência do <strong>Canal ' + canalAberto.canal + '</strong>? ' +
+            'Uma foto nova é tirada da câmera agora mesmo e substitui a que estava salva -- essa é a imagem que vai ' +
+            'servir de comparação pra saber "como a câmera deveria estar" caso ela pare de funcionar depois.',
+            async function () {
+                const dados = new URLSearchParams();
+                dados.set('id', canalAberto.id);
+                dados.set('canal', canalAberto.canal);
+
+                const res = await fetch(<?= json_encode(url('/ativos/intelbras-dvr/imagem-referencia/salvar')) ?>, { method: 'POST', body: dados });
+                const resultado = await res.json();
+
+                if (resultado.success) {
+                    await carregarImagemReferencia(canalAberto.id, canalAberto.canal);
+                    const linha = document.querySelector('.botao-imagem-referencia-dvr[data-id="' + canalAberto.id + '"][data-canal="' + canalAberto.canal + '"]');
+                    if (linha) {
+                        linha.classList.remove('btn-outline-warning');
+                        linha.classList.add('btn-outline-success');
+                    }
+                } else {
+                    alert(resultado.message || 'Falha ao atualizar a imagem de referência.');
+                }
+            }
+        );
+    });
+})();
+
+(function () {
+    const botaoAutoPreencher = document.getElementById('botaoAutoPreencherImagemReferenciaDvr');
+    if (!botaoAutoPreencher) return;
+
+    botaoAutoPreencher.addEventListener('click', function () {
+        abrirConfirmacaoHitech(
+            'Auto-preencher imagens de referência',
+            'Confirma auto-preencher as imagens de referência desse DVR/NVR? O sistema vai tirar uma foto de cada ' +
+            'canal que <strong>ainda não</strong> tem referência salva -- canais sem sinal no momento são simplesmente ' +
+            'ignorados (nada é sobrescrito). Pode levar alguns segundos dependendo do número de canais.',
+            async function () {
+                const dados = new URLSearchParams();
+                dados.set('id', botaoAutoPreencher.dataset.id);
+
+                const res = await fetch(<?= json_encode(url('/ativos/intelbras-dvr/imagem-referencia/auto-preencher')) ?>, { method: 'POST', body: dados });
+                const resultado = await res.json();
+
+                alert(resultado.message || (resultado.success ? 'Concluído.' : 'Falha ao auto-preencher.'));
+                if (resultado.success && resultado.preenchidos > 0) {
+                    location.reload();
+                }
+            }
+        );
     });
 })();
 

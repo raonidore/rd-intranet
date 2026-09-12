@@ -633,6 +633,39 @@ class AtivoController extends Controller
         echo json_encode($this->service->testarTampadaCanalDvr($id, $canal));
     }
 
+    public function imagemReferenciaCanalDvr(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $canal = (int)($_POST['canal'] ?? 0);
+
+        echo json_encode($this->service->buscarImagemReferenciaDvr($id, $canal));
+    }
+
+    public function salvarImagemReferenciaCanalDvr(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $canal = (int)($_POST['canal'] ?? 0);
+
+        echo json_encode($this->service->salvarImagemReferenciaDvr($id, $canal));
+    }
+
+    public function autoPreencherImagemReferenciaDvr(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+        set_time_limit(120);
+
+        $id = (int)($_POST['id'] ?? 0);
+
+        echo json_encode($this->service->autoPreencherImagensReferenciaDvr($id));
+    }
+
     public function definirDeteccaoTampadaDvr(): void
     {
         AuthMiddleware::checkModulo('ativos_lista');

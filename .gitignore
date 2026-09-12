@@ -13,6 +13,7 @@
 /storage/config_restore_status/*
 /storage/whatsapp/*
 /storage/chat/*
+/storage/dvr_snapshots/*
 .env
 /app/Config/database.php
 *.log

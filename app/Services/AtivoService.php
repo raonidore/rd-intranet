@@ -355,6 +355,7 @@ class AtivoService
         }
 
         $this->repository->excluir($id);
+        $this->removerImagensReferenciaDvr($id);
 
         AuditService::registrar('Ativos', 'Excluir Ativo', 'Ativo ' . $ativo['codigo_patrimonio'] . ' (' . $ativo['nome'] . ') removido.');
 
@@ -1936,6 +1937,157 @@ class AtivoService
             'success' => true,
             'imagem_base64' => base64_encode($resultado['imagem']),
             'content_type' => $resultado['content_type'],
+        ];
+    }
+
+    /**
+     * "Imagem de referência" = a última foto que alguém CONFIRMOU que
+     * mostrava a câmera funcionando -- diferente do snapshot ao vivo
+     * (snapshotCanalDvr()), que mostra o que está na tela agora mesmo
+     * (podendo estar preto/quebrado se a câmera caiu). Serve pra saber "como
+     * ela deveria estar" quando o canal está sem sinal e ninguém lembra qual
+     * câmera é aquela ou se ela já existiu de verdade. Guardada como arquivo
+     * (mesmo padrão de storage/ do ChamadoAnexoService), não em base64 no
+     * JSON de detalhes -- evita inchar a coluna com até 32 imagens por DVR.
+     * NUNCA é sobrescrita sozinha por uma coleta periódica -- só por ação
+     * explícita do usuário (botão + confirmação), de propósito: uma foto
+     * poderia ficar "confirmada" errada se fosse trocada automaticamente no
+     * exato momento em que a câmera parasse de funcionar.
+     */
+    private function diretorioImagensReferenciaDvr(int $ativoId): string
+    {
+        $dir = __DIR__ . '/../../storage/dvr_snapshots/' . $ativoId;
+
+        if (!is_dir($dir)) {
+            mkdir($dir, 0775, true);
+        }
+
+        return $dir;
+    }
+
+    private function caminhoImagemReferenciaDvr(int $ativoId, int $canal): string
+    {
+        return $this->diretorioImagensReferenciaDvr($ativoId) . '/canal_' . $canal . '.jpg';
+    }
+
+    private function removerImagensReferenciaDvr(int $ativoId): void
+    {
+        $dir = __DIR__ . '/../../storage/dvr_snapshots/' . $ativoId;
+
+        if (!is_dir($dir)) {
+            return;
+        }
+
+        foreach (glob($dir . '/*') ?: [] as $arquivo) {
+            @unlink($arquivo);
+        }
+
+        @rmdir($dir);
+    }
+
+    /** @return array{success:bool, existe?:bool, imagem_base64?:string, content_type?:string, atualizada_em?:?string, message?:string} */
+    public function buscarImagemReferenciaDvr(int $id, int $canal): array
+    {
+        $ativo = $this->repository->buscarPorId($id);
+
+        if (!$ativo) {
+            return ['success' => false, 'message' => 'Ativo não encontrado.'];
+        }
+
+        $caminho = $this->caminhoImagemReferenciaDvr($id, $canal);
+
+        if (!is_file($caminho)) {
+            return ['success' => true, 'existe' => false];
+        }
+
+        $detalhes = json_decode($ativo['detalhes'] ?? '', true) ?: [];
+        $atualizadaEm = null;
+
+        foreach (($detalhes['dvr_canais'] ?? []) as $c) {
+            if ((int)($c['numero'] ?? 0) === $canal) {
+                $atualizadaEm = $c['imagem_referencia_atualizada_em'] ?? null;
+                break;
+            }
+        }
+
+        return [
+            'success' => true,
+            'existe' => true,
+            'imagem_base64' => base64_encode((string)file_get_contents($caminho)),
+            'content_type' => 'image/jpeg',
+            'atualizada_em' => $atualizadaEm,
+        ];
+    }
+
+    /** @return array{success:bool, message:string, atualizada_em?:string} */
+    public function salvarImagemReferenciaDvr(int $id, int $canal): array
+    {
+        $ativo = $this->repository->buscarPorId($id);
+
+        if (!$ativo || empty($ativo['ip'])) {
+            return ['success' => false, 'message' => 'Ativo não encontrado ou sem IP cadastrado.'];
+        }
+
+        $resultado = (new IntelbrasDvrService())->snapshot($ativo['ip'], $canal);
+
+        if (!$resultado['success']) {
+            return $resultado;
+        }
+
+        file_put_contents($this->caminhoImagemReferenciaDvr($id, $canal), $resultado['imagem']);
+
+        $agora = date('Y-m-d H:i:s');
+
+        $this->alterarDetalhesComLock($id, function (array $detalhes) use ($canal, $agora) {
+            // Mesmo cuidado de definirCanalEmUsoDvr() -- "foreach ($x['y'] ?? [] as &$c)" não propaga a mutação de volta.
+            $canais = $detalhes['dvr_canais'] ?? [];
+
+            foreach ($canais as &$c) {
+                if ((int)($c['numero'] ?? 0) === $canal) {
+                    $c['imagem_referencia_atualizada_em'] = $agora;
+                }
+            }
+            unset($c);
+
+            $detalhes['dvr_canais'] = $canais;
+
+            return ['ok' => true, 'detalhes' => $detalhes];
+        });
+
+        AuditService::registrar('Ativos', 'DVR/NVR - Imagem de referência', "{$ativo['codigo_patrimonio']}: canal {$canal} -- imagem de referência atualizada.");
+
+        return ['success' => true, 'message' => 'Imagem de referência salva.', 'atualizada_em' => $agora];
+    }
+
+    /** Tira foto de todo canal que ainda não tem imagem de referência salva -- canal sem sinal no momento simplesmente falha e é ignorado (nada sobrescrito). */
+    public function autoPreencherImagensReferenciaDvr(int $id): array
+    {
+        $ativo = $this->repository->buscarPorId($id);
+
+        if (!$ativo) {
+            return ['success' => false, 'message' => 'Ativo não encontrado.', 'preenchidos' => 0, 'total' => 0];
+        }
+
+        $detalhes = json_decode($ativo['detalhes'] ?? '', true) ?: [];
+        $semReferencia = array_filter($detalhes['dvr_canais'] ?? [], fn (array $c) => empty($c['imagem_referencia_atualizada_em']));
+
+        $preenchidos = 0;
+        foreach ($semReferencia as $c) {
+            $resultado = $this->salvarImagemReferenciaDvr($id, (int)($c['numero'] ?? 0));
+            if ($resultado['success']) {
+                $preenchidos++;
+            }
+        }
+
+        $total = count($semReferencia);
+
+        AuditService::registrar('Ativos', 'DVR/NVR - Imagem de referência', "{$ativo['codigo_patrimonio']}: auto-preenchimento -- {$preenchidos} de {$total} canal(is) sem referência.");
+
+        return [
+            'success' => true,
+            'message' => "{$preenchidos} de {$total} canal(is) preenchido(s) (os demais estavam sem sinal no momento).",
+            'preenchidos' => $preenchidos,
+            'total' => $total,
         ];
     }
 
