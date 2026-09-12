@@ -263,10 +263,11 @@ ob_start();
                                 conferir o snapshot e decidir.
                             </div>
                         </div>
-                        <p class="text-muted small mt-3 mb-1"><strong>Duas chaves de controle, direto na aba "Canais":</strong></p>
+                        <p class="text-muted small mt-3 mb-1"><strong>Três controles, direto na aba "Canais":</strong></p>
                         <ul class="small text-muted mb-0">
-                            <li><strong>Sensibilidade por canal</strong> (1 a 6, padrão de fábrica 3) -- grava direto no "BlindDetect" do DVR. Baixando pra 1 ou 2 numa cena escura, reduz o falso positivo na origem. O botão <strong>"Testar"</strong> confere na hora, sem esperar a próxima coleta.</li>
-                            <li><strong>Liga/desliga por canal</strong> (ícone de sino) -- pra quando nem a sensibilidade mínima resolve (limitação conhecida do algoritmo em infravermelho/baixa luz, não é bug do RD.Intranet). Desliga só aquele canal, sem afetar os outros.</li>
+                            <li><strong>Sensibilidade por canal</strong> (seletor 1 a 6, padrão de fábrica 3) -- grava direto no "BlindDetect" do DVR. Baixando pra 1 ou 2 numa cena escura, reduz o falso positivo na origem.</li>
+                            <li><strong>Botão "Testar"</strong> (<i class="bi bi-arrow-repeat"></i>) -- confere na hora se o canal ainda dispara com a sensibilidade atual, sem esperar a próxima coleta (útil logo depois de ajustar o seletor acima).</li>
+                            <li><strong>Liga/desliga por canal</strong> (ícone de sino, <i class="bi bi-bell"></i>/<i class="bi bi-bell-slash"></i>) -- pra quando nem a sensibilidade mínima resolve (limitação conhecida do algoritmo em infravermelho/baixa luz, não é bug do RD.Intranet). Desliga só aquele canal, sem afetar os outros -- o seletor e o "Testar" ficam desabilitados enquanto ele estiver desligado.</li>
                             <li><strong>Liga/desliga por DVR/NVR inteiro</strong> -- switch no cabeçalho da aba "Canais", já que cada equipamento fica num ambiente diferente.</li>
                         </ul>
                     </div>
@@ -299,17 +300,50 @@ ob_start();
             <div class="accordion-item">
                 <h2 class="accordion-header">
                     <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#docCanais">
-                        <i class="bi bi-camera-video me-2"></i> Ver canal e renomear
+                        <i class="bi bi-camera-video me-2"></i> Ver imagem atual e renomear canal
                     </button>
                 </h2>
                 <div id="docCanais" class="accordion-collapse collapse" data-bs-parent="#acordeaoDocDvr">
                     <div class="accordion-body">
                         <p class="text-muted small mb-0">
-                            Na aba "Canais", cada linha tem dois botões: o de câmera abre uma <strong>foto do
-                            momento</strong> (não é vídeo ao vivo contínuo -- isso exigiria um servidor de mídia à
-                            parte, RTSP não roda direto em HTML); o lápis renomeia o canal de verdade no próprio
-                            DVR (mesmo nome que aparece na tela dele). No modal da foto dá pra <strong>atualizar</strong>
-                            sem fechar e <strong>baixar a imagem</strong> direto, sem precisar de print de tela.
+                            Na aba "Canais", o botão de câmera (<i class="bi bi-camera-video"></i>) abre uma
+                            <strong>foto do momento</strong> -- o que está na tela agora mesmo (não é vídeo ao vivo
+                            contínuo, isso exigiria um servidor de mídia à parte, RTSP não roda direto em HTML). O
+                            lápis (<i class="bi bi-pencil"></i>) renomeia o canal de verdade no próprio DVR (mesmo
+                            nome que aparece na tela dele). No modal da foto dá pra <strong>atualizar</strong> sem
+                            fechar e <strong>baixar a imagem</strong> direto, sem precisar de print de tela.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#docImagemReferencia">
+                        <i class="bi bi-bookmark-star me-2"></i> Imagem de referência (curada manualmente)
+                    </button>
+                </h2>
+                <div id="docImagemReferencia" class="accordion-collapse collapse" data-bs-parent="#acordeaoDocDvr">
+                    <div class="accordion-body">
+                        <p class="text-muted small">
+                            O botão de marcador (<i class="bi bi-bookmark-star"></i>), ao lado do de câmera, abre a
+                            <strong>imagem de referência</strong> do canal -- diferente da foto do momento, essa é a
+                            última imagem que <strong>alguém confirmou</strong> que mostrava a câmera funcionando de
+                            verdade. Serve pra quando um canal está "Sem sinal" e ninguém lembra qual câmera é
+                            aquela, ou não sabe se ela já existiu de fato -- comparando com a referência dá pra
+                            confirmar visualmente.
+                        </p>
+                        <ul class="small text-muted mb-3">
+                            <li>O botão fica <strong class="text-warning">amarelo</strong> quando o canal ainda não tem referência salva, e <strong class="text-success">verde</strong> depois de salva.</li>
+                            <li><strong>Nunca é sobrescrita sozinha</strong> por uma coleta periódica -- só por ação explícita, confirmada num popup (pra evitar salvar sem querer uma foto ruim no exato momento em que a câmera cair).</li>
+                            <li>Ao confirmar, o sistema busca uma foto <strong>nova, na hora</strong>, direto do DVR -- nunca reaproveita algo que já estava carregado na tela.</li>
+                            <li>Guardada como arquivo (<code>storage/dvr_snapshots/</code>), no mesmo padrão de anexo já usado no resto do sistema -- não pesa no banco de dados.</li>
+                        </ul>
+                        <p class="text-muted small mb-0">
+                            <strong>Auto-preencher imagens de referência</strong> -- botão no cabeçalho da aba
+                            "Canais", tira uma foto de cada canal que <strong>ainda não</strong> tem referência
+                            salva (canal sem sinal no momento é simplesmente ignorado, nada é sobrescrito). Útil pra
+                            popular tudo de uma vez num DVR recém-cadastrado, em vez de salvar canal por canal.
                         </p>
                     </div>
                 </div>
