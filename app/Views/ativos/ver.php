@@ -1727,13 +1727,26 @@ function abrirConfirmacaoHitech(titulo, mensagem, aoConfirmar) {
     const botaoAntigo = document.getElementById('botaoConfirmarHitech');
     const botao = botaoAntigo.cloneNode(true);
     botaoAntigo.parentNode.replaceChild(botao, botaoAntigo);
+    const botaoCancelar = modalEl.querySelector('.hitech-btn:not(.hitech-btn-confirmar)');
+    const botaoFechar = modalEl.querySelector('.btn-close');
+    const textoOriginalBotao = botao.innerHTML;
 
     botao.addEventListener('click', async function () {
+        // Ação pode levar alguns segundos (ex: auto-preencher percorre
+        // canal por canal) -- sem esse estado de "processando" visível, a
+        // tela parece travada e o usuário não sabe se o clique funcionou.
         botao.disabled = true;
+        botao.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Processando...';
+        if (botaoCancelar) botaoCancelar.disabled = true;
+        if (botaoFechar) botaoFechar.disabled = true;
+
         try {
             await aoConfirmar();
         } finally {
             botao.disabled = false;
+            botao.innerHTML = textoOriginalBotao;
+            if (botaoCancelar) botaoCancelar.disabled = false;
+            if (botaoFechar) botaoFechar.disabled = false;
             modal.hide();
         }
     });
@@ -1747,6 +1760,24 @@ function formatarDataHoraReferencia(dataStr) {
     const [ano, mes, dia] = (data || '').split('-');
     return 'Imagem atualizada em ' + hora + ' do dia ' + dia + '/' + mes + '/' + ano;
 }
+
+// Sem isso, qualquer location.reload() (ex: depois do auto-preenchimento
+// de imagens de referência) sempre volta pra aba "Visão Geral" -- guarda
+// a aba ativa no hash da URL pra restaurar depois de recarregar.
+(function () {
+    if (location.hash) {
+        const gatilho = document.querySelector('.nav-link[data-bs-target="' + location.hash + '"]');
+        if (gatilho) {
+            bootstrap.Tab.getOrCreateInstance(gatilho).show();
+        }
+    }
+
+    document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (gatilho) {
+        gatilho.addEventListener('shown.bs.tab', function () {
+            history.replaceState(null, '', gatilho.dataset.bsTarget);
+        });
+    });
+})();
 
 (function () {
     const linkVoltar = document.getElementById('linkVoltarAtivo');
@@ -2386,6 +2417,7 @@ function formatarDataHoraReferencia(dataStr) {
 
                 alert(resultado.message || (resultado.success ? 'Concluído.' : 'Falha ao auto-preencher.'));
                 if (resultado.success && resultado.preenchidos > 0) {
+                    location.hash = '#abaCanaisDvr';
                     location.reload();
                 }
             }
