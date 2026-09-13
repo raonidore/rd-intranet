@@ -806,6 +806,7 @@ $router->post('/administracao/empresa/logo-sistema/remover', [EmpresaController:
 $router->get('/administracao/empresa/logo-sistema', [EmpresaController::class, 'logoSistema']);
 $router->post('/administracao/empresa/unidade-novo', [EmpresaController::class, 'unidadeNovo']);
 $router->post('/administracao/empresa/unidade-editar', [EmpresaController::class, 'unidadeEditar']);
+$router->post('/administracao/empresa/unidade-padrao', [EmpresaController::class, 'unidadePadrao']);
 $router->post('/administracao/empresa/unidade-excluir', [EmpresaController::class, 'unidadeExcluir']);
 
 $router->get('/administracao/email', [EmailConfigController::class, 'index']);

@@ -65,6 +65,16 @@ class EmpresaController extends Controller
         exit;
     }
 
+    public function unidadePadrao(): void
+    {
+        AuthMiddleware::checkAdmin();
+
+        $this->unidadeService->definirPadrao((int)($_POST['id'] ?? 0));
+
+        header('Location: ' . url('/administracao/empresa'));
+        exit;
+    }
+
     public function unidadeExcluir(): void
     {
         AuthMiddleware::checkAdmin();

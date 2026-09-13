@@ -60,6 +60,13 @@ use App\Components\Alert;
                                 <?php endif; ?>
                             </span>
                             <div class="d-flex gap-1">
+                                <?php if (!$u['padrao']): ?>
+                                    <form method="post" action="<?= url('/administracao/empresa/unidade-padrao') ?>"
+                                          onsubmit="return confirm('Definir &quot;<?= htmlspecialchars(addslashes($u['nome'])) ?>&quot; como unidade padrão?');">
+                                        <input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
+                                        <button class="btn btn-sm btn-outline-secondary" title="Definir como padrão"><i class="bi bi-star"></i></button>
+                                    </form>
+                                <?php endif; ?>
                                 <button type="button" class="btn btn-sm btn-outline-secondary botao-editar-unidade"><i class="bi bi-pencil"></i></button>
                                 <?php if (!$u['padrao']): ?>
                                     <form method="post" action="<?= url('/administracao/empresa/unidade-excluir') ?>"

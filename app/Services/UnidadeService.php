@@ -106,6 +106,29 @@ class UnidadeService
         return true;
     }
 
+    /** Marca uma unidade como padrão (fallback pra ativo sem unidade escolhida, ex: cadastro via agente) -- tira o "padrão" de qualquer outra automaticamente, só uma pode ter por vez. */
+    public function definirPadrao(int $id): bool
+    {
+        $item = $this->repository->buscarPorId($id);
+        if (!$item) {
+            NotificationService::error('Unidade não encontrada.');
+            return false;
+        }
+
+        if ((int)$item['padrao'] === 1) {
+            NotificationService::error('Essa unidade já é a padrão.');
+            return false;
+        }
+
+        $this->repository->definirPadrao($id);
+
+        AuditService::registrar('Administração', 'Unidades', 'Unidade "' . $item['nome'] . '" definida como padrão.');
+
+        NotificationService::success('Unidade "' . $item['nome'] . '" definida como padrão.');
+
+        return true;
+    }
+
     public function excluir(int $id): bool
     {
         $item = $this->repository->buscarPorId($id);

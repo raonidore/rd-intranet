@@ -82,6 +82,26 @@ class UnidadeRepository
         return $stmt->execute([$nome, $sigla, $id]);
     }
 
+    /** Só uma unidade pode ser padrão -- tira de todas antes de marcar a nova, dentro de uma transação (evita ficar sem nenhuma padrão se a segunda query falhar no meio). */
+    public function definirPadrao(int $id): bool
+    {
+        $this->pdo->beginTransaction();
+
+        try {
+            $this->pdo->exec("UPDATE unidades SET padrao = 0");
+            $stmt = $this->pdo->prepare("UPDATE unidades SET padrao = 1 WHERE id = ?");
+            $stmt->execute([$id]);
+
+            $this->pdo->commit();
+
+            return true;
+        } catch (\Throwable $e) {
+            $this->pdo->rollBack();
+
+            throw $e;
+        }
+    }
+
     public function excluir(int $id): bool
     {
         $stmt = $this->pdo->prepare("DELETE FROM unidades WHERE id = ?");
