@@ -625,7 +625,11 @@ class UnifiService
             'protocol' => $protocolo,
             'connection_state_type' => 'ALL',
             'connection_states' => [],
-            'create_allow_respond' => true,
+            // Confirmado ao vivo: o Controller recusa
+            // ("Firewall policy create respond traffic not allowed") esse
+            // campo true numa regra BLOCK -- só faz sentido pra ALLOW (cria
+            // sozinho a regra de retorno do tráfego permitido).
+            'create_allow_respond' => $acao === 'ALLOW',
             'ip_version' => 'BOTH',
             'icmp_typename' => 'ANY',
             'icmp_v6_typename' => 'ANY',
