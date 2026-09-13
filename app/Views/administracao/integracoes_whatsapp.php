@@ -2,6 +2,7 @@
 ob_start();
 
 use App\Components\Alert;
+use App\Components\Badge;
 ?>
 
 <?= Alert::flash() ?>
@@ -11,7 +12,10 @@ use App\Components\Alert;
     <small class="text-muted d-block mb-1">
         <a href="<?= url('/administracao/integracoes') ?>"><i class="bi bi-arrow-left"></i> Integrações</a>
     </small>
-    <small class="text-muted">Conexão do módulo de Atendimento com o WhatsApp, usada em WhatsApp &gt; Fila/Atendimentos.</small>
+    <small class="text-muted">
+        A conexão configurada aqui alimenta o módulo inteiro de Atendimento (Fila, Atendimentos, Chatbot, NPS) --
+        veja o tutorial completo mais abaixo.
+    </small>
 </div>
 
 <div class="card border-0 shadow-sm mb-3" style="max-width:720px">
@@ -340,6 +344,337 @@ use App\Components\Alert;
     </div>
 </div>
 <?php endif; ?>
+
+<div class="card border-0 shadow-sm mt-3 wpp-doc-card" style="max-width:960px">
+    <div class="card-body">
+        <strong><i class="bi bi-signpost-split"></i> Qual tipo de conexão escolher?</strong>
+        <p class="text-muted small mt-2 mb-3">Os três falam com o mesmo módulo de Atendimento por trás -- a diferença é só como as mensagens entram e saem do WhatsApp.</p>
+        <div class="table-responsive">
+            <table class="table table-sm wpp-tabela-tipos align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Tipo</th>
+                        <th>Custo</th>
+                        <th>Aprovação prévia</th>
+                        <th>Risco</th>
+                        <th>Como conecta</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><i class="bi bi-qr-code text-success"></i> <strong>QR Code</strong></td>
+                        <td class="text-muted small">Nenhum</td>
+                        <td class="text-muted small">Nenhuma</td>
+                        <td class="text-muted small">Não é a API oficial -- número pode ser banido pelo WhatsApp por uso fora dos termos (alto volume, automação agressiva)</td>
+                        <td class="text-muted small">Escaneia o QR Code com o celular, igual ao WhatsApp Web</td>
+                    </tr>
+                    <tr>
+                        <td><i class="bi bi-patch-check text-primary"></i> <strong>API Oficial (Meta)</strong></td>
+                        <td class="text-muted small">Cobrado pela Meta por conversa, fora de uma cota gratuita mensal</td>
+                        <td class="text-muted small">Conta Meta Business verificada + número aprovado</td>
+                        <td class="text-muted small">Baixo -- canal oficial, sem risco de ban</td>
+                        <td class="text-muted small">Phone Number ID + Access Token, webhook direto na Meta</td>
+                    </tr>
+                    <tr>
+                        <td><i class="bi bi-patch-check text-info"></i> <strong>Twilio</strong></td>
+                        <td class="text-muted small">Cobrado pela Twilio por mensagem</td>
+                        <td class="text-muted small">Mais rápida -- sandbox pra testar na hora, número de produção depois</td>
+                        <td class="text-muted small">Baixo -- canal oficial via parceiro Meta</td>
+                        <td class="text-muted small">Account SID + Auth Token, webhook direto na Twilio</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="wpp-callout wpp-callout-warning mt-3">
+            <i class="bi bi-exclamation-triangle"></i>
+            <div>
+                Comece pelo <strong>QR Code</strong> pra testar o módulo sem custo nem burocracia -- migrar pra Meta
+                ou Twilio depois é só trocar o "Tipo de integração" acima e preencher as credenciais, o resto do
+                sistema (Fila, Atendimentos, Chatbot, NPS) não muda em nada.
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mt-3 wpp-doc-card" style="max-width:960px">
+    <div class="card-body">
+        <strong><i class="bi bi-diagram-3"></i> O que acontece depois de conectado -- visão geral</strong>
+        <p class="text-muted small mt-2 mb-3">O caminho de uma mensagem recebida, do primeiro "oi" até o atendimento encerrado.</p>
+        <div class="table-responsive">
+            <table class="table table-sm wpp-tabela-modulos align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Etapa</th>
+                        <th>Onde configurar</th>
+                        <th>O que faz</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><i class="bi bi-diagram-2 text-primary"></i> Chatbot (árvore de menus)</td>
+                        <td class="text-muted small"><a href="<?= url('/whatsapp/chatbot') ?>">WhatsApp &gt; Chatbot</a></td>
+                        <td class="text-muted small">Primeira coisa que o cliente vê -- menu numerado, cada opção pode dar uma resposta pronta, encaminhar pra um setor ou abrir chamado direto</td>
+                    </tr>
+                    <tr>
+                        <td><i class="bi bi-diagram-3 text-primary"></i> Setores</td>
+                        <td class="text-muted small"><a href="<?= url('/whatsapp/setores') ?>">WhatsApp &gt; Setores</a></td>
+                        <td class="text-muted small">Departamentos que recebem atendimento encaminhado pelo bot -- cada conexão (número) escolhe quais setores aparecem no menu dela</td>
+                    </tr>
+                    <tr>
+                        <td><i class="bi bi-hourglass-split text-warning"></i> Fila</td>
+                        <td class="text-muted small"><a href="<?= url('/whatsapp/fila') ?>">WhatsApp &gt; Fila</a></td>
+                        <td class="text-muted small">Atendimentos encaminhados pelo bot esperando um atendente humano assumir</td>
+                    </tr>
+                    <tr>
+                        <td><i class="bi bi-chat-dots text-success"></i> Atendimentos</td>
+                        <td class="text-muted small"><a href="<?= url('/whatsapp/atendimentos') ?>">WhatsApp &gt; Atendimentos</a></td>
+                        <td class="text-muted small">Conversa em andamento com um atendente -- responder, anexar arquivo, transferir de setor/atendente, encerrar</td>
+                    </tr>
+                    <tr>
+                        <td><i class="bi bi-star text-warning"></i> NPS (satisfação)</td>
+                        <td class="text-muted small">Ativado por setor em <a href="<?= url('/whatsapp/setores') ?>">WhatsApp &gt; Setores</a></td>
+                        <td class="text-muted small">Ao encerrar, pergunta satisfação (1-5) e se resolveu (sim/não) -- opcional, por setor</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mt-3 wpp-doc-card" style="max-width:960px">
+    <div class="card-body">
+        <strong><i class="bi bi-box-arrow-right"></i> Quem mais usa esta conexão</strong>
+        <p class="text-muted small mt-2 mb-3">Além do módulo de Atendimento (o uso principal), dois outros módulos recorrem ao WhatsApp como canal alternativo:</p>
+        <div class="table-responsive">
+            <table class="table table-sm wpp-tabela-modulos align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Módulo</th>
+                        <th>Quando usa o WhatsApp</th>
+                        <th>Tipo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><i class="bi bi-star text-warning"></i> Chamados -- avaliação de atendimento</td>
+                        <td class="text-muted small">Chamado marcado "Resolvido" e o solicitante <strong>não</strong> tem e-mail cadastrado, só telefone</td>
+                        <td><?= Badge::make('Alternativa ao e-mail', 'secondary') ?></td>
+                    </tr>
+                    <tr>
+                        <td><i class="bi bi-people text-primary"></i> Notificações de Projetos</td>
+                        <td class="text-muted small">Participante externo com telefone cadastrado é incluído numa tarefa</td>
+                        <td><?= Badge::make('Complementar ao e-mail', 'secondary') ?></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mt-3 wpp-doc-card" style="max-width:960px">
+    <div class="card-body">
+        <strong><i class="bi bi-palette me-2"></i> Legenda do status (conexão via QR Code)</strong>
+        <p class="text-muted small mt-2 mb-3">O badge no topo de cada cartão de conexão muda sozinho, atualizado a cada 3 segundos.</p>
+        <div class="wpp-legenda">
+            <div class="wpp-legenda-item">
+                <span class="badge text-bg-secondary" tabindex="-1">verificando...</span>
+                <span>Consultando o bridge pela primeira vez, assim que a página carrega</span>
+            </div>
+            <div class="wpp-legenda-item">
+                <span class="badge text-bg-info" tabindex="-1"><span class="spinner-border spinner-border-sm me-1"></span>Instalando...</span>
+                <span>Bridge sendo instalado no servidor -- pode levar até 1 minuto na primeira vez</span>
+            </div>
+            <div class="wpp-legenda-item">
+                <span class="badge text-bg-warning" tabindex="-1">Aguardando leitura do QR Code</span>
+                <span>Bridge no ar, esperando alguém escanear o código com o celular</span>
+            </div>
+            <div class="wpp-legenda-item">
+                <span class="badge text-bg-success" tabindex="-1">Conectado</span>
+                <span>Funcionando -- mostra o número conectado logo abaixo</span>
+            </div>
+            <div class="wpp-legenda-item">
+                <span class="badge text-bg-secondary" tabindex="-1">Desconectado</span>
+                <span>Bridge instalado, mas a sessão do WhatsApp caiu -- clique em "Reinstalar bridge" pra gerar um QR Code novo</span>
+            </div>
+            <div class="wpp-legenda-item">
+                <span class="badge text-bg-secondary" tabindex="-1">bridge não respondeu</span>
+                <span>Ainda não foi instalado neste servidor (ou o processo caiu) -- clique em "Instalar bridge"</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mt-3 wpp-doc-card" style="max-width:960px">
+    <div class="card-body">
+        <strong><i class="bi bi-book"></i> Documentação técnica</strong>
+        <p class="text-muted small mt-2 mb-3">Detalhe de cada tipo de conexão e como o módulo funciona por baixo dos panos.</p>
+
+        <div class="accordion wpp-accordion" id="acordeaoDocWpp">
+
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#docQrcode">
+                        <i class="bi bi-qr-code text-success me-2"></i> QR Code -- bridge próprio (não oficial)
+                    </button>
+                </h2>
+                <div id="docQrcode" class="accordion-collapse collapse" data-bs-parent="#acordeaoDocWpp">
+                    <div class="accordion-body">
+                        <p class="text-muted small">
+                            O "bridge" é um processo Node.js à parte (rodando como serviço systemd) que fala com o
+                            WhatsApp do mesmo jeito que o WhatsApp Web -- sessão pareada por QR Code, sem usar a API
+                            oficial da Meta. Cada <strong>conexão</strong> cadastrada (um cartão na tela) é um bridge
+                            independente, com sua própria porta e sessão -- dá pra ter vários números ao mesmo tempo,
+                            cada um atendendo setores diferentes.
+                        </p>
+                        <ul class="small text-muted mb-0">
+                            <li><strong>Instalar bridge</strong> dispara um script em segundo plano (<code>npm install</code> + subir o serviço) -- a tela não trava esperando, só fica consultando o status sozinha.</li>
+                            <li><strong>Reinstalar bridge</strong> é o mesmo processo -- usado quando a sessão cai e precisa de um QR Code novo, ou pra atualizar o código do bridge sem perder a instalação.</li>
+                            <li><strong>Desconectar</strong> encerra a sessão do WhatsApp de propósito (equivalente a remover o aparelho em "Aparelhos conectados" no app) -- o bridge continua instalado, só precisa ler um QR Code novo pra voltar.</li>
+                            <li>Setores marcados no cartão da conexão definem quais opções aparecem no menu do chatbot <strong>pra quem manda mensagem naquele número</strong> -- números diferentes podem ter menus diferentes.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#docMeta">
+                        <i class="bi bi-patch-check text-primary me-2"></i> API Oficial (Meta) -- configuração
+                    </button>
+                </h2>
+                <div id="docMeta" class="accordion-collapse collapse" data-bs-parent="#acordeaoDocWpp">
+                    <div class="accordion-body">
+                        <ol class="small text-muted mb-0">
+                            <li class="mb-2">Crie (ou use) um app em <a href="https://developers.facebook.com/" target="_blank" rel="noopener">Meta for Developers</a> e adicione o produto <strong>WhatsApp</strong>.</li>
+                            <li class="mb-2">Copie o <strong>Phone Number ID</strong> e gere um <strong>Access Token</strong> (permanente, não o temporário de 24h que a Meta mostra por padrão).</li>
+                            <li class="mb-2">Escolha um <strong>Verify Token</strong> (qualquer texto seu) e cole o mesmo valor aqui e no painel de configuração do webhook da Meta.</li>
+                            <li class="mb-2">Cole a <strong>URL do webhook</strong> mostrada na tela (acima do formulário) no painel da Meta -- é assim que as mensagens recebidas chegam neste sistema.</li>
+                            <li><strong>App Secret</strong> é opcional, mas recomendado -- com ele, o sistema confere a assinatura de cada webhook recebido, garantindo que veio mesmo da Meta.</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#docTwilio">
+                        <i class="bi bi-patch-check text-info me-2"></i> Twilio -- configuração
+                    </button>
+                </h2>
+                <div id="docTwilio" class="accordion-collapse collapse" data-bs-parent="#acordeaoDocWpp">
+                    <div class="accordion-body">
+                        <ol class="small text-muted mb-0">
+                            <li class="mb-2">No <a href="https://console.twilio.com/" target="_blank" rel="noopener">console da Twilio</a>, copie o <strong>Account SID</strong> e o <strong>Auth Token</strong> (na página inicial do console).</li>
+                            <li class="mb-2">Ative o <strong>WhatsApp Sender</strong> -- pra testar sem custo, use o número de sandbox da própria Twilio; pra produção, precisa de um número aprovado.</li>
+                            <li class="mb-2">Cole a <strong>URL do webhook</strong> mostrada na tela na configuração do Sender ("When a message comes in").</li>
+                            <li>Salve aqui o Account SID, Auth Token e o número (formato internacional, ex: <code>+14155238886</code>).</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#docChatbotWpp">
+                        <i class="bi bi-diagram-2 text-primary me-2"></i> Chatbot -- árvore de menus
+                    </button>
+                </h2>
+                <div id="docChatbotWpp" class="accordion-collapse collapse" data-bs-parent="#acordeaoDocWpp">
+                    <div class="accordion-body">
+                        <p class="text-muted small">
+                            Configurado em <a href="<?= url('/whatsapp/chatbot') ?>">WhatsApp &gt; Chatbot</a>. A
+                            mensagem de um nó tipo "menu" é só o texto de saudação -- a lista numerada das opções
+                            filhas é <strong>gerada automaticamente</strong>, o admin nunca digita "1 - Suporte, 2 -
+                            Financeiro" na mão. O cliente responde só o número, e o motor interpreta como a posição
+                            entre as opções ativas daquele nó (por isso o texto mostrado e o número aceito nunca
+                            desincronizam).
+                        </p>
+                        <ul class="small text-muted mb-0">
+                            <li><strong>Menu</strong> -- abre mais um nível de opções.</li>
+                            <li><strong>Resposta final</strong> -- responde um texto pronto e encerra ali (ex: horário de funcionamento).</li>
+                            <li><strong>Encaminhar setor</strong> -- manda o atendimento pra fila de um departamento (WhatsApp &gt; Fila).</li>
+                            <li><strong>Abrir chamado</strong> -- cria um chamado direto no módulo de Chamados, sem precisar de atendente humano no WhatsApp pra isso.</li>
+                            <li>Depois de <strong>3 respostas inválidas</strong> seguidas, o bot desiste de interpretar número e segue um caminho de erro (configurável).</li>
+                            <li>Expediente (horário de funcionamento) também é configurável ali -- fora do horário, o bot pode responder diferente em vez de fingir que tem gente disponível.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#docNpsWpp">
+                        <i class="bi bi-star text-warning me-2"></i> NPS -- pesquisa de satisfação
+                    </button>
+                </h2>
+                <div id="docNpsWpp" class="accordion-collapse collapse" data-bs-parent="#acordeaoDocWpp">
+                    <div class="accordion-body">
+                        <p class="text-muted small mb-0">
+                            Ativado <strong>por setor</strong> (não é geral) em <a href="<?= url('/whatsapp/setores') ?>">WhatsApp &gt; Setores</a>.
+                            Ao encerrar um atendimento de um setor com NPS ativo, o cliente recebe duas perguntas em
+                            sequência: uma nota de satisfação com o atendente (1 a 5, com legenda explicando cada
+                            nota) e se o problema foi resolvido (sim/não). A pergunta em si é configurável, mas a
+                            legenda das notas é fixa de propósito -- muda o texto, mas o significado de "nota 3" tem
+                            que continuar igual pra sempre, senão as estatísticas históricas perdem sentido.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#docTecnicoWpp">
+                        <i class="bi bi-cpu me-2"></i> Como funciona por baixo dos panos
+                    </button>
+                </h2>
+                <div id="docTecnicoWpp" class="accordion-collapse collapse" data-bs-parent="#acordeaoDocWpp">
+                    <div class="accordion-body">
+                        <p class="text-muted small mb-0">
+                            Os três tipos convergem pro mesmo <strong>webhook interno</strong> e pro mesmo motor de
+                            atendimento -- o que muda é só a "porta de entrada". No QR Code, cada conexão roda um
+                            processo Node (biblioteca Baileys) como serviço systemd próprio, chamando de volta o
+                            webhook deste sistema via <code>127.0.0.1</code> (loopback, nunca pelo host/domínio
+                            público -- evita problema de certificado autoassinado entre o bridge e o painel, já que
+                            os dois sempre rodam na mesma máquina). Na Meta e na Twilio, quem chama o webhook é o
+                            próprio provedor, direto da internet -- por isso a URL mostrada na tela precisa ser
+                            acessível de fora. A chave de API de cada conexão (cifrada, mesmo esquema da senha SMTP)
+                            é quem identifica de qual número/credencial veio cada mensagem recebida.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<style>
+.wpp-doc-card .card-body { padding: 1.25rem 1.5rem; }
+
+.wpp-tabela-tipos th, .wpp-tabela-modulos th { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: #6c757d; border-top: none; }
+.wpp-tabela-tipos td, .wpp-tabela-modulos td { font-size: .85rem; }
+
+.wpp-legenda { display: flex; flex-direction: column; gap: .65rem; }
+.wpp-legenda-item { display: flex; align-items: center; gap: .75rem; }
+.wpp-legenda-item > .badge { flex: 0 0 auto; }
+.wpp-legenda-item > span:last-child { font-size: .85rem; color: #495057; }
+
+.wpp-accordion .accordion-button {
+    font-size: .88rem; font-weight: 600; background: #f8f9fa;
+}
+.wpp-accordion .accordion-button:not(.collapsed) {
+    background: #eef4ff; color: #0d3b8c; box-shadow: none;
+}
+.wpp-accordion .accordion-button:focus { box-shadow: none; }
+.wpp-accordion .accordion-item { border-color: #e9ecef; }
+
+.wpp-callout {
+    display: flex; gap: .6rem; padding: .75rem .9rem; border-radius: .5rem; font-size: .82rem;
+}
+.wpp-callout i { font-size: 1.1rem; flex: 0 0 auto; }
+.wpp-callout-warning { background: #fff8e6; color: #664d03; border: 1px solid #ffe69c; }
+.wpp-callout-warning i { color: #997404; }
+</style>
 
 <?php
 $conteudo = ob_get_clean();
