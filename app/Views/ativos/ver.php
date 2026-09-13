@@ -1485,6 +1485,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                     <div class="mb-2" id="usuarioDvrSenhaWrap">
                         <label class="form-label small mb-1">Senha</label>
                         <input type="password" class="form-control form-control-sm" id="usuarioDvrSenhaInput">
+                        <div class="form-text">Mínimo 8 caracteres, misturando maiúscula, minúscula, número e caractere especial -- o DVR recusa senha fraca.</div>
                     </div>
                     <div class="mb-2">
                         <label class="form-label small mb-1">Grupo</label>
@@ -1522,6 +1523,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                 <div class="modal-body">
                     <label class="form-label small mb-1">Nova senha</label>
                     <input type="password" class="form-control form-control-sm" id="trocarSenhaUsuarioDvrInput" required>
+                    <div class="form-text">Mínimo 8 caracteres, misturando maiúscula, minúscula, número e caractere especial -- o DVR recusa senha fraca.</div>
                     <div class="small text-danger mt-2" id="trocarSenhaUsuarioDvrErro"></div>
                 </div>
                 <div class="modal-footer">

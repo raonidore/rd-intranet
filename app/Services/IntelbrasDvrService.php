@@ -971,11 +971,26 @@ class IntelbrasDvrService
         }
 
         if ($codigo < 200 || $codigo >= 300) {
-            return ['sucesso' => false, 'dados' => [], 'mensagem' => "Erro HTTP {$codigo} ao falar com o DVR/NVR."];
-        }
+            // O corpo do erro costuma trazer o motivo de verdade (ex:
+            // "Password Too Weak!", ou "Error" seguido de "Bad Request!") --
+            // confirmado ao vivo com o erro real de "Password Too Weak!" ao
+            // tentar criar um usuário, que antes desse fix virava só um
+            // genérico "Erro HTTP 400" sem pista nenhuma do motivo. Filtra a
+            // linha "Error" solta (só um cabeçalho, não é a mensagem) e usa a
+            // primeira linha que sobrar.
+            $linhas = array_values(array_filter(
+                array_map('trim', explode("\n", $resposta)),
+                fn ($linha) => $linha !== '' && $linha !== 'Error'
+            ));
+            $motivo = $linhas[0] ?? null;
 
-        if (str_contains($resposta, 'Bad Request') || str_contains($resposta, 'Not Implemented')) {
-            return ['sucesso' => false, 'dados' => [], 'mensagem' => 'Comando não suportado por este dispositivo.'];
+            return [
+                'sucesso' => false,
+                'dados' => [],
+                'mensagem' => $motivo !== null
+                    ? "O DVR/NVR recusou o comando: {$motivo}"
+                    : "Erro HTTP {$codigo} ao falar com o DVR/NVR.",
+            ];
         }
 
         $dados = [];
