@@ -277,6 +277,19 @@ class AtivoRepository
         return $stmt->execute(['id' => $id, 'detalhes' => $detalhesJson]);
     }
 
+    /**
+     * Atualiza só o IP cadastrado do Ativo -- usado depois de trocar o
+     * IP/máscara/gateway de verdade no equipamento (ex: DVR/NVR Intelbras)
+     * via API, pra que o próprio sistema continue enxergando o dispositivo
+     * no endereço novo sem precisar editar o Ativo manualmente.
+     */
+    public function atualizarIp(int $id, string $ip): bool
+    {
+        $stmt = $this->pdo->prepare("UPDATE ativos SET ip = :ip WHERE id = :id");
+
+        return $stmt->execute(['id' => $id, 'ip' => $ip]);
+    }
+
     public function listarPorTipoSlugComIp(string $slug): array
     {
         $stmt = $this->pdo->prepare("

@@ -787,12 +787,24 @@ class IntelbrasDvrService
     }
 
     /**
-     * Só troca hostname e DNS -- IP/máscara/gateway/DHCP ficam de fora DE
-     * PROPÓSITO (decisão explícita, dado o risco: um valor errado nesses
-     * campos pode deixar o DVR inacessível pela rede, exigindo alguém ir
-     * até o equipamento fisicamente pra corrigir).
+     * Grava hostname/DNS sempre; IP/máscara/gateway só quando $ipEstatico
+     * vier preenchido (nesse caso força DhcpEnable=false, porque não faz
+     * sentido informar IP manual com DHCP ligado -- o DVR ignoraria).
+     * Deixar $ipEstatico null preserva IP/DHCP como estão, do jeito que era
+     * antes de existir edição de IP por aqui.
+     *
+     * AVISO (já comunicado na tela, repetido aqui pra quem mexer no código
+     * depois): trocar IP/máscara/gateway remotamente pode deixar o DVR
+     * inacessível pela rede se o valor novo estiver errado ou não bater com
+     * a rede de verdade -- exigiria alguém ir até o equipamento fisicamente
+     * pra corrigir. Habilitar DHCP por aqui NÃO é suportado de propósito: o
+     * IP resultante fica desconhecido pro nosso sistema, que precisa de um
+     * IP fixo pra continuar enxergando o equipamento.
+     *
+     * @param ?array{ip:string, mascara:string, gateway:string} $ipEstatico
+     * @return array{success:bool, message?:string, ip_mudou_para?:?string}
      */
-    public function definirRedeSegura(string $ip, string $hostname, array $dnsServers): array
+    public function definirRede(string $ip, string $hostname, array $dnsServers, ?array $ipEstatico): array
     {
         $hostname = trim($hostname);
 
@@ -807,6 +819,19 @@ class IntelbrasDvrService
             }
         }
 
+        $novoIp = null;
+        if ($ipEstatico !== null) {
+            $novoIp = trim($ipEstatico['ip'] ?? '');
+            $mascara = trim($ipEstatico['mascara'] ?? '');
+            $gateway = trim($ipEstatico['gateway'] ?? '');
+
+            foreach (['Endereço IP' => $novoIp, 'Máscara de sub-rede' => $mascara, 'Gateway padrão' => $gateway] as $rotulo => $valor) {
+                if (filter_var($valor, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
+                    return ['success' => false, 'message' => "\"{$rotulo}\" precisa ser um endereço IPv4 válido."];
+                }
+            }
+        }
+
         // Índice do array vai como %5B/%5D (bracket percent-encoded) -- mesmo
         // padrão já usado (e confirmado ao vivo) em renomearCanal()/
         // definirSensibilidadeTampada(), evita depender de como cada
@@ -816,13 +841,24 @@ class IntelbrasDvrService
             $query .= "&Network.eth0.DnsServers%5B{$i}%5D=" . rawurlencode($dns);
         }
 
+        if ($ipEstatico !== null) {
+            $query .= '&Network.eth0.DhcpEnable=false'
+                . '&Network.eth0.IPAddress=' . rawurlencode($novoIp)
+                . '&Network.eth0.SubnetMask=' . rawurlencode($mascara)
+                . '&Network.eth0.DefaultGateway=' . rawurlencode($gateway);
+        }
+
         $resultado = $this->chamarApi($ip, '/cgi-bin/configManager.cgi?action=setConfig&' . $query);
 
         if (!$resultado['sucesso']) {
             return ['success' => false, 'message' => $resultado['mensagem']];
         }
 
-        return ['success' => true, 'message' => 'Configuração de rede (hostname/DNS) salva.'];
+        if ($novoIp !== null && $novoIp !== $ip) {
+            return ['success' => true, 'message' => 'Configuração de rede salva.', 'ip_mudou_para' => $novoIp];
+        }
+
+        return ['success' => true, 'message' => 'Configuração de rede salva.'];
     }
 
     /**

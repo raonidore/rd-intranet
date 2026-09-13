@@ -1383,25 +1383,49 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                         <div class="col-md-3"><div class="text-muted small">Velocidade</div><div class="fw-semibold" id="redeDvrVelocidade">—</div></div>
                         <div class="col-md-3"><div class="text-muted small">MTU</div><div class="fw-semibold" id="redeDvrMtu">—</div></div>
                     </div>
-                    <div class="alert alert-secondary small mb-3">
-                        <i class="bi bi-info-circle"></i> IP, máscara, gateway e DHCP são só leitura por aqui -- um valor errado nesses campos pode deixar o DVR inacessível pela rede, exigindo acesso físico pro equipamento pra corrigir. Só nome do equipamento e DNS podem ser editados.
-                    </div>
-                    <form id="formRedeSeguraDvr" class="row g-2 align-items-end" data-id="<?= (int)$ativo['id'] ?>">
-                        <div class="col-md-4">
-                            <label class="form-label small mb-1">Nome do equipamento (hostname)</label>
-                            <input type="text" class="form-control form-control-sm" id="redeDvrHostnameInput" required>
+                    <form id="formRedeSeguraDvr" data-id="<?= (int)$ativo['id'] ?>">
+                        <div class="row g-2 align-items-end mb-2">
+                            <div class="col-md-4">
+                                <label class="form-label small mb-1">Nome do equipamento (hostname)</label>
+                                <input type="text" class="form-control form-control-sm" id="redeDvrHostnameInput" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small mb-1">DNS primário</label>
+                                <input type="text" class="form-control form-control-sm" id="redeDvrDns1Input" placeholder="8.8.8.8">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small mb-1">DNS secundário</label>
+                                <input type="text" class="form-control form-control-sm" id="redeDvrDns2Input" placeholder="1.1.1.1">
+                            </div>
                         </div>
-                        <div class="col-md-3">
-                            <label class="form-label small mb-1">DNS primário</label>
-                            <input type="text" class="form-control form-control-sm" id="redeDvrDns1Input" placeholder="8.8.8.8">
+
+                        <div class="form-check mb-2">
+                            <input type="checkbox" class="form-check-input" id="redeDvrEditarIpFixo">
+                            <label class="form-check-label small" for="redeDvrEditarIpFixo">Configurar IP fixo manualmente (IP, máscara e gateway)</label>
                         </div>
-                        <div class="col-md-3">
-                            <label class="form-label small mb-1">DNS secundário</label>
-                            <input type="text" class="form-control form-control-sm" id="redeDvrDns2Input" placeholder="1.1.1.1">
+
+                        <div id="redeDvrIpFixoWrap" style="display:none">
+                            <div class="alert alert-danger small">
+                                <i class="bi bi-exclamation-triangle-fill"></i> <strong>Risco:</strong> se o IP/máscara/gateway não baterem com a rede de verdade, o DVR fica <strong>inacessível remotamente</strong> -- inclusive pra nós mesmos corrigirmos por aqui. Vai exigir alguém ir até o equipamento fisicamente pra corrigir. Confira os valores com atenção antes de salvar.
+                            </div>
+                            <div class="row g-2 mb-2">
+                                <div class="col-md-4">
+                                    <label class="form-label small mb-1">Endereço IP</label>
+                                    <input type="text" class="form-control form-control-sm" id="redeDvrIpInput" placeholder="192.168.1.157">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small mb-1">Máscara de sub-rede</label>
+                                    <input type="text" class="form-control form-control-sm" id="redeDvrMascaraInput" placeholder="255.255.255.0">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small mb-1">Gateway padrão</label>
+                                    <input type="text" class="form-control form-control-sm" id="redeDvrGatewayInput" placeholder="192.168.1.1">
+                                </div>
+                            </div>
+                            <div class="small text-muted mb-2">Isso desativa o DHCP nesse equipamento (passa a usar sempre esse IP fixo).</div>
                         </div>
-                        <div class="col-md-2">
-                            <button type="submit" class="btn btn-sm btn-outline-primary w-100"><i class="bi bi-save"></i> Salvar</button>
-                        </div>
+
+                        <button type="submit" class="btn btn-sm btn-outline-primary"><i class="bi bi-save"></i> Salvar</button>
                     </form>
                     <div class="small mt-2" id="redeDvrFeedback"></div>
                 </div>
@@ -2922,8 +2946,9 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
     }
 })();
 
-// Rede/TCP-IP -- leitura completa + edição só de hostname/DNS, carregada
-// sob demanda quando a aba é aberta.
+// Rede/TCP-IP -- leitura completa + edição de hostname/DNS (direto) e
+// IP/máscara/gateway (atrás de checkbox + confirmação "high-tech", dado o
+// risco real de deixar o DVR inacessível remotamente com um valor errado).
 (function () {
     const navRede = document.querySelector('.nav-link[data-bs-target="#abaRedeDvr"]');
     const form = document.getElementById('formRedeSeguraDvr');
@@ -2932,7 +2957,10 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
     const idAtivo = form.dataset.id;
     const carregando = document.getElementById('redeDvrCarregando');
     const conteudo = document.getElementById('redeDvrConteudo');
+    const campoEditarIpFixo = document.getElementById('redeDvrEditarIpFixo');
+    const wrapIpFixo = document.getElementById('redeDvrIpFixoWrap');
     let carregadoUmaVez = false;
+    let ipAtual = '';
 
     async function carregarRede() {
         carregando.style.display = '';
@@ -2949,6 +2977,8 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
             return;
         }
 
+        ipAtual = resultado.ip || '';
+
         document.getElementById('redeDvrIp').textContent = resultado.ip || '—';
         document.getElementById('redeDvrMascara').textContent = resultado.mascara || '—';
         document.getElementById('redeDvrGateway').textContent = resultado.gateway || '—';
@@ -2960,6 +2990,14 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
         document.getElementById('redeDvrHostnameInput').value = resultado.hostname || '';
         document.getElementById('redeDvrDns1Input').value = (resultado.dns && resultado.dns[0]) || '';
         document.getElementById('redeDvrDns2Input').value = (resultado.dns && resultado.dns[1]) || '';
+        document.getElementById('redeDvrIpInput').value = resultado.ip || '';
+        document.getElementById('redeDvrMascaraInput').value = resultado.mascara || '';
+        document.getElementById('redeDvrGatewayInput').value = resultado.gateway || '';
+
+        // Volta pro estado fechado a cada recarga -- evita editar em cima de
+        // um valor que já pode ter mudado (ex: depois de salvar um IP novo).
+        campoEditarIpFixo.checked = false;
+        wrapIpFixo.style.display = 'none';
 
         carregando.style.display = 'none';
         conteudo.style.display = '';
@@ -2972,8 +3010,11 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
         }
     });
 
-    form.addEventListener('submit', async function (ev) {
-        ev.preventDefault();
+    campoEditarIpFixo.addEventListener('change', function () {
+        wrapIpFixo.style.display = campoEditarIpFixo.checked ? '' : 'none';
+    });
+
+    async function salvarRede() {
         const feedback = document.getElementById('redeDvrFeedback');
         feedback.textContent = '';
 
@@ -2983,12 +3024,42 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
         dados.set('dns1', document.getElementById('redeDvrDns1Input').value.trim());
         dados.set('dns2', document.getElementById('redeDvrDns2Input').value.trim());
 
+        if (campoEditarIpFixo.checked) {
+            dados.set('ip_fixo', '1');
+            dados.set('ip', document.getElementById('redeDvrIpInput').value.trim());
+            dados.set('mascara', document.getElementById('redeDvrMascaraInput').value.trim());
+            dados.set('gateway', document.getElementById('redeDvrGatewayInput').value.trim());
+        }
+
         const res = await fetch(<?= json_encode(url('/ativos/intelbras-dvr/rede/salvar')) ?>, { method: 'POST', body: dados });
         const resultado = await res.json();
 
         feedback.innerHTML = resultado.success
             ? '<span class="text-success"><i class="bi bi-check-circle"></i> ' + resultado.message + '</span>'
             : '<span class="text-danger">' + (resultado.message || 'Falha ao salvar.') + '</span>';
+
+        if (resultado.success) {
+            carregarRede();
+        }
+    }
+
+    form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+
+        if (!campoEditarIpFixo.checked) {
+            salvarRede();
+            return;
+        }
+
+        const novoIp = document.getElementById('redeDvrIpInput').value.trim();
+        abrirConfirmacaoHitech(
+            'Trocar IP fixo do DVR/NVR',
+            'Confirma trocar a configuração de rede pra <strong>IP fixo ' + novoIp + '</strong> ' +
+            '(atual: ' + (ipAtual || '?') + ')? Se esse endereço estiver errado ou não bater com a rede de verdade, ' +
+            'o DVR fica <strong>inacessível remotamente</strong>, exigindo alguém ir até o equipamento fisicamente ' +
+            'pra corrigir. Confira o IP, a máscara e o gateway antes de confirmar.',
+            salvarRede
+        );
     });
 })();
 

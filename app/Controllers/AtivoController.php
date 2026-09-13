@@ -758,7 +758,7 @@ class AtivoController extends Controller
         echo json_encode($this->service->buscarRedeDvr($id));
     }
 
-    public function definirRedeSeguraDvr(): void
+    public function definirRedeDvr(): void
     {
         AuthMiddleware::checkModulo('ativos_lista');
         header('Content-Type: application/json');
@@ -770,7 +770,20 @@ class AtivoController extends Controller
             trim((string)($_POST['dns2'] ?? '')),
         ], fn ($v) => $v !== '');
 
-        echo json_encode($this->service->definirRedeSeguraDvr($id, $hostname, $dns));
+        // ip_fixo=1 é o gatilho explícito de "sim, quero mesmo editar IP/
+        // máscara/gateway" -- sem ele, os 3 campos são ignorados mesmo que
+        // venham preenchidos no POST (defesa contra reenvio acidental de
+        // formulário com valores antigos).
+        $ipEstatico = null;
+        if (($_POST['ip_fixo'] ?? '') === '1') {
+            $ipEstatico = [
+                'ip' => trim((string)($_POST['ip'] ?? '')),
+                'mascara' => trim((string)($_POST['mascara'] ?? '')),
+                'gateway' => trim((string)($_POST['gateway'] ?? '')),
+            ];
+        }
+
+        echo json_encode($this->service->definirRedeDvr($id, $hostname, $dns, $ipEstatico));
     }
 
     public function segurancaAcessoDvr(): void

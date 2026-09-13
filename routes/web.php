@@ -970,7 +970,7 @@ $router->post('/ativos/intelbras-dvr/usuarios/editar', [AtivoController::class, 
 $router->post('/ativos/intelbras-dvr/usuarios/excluir', [AtivoController::class, 'excluirUsuarioDvr']);
 $router->post('/ativos/intelbras-dvr/usuarios/trocar-senha', [AtivoController::class, 'trocarSenhaUsuarioDvr']);
 $router->post('/ativos/intelbras-dvr/rede', [AtivoController::class, 'redeDvr']);
-$router->post('/ativos/intelbras-dvr/rede/salvar', [AtivoController::class, 'definirRedeSeguraDvr']);
+$router->post('/ativos/intelbras-dvr/rede/salvar', [AtivoController::class, 'definirRedeDvr']);
 $router->post('/ativos/intelbras-dvr/seguranca', [AtivoController::class, 'segurancaAcessoDvr']);
 $router->post('/ativos/intelbras-dvr/seguranca/alerta-login-falho', [AtivoController::class, 'definirAlertaLoginFalhoDvr']);
 $router->post('/ativos/unifi/desconectar-cliente', [AtivoController::class, 'unifiDesconectarCliente']);

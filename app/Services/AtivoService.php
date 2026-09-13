@@ -2432,9 +2432,9 @@ class AtivoService
     /*
      |---------------------------------------------------------
      | TCP/IP do DVR/NVR -- leitura completa (IP/máscara/gateway/DNS/DHCP/
-     | link) + edição só dos campos "seguros" (hostname/DNS). IP/máscara/
-     | gateway/DHCP ficam de fora de propósito -- ver o comentário em
-     | IntelbrasDvrService::definirRedeSegura().
+     | link) + edição de hostname/DNS (direto) e IP/máscara/gateway (só
+     | quando $ipEstatico vem preenchido, força IP fixo/desliga DHCP) -- ver
+     | IntelbrasDvrService::definirRede().
      |---------------------------------------------------------
      */
 
@@ -2448,17 +2448,32 @@ class AtivoService
         return (new IntelbrasDvrService())->buscarRede($base['ativo']['ip']);
     }
 
-    public function definirRedeSeguraDvr(int $id, string $hostname, array $dnsServers): array
+    /**
+     * @param ?array{ip:string, mascara:string, gateway:string} $ipEstatico null = não mexe em IP/máscara/gateway/DHCP
+     */
+    public function definirRedeDvr(int $id, string $hostname, array $dnsServers, ?array $ipEstatico): array
     {
         $base = $this->ativoComIpOuErro($id);
         if (!$base['success']) {
             return $base;
         }
 
-        $resultado = (new IntelbrasDvrService())->definirRedeSegura($base['ativo']['ip'], $hostname, $dnsServers);
+        $resultado = (new IntelbrasDvrService())->definirRede($base['ativo']['ip'], $hostname, $dnsServers, $ipEstatico);
 
-        if ($resultado['success']) {
-            AuditService::registrar('Ativos', 'DVR/NVR - Rede', "{$base['ativo']['codigo_patrimonio']}: hostname/DNS atualizados no equipamento.");
+        if (!$resultado['success']) {
+            return $resultado;
+        }
+
+        AuditService::registrar('Ativos', 'DVR/NVR - Rede', "{$base['ativo']['codigo_patrimonio']}: configuração de rede atualizada no equipamento.");
+
+        // O IP mudou de verdade no equipamento -- atualiza o cadastro do
+        // Ativo pro IP novo, senão o próprio sistema perde o equipamento de
+        // vista na próxima coleta/ação (ainda ia tentar falar com o IP
+        // antigo, que não responde mais).
+        if (!empty($resultado['ip_mudou_para'])) {
+            $this->repository->atualizarIp($id, $resultado['ip_mudou_para']);
+            AuditService::registrar('Ativos', 'DVR/NVR - Rede', "{$base['ativo']['codigo_patrimonio']}: IP cadastrado atualizado de {$base['ativo']['ip']} para {$resultado['ip_mudou_para']}.");
+            $resultado['message'] .= " O cadastro do Ativo foi atualizado pro novo IP ({$resultado['ip_mudou_para']}).";
         }
 
         return $resultado;
