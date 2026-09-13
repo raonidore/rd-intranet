@@ -978,6 +978,22 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
         <?php $redesLan = $detalhes['unifi_redes_lan'] ?? []; ?>
         <?php $wanModo = $detalhes['unifi_wan_modo'] ?? null; ?>
         <div class="row g-3">
+            <?php if ((new UnifiService())->configurado()): ?>
+            <div class="col-12">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                        <strong>Saúde da rede</strong>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="botaoAtualizarSaudeUnifi">
+                            <i class="bi bi-arrow-repeat"></i> Atualizar
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div class="small text-muted mb-0" id="saudeUnifiCarregando"><div class="spinner-border spinner-border-sm"></div> Consultando o Controller...</div>
+                        <div class="row g-3" id="saudeUnifiConteudo" style="display:none"></div>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
             <div class="col-12">
                 <div class="card border-0 shadow-sm">
                     <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -1123,6 +1139,49 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                     </div>
                 </div>
             </div>
+
+            <?php if ((new UnifiService())->configurado()): ?>
+            <div class="col-md-6">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-white"><strong>Redes Wi-Fi configuradas</strong></div>
+                    <div class="card-body p-0">
+                        <div class="small text-muted p-3 mb-0" id="wifiConfigUnifiCarregando"><div class="spinner-border spinner-border-sm"></div> Consultando o Controller...</div>
+                        <table class="table table-sm mb-0" style="display:none" id="wifiConfigUnifiTabela">
+                            <thead><tr><th>Nome</th><th>Banda</th><th>Segurança</th><th>Status</th></tr></thead>
+                            <tbody id="wifiConfigUnifiCorpo"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-white"><strong>Rotas estáticas</strong></div>
+                    <div class="card-body p-0">
+                        <div class="small text-muted p-3 mb-0" id="rotasUnifiCarregando"><div class="spinner-border spinner-border-sm"></div> Consultando o Controller...</div>
+                        <table class="table table-sm mb-0" style="display:none" id="rotasUnifiTabela">
+                            <thead><tr><th>Nome</th><th>Rede de destino</th><th>Próximo salto</th><th>Status</th></tr></thead>
+                            <tbody id="rotasUnifiCorpo"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-white"><strong>Controller UniFi</strong></div>
+                    <div class="card-body">
+                        <div class="small text-muted mb-0" id="infoControladorUnifiCarregando"><div class="spinner-border spinner-border-sm"></div> Consultando o Controller...</div>
+                        <div class="row g-3" id="infoControladorUnifiConteudo" style="display:none">
+                            <div class="col-md-3"><div class="text-muted small">Versão</div><div class="fw-semibold" id="infoControladorUnifiVersao">—</div></div>
+                            <div class="col-md-3"><div class="text-muted small">Hostname</div><div class="fw-semibold" id="infoControladorUnifiHostname">—</div></div>
+                            <div class="col-md-3"><div class="text-muted small">Uptime</div><div class="fw-semibold" id="infoControladorUnifiUptime">—</div></div>
+                            <div class="col-md-3"><div class="text-muted small">Atualização</div><div class="fw-semibold" id="infoControladorUnifiAtualizacao">—</div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
         </div>
     </div>
 
@@ -1153,6 +1212,33 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                             </tr>
                         </thead>
                         <tbody id="clientesRedeUnifiCorpo"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mt-3">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <strong>Redes Wi-Fi vizinhas detectadas</strong>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="botaoAtualizarRedesVizinhasUnifi">
+                    <i class="bi bi-arrow-repeat"></i> Atualizar
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="form-text mb-2">Redes vizinhas que os próprios rádios dos pontos de acesso enxergam passivamente -- não é uma varredura ativa.</div>
+                <div class="small text-muted mb-3" id="redesVizinhasUnifiCarregando"><div class="spinner-border spinner-border-sm"></div> Consultando o Controller...</div>
+                <div class="table-responsive" style="display:none" id="redesVizinhasUnifiTabelaWrap">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>SSID</th>
+                                <th>Canal</th>
+                                <th>Sinal</th>
+                                <th>Segurança</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="redesVizinhasUnifiCorpo"></tbody>
                     </table>
                 </div>
             </div>
@@ -1197,6 +1283,33 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                             </tr>
                         </thead>
                         <tbody id="firewallUnifiCorpo"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mt-3">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <strong>Redirecionamento de portas</strong>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="botaoAtualizarPortForwardUnifi">
+                    <i class="bi bi-arrow-repeat"></i> Atualizar
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="form-text mb-2">Regras de NAT (port-forward) -- separadas das regras de firewall acima, só leitura.</div>
+                <div class="small text-muted mb-3" id="portForwardUnifiCarregando"><div class="spinner-border spinner-border-sm"></div> Consultando o Controller...</div>
+                <div class="table-responsive" style="display:none" id="portForwardUnifiTabelaWrap">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Nome</th>
+                                <th>Porta externa</th>
+                                <th>Protocolo</th>
+                                <th>Destino</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="portForwardUnifiCorpo"></tbody>
                     </table>
                 </div>
             </div>
@@ -2350,6 +2463,163 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
     });
 })();
 
+// Saúde da rede + Redes Wi-Fi configuradas + Rotas estáticas + Info do
+// Controller (UniFi Gateway) -- tudo carregado junto quando a aba Rede/WAN
+// é aberta, cada bloco só leitura.
+(function () {
+    const nav = document.querySelector('.nav-link[data-bs-target="#abaRedeWan"]');
+    const saudeConteudo = document.getElementById('saudeUnifiConteudo');
+    if (!nav || !saudeConteudo) return;
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    function rotuloDuracao(segundos) {
+        if (segundos == null) return '—';
+        const dias = Math.floor(segundos / 86400);
+        const horas = Math.floor((segundos % 86400) / 3600);
+        if (dias > 0) return dias + 'd ' + horas + 'h';
+        const minutos = Math.floor((segundos % 3600) / 60);
+        return horas + 'h ' + minutos + 'min';
+    }
+
+    const rotulosSubsistema = { wan: 'WAN (Internet)', wlan: 'Wi-Fi', lan: 'Rede local', vpn: 'VPN' };
+
+    async function carregarSaude() {
+        const carregando = document.getElementById('saudeUnifiCarregando');
+        carregando.style.display = '';
+        saudeConteudo.style.display = 'none';
+
+        const res = await fetch(<?= json_encode(url('/ativos/unifi/saude')) ?>, { method: 'POST' });
+        const resultado = await res.json();
+
+        if (!resultado.success) {
+            carregando.innerHTML = '<span class="text-danger">' + escapeHtml(resultado.message || 'Falha ao consultar a saúde da rede.') + '</span>';
+            return;
+        }
+
+        saudeConteudo.innerHTML = resultado.subsistemas.map(function (s) {
+            const cor = s.status === 'ok' ? 'success' : (s.status ? 'warning' : 'secondary');
+            let detalhes = '';
+            if (s.nome === 'wan') {
+                detalhes = (s.isp_name ? escapeHtml(s.isp_name) + ' -- ' : '') + escapeHtml(s.wan_ip || '—') +
+                    (s.gw_cpu_pct != null ? '<br>CPU ' + s.gw_cpu_pct + '% -- Mem ' + s.gw_mem_pct + '%' : '');
+            } else if (s.nome === 'wlan') {
+                detalhes = s.num_ap + ' AP(s) -- ' + s.num_user + ' usuário(s), ' + s.num_guest + ' convidado(s)';
+                if (s.num_disconnected) detalhes += '<br><span class="text-danger">' + s.num_disconnected + ' desconectado(s)</span>';
+            } else {
+                detalhes = (s.num_adopted != null ? s.num_adopted + ' adotado(s)' : '');
+            }
+            return '<div class="col-md-3">' +
+                '<div class="border rounded p-2 h-100">' +
+                    '<div class="d-flex justify-content-between align-items-center">' +
+                        '<strong class="small">' + escapeHtml(rotulosSubsistema[s.nome] || s.nome) + '</strong>' +
+                        '<span class="badge text-bg-' + cor + '">' + escapeHtml(s.status || '?') + '</span>' +
+                    '</div>' +
+                    '<div class="small text-muted mt-1">' + detalhes + '</div>' +
+                '</div>' +
+            '</div>';
+        }).join('') || '<div class="col-12 text-muted small">Nenhum subsistema retornado.</div>';
+
+        carregando.style.display = 'none';
+        saudeConteudo.style.display = '';
+    }
+
+    async function carregarWifiConfig() {
+        const carregando = document.getElementById('wifiConfigUnifiCarregando');
+        const tabela = document.getElementById('wifiConfigUnifiTabela');
+        const corpo = document.getElementById('wifiConfigUnifiCorpo');
+
+        const res = await fetch(<?= json_encode(url('/ativos/unifi/redes-wifi-configuradas')) ?>, { method: 'POST' });
+        const resultado = await res.json();
+
+        if (!resultado.success) {
+            carregando.innerHTML = '<span class="text-danger">' + escapeHtml(resultado.message || 'Falha ao consultar.') + '</span>';
+            return;
+        }
+
+        corpo.innerHTML = resultado.redes.map(function (r) {
+            return '<tr>' +
+                '<td>' + escapeHtml(r.nome) + (r.convidado ? ' <span class="badge text-bg-light border">convidado</span>' : '') + (r.oculta ? ' <i class="bi bi-eye-slash text-muted" title="SSID oculto"></i>' : '') + '</td>' +
+                '<td>' + escapeHtml(r.banda || '—') + '</td>' +
+                '<td>' + escapeHtml(r.seguranca || '—') + '</td>' +
+                '<td>' + (r.habilitada ? '<span class="badge text-bg-success">Ativa</span>' : '<span class="badge text-bg-secondary">Desativada</span>') + '</td>' +
+            '</tr>';
+        }).join('') || '<tr><td colspan="4" class="text-muted small">Nenhuma rede encontrada.</td></tr>';
+
+        carregando.style.display = 'none';
+        tabela.style.display = '';
+    }
+
+    async function carregarRotas() {
+        const carregando = document.getElementById('rotasUnifiCarregando');
+        const tabela = document.getElementById('rotasUnifiTabela');
+        const corpo = document.getElementById('rotasUnifiCorpo');
+
+        const res = await fetch(<?= json_encode(url('/ativos/unifi/rotas-estaticas')) ?>, { method: 'POST' });
+        const resultado = await res.json();
+
+        if (!resultado.success) {
+            carregando.innerHTML = '<span class="text-danger">' + escapeHtml(resultado.message || 'Falha ao consultar.') + '</span>';
+            return;
+        }
+
+        corpo.innerHTML = resultado.rotas.map(function (r) {
+            return '<tr>' +
+                '<td>' + escapeHtml(r.nome) + '</td>' +
+                '<td class="font-monospace small">' + escapeHtml(r.rede_destino) + '</td>' +
+                '<td class="font-monospace small">' + escapeHtml(r.proximo_salto) + '</td>' +
+                '<td>' + (r.habilitada ? '<span class="badge text-bg-success">Ativa</span>' : '<span class="badge text-bg-secondary">Desativada</span>') + '</td>' +
+            '</tr>';
+        }).join('') || '<tr><td colspan="4" class="text-muted small">Nenhuma rota estática configurada.</td></tr>';
+
+        carregando.style.display = 'none';
+        tabela.style.display = '';
+    }
+
+    async function carregarInfoControlador() {
+        const carregando = document.getElementById('infoControladorUnifiCarregando');
+        const conteudo = document.getElementById('infoControladorUnifiConteudo');
+
+        const res = await fetch(<?= json_encode(url('/ativos/unifi/info-controlador')) ?>, { method: 'POST' });
+        const resultado = await res.json();
+
+        if (!resultado.success) {
+            carregando.innerHTML = '<span class="text-danger">' + escapeHtml(resultado.message || 'Falha ao consultar.') + '</span>';
+            return;
+        }
+
+        document.getElementById('infoControladorUnifiVersao').textContent = resultado.versao || '—';
+        document.getElementById('infoControladorUnifiHostname').textContent = resultado.hostname || '—';
+        document.getElementById('infoControladorUnifiUptime').textContent = rotuloDuracao(resultado.uptime_segundos);
+        document.getElementById('infoControladorUnifiAtualizacao').innerHTML = resultado.atualizacao_disponivel
+            ? '<span class="badge text-bg-warning">Disponível</span>'
+            : '<span class="badge text-bg-success">Em dia</span>';
+
+        carregando.style.display = 'none';
+        conteudo.style.display = '';
+    }
+
+    let carregadoUmaVez = false;
+    nav.addEventListener('shown.bs.tab', function () {
+        if (!carregadoUmaVez) {
+            carregadoUmaVez = true;
+            carregarSaude();
+            carregarWifiConfig();
+            carregarRotas();
+            carregarInfoControlador();
+        }
+    });
+
+    const botaoAtualizarSaude = document.getElementById('botaoAtualizarSaudeUnifi');
+    if (botaoAtualizarSaude) {
+        botaoAtualizarSaude.addEventListener('click', carregarSaude);
+    }
+})();
+
 // Clientes da rede (UniFi Gateway) -- lista site inteira (com fio + Wi-Fi), só leitura, carregada sob demanda.
 (function () {
     const nav = document.querySelector('.nav-link[data-bs-target="#abaClientesRedeUnifi"]');
@@ -2398,6 +2668,62 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
                 '<td>' + (c.bloqueado ? '<span class="badge text-bg-danger">Bloqueado</span>' : '<span class="badge text-bg-success">' + escapeHtml(c.status || 'Online') + '</span>') + '</td>' +
             '</tr>';
         }).join('') || '<tr><td colspan="8" class="text-muted small">Nenhum cliente conectado agora.</td></tr>';
+
+        carregando.style.display = 'none';
+        tabelaWrap.style.display = '';
+    }
+
+    nav.addEventListener('shown.bs.tab', function () {
+        if (!carregadoUmaVez) {
+            carregadoUmaVez = true;
+            carregar();
+        }
+    });
+
+    if (botaoAtualizar) {
+        botaoAtualizar.addEventListener('click', carregar);
+    }
+})();
+
+// Redes Wi-Fi vizinhas detectadas (UniFi Gateway) -- carregado junto com a aba Clientes.
+(function () {
+    const nav = document.querySelector('.nav-link[data-bs-target="#abaClientesRedeUnifi"]');
+    const carregando = document.getElementById('redesVizinhasUnifiCarregando');
+    const tabelaWrap = document.getElementById('redesVizinhasUnifiTabelaWrap');
+    const corpo = document.getElementById('redesVizinhasUnifiCorpo');
+    const botaoAtualizar = document.getElementById('botaoAtualizarRedesVizinhasUnifi');
+    if (!nav || !carregando) return;
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    let carregadoUmaVez = false;
+
+    async function carregar() {
+        carregando.style.display = '';
+        carregando.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Consultando o Controller...';
+        tabelaWrap.style.display = 'none';
+
+        const res = await fetch(<?= json_encode(url('/ativos/unifi/redes-vizinhas')) ?>, { method: 'POST' });
+        const resultado = await res.json();
+
+        if (!resultado.success) {
+            carregando.innerHTML = '<span class="text-danger">' + escapeHtml(resultado.message || 'Falha ao consultar redes vizinhas.') + '</span>';
+            return;
+        }
+
+        corpo.innerHTML = resultado.redes.map(function (r) {
+            return '<tr>' +
+                '<td>' + escapeHtml(r.ssid) + '</td>' +
+                '<td>' + escapeHtml(String(r.canal ?? '—')) + '</td>' +
+                '<td>' + (r.sinal_dbm != null ? r.sinal_dbm + ' dBm' : '—') + '</td>' +
+                '<td>' + escapeHtml(r.seguranca || '—') + '</td>' +
+                '<td>' + (r.suspeita ? '<span class="badge text-bg-danger">Suspeita</span>' : '<span class="badge text-bg-light border">Vizinha</span>') + '</td>' +
+            '</tr>';
+        }).join('') || '<tr><td colspan="5" class="text-muted small">Nenhuma rede vizinha detectada.</td></tr>';
 
         carregando.style.display = 'none';
         tabelaWrap.style.display = '';
@@ -2622,6 +2948,62 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
                 erro.textContent = resultado.message || 'Falha ao criar a regra.';
             }
         });
+    }
+})();
+
+// Redirecionamento de portas (NAT, UniFi Gateway) -- carregado junto com a aba Firewall.
+(function () {
+    const nav = document.querySelector('.nav-link[data-bs-target="#abaFirewallUnifi"]');
+    const carregando = document.getElementById('portForwardUnifiCarregando');
+    const tabelaWrap = document.getElementById('portForwardUnifiTabelaWrap');
+    const corpo = document.getElementById('portForwardUnifiCorpo');
+    const botaoAtualizar = document.getElementById('botaoAtualizarPortForwardUnifi');
+    if (!nav || !carregando) return;
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    let carregadoUmaVez = false;
+
+    async function carregar() {
+        carregando.style.display = '';
+        carregando.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Consultando o Controller...';
+        tabelaWrap.style.display = 'none';
+
+        const res = await fetch(<?= json_encode(url('/ativos/unifi/port-forward')) ?>, { method: 'POST' });
+        const resultado = await res.json();
+
+        if (!resultado.success) {
+            carregando.innerHTML = '<span class="text-danger">' + escapeHtml(resultado.message || 'Falha ao consultar redirecionamentos.') + '</span>';
+            return;
+        }
+
+        corpo.innerHTML = resultado.regras.map(function (r) {
+            return '<tr>' +
+                '<td>' + escapeHtml(r.nome) + '</td>' +
+                '<td>' + escapeHtml(String(r.porta_externa)) + '</td>' +
+                '<td>' + escapeHtml(r.protocolo) + '</td>' +
+                '<td class="font-monospace small">' + escapeHtml(r.destino_ip) + ':' + escapeHtml(String(r.destino_porta)) + '</td>' +
+                '<td>' + (r.habilitada ? '<span class="badge text-bg-success">Ativa</span>' : '<span class="badge text-bg-secondary">Desativada</span>') + '</td>' +
+            '</tr>';
+        }).join('') || '<tr><td colspan="5" class="text-muted small">Nenhum redirecionamento configurado.</td></tr>';
+
+        carregando.style.display = 'none';
+        tabelaWrap.style.display = '';
+    }
+
+    nav.addEventListener('shown.bs.tab', function () {
+        if (!carregadoUmaVez) {
+            carregadoUmaVez = true;
+            carregar();
+        }
+    });
+
+    if (botaoAtualizar) {
+        botaoAtualizar.addEventListener('click', carregar);
     }
 })();
 

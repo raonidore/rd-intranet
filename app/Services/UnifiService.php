@@ -761,6 +761,233 @@ class UnifiService
         return ['success' => true, 'clientes' => $clientes];
     }
 
+    /**
+     * Saúde da rede por subsistema (wan/wlan/lan/vpn) -- confirmado ao vivo
+     * via `stat/health` (API clássica). Cada subsistema tem campos
+     * diferentes (ex: só "wan" tem `wan_ip`/`isp_name`), por isso os campos
+     * abaixo saem `null` quando não existem pro subsistema em questão.
+     *
+     * @return array{success:bool, message?:string, subsistemas?:array}
+     */
+    public function buscarSaudeRede(): array
+    {
+        $ref = $this->siteRefAtual();
+
+        if ($ref === null) {
+            return ['success' => false, 'message' => 'Site do UniFi Controller ainda não identificado -- use "Testar conexão" em Integrações > UniFi.'];
+        }
+
+        $resultado = $this->chamarApi('GET', "/proxy/network/api/s/{$ref}/stat/health");
+
+        if (!$resultado['sucesso']) {
+            return ['success' => false, 'message' => $resultado['mensagem']];
+        }
+
+        $subsistemas = [];
+        foreach ($resultado['dados']['data'] ?? [] as $s) {
+            $subsistemas[] = [
+                'nome' => $s['subsystem'] ?? '',
+                'status' => $s['status'] ?? '',
+                'num_ap' => $s['num_ap'] ?? null,
+                'num_adopted' => $s['num_adopted'] ?? null,
+                'num_disconnected' => $s['num_disconnected'] ?? null,
+                'num_pending' => $s['num_pending'] ?? null,
+                'num_user' => $s['num_user'] ?? null,
+                'num_guest' => $s['num_guest'] ?? null,
+                'wan_ip' => $s['wan_ip'] ?? null,
+                'isp_name' => $s['isp_name'] ?? null,
+                'gw_cpu_pct' => isset($s['gw_system-stats']['cpu']) ? (float)$s['gw_system-stats']['cpu'] : null,
+                'gw_mem_pct' => isset($s['gw_system-stats']['mem']) ? (float)$s['gw_system-stats']['mem'] : null,
+                'gw_uptime_segundos' => isset($s['gw_system-stats']['uptime']) ? (int)$s['gw_system-stats']['uptime'] : null,
+            ];
+        }
+
+        return ['success' => true, 'subsistemas' => $subsistemas];
+    }
+
+    /**
+     * Redes Wi-Fi vizinhas/interferentes detectadas pelos rádios dos
+     * próprios APs (`stat/rogueap`) -- não é uma varredura ativa, é o que os
+     * rádios já veem passivamente. `is_rogue` distingue rede realmente
+     * suspeita (ex: mesmo SSID clonado) de só uma rede qualquer do vizinho.
+     *
+     * @return array{success:bool, message?:string, redes?:array}
+     */
+    public function listarRedesVizinhas(): array
+    {
+        $ref = $this->siteRefAtual();
+
+        if ($ref === null) {
+            return ['success' => false, 'message' => 'Site do UniFi Controller ainda não identificado -- use "Testar conexão" em Integrações > UniFi.'];
+        }
+
+        $resultado = $this->chamarApi('GET', "/proxy/network/api/s/{$ref}/stat/rogueap");
+
+        if (!$resultado['sucesso']) {
+            return ['success' => false, 'message' => $resultado['mensagem']];
+        }
+
+        $redes = [];
+        foreach ($resultado['dados']['data'] ?? [] as $r) {
+            $redes[] = [
+                'ssid' => $r['essid'] ?? '(oculta)',
+                'bssid' => $r['bssid'] ?? '',
+                'canal' => $r['channel'] ?? null,
+                'sinal_dbm' => $r['signal'] ?? null,
+                'seguranca' => $r['security'] ?? '',
+                'suspeita' => (bool)($r['is_rogue'] ?? false),
+                'detectada_por_ap' => $r['ap_mac'] ?? '',
+                'visto_por_ultimo' => isset($r['last_seen']) ? (int)$r['last_seen'] : null,
+            ];
+        }
+
+        // Suspeitas primeiro, depois sinal mais forte (rssi maior) primeiro.
+        usort($redes, fn ($a, $b) => ($b['suspeita'] <=> $a['suspeita']) ?: (($b['sinal_dbm'] ?? -999) <=> ($a['sinal_dbm'] ?? -999)));
+
+        return ['success' => true, 'redes' => $redes];
+    }
+
+    /**
+     * Regras de redirecionamento de porta (NAT) -- lista SEPARADA das
+     * políticas de firewall (`firewall-policies`), confirmado ao vivo via
+     * `list/portforward` (API clássica). Só leitura.
+     *
+     * @return array{success:bool, message?:string, regras?:array}
+     */
+    public function listarPortForward(): array
+    {
+        $ref = $this->siteRefAtual();
+
+        if ($ref === null) {
+            return ['success' => false, 'message' => 'Site do UniFi Controller ainda não identificado -- use "Testar conexão" em Integrações > UniFi.'];
+        }
+
+        $resultado = $this->chamarApi('GET', "/proxy/network/api/s/{$ref}/list/portforward");
+
+        if (!$resultado['sucesso']) {
+            return ['success' => false, 'message' => $resultado['mensagem']];
+        }
+
+        $regras = [];
+        foreach ($resultado['dados']['data'] ?? [] as $p) {
+            $regras[] = [
+                'nome' => $p['name'] ?? '',
+                'habilitada' => (bool)($p['enabled'] ?? false),
+                'protocolo' => strtoupper((string)($p['proto'] ?? '')),
+                'porta_externa' => $p['dst_port'] ?? '',
+                'destino_ip' => $p['fwd'] ?? '',
+                'destino_porta' => $p['fwd_port'] ?? '',
+            ];
+        }
+
+        return ['success' => true, 'regras' => $regras];
+    }
+
+    /**
+     * Configuração das redes Wi-Fi cadastradas (SSID, segurança, banda,
+     * oculta) -- confirmado ao vivo via `rest/wlanconf` (API clássica). Só
+     * leitura; não expõe a senha (`x_passphrase` existe no retorno cru, mas
+     * não é repassada por aqui de propósito).
+     *
+     * @return array{success:bool, message?:string, redes?:array}
+     */
+    public function listarRedesWifiConfiguradas(): array
+    {
+        $ref = $this->siteRefAtual();
+
+        if ($ref === null) {
+            return ['success' => false, 'message' => 'Site do UniFi Controller ainda não identificado -- use "Testar conexão" em Integrações > UniFi.'];
+        }
+
+        $resultado = $this->chamarApi('GET', "/proxy/network/api/s/{$ref}/rest/wlanconf");
+
+        if (!$resultado['sucesso']) {
+            return ['success' => false, 'message' => $resultado['mensagem']];
+        }
+
+        $redes = [];
+        foreach ($resultado['dados']['data'] ?? [] as $w) {
+            $redes[] = [
+                'nome' => $w['name'] ?? '',
+                'habilitada' => (bool)($w['enabled'] ?? true),
+                'banda' => $w['wlan_band'] ?? '',
+                'seguranca' => strtoupper((string)($w['wpa_mode'] ?? ($w['security'] ?? ''))),
+                'oculta' => (bool)($w['hide_ssid'] ?? false),
+                'convidado' => (bool)($w['is_guest'] ?? false),
+            ];
+        }
+
+        return ['success' => true, 'redes' => $redes];
+    }
+
+    /**
+     * Rotas estáticas configuradas no Gateway -- confirmado ao vivo via
+     * `rest/routing` (API clássica). Só leitura.
+     *
+     * @return array{success:bool, message?:string, rotas?:array}
+     */
+    public function listarRotasEstaticas(): array
+    {
+        $ref = $this->siteRefAtual();
+
+        if ($ref === null) {
+            return ['success' => false, 'message' => 'Site do UniFi Controller ainda não identificado -- use "Testar conexão" em Integrações > UniFi.'];
+        }
+
+        $resultado = $this->chamarApi('GET', "/proxy/network/api/s/{$ref}/rest/routing");
+
+        if (!$resultado['sucesso']) {
+            return ['success' => false, 'message' => $resultado['mensagem']];
+        }
+
+        $rotas = [];
+        foreach ($resultado['dados']['data'] ?? [] as $r) {
+            $rotas[] = [
+                'nome' => $r['name'] ?? '',
+                'habilitada' => (bool)($r['enabled'] ?? false),
+                'rede_destino' => $r['static-route_network'] ?? '',
+                'proximo_salto' => $r['static-route_nexthop'] ?? '',
+                'tipo' => $r['static-route_type'] ?? '',
+            ];
+        }
+
+        return ['success' => true, 'rotas' => $rotas];
+    }
+
+    /**
+     * Informações do próprio Controller (versão, hostname, uptime, se tem
+     * atualização disponível) -- confirmado ao vivo via `stat/sysinfo` (API
+     * clássica). Só leitura.
+     *
+     * @return array{success:bool, message?:string, versao?:string, hostname?:string, uptime_segundos?:int,
+     *   atualizacao_disponivel?:bool, ips?:array}
+     */
+    public function buscarInfoControlador(): array
+    {
+        $ref = $this->siteRefAtual();
+
+        if ($ref === null) {
+            return ['success' => false, 'message' => 'Site do UniFi Controller ainda não identificado -- use "Testar conexão" em Integrações > UniFi.'];
+        }
+
+        $resultado = $this->chamarApi('GET', "/proxy/network/api/s/{$ref}/stat/sysinfo");
+
+        if (!$resultado['sucesso']) {
+            return ['success' => false, 'message' => $resultado['mensagem']];
+        }
+
+        $info = $resultado['dados']['data'][0] ?? [];
+
+        return [
+            'success' => true,
+            'versao' => $info['version'] ?? '',
+            'hostname' => $info['hostname'] ?? ($info['name'] ?? ''),
+            'uptime_segundos' => isset($info['uptime']) ? (int)$info['uptime'] : null,
+            'atualizacao_disponivel' => (bool)($info['update_available'] ?? false),
+            'ips' => $info['ip_addrs'] ?? [],
+        ];
+    }
+
     /** Desconecta o cliente agora -- reconecta sozinho em seguida (não é um bloqueio, só força uma nova associação). */
     public function desconectarCliente(string $mac): array
     {

@@ -2761,6 +2761,36 @@ class AtivoService
         return (new UnifiService())->listarClientesRede();
     }
 
+    public function buscarSaudeRedeUnifi(): array
+    {
+        return (new UnifiService())->buscarSaudeRede();
+    }
+
+    public function listarRedesVizinhasUnifi(): array
+    {
+        return (new UnifiService())->listarRedesVizinhas();
+    }
+
+    public function listarPortForwardUnifi(): array
+    {
+        return (new UnifiService())->listarPortForward();
+    }
+
+    public function listarRedesWifiConfiguradasUnifi(): array
+    {
+        return (new UnifiService())->listarRedesWifiConfiguradas();
+    }
+
+    public function listarRotasEstaticasUnifi(): array
+    {
+        return (new UnifiService())->listarRotasEstaticas();
+    }
+
+    public function buscarInfoControladorUnifi(): array
+    {
+        return (new UnifiService())->buscarInfoControlador();
+    }
+
     /** @return array<int, array{mac:string, nome:string}> */
     public function listarClientesUnifiBloqueados(): array
     {

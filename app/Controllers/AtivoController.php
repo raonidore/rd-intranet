@@ -856,6 +856,54 @@ class AtivoController extends Controller
         echo json_encode($this->service->listarClientesRedeUnifi());
     }
 
+    public function unifiSaude(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        echo json_encode($this->service->buscarSaudeRedeUnifi());
+    }
+
+    public function unifiRedesVizinhas(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        echo json_encode($this->service->listarRedesVizinhasUnifi());
+    }
+
+    public function unifiPortForward(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        echo json_encode($this->service->listarPortForwardUnifi());
+    }
+
+    public function unifiRedesWifiConfiguradas(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        echo json_encode($this->service->listarRedesWifiConfiguradasUnifi());
+    }
+
+    public function unifiRotasEstaticas(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        echo json_encode($this->service->listarRotasEstaticasUnifi());
+    }
+
+    public function unifiInfoControlador(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        echo json_encode($this->service->buscarInfoControladorUnifi());
+    }
+
     public function unifiAlterarFirewall(): void
     {
         AuthMiddleware::checkModulo('ativos_lista');

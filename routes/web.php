@@ -979,6 +979,12 @@ $router->post('/ativos/unifi/bloquear-cliente', [AtivoController::class, 'unifiB
 $router->post('/ativos/unifi/desbloquear-cliente', [AtivoController::class, 'unifiDesbloquearCliente']);
 $router->post('/ativos/unifi/firewall', [AtivoController::class, 'unifiFirewall']);
 $router->post('/ativos/unifi/clientes-rede', [AtivoController::class, 'unifiClientesRede']);
+$router->post('/ativos/unifi/saude', [AtivoController::class, 'unifiSaude']);
+$router->post('/ativos/unifi/redes-vizinhas', [AtivoController::class, 'unifiRedesVizinhas']);
+$router->post('/ativos/unifi/port-forward', [AtivoController::class, 'unifiPortForward']);
+$router->post('/ativos/unifi/redes-wifi-configuradas', [AtivoController::class, 'unifiRedesWifiConfiguradas']);
+$router->post('/ativos/unifi/rotas-estaticas', [AtivoController::class, 'unifiRotasEstaticas']);
+$router->post('/ativos/unifi/info-controlador', [AtivoController::class, 'unifiInfoControlador']);
 $router->post('/ativos/unifi/firewall/alterar', [AtivoController::class, 'unifiAlterarFirewall']);
 $router->post('/ativos/unifi/firewall/zonas', [AtivoController::class, 'unifiZonasFirewall']);
 $router->post('/ativos/unifi/firewall/criar', [AtivoController::class, 'unifiCriarFirewall']);
