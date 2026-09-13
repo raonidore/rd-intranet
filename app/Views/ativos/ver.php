@@ -1225,7 +1225,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                 </button>
             </div>
             <div class="card-body">
-                <div class="form-text mb-2">Redes vizinhas que os próprios rádios dos pontos de acesso enxergam passivamente -- não é uma varredura ativa.</div>
+                <div class="form-text mb-2">Redes vizinhas vistas na última hora pelos próprios rádios dos pontos de acesso (passivo, não é varredura ativa) -- uma linha por rede, mesmo que vários APs a enxerguem.</div>
                 <div class="small text-muted mb-3" id="redesVizinhasUnifiCarregando"><div class="spinner-border spinner-border-sm"></div> Consultando o Controller...</div>
                 <div class="table-responsive" style="display:none" id="redesVizinhasUnifiTabelaWrap">
                     <table class="table table-sm align-middle mb-0">

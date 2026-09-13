@@ -811,6 +811,14 @@ class UnifiService
      * rádios já veem passivamente. `is_rogue` distingue rede realmente
      * suspeita (ex: mesmo SSID clonado) de só uma rede qualquer do vizinho.
      *
+     * Confirmado ao vivo: esse endpoint devolve o HISTÓRICO de avistamentos
+     * (525 linhas num Controller com 326 redes vizinhas únicas num prédio
+     * bem denso de Wi-Fi -- cada AP que enxerga a mesma rede gera outra
+     * linha, e entradas antigas não somem sozinhas). Sem filtro isso vira
+     * uma tabela imensa e inútil, então: só o que foi visto na última hora
+     * (retrato de "agora"), e um só registro por BSSID (fica o de sinal mais
+     * forte entre as repetições).
+     *
      * @return array{success:bool, message?:string, redes?:array}
      */
     public function listarRedesVizinhas(): array
@@ -827,22 +835,36 @@ class UnifiService
             return ['success' => false, 'message' => $resultado['mensagem']];
         }
 
-        $redes = [];
+        $agora = time();
+        $porBssid = [];
         foreach ($resultado['dados']['data'] ?? [] as $r) {
-            $redes[] = [
-                'ssid' => $r['essid'] ?? '(oculta)',
-                'bssid' => $r['bssid'] ?? '',
+            $vistoEm = isset($r['last_seen']) ? (int)$r['last_seen'] : 0;
+            if (($agora - $vistoEm) > 3600) {
+                continue;
+            }
+
+            $bssid = $r['bssid'] ?? '';
+            $sinal = $r['signal'] ?? -999;
+            if (isset($porBssid[$bssid]) && $porBssid[$bssid]['sinal_dbm'] >= $sinal) {
+                continue;
+            }
+
+            $porBssid[$bssid] = [
+                'ssid' => $r['essid'] ?: '(oculta)',
+                'bssid' => $bssid,
                 'canal' => $r['channel'] ?? null,
-                'sinal_dbm' => $r['signal'] ?? null,
+                'sinal_dbm' => $sinal,
                 'seguranca' => $r['security'] ?? '',
                 'suspeita' => (bool)($r['is_rogue'] ?? false),
                 'detectada_por_ap' => $r['ap_mac'] ?? '',
-                'visto_por_ultimo' => isset($r['last_seen']) ? (int)$r['last_seen'] : null,
+                'visto_por_ultimo' => $vistoEm,
             ];
         }
 
+        $redes = array_values($porBssid);
+
         // Suspeitas primeiro, depois sinal mais forte (rssi maior) primeiro.
-        usort($redes, fn ($a, $b) => ($b['suspeita'] <=> $a['suspeita']) ?: (($b['sinal_dbm'] ?? -999) <=> ($a['sinal_dbm'] ?? -999)));
+        usort($redes, fn ($a, $b) => ($b['suspeita'] <=> $a['suspeita']) ?: ($b['sinal_dbm'] <=> $a['sinal_dbm']));
 
         return ['success' => true, 'redes' => $redes];
     }
