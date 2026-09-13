@@ -2795,12 +2795,14 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
         });
     }
 
-    // -70dBm ou mais forte = sinal bom (verde); até -85 = razoável (amarelo); mais fraco = ruim (cinza) -- faixas usuais de site survey Wi-Fi.
+    // Mesmas faixas de corSinalWifi() (PHP, topo desta página) -- dBm mais
+    // próximo de 0 é sinal melhor: -60 ou mais forte = bom (verde), até -70
+    // = razoável (amarelo), mais fraco = fraco (vermelho).
     function corSinal(dbm) {
         if (dbm == null) return 'secondary';
-        if (dbm >= -70) return 'success';
-        if (dbm >= -85) return 'warning';
-        return 'secondary';
+        if (dbm >= -60) return 'success';
+        if (dbm >= -70) return 'warning';
+        return 'danger';
     }
 
     function barraSinal(dbm) {
@@ -2848,7 +2850,7 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
                 '<td>' + escapeHtml(r.ssid) + '</td>' +
                 '<td>' + escapeHtml(r.banda || '—') + '</td>' +
                 '<td>' + escapeHtml(String(r.canal ?? '—')) + '</td>' +
-                '<td>' + barraSinal(r.sinal_dbm) + (r.sinal_dbm != null ? r.sinal_dbm + ' dBm' : '—') + '</td>' +
+                '<td>' + barraSinal(r.sinal_dbm) + (r.sinal_dbm != null ? '<span class="text-' + corSinal(r.sinal_dbm) + ' fw-semibold">' + r.sinal_dbm + ' dBm</span>' : '—') + '</td>' +
                 '<td>' + escapeHtml(r.seguranca || '—') + '</td>' +
                 '<td>' + (r.suspeita ? '<span class="badge text-bg-danger">Suspeita</span>' : '<span class="badge text-bg-light border">Vizinha</span>') + '</td>' +
             '</tr>';
