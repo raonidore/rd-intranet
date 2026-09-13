@@ -122,7 +122,7 @@ use App\Components\Alert;
         <div class="form-text mb-2">
             A imagem grande no topo do menu, acima de "Painel Administrativo" -- é a identidade visual do próprio RD Intranet
             (diferente da logo da empresa abaixo, que é do cliente). Opcional; sem enviar nada, fica a padrão.
-            Redimensionada automaticamente pro padrão <strong>480&times;480px</strong> (mantendo a proporção, sem cortar).
+            Ao escolher um arquivo, abre uma tela pra ajustar o enquadramento (arrastar/zoom) antes de salvar -- final sempre <strong>480&times;480px</strong>.
         </div>
 
         <div class="d-flex justify-content-between align-items-center border rounded p-2 mb-2">
@@ -147,7 +147,7 @@ use App\Components\Alert;
         <label class="form-label">Logo da empresa</label>
         <div class="form-text mb-2">
             Aparece pequena, abaixo de "RD Intranet / Painel Administrativo" no menu lateral. Opcional.
-            Redimensionada automaticamente pro padrão <strong>320&times;120px</strong> (mantendo a proporção, sem cortar) antes de enviar -- PNG com fundo transparente funciona melhor.
+            Ao escolher um arquivo, abre uma tela pra ajustar o enquadramento (arrastar/zoom) antes de salvar -- final sempre <strong>320&times;120px</strong>, PNG com fundo transparente funciona melhor.
         </div>
 
         <?php if ($logoConfigurada): ?>
@@ -165,45 +165,189 @@ use App\Components\Alert;
     </div>
 </div>
 
+<!-- Ajustar logo (arrastar + zoom) antes de enviar -- reaproveitado pros dois uploads (logo do sistema 480x480, logo da empresa 320x120), só muda o tamanho-alvo. -->
+<div class="modal fade" id="modalAjustarLogo" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title mb-0">Ajustar logo</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <div id="ajustarLogoCanvasWrap" style="display:inline-block; overflow:hidden; border:1px solid #dee2e6; border-radius:4px; cursor:move; touch-action:none; background-image:linear-gradient(45deg,#e9ecef 25%,transparent 25%),linear-gradient(-45deg,#e9ecef 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#e9ecef 75%),linear-gradient(-45deg,transparent 75%,#e9ecef 75%); background-size:16px 16px; background-position:0 0,0 8px,8px -8px,-8px 0px;">
+                    <canvas id="ajustarLogoCanvas"></canvas>
+                </div>
+                <div class="d-flex align-items-center gap-2 mt-3 mx-auto" style="max-width:360px">
+                    <i class="bi bi-zoom-out text-muted"></i>
+                    <input type="range" class="form-range" id="ajustarLogoZoom" min="0" max="100" step="0.1" value="30">
+                    <i class="bi bi-zoom-in text-muted"></i>
+                </div>
+                <div class="form-text">Arraste a imagem pra posicionar; use o controle pra aproximar/afastar (dá pra deixar espaço em volta ou preencher tudo).</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-primary" id="ajustarLogoConfirmar"><i class="bi bi-check-lg"></i> Aplicar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
-function kbConfigurarRedimensionamentoLogo(idInput, larguraMax, alturaMax) {
-    var input = document.getElementById(idInput);
-    if (!input || typeof HTMLCanvasElement === 'undefined') return;
+(function () {
+    const canvas = document.getElementById('ajustarLogoCanvas');
+    const wrap = document.getElementById('ajustarLogoCanvasWrap');
+    const zoom = document.getElementById('ajustarLogoZoom');
+    const modalEl = document.getElementById('modalAjustarLogo');
+    const botaoConfirmar = document.getElementById('ajustarLogoConfirmar');
+    if (!canvas || typeof HTMLCanvasElement === 'undefined') return;
 
-    input.addEventListener('change', function () {
-        var arquivo = input.files[0];
-        if (!arquivo) return;
+    const ctx = canvas.getContext('2d');
+    let estado = null; // { imagem, escalaConter, escalaCobrir, escala, offsetX, offsetY, larguraAlvo, alturaAlvo, aoConfirmar, inputOrigem }
+    let arrastando = false;
+    let inicioX = 0, inicioY = 0, offsetInicialX = 0, offsetInicialY = 0;
 
-        var leitor = new FileReader();
-        leitor.onload = function (eLeitor) {
-            var imagem = new Image();
-            imagem.onload = function () {
-                var escala = Math.min(1, larguraMax / imagem.width, alturaMax / imagem.height);
-                var largura = Math.max(1, Math.round(imagem.width * escala));
-                var altura = Math.max(1, Math.round(imagem.height * escala));
+    function redesenhar() {
+        if (!estado) return;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(estado.imagem, estado.offsetX, estado.offsetY, estado.imagem.width * estado.escala, estado.imagem.height * estado.escala);
+    }
 
-                var canvas = document.createElement('canvas');
-                canvas.width = largura;
-                canvas.height = altura;
-                canvas.getContext('2d').drawImage(imagem, 0, 0, largura, altura);
+    function centralizarEscala(novaEscala) {
+        const centroX = estado.larguraAlvo / 2;
+        const centroY = estado.alturaAlvo / 2;
+        const relX = (centroX - estado.offsetX) / estado.escala;
+        const relY = (centroY - estado.offsetY) / estado.escala;
+        estado.escala = novaEscala;
+        estado.offsetX = centroX - relX * novaEscala;
+        estado.offsetY = centroY - relY * novaEscala;
+    }
 
-                canvas.toBlob(function (blob) {
-                    if (!blob) return;
-
-                    var redimensionada = new File([blob], 'logo.png', { type: 'image/png' });
-                    var transferencia = new DataTransfer();
-                    transferencia.items.add(redimensionada);
-                    input.files = transferencia.files;
-                }, 'image/png');
-            };
-            imagem.src = eLeitor.target.result;
+    function abrir(dataUrl, larguraAlvo, alturaAlvo, aoConfirmar, inputOrigem) {
+        const imagem = new Image();
+        imagem.onerror = function () {
+            // Imagem não decodificável no navegador -- deixa passar o arquivo original sem ajuste (o input já está com ele), o servidor ainda revalida.
         };
-        leitor.readAsDataURL(arquivo);
-    });
-}
+        imagem.onload = function () {
+            canvas.width = larguraAlvo;
+            canvas.height = alturaAlvo;
 
-kbConfigurarRedimensionamentoLogo('inputLogoSistema', 480, 480);
-kbConfigurarRedimensionamentoLogo('inputLogoEmpresa', 320, 120);
+            const escalaExibicao = 360 / larguraAlvo;
+            canvas.style.width = Math.round(larguraAlvo * escalaExibicao) + 'px';
+            canvas.style.height = Math.round(alturaAlvo * escalaExibicao) + 'px';
+
+            const escalaConter = Math.min(larguraAlvo / imagem.width, alturaAlvo / imagem.height);
+            const escalaCobrir = Math.max(larguraAlvo / imagem.width, alturaAlvo / imagem.height);
+
+            estado = {
+                imagem: imagem,
+                escalaConter: escalaConter,
+                escalaCobrir: escalaCobrir,
+                escala: escalaCobrir,
+                offsetX: (larguraAlvo - imagem.width * escalaCobrir) / 2,
+                offsetY: (alturaAlvo - imagem.height * escalaCobrir) / 2,
+                larguraAlvo: larguraAlvo,
+                alturaAlvo: alturaAlvo,
+                aoConfirmar: aoConfirmar,
+                inputOrigem: inputOrigem,
+                confirmado: false,
+            };
+
+            // Controle vai de "conter tudo" (0) a "bem de perto" (100), com "cobrir o quadro" perto do meio -- faixa não-linear pra dar mais precisão perto do ponto que interessa.
+            zoom.value = 30;
+            redesenhar();
+
+            new bootstrap.Modal(modalEl).show();
+        };
+        imagem.src = dataUrl;
+    }
+
+    function escalaDoControle(valorControle) {
+        // 0-30 vai de "conter" até "cobrir"; 30-100 vai de "cobrir" até 3x "cobrir" (zoom bem de perto).
+        const t = valorControle / 100;
+        if (t <= 0.3) {
+            return estado.escalaConter + (estado.escalaCobrir - estado.escalaConter) * (t / 0.3);
+        }
+        return estado.escalaCobrir + (estado.escalaCobrir * 2) * ((t - 0.3) / 0.7);
+    }
+
+    zoom.addEventListener('input', function () {
+        if (!estado) return;
+        centralizarEscala(escalaDoControle(parseFloat(zoom.value)));
+        redesenhar();
+    });
+
+    function posicaoPonteiro(ev) {
+        return { x: ev.clientX, y: ev.clientY };
+    }
+
+    wrap.addEventListener('pointerdown', function (ev) {
+        if (!estado) return;
+        arrastando = true;
+        const p = posicaoPonteiro(ev);
+        inicioX = p.x;
+        inicioY = p.y;
+        offsetInicialX = estado.offsetX;
+        offsetInicialY = estado.offsetY;
+        wrap.setPointerCapture(ev.pointerId);
+    });
+
+    wrap.addEventListener('pointermove', function (ev) {
+        if (!arrastando || !estado) return;
+        const p = posicaoPonteiro(ev);
+        const fator = canvas.width / canvas.clientWidth;
+        estado.offsetX = offsetInicialX + (p.x - inicioX) * fator;
+        estado.offsetY = offsetInicialY + (p.y - inicioY) * fator;
+        redesenhar();
+    });
+
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (evento) {
+        wrap.addEventListener(evento, function () { arrastando = false; });
+    });
+
+    botaoConfirmar.addEventListener('click', function () {
+        if (!estado) return;
+        canvas.toBlob(function (blob) {
+            if (!blob || !estado) return;
+            estado.confirmado = true;
+            estado.aoConfirmar(blob);
+            bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+        }, 'image/png');
+    });
+
+    modalEl.addEventListener('hidden.bs.modal', function () {
+        // Fechou sem clicar "Aplicar" (Cancelar, X, Esc, clique fora) --
+        // limpa o input pra não deixar o arquivo ORIGINAL (sem ajuste)
+        // pronto pra ser enviado sozinho se a pessoa clicar "Enviar" depois.
+        if (estado && !estado.confirmado && estado.inputOrigem) {
+            estado.inputOrigem.value = '';
+        }
+        estado = null;
+    });
+
+    window.kbConfigurarAjusteLogo = function (idInput, larguraAlvo, alturaAlvo) {
+        const input = document.getElementById(idInput);
+        if (!input) return;
+
+        input.addEventListener('change', function () {
+            const arquivo = input.files[0];
+            if (!arquivo) return;
+
+            const leitor = new FileReader();
+            leitor.onload = function (eLeitor) {
+                abrir(eLeitor.target.result, larguraAlvo, alturaAlvo, function (blob) {
+                    const ajustada = new File([blob], 'logo.png', { type: 'image/png' });
+                    const transferencia = new DataTransfer();
+                    transferencia.items.add(ajustada);
+                    input.files = transferencia.files;
+                }, input);
+            };
+            leitor.readAsDataURL(arquivo);
+        });
+    };
+})();
+
+kbConfigurarAjusteLogo('inputLogoSistema', 480, 480);
+kbConfigurarAjusteLogo('inputLogoEmpresa', 320, 120);
 </script>
 
 <?php
