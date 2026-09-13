@@ -128,7 +128,10 @@ use App\Components\Alert;
         <div class="d-flex justify-content-between align-items-center border rounded p-2 mb-2">
             <img src="<?= $logoSistemaConfigurada ? url('/administracao/empresa/logo-sistema') : url('/assets/img/logord.png') ?>" alt="Logo do sistema" style="max-height:60px;max-width:220px">
             <?php if ($logoSistemaConfigurada): ?>
-                <button type="button" class="btn btn-sm btn-outline-danger" onclick="document.getElementById('formRemoverLogoSistema').submit()" title="Voltar pra padrão"><i class="bi bi-trash"></i></button>
+                <div class="d-flex gap-1">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="kbAjustarLogoExistente('<?= url('/administracao/empresa/logo-sistema') ?>', 'inputLogoSistema', 480, 480, 'formUploadLogoSistema')" title="Ajustar enquadramento da imagem atual"><i class="bi bi-crop"></i></button>
+                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="document.getElementById('formRemoverLogoSistema').submit()" title="Voltar pra padrão"><i class="bi bi-trash"></i></button>
+                </div>
             <?php endif; ?>
         </div>
         <?php if ($logoSistemaConfigurada): ?>
@@ -153,7 +156,10 @@ use App\Components\Alert;
         <?php if ($logoConfigurada): ?>
             <div class="d-flex justify-content-between align-items-center border rounded p-2 mb-2">
                 <img src="<?= url('/administracao/empresa/logo') ?>" alt="Logo da empresa" style="max-height:36px;max-width:180px">
-                <button type="button" class="btn btn-sm btn-outline-danger" onclick="document.getElementById('formRemoverLogoEmpresa').submit()"><i class="bi bi-trash"></i></button>
+                <div class="d-flex gap-1">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="kbAjustarLogoExistente('<?= url('/administracao/empresa/logo') ?>', 'inputLogoEmpresa', 320, 120, 'formUploadLogoEmpresa')" title="Ajustar enquadramento da imagem atual"><i class="bi bi-crop"></i></button>
+                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="document.getElementById('formRemoverLogoEmpresa').submit()"><i class="bi bi-trash"></i></button>
+                </div>
             </div>
             <form method="post" action="<?= url('/administracao/empresa/logo/remover') ?>" id="formRemoverLogoEmpresa" class="d-none"></form>
         <?php endif; ?>
@@ -324,6 +330,13 @@ use App\Components\Alert;
         estado = null;
     });
 
+    function aplicarBlobNoInput(input, blob) {
+        const ajustada = new File([blob], 'logo.png', { type: 'image/png' });
+        const transferencia = new DataTransfer();
+        transferencia.items.add(ajustada);
+        input.files = transferencia.files;
+    }
+
     window.kbConfigurarAjusteLogo = function (idInput, larguraAlvo, alturaAlvo) {
         const input = document.getElementById(idInput);
         if (!input) return;
@@ -335,14 +348,33 @@ use App\Components\Alert;
             const leitor = new FileReader();
             leitor.onload = function (eLeitor) {
                 abrir(eLeitor.target.result, larguraAlvo, alturaAlvo, function (blob) {
-                    const ajustada = new File([blob], 'logo.png', { type: 'image/png' });
-                    const transferencia = new DataTransfer();
-                    transferencia.items.add(ajustada);
-                    input.files = transferencia.files;
+                    aplicarBlobNoInput(input, blob);
                 }, input);
             };
             leitor.readAsDataURL(arquivo);
         });
+    };
+
+    // Reajustar a imagem JÁ SALVA (sem precisar escolher um arquivo de novo)
+    // -- busca a própria imagem atual (mesma origem, sem problema de CORS),
+    // abre no mesmo editor, e ao confirmar já envia o formulário sozinho.
+    window.kbAjustarLogoExistente = function (urlImagemAtual, idInput, larguraAlvo, alturaAlvo, idFormulario) {
+        const input = document.getElementById(idInput);
+        const form = document.getElementById(idFormulario);
+        if (!input || !form) return;
+
+        fetch(urlImagemAtual, { cache: 'no-store' })
+            .then(function (res) { return res.blob(); })
+            .then(function (blob) {
+                const urlObjeto = URL.createObjectURL(blob);
+                abrir(urlObjeto, larguraAlvo, alturaAlvo, function (blobAjustado) {
+                    aplicarBlobNoInput(input, blobAjustado);
+                    form.submit();
+                }, input);
+            })
+            .catch(function () {
+                alert('Não foi possível carregar a imagem atual pra ajustar.');
+            });
     };
 })();
 
