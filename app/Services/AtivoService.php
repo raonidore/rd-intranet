@@ -2727,6 +2727,34 @@ class AtivoService
         return $resultado;
     }
 
+    /** Zonas do firewall (Internal/External/Gateway/Vpn/Hotspot/Dmz) -- pro formulário de nova regra. */
+    public function listarZonasFirewallUnifi(): array
+    {
+        return (new UnifiService())->listarZonasFirewallParaFormulario();
+    }
+
+    public function criarPoliticaFirewallUnifi(array $dados): array
+    {
+        $resultado = (new UnifiService())->criarPoliticaFirewall($dados);
+
+        if ($resultado['success']) {
+            AuditService::registrar('Ativos', 'UniFi - Regra de firewall', "Regra \"{$dados['nome']}\" criada via UniFi Controller.");
+        }
+
+        return $resultado;
+    }
+
+    public function excluirPoliticaFirewallUnifi(string $policyId, string $nomeAuditoria): array
+    {
+        $resultado = (new UnifiService())->excluirPoliticaFirewall($policyId, $nomeAuditoria);
+
+        if ($resultado['success']) {
+            AuditService::registrar('Ativos', 'UniFi - Regra de firewall', "Regra \"{$nomeAuditoria}\" excluída via UniFi Controller.");
+        }
+
+        return $resultado;
+    }
+
     /** Todos os clientes conectados na rede (com fio + Wi-Fi) via UniFi Controller -- só leitura, site inteiro. */
     public function listarClientesRedeUnifi(): array
     {

@@ -515,6 +515,155 @@ class UnifiService
         return ['success' => true, 'regras' => $regras];
     }
 
+    /** @return array{success:bool, message?:string, zonas?:array<int,array{id:string,nome:string}>} */
+    public function listarZonasFirewallParaFormulario(): array
+    {
+        $ref = $this->siteRefAtual();
+
+        if ($ref === null) {
+            return ['success' => false, 'message' => 'Site do UniFi Controller ainda não identificado -- use "Testar conexão" em Integrações > UniFi.'];
+        }
+
+        $nomes = $this->nomesZonasFirewall($ref);
+
+        if (empty($nomes)) {
+            return ['success' => false, 'message' => 'Não foi possível consultar as zonas do firewall no Controller.'];
+        }
+
+        $zonas = [];
+        foreach ($nomes as $id => $nome) {
+            $zonas[] = ['id' => $id, 'nome' => $nome];
+        }
+
+        return ['success' => true, 'zonas' => $zonas];
+    }
+
+    /**
+     * Monta o "lado" (origem ou destino) de uma regra -- IP específico só
+     * entra quando informado (confirmado ao vivo: a forma "qualquer IP" da
+     * API nem manda a chave `matching_target_type`, só existe quando o alvo
+     * é "IP"/"SPECIFIC" de verdade).
+     */
+    private function montarLadoRegraFirewall(string $zonaId, string $ip): array
+    {
+        $lado = [
+            'zone_id' => $zonaId,
+            'matching_target' => $ip !== '' ? 'IP' : 'ANY',
+            'port_matching_type' => 'ANY',
+            'match_opposite_ports' => false,
+        ];
+
+        if ($ip !== '') {
+            $lado['matching_target_type'] = 'SPECIFIC';
+            $lado['ips'] = [$ip];
+            $lado['match_opposite_ips'] = false;
+        }
+
+        return $lado;
+    }
+
+    /**
+     * Cria uma regra de firewall nova -- confirmado ao vivo (criada
+     * desativada, verificada, excluída de novo, sem deixar rastro). Cobre só
+     * o caso comum (zona a zona, com IP/porta de destino opcionais);
+     * schedule sempre "Always", sem estado de conexão/ICMP customizado --
+     * pra isso, o Controller direto.
+     *
+     * @param array{nome:string, acao:string, protocolo:string, zona_origem_id:string, zona_destino_id:string,
+     *   ip_origem?:string, ip_destino?:string, porta_destino?:string, habilitada:bool} $dados
+     * @return array{success:bool, message:string}
+     */
+    public function criarPoliticaFirewall(array $dados): array
+    {
+        $ref = $this->siteRefAtual();
+
+        if ($ref === null) {
+            return ['success' => false, 'message' => 'Site do UniFi Controller ainda não identificado -- use "Testar conexão" em Integrações > UniFi.'];
+        }
+
+        $nome = trim($dados['nome'] ?? '');
+        $acao = $dados['acao'] ?? '';
+        $zonaOrigemId = trim($dados['zona_origem_id'] ?? '');
+        $zonaDestinoId = trim($dados['zona_destino_id'] ?? '');
+
+        if ($nome === '') {
+            return ['success' => false, 'message' => 'Informe um nome pra regra.'];
+        }
+        if (!in_array($acao, ['ALLOW', 'BLOCK'], true)) {
+            return ['success' => false, 'message' => 'Ação inválida.'];
+        }
+        if ($zonaOrigemId === '' || $zonaDestinoId === '') {
+            return ['success' => false, 'message' => 'Selecione a zona de origem e a de destino.'];
+        }
+
+        $ipOrigem = trim($dados['ip_origem'] ?? '');
+        $ipDestino = trim($dados['ip_destino'] ?? '');
+        foreach (['IP de origem' => $ipOrigem, 'IP de destino' => $ipDestino] as $rotulo => $ip) {
+            if ($ip !== '' && filter_var($ip, FILTER_VALIDATE_IP) === false) {
+                return ['success' => false, 'message' => "\"{$ip}\" não é um IP válido ({$rotulo})."];
+            }
+        }
+
+        $portaDestino = trim($dados['porta_destino'] ?? '');
+        if ($portaDestino !== '' && (!ctype_digit($portaDestino) || (int)$portaDestino < 1 || (int)$portaDestino > 65535)) {
+            return ['success' => false, 'message' => 'Porta de destino inválida (use um número de 1 a 65535, ou deixe em branco pra qualquer porta).'];
+        }
+
+        $protocolo = in_array($dados['protocolo'] ?? '', ['all', 'tcp', 'udp', 'icmp'], true) ? $dados['protocolo'] : 'all';
+
+        $origem = $this->montarLadoRegraFirewall($zonaOrigemId, $ipOrigem);
+        $destino = $this->montarLadoRegraFirewall($zonaDestinoId, $ipDestino);
+        if ($portaDestino !== '') {
+            $destino['port'] = $portaDestino;
+            $destino['port_matching_type'] = 'SPECIFIC';
+        }
+
+        $payload = [
+            'name' => $nome,
+            'action' => $acao,
+            'enabled' => (bool)($dados['habilitada'] ?? true),
+            'protocol' => $protocolo,
+            'connection_state_type' => 'ALL',
+            'connection_states' => [],
+            'create_allow_respond' => true,
+            'ip_version' => 'BOTH',
+            'icmp_typename' => 'ANY',
+            'icmp_v6_typename' => 'ANY',
+            'logging' => false,
+            'match_ip_sec' => false,
+            'match_opposite_protocol' => false,
+            'predefined' => false,
+            'schedule' => ['mode' => 'ALWAYS'],
+            'source' => $origem,
+            'destination' => $destino,
+        ];
+
+        $resultado = $this->chamarApi('POST', "/proxy/network/v2/api/site/{$ref}/firewall-policies", $payload);
+
+        if (!$resultado['sucesso']) {
+            return ['success' => false, 'message' => $resultado['mensagem']];
+        }
+
+        return ['success' => true, 'message' => "Regra \"{$nome}\" criada."];
+    }
+
+    public function excluirPoliticaFirewall(string $policyId, string $nome): array
+    {
+        $ref = $this->siteRefAtual();
+
+        if ($ref === null) {
+            return ['success' => false, 'message' => 'Site do UniFi Controller ainda não identificado -- use "Testar conexão" em Integrações > UniFi.'];
+        }
+
+        $resultado = $this->chamarApi('DELETE', "/proxy/network/v2/api/site/{$ref}/firewall-policies/{$policyId}");
+
+        if (!$resultado['sucesso']) {
+            return ['success' => false, 'message' => $resultado['mensagem']];
+        }
+
+        return ['success' => true, 'message' => "Regra \"{$nome}\" excluída."];
+    }
+
     /**
      * Liga/desliga uma regra de firewall existente -- confirmado ao vivo que
      * o Controller espera o objeto INTEIRO da regra no PUT (não um patch

@@ -868,6 +868,45 @@ class AtivoController extends Controller
         echo json_encode($this->service->alterarPoliticaFirewallUnifi($id, $habilitada, $nome));
     }
 
+    public function unifiZonasFirewall(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        echo json_encode($this->service->listarZonasFirewallUnifi());
+    }
+
+    public function unifiCriarFirewall(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $dados = [
+            'nome' => trim($_POST['nome'] ?? ''),
+            'acao' => trim($_POST['acao'] ?? ''),
+            'protocolo' => trim($_POST['protocolo'] ?? 'all'),
+            'zona_origem_id' => trim($_POST['zona_origem_id'] ?? ''),
+            'zona_destino_id' => trim($_POST['zona_destino_id'] ?? ''),
+            'ip_origem' => trim($_POST['ip_origem'] ?? ''),
+            'ip_destino' => trim($_POST['ip_destino'] ?? ''),
+            'porta_destino' => trim($_POST['porta_destino'] ?? ''),
+            'habilitada' => ($_POST['habilitada'] ?? '1') === '1',
+        ];
+
+        echo json_encode($this->service->criarPoliticaFirewallUnifi($dados));
+    }
+
+    public function unifiExcluirFirewall(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = trim($_POST['id'] ?? '');
+        $nome = trim($_POST['nome'] ?? '') ?: $id;
+
+        echo json_encode($this->service->excluirPoliticaFirewallUnifi($id, $nome));
+    }
+
     public function salvarIntervaloComunicacao(): void
     {
         AuthMiddleware::checkModulo('ativos_dashboard');

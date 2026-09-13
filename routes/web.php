@@ -979,6 +979,9 @@ $router->post('/ativos/unifi/desbloquear-cliente', [AtivoController::class, 'uni
 $router->post('/ativos/unifi/firewall', [AtivoController::class, 'unifiFirewall']);
 $router->post('/ativos/unifi/clientes-rede', [AtivoController::class, 'unifiClientesRede']);
 $router->post('/ativos/unifi/firewall/alterar', [AtivoController::class, 'unifiAlterarFirewall']);
+$router->post('/ativos/unifi/firewall/zonas', [AtivoController::class, 'unifiZonasFirewall']);
+$router->post('/ativos/unifi/firewall/criar', [AtivoController::class, 'unifiCriarFirewall']);
+$router->post('/ativos/unifi/firewall/excluir', [AtivoController::class, 'unifiExcluirFirewall']);
 $router->post('/ativos/agente/regenerar-chave', [AtivoController::class, 'regenerarChaveAgente']);
 $router->post('/ativos/agente/desativar-chave', [AtivoController::class, 'desativarChaveAgente']);
 $router->post('/ativos/elevacao/credenciais', [AtivoController::class, 'salvarCredenciaisElevacao']);

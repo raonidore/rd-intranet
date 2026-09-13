@@ -1169,6 +1169,9 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                         <input type="checkbox" class="form-check-input" id="campoMostrarRegrasAutomaticasFirewall">
                         <label class="form-check-label small" for="campoMostrarRegrasAutomaticasFirewall">Mostrar regras internas do sistema</label>
                     </div>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="botaoNovaRegraFirewall">
+                        <i class="bi bi-plus-lg"></i> Nova regra
+                    </button>
                     <button type="button" class="btn btn-sm btn-outline-secondary" id="botaoAtualizarFirewallUnifi">
                         <i class="bi bi-arrow-repeat"></i> Atualizar
                     </button>
@@ -1176,7 +1179,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             </div>
             <div class="card-body">
                 <div class="alert alert-warning small mb-3">
-                    <i class="bi bi-exclamation-triangle-fill"></i> Dá pra ativar/desativar uma regra existente pelo interruptor da coluna "Status" -- isso muda o firewall de verdade. Não cria, edita nem remove regra; pra isso, acesse o UniFi Controller diretamente.
+                    <i class="bi bi-exclamation-triangle-fill"></i> Dá pra criar, excluir e ativar/desativar regras por aqui -- isso muda o firewall de verdade. Cobre só o caso comum (zona a zona, com IP/porta opcionais); pra opções avançadas (agendamento, estado de conexão etc.), acesse o UniFi Controller diretamente.
                 </div>
                 <div class="small text-muted mb-3" id="firewallUnifiCarregando"><div class="spinner-border spinner-border-sm"></div> Consultando o Controller...</div>
                 <div class="table-responsive" style="display:none" id="firewallUnifiTabelaWrap">
@@ -1190,12 +1193,82 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                 <th>Agendamento</th>
                                 <th>Hits</th>
                                 <th>Status</th>
+                                <th class="text-end">Ações</th>
                             </tr>
                         </thead>
                         <tbody id="firewallUnifiCorpo"></tbody>
                     </table>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Nova regra de firewall (UniFi Gateway) -->
+    <div class="modal fade" id="modalNovaRegraFirewall" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <form class="modal-content" id="formNovaRegraFirewall">
+                <div class="modal-header">
+                    <h6 class="modal-title">Nova regra de firewall</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-2">
+                        <label class="form-label small mb-1">Nome</label>
+                        <input type="text" class="form-control form-control-sm" id="regraFirewallNomeInput" required>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-6">
+                            <label class="form-label small mb-1">Ação</label>
+                            <select class="form-select form-select-sm" id="regraFirewallAcaoInput">
+                                <option value="BLOCK">Bloquear</option>
+                                <option value="ALLOW">Permitir</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small mb-1">Protocolo</label>
+                            <select class="form-select form-select-sm" id="regraFirewallProtocoloInput">
+                                <option value="all">Qualquer</option>
+                                <option value="tcp">TCP</option>
+                                <option value="udp">UDP</option>
+                                <option value="icmp">ICMP</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-6">
+                            <label class="form-label small mb-1">Zona de origem</label>
+                            <select class="form-select form-select-sm" id="regraFirewallZonaOrigemInput" required></select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small mb-1">IP de origem (opcional)</label>
+                            <input type="text" class="form-control form-control-sm" id="regraFirewallIpOrigemInput" placeholder="Qualquer">
+                        </div>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-6">
+                            <label class="form-label small mb-1">Zona de destino</label>
+                            <select class="form-select form-select-sm" id="regraFirewallZonaDestinoInput" required></select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small mb-1">IP de destino (opcional)</label>
+                            <input type="text" class="form-control form-control-sm" id="regraFirewallIpDestinoInput" placeholder="Qualquer">
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small mb-1">Porta de destino (opcional)</label>
+                        <input type="text" class="form-control form-control-sm" id="regraFirewallPortaDestinoInput" placeholder="Qualquer, ex: 8080">
+                    </div>
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="regraFirewallHabilitadaInput" checked>
+                        <label class="form-check-label small" for="regraFirewallHabilitadaInput">Criar já ativada</label>
+                    </div>
+                    <div class="small text-danger mt-2" id="regraFirewallErro"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-sm btn-outline-primary">Criar regra</button>
+                </div>
+            </form>
         </div>
     </div>
     <?php endif; ?>
@@ -2380,8 +2453,38 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
                         '<input type="checkbox" class="form-check-input botao-alternar-firewall-unifi" role="switch" data-id="' + escapeHtml(r.id) + '" data-nome="' + escapeHtml(r.nome) + '" ' + (r.habilitada ? 'checked' : '') + '>' +
                     '</div>' +
                 '</td>' +
+                '<td class="text-end">' +
+                    (r.personalizada ? '<button type="button" class="btn btn-sm btn-outline-danger botao-excluir-firewall-unifi" data-id="' + escapeHtml(r.id) + '" data-nome="' + escapeHtml(r.nome) + '" title="Excluir regra"><i class="bi bi-trash"></i></button>' : '') +
+                '</td>' +
             '</tr>';
-        }).join('') || '<tr><td colspan="7" class="text-muted small">Nenhuma regra encontrada.</td></tr>';
+        }).join('') || '<tr><td colspan="8" class="text-muted small">Nenhuma regra encontrada.</td></tr>';
+
+        corpo.querySelectorAll('.botao-excluir-firewall-unifi').forEach(function (botao) {
+            botao.addEventListener('click', async function () {
+                const nome = botao.dataset.nome;
+                if (!confirm(`Excluir a regra "${nome}"? Essa ação é feita direto no UniFi Controller e não pode ser desfeita por aqui.`)) return;
+
+                botao.disabled = true;
+                const dados = new URLSearchParams();
+                dados.set('id', botao.dataset.id);
+                dados.set('nome', nome);
+
+                try {
+                    const res = await fetch(<?= json_encode(url('/ativos/unifi/firewall/excluir')) ?>, { method: 'POST', body: dados });
+                    const resultado = await res.json();
+                    if (resultado.success) {
+                        regrasCarregadas = regrasCarregadas.filter(r => r.id !== botao.dataset.id);
+                        renderizar();
+                    } else {
+                        alert(resultado.message || 'Falha ao excluir a regra.');
+                    }
+                } catch (e) {
+                    alert('Erro ao comunicar com o servidor.');
+                } finally {
+                    botao.disabled = false;
+                }
+            });
+        });
 
         corpo.querySelectorAll('.botao-alternar-firewall-unifi').forEach(function (campo) {
             campo.addEventListener('change', async function () {
@@ -2454,6 +2557,72 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
         botaoAtualizar.addEventListener('click', carregar);
     }
     campoMostrarAutomaticas.addEventListener('change', renderizar);
+
+    // Nova regra -- popula as zonas na primeira abertura do modal, cria via POST e recarrega a lista.
+    const botaoNovaRegra = document.getElementById('botaoNovaRegraFirewall');
+    const modalNovaRegraEl = document.getElementById('modalNovaRegraFirewall');
+    const formNovaRegra = document.getElementById('formNovaRegraFirewall');
+    let zonasCarregadas = false;
+
+    async function carregarZonas() {
+        const selects = [document.getElementById('regraFirewallZonaOrigemInput'), document.getElementById('regraFirewallZonaDestinoInput')];
+        const res = await fetch(<?= json_encode(url('/ativos/unifi/firewall/zonas')) ?>, { method: 'POST' });
+        const resultado = await res.json();
+
+        if (!resultado.success) {
+            alert(resultado.message || 'Falha ao consultar as zonas do firewall.');
+            return;
+        }
+
+        const opcoes = resultado.zonas.map(z => '<option value="' + escapeHtml(z.id) + '">' + escapeHtml(z.nome) + '</option>').join('');
+        selects.forEach(s => { s.innerHTML = opcoes; });
+        zonasCarregadas = true;
+    }
+
+    if (botaoNovaRegra && modalNovaRegraEl && formNovaRegra) {
+        botaoNovaRegra.addEventListener('click', async function () {
+            document.getElementById('regraFirewallErro').textContent = '';
+            formNovaRegra.reset();
+            if (!zonasCarregadas) {
+                await carregarZonas();
+            }
+            new bootstrap.Modal(modalNovaRegraEl).show();
+        });
+
+        formNovaRegra.addEventListener('submit', async function (ev) {
+            ev.preventDefault();
+            const erro = document.getElementById('regraFirewallErro');
+            erro.textContent = '';
+
+            const nome = document.getElementById('regraFirewallNomeInput').value.trim();
+            const acao = document.getElementById('regraFirewallAcaoInput').value;
+            const mensagem = acao === 'BLOCK'
+                ? `Criar a regra "${nome}" pra BLOQUEAR tráfego? Isso muda o firewall do UniFi Gateway agora.`
+                : `Criar a regra "${nome}" pra PERMITIR tráfego? Isso muda o firewall do UniFi Gateway agora -- confira as zonas/IP/porta antes de confirmar.`;
+            if (!confirm(mensagem)) return;
+
+            const dados = new URLSearchParams();
+            dados.set('nome', nome);
+            dados.set('acao', acao);
+            dados.set('protocolo', document.getElementById('regraFirewallProtocoloInput').value);
+            dados.set('zona_origem_id', document.getElementById('regraFirewallZonaOrigemInput').value);
+            dados.set('zona_destino_id', document.getElementById('regraFirewallZonaDestinoInput').value);
+            dados.set('ip_origem', document.getElementById('regraFirewallIpOrigemInput').value.trim());
+            dados.set('ip_destino', document.getElementById('regraFirewallIpDestinoInput').value.trim());
+            dados.set('porta_destino', document.getElementById('regraFirewallPortaDestinoInput').value.trim());
+            dados.set('habilitada', document.getElementById('regraFirewallHabilitadaInput').checked ? '1' : '0');
+
+            const res = await fetch(<?= json_encode(url('/ativos/unifi/firewall/criar')) ?>, { method: 'POST', body: dados });
+            const resultado = await res.json();
+
+            if (resultado.success) {
+                bootstrap.Modal.getOrCreateInstance(modalNovaRegraEl).hide();
+                carregar();
+            } else {
+                erro.textContent = resultado.message || 'Falha ao criar a regra.';
+            }
+        });
+    }
 })();
 
 (function () {
