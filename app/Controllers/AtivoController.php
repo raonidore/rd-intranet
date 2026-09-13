@@ -856,6 +856,18 @@ class AtivoController extends Controller
         echo json_encode($this->service->listarClientesRedeUnifi());
     }
 
+    public function unifiAlterarFirewall(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = trim($_POST['id'] ?? '');
+        $nome = trim($_POST['nome'] ?? '') ?: $id;
+        $habilitada = ($_POST['habilitada'] ?? '') === '1';
+
+        echo json_encode($this->service->alterarPoliticaFirewallUnifi($id, $habilitada, $nome));
+    }
+
     public function salvarIntervaloComunicacao(): void
     {
         AuthMiddleware::checkModulo('ativos_dashboard');

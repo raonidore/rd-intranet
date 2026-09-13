@@ -2709,10 +2709,22 @@ class AtivoService
         return $resultado;
     }
 
-    /** Regras de firewall (zone-based) do UniFi Controller -- só leitura, site inteiro (não é por Ativo específico). */
+    /** Regras de firewall (zone-based) do UniFi Controller -- site inteiro (não é por Ativo específico). */
     public function listarFirewallUnifi(): array
     {
         return (new UnifiService())->listarPoliticasFirewall();
+    }
+
+    /** Liga/desliga uma regra de firewall existente -- ação real no Controller, por isso vira registro de auditoria (igual às ações remotas de Ativos). */
+    public function alterarPoliticaFirewallUnifi(string $policyId, bool $habilitada, string $nomeAuditoria): array
+    {
+        $resultado = (new UnifiService())->alterarPoliticaFirewall($policyId, $habilitada);
+
+        if ($resultado['success']) {
+            AuditService::registrar('Ativos', 'UniFi - Regra de firewall', "Regra \"{$nomeAuditoria}\" " . ($habilitada ? 'ativada' : 'desativada') . ' via UniFi Controller.');
+        }
+
+        return $resultado;
     }
 
     /** Todos os clientes conectados na rede (com fio + Wi-Fi) via UniFi Controller -- só leitura, site inteiro. */

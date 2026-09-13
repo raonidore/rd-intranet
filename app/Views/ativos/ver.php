@@ -1159,7 +1159,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
         </div>
     </div>
 
-    <!-- Firewall (UniFi Gateway, zone-based) -- só leitura -->
+    <!-- Firewall (UniFi Gateway, zone-based) -->
     <div class="tab-pane fade" id="abaFirewallUnifi">
         <div class="card border-0 shadow-sm">
             <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -1175,8 +1175,8 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                 </div>
             </div>
             <div class="card-body">
-                <div class="alert alert-secondary small mb-3">
-                    <i class="bi bi-info-circle"></i> Só leitura por aqui -- pra alterar uma regra, acesse o UniFi Controller diretamente.
+                <div class="alert alert-warning small mb-3">
+                    <i class="bi bi-exclamation-triangle-fill"></i> Dá pra ativar/desativar uma regra existente pelo interruptor da coluna "Status" -- isso muda o firewall de verdade. Não cria, edita nem remove regra; pra isso, acesse o UniFi Controller diretamente.
                 </div>
                 <div class="small text-muted mb-3" id="firewallUnifiCarregando"><div class="spinner-border spinner-border-sm"></div> Consultando o Controller...</div>
                 <div class="table-responsive" style="display:none" id="firewallUnifiTabelaWrap">
@@ -2342,7 +2342,7 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
     }
 })();
 
-// Firewall (UniFi Gateway, zone-based) -- só leitura, carregado sob demanda.
+// Firewall (UniFi Gateway, zone-based) -- lista + liga/desliga regra existente, carregado sob demanda.
 (function () {
     const nav = document.querySelector('.nav-link[data-bs-target="#abaFirewallUnifi"]');
     if (!nav) return;
@@ -2375,9 +2375,52 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
                 '<td>' + escapeHtml(r.zona_destino || '—') + (r.porta_destino ? ' :' + escapeHtml(String(r.porta_destino)) : '') + '</td>' +
                 '<td>' + (r.agendamento === 'ALWAYS' ? 'Sempre' : escapeHtml(r.agendamento)) + '</td>' +
                 '<td>' + (r.hits != null ? r.hits.toLocaleString('pt-BR') : '—') + '</td>' +
-                '<td>' + (r.habilitada ? '<span class="badge text-bg-success">Ativa</span>' : '<span class="badge text-bg-secondary">Desativada</span>') + '</td>' +
+                '<td>' +
+                    '<div class="form-check form-switch mb-0">' +
+                        '<input type="checkbox" class="form-check-input botao-alternar-firewall-unifi" role="switch" data-id="' + escapeHtml(r.id) + '" data-nome="' + escapeHtml(r.nome) + '" ' + (r.habilitada ? 'checked' : '') + '>' +
+                    '</div>' +
+                '</td>' +
             '</tr>';
         }).join('') || '<tr><td colspan="7" class="text-muted small">Nenhuma regra encontrada.</td></tr>';
+
+        corpo.querySelectorAll('.botao-alternar-firewall-unifi').forEach(function (campo) {
+            campo.addEventListener('change', async function () {
+                const habilitarPara = campo.checked;
+                const nome = campo.dataset.nome;
+
+                const mensagem = habilitarPara
+                    ? `Ativar a regra "${nome}"? Isso muda o firewall do UniFi Gateway agora.`
+                    : `Desativar a regra "${nome}"? Isso muda o firewall do UniFi Gateway agora -- se essa regra bloqueava algo importante, desativar pode expor a rede; se ela permitia algo, desativar pode cortar esse acesso.`;
+
+                if (!confirm(mensagem)) {
+                    campo.checked = !habilitarPara;
+                    return;
+                }
+
+                campo.disabled = true;
+                const dados = new URLSearchParams();
+                dados.set('id', campo.dataset.id);
+                dados.set('nome', nome);
+                dados.set('habilitada', habilitarPara ? '1' : '0');
+
+                try {
+                    const res = await fetch(<?= json_encode(url('/ativos/unifi/firewall/alterar')) ?>, { method: 'POST', body: dados });
+                    const resultado = await res.json();
+                    if (!resultado.success) {
+                        alert(resultado.message || 'Falha ao alterar a regra.');
+                        campo.checked = !habilitarPara;
+                    } else {
+                        const regra = regrasCarregadas.find(r => r.id === campo.dataset.id);
+                        if (regra) regra.habilitada = habilitarPara;
+                    }
+                } catch (e) {
+                    alert('Erro ao comunicar com o servidor.');
+                    campo.checked = !habilitarPara;
+                } finally {
+                    campo.disabled = false;
+                }
+            });
+        });
     }
 
     async function carregar() {

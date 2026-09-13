@@ -496,6 +496,7 @@ class UnifiService
         foreach ($resultado['dados'] ?? [] as $p) {
             $nome = $p['name'] ?? '';
             $regras[] = [
+                'id' => $p['_id'] ?? '',
                 'nome' => $nome,
                 'acao' => $p['action'] ?? '',
                 'habilitada' => (bool)($p['enabled'] ?? false),
@@ -512,6 +513,50 @@ class UnifiService
         }
 
         return ['success' => true, 'regras' => $regras];
+    }
+
+    /**
+     * Liga/desliga uma regra de firewall existente -- confirmado ao vivo que
+     * o Controller espera o objeto INTEIRO da regra no PUT (não um patch
+     * parcial só com "enabled"), por isso busca a lista de novo pra pegar o
+     * objeto completo antes de mudar só o campo `enabled` e mandar de volta.
+     * Não cria, não remove, não muda ação/zona/porta -- só ativa/desativa.
+     */
+    public function alterarPoliticaFirewall(string $policyId, bool $habilitada): array
+    {
+        $ref = $this->siteRefAtual();
+
+        if ($ref === null) {
+            return ['success' => false, 'message' => 'Site do UniFi Controller ainda não identificado -- use "Testar conexão" em Integrações > UniFi.'];
+        }
+
+        $lista = $this->chamarApi('GET', "/proxy/network/v2/api/site/{$ref}/firewall-policies");
+
+        if (!$lista['sucesso']) {
+            return ['success' => false, 'message' => $lista['mensagem']];
+        }
+
+        $politica = null;
+        foreach ($lista['dados'] ?? [] as $p) {
+            if (($p['_id'] ?? '') === $policyId) {
+                $politica = $p;
+                break;
+            }
+        }
+
+        if ($politica === null) {
+            return ['success' => false, 'message' => 'Regra não encontrada -- pode ter sido removida ou alterada direto no Controller. Atualize a lista.'];
+        }
+
+        $politica['enabled'] = $habilitada;
+
+        $resultado = $this->chamarApi('PUT', "/proxy/network/v2/api/site/{$ref}/firewall-policies/{$policyId}", $politica);
+
+        if (!$resultado['sucesso']) {
+            return ['success' => false, 'message' => $resultado['mensagem']];
+        }
+
+        return ['success' => true, 'message' => $habilitada ? "Regra \"{$politica['name']}\" ativada." : "Regra \"{$politica['name']}\" desativada."];
     }
 
     /**
