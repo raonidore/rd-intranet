@@ -853,6 +853,9 @@ class UnifiService
                 'ssid' => $r['essid'] ?: '(oculta)',
                 'bssid' => $bssid,
                 'canal' => $r['channel'] ?? null,
+                // Canal <= 14 é sempre 2.4GHz, senão é 5GHz -- mais confiável
+                // que tentar decifrar o enum "band" cru ("ng", "na" etc.).
+                'banda' => isset($r['channel']) && (int)$r['channel'] <= 14 ? '2.4 GHz' : '5 GHz',
                 'sinal_dbm' => $sinal,
                 'seguranca' => $r['security'] ?? '',
                 'suspeita' => (bool)($r['is_rogue'] ?? false),

@@ -1199,16 +1199,16 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                 <div class="small text-muted mb-3" id="clientesRedeUnifiCarregando"><div class="spinner-border spinner-border-sm"></div> Consultando o Controller...</div>
                 <div class="table-responsive" style="display:none" id="clientesRedeUnifiTabelaWrap">
                     <table class="table table-sm align-middle mb-0">
-                        <thead>
+                        <thead id="clientesRedeUnifiThead">
                             <tr>
-                                <th>Cliente</th>
-                                <th>IP</th>
-                                <th>Rede</th>
-                                <th>Conexão</th>
-                                <th>Baixado</th>
-                                <th>Upload</th>
-                                <th>Total</th>
-                                <th>Status</th>
+                                <th data-campo="nome">Cliente</th>
+                                <th data-campo="ip">IP</th>
+                                <th data-campo="rede">Rede</th>
+                                <th data-campo="com_fio" data-tipo="numero">Conexão</th>
+                                <th data-campo="rx_bytes" data-tipo="numero">Baixado</th>
+                                <th data-campo="tx_bytes" data-tipo="numero">Upload</th>
+                                <th data-campo="total_bytes" data-tipo="numero">Total</th>
+                                <th data-campo="status">Status</th>
                             </tr>
                         </thead>
                         <tbody id="clientesRedeUnifiCorpo"></tbody>
@@ -1227,19 +1227,39 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             <div class="card-body">
                 <div class="form-text mb-2">Redes vizinhas vistas na última hora pelos próprios rádios dos pontos de acesso (passivo, não é varredura ativa) -- uma linha por rede, mesmo que vários APs a enxerguem.</div>
                 <div class="small text-muted mb-3" id="redesVizinhasUnifiCarregando"><div class="spinner-border spinner-border-sm"></div> Consultando o Controller...</div>
-                <div class="table-responsive" style="display:none" id="redesVizinhasUnifiTabelaWrap">
-                    <table class="table table-sm align-middle mb-0">
-                        <thead>
-                            <tr>
-                                <th>SSID</th>
-                                <th>Canal</th>
-                                <th>Sinal</th>
-                                <th>Segurança</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody id="redesVizinhasUnifiCorpo"></tbody>
-                    </table>
+                <div id="redesVizinhasUnifiConteudo" style="display:none">
+                    <div class="mb-3">
+                        <div class="small text-muted mb-1">Canais mais usados pelas redes vizinhas (2.4GHz -- prefira o seu AP num canal livre entre 1, 6 e 11)</div>
+                        <div class="d-flex flex-wrap gap-1" id="redesVizinhasUnifiCanais"></div>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <input type="text" class="form-control form-control-sm" id="redesVizinhasUnifiBusca" placeholder="Filtrar por nome da rede (SSID)...">
+                        </div>
+                        <div class="col-md-3">
+                            <select class="form-select form-select-sm" id="redesVizinhasUnifiFiltroBanda">
+                                <option value="">Todas as bandas</option>
+                                <option value="2.4 GHz">2.4 GHz</option>
+                                <option value="5 GHz">5 GHz</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3 d-flex align-items-center small text-muted" id="redesVizinhasUnifiContador"></div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead id="redesVizinhasUnifiThead">
+                                <tr>
+                                    <th data-campo="ssid">SSID</th>
+                                    <th data-campo="banda">Banda</th>
+                                    <th data-campo="canal" data-tipo="numero">Canal</th>
+                                    <th data-campo="sinal_dbm" data-tipo="numero">Sinal</th>
+                                    <th data-campo="seguranca">Segurança</th>
+                                    <th data-campo="suspeita" data-tipo="numero">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="redesVizinhasUnifiCorpo"></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -2274,6 +2294,61 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
 </div>
 
 <script>
+/**
+ * Deixa clicável cada <th data-campo="..."> de theadEl -- clique ordena a
+ * tabela por aquele campo (clicar de novo inverte asc/desc), reaproveitado
+ * por qualquer tabela carregada via JS (Clientes/Firewall/Redes vizinhas
+ * etc.). `data-tipo="numero"` compara como número; qualquer outro valor
+ * (ou ausente) compara como texto (case-insensitive).
+ *
+ * @param {HTMLElement} theadEl
+ * @param {() => any[]} obterDados
+ * @param {(dados: any[]) => void} renderizar
+ */
+function configurarOrdenacaoTabela(theadEl, obterDados, renderizar) {
+    let campoAtual = null;
+    let ascendente = true;
+
+    theadEl.querySelectorAll('th[data-campo]').forEach(function (th) {
+        th.style.cursor = 'pointer';
+        th.style.userSelect = 'none';
+        const icone = document.createElement('i');
+        icone.className = 'bi bi-arrow-down-up small text-muted ms-1';
+        th.appendChild(icone);
+
+        th.addEventListener('click', function () {
+            const campo = th.dataset.campo;
+            const tipo = th.dataset.tipo || 'texto';
+
+            ascendente = (campoAtual === campo) ? !ascendente : true;
+            campoAtual = campo;
+
+            const dados = obterDados();
+            dados.sort(function (a, b) {
+                let va = a[campo];
+                let vb = b[campo];
+                if (tipo === 'numero') {
+                    va = (va == null) ? -Infinity : va;
+                    vb = (vb == null) ? -Infinity : vb;
+                    return ascendente ? (va - vb) : (vb - va);
+                }
+                va = (va == null ? '' : va).toString().toLowerCase();
+                vb = (vb == null ? '' : vb).toString().toLowerCase();
+                if (va < vb) return ascendente ? -1 : 1;
+                if (va > vb) return ascendente ? 1 : -1;
+                return 0;
+            });
+
+            theadEl.querySelectorAll('th[data-campo] i').forEach(function (i2) {
+                i2.className = 'bi bi-arrow-down-up small text-muted ms-1';
+            });
+            icone.className = 'bi ' + (ascendente ? 'bi-sort-up' : 'bi-sort-down') + ' ms-1';
+
+            renderizar(dados);
+        });
+    });
+}
+
 // Popup de confirmação "high-tech" (mesmo visual dos painéis de console
 // já usados no Explorador de Arquivos/Gerenciador de Processos) --
 // reaproveitado por qualquer ação que reescreve algo salvo. Cada
@@ -2628,8 +2703,10 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
     const carregando = document.getElementById('clientesRedeUnifiCarregando');
     const tabelaWrap = document.getElementById('clientesRedeUnifiTabelaWrap');
     const corpo = document.getElementById('clientesRedeUnifiCorpo');
+    const thead = document.getElementById('clientesRedeUnifiThead');
     const botaoAtualizar = document.getElementById('botaoAtualizarClientesRedeUnifi');
     let carregadoUmaVez = false;
+    let clientesCarregados = [];
 
     function escapeHtml(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -2641,6 +2718,21 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
         if (!bytes) return '0 MB';
         const mb = bytes / (1024 * 1024);
         return mb >= 1024 ? (mb / 1024).toFixed(2) + ' GB' : mb.toFixed(1) + ' MB';
+    }
+
+    function renderizar(clientes) {
+        corpo.innerHTML = clientes.map(function (c) {
+            return '<tr>' +
+                '<td>' + escapeHtml(c.nome) + '</td>' +
+                '<td>' + escapeHtml(c.ip) + '</td>' +
+                '<td>' + escapeHtml(c.rede) + '</td>' +
+                '<td>' + (c.com_fio ? '<i class="bi bi-ethernet"></i> Cabo' : '<i class="bi bi-wifi"></i> Wi-Fi') + '</td>' +
+                '<td>' + formatarBytes(c.rx_bytes) + '</td>' +
+                '<td>' + formatarBytes(c.tx_bytes) + '</td>' +
+                '<td>' + formatarBytes(c.total_bytes) + '</td>' +
+                '<td>' + (c.bloqueado ? '<span class="badge text-bg-danger">Bloqueado</span>' : '<span class="badge text-bg-success">' + escapeHtml(c.status || 'Online') + '</span>') + '</td>' +
+            '</tr>';
+        }).join('') || '<tr><td colspan="8" class="text-muted small">Nenhum cliente conectado agora.</td></tr>';
     }
 
     async function carregar() {
@@ -2656,22 +2748,17 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
             return;
         }
 
-        corpo.innerHTML = resultado.clientes.map(function (c) {
-            return '<tr>' +
-                '<td>' + escapeHtml(c.nome) + '</td>' +
-                '<td>' + escapeHtml(c.ip) + '</td>' +
-                '<td>' + escapeHtml(c.rede) + '</td>' +
-                '<td>' + (c.com_fio ? '<i class="bi bi-ethernet"></i> Cabo' : '<i class="bi bi-wifi"></i> Wi-Fi') + '</td>' +
-                '<td>' + formatarBytes(c.rx_bytes) + '</td>' +
-                '<td>' + formatarBytes(c.tx_bytes) + '</td>' +
-                '<td>' + formatarBytes(c.total_bytes) + '</td>' +
-                '<td>' + (c.bloqueado ? '<span class="badge text-bg-danger">Bloqueado</span>' : '<span class="badge text-bg-success">' + escapeHtml(c.status || 'Online') + '</span>') + '</td>' +
-            '</tr>';
-        }).join('') || '<tr><td colspan="8" class="text-muted small">Nenhum cliente conectado agora.</td></tr>';
+        clientesCarregados = resultado.clientes;
+        renderizar(clientesCarregados);
 
         carregando.style.display = 'none';
         tabelaWrap.style.display = '';
     }
+
+    configurarOrdenacaoTabela(thead, function () { return clientesCarregados; }, function (ordenados) {
+        clientesCarregados = ordenados;
+        renderizar(ordenados);
+    });
 
     nav.addEventListener('shown.bs.tab', function () {
         if (!carregadoUmaVez) {
@@ -2685,12 +2772,20 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
     }
 })();
 
-// Redes Wi-Fi vizinhas detectadas (UniFi Gateway) -- carregado junto com a aba Clientes.
+// Redes Wi-Fi vizinhas detectadas (UniFi Gateway) -- carregado junto com a
+// aba Clientes. Costuma vir com muita rede (prédio denso de Wi-Fi), por
+// isso tem resumo de canal + filtro por nome/banda + ordenação, em vez de
+// só despejar tudo numa tabela enorme.
 (function () {
     const nav = document.querySelector('.nav-link[data-bs-target="#abaClientesRedeUnifi"]');
     const carregando = document.getElementById('redesVizinhasUnifiCarregando');
-    const tabelaWrap = document.getElementById('redesVizinhasUnifiTabelaWrap');
+    const conteudo = document.getElementById('redesVizinhasUnifiConteudo');
     const corpo = document.getElementById('redesVizinhasUnifiCorpo');
+    const thead = document.getElementById('redesVizinhasUnifiThead');
+    const canaisEl = document.getElementById('redesVizinhasUnifiCanais');
+    const contadorEl = document.getElementById('redesVizinhasUnifiContador');
+    const campoBusca = document.getElementById('redesVizinhasUnifiBusca');
+    const campoFiltroBanda = document.getElementById('redesVizinhasUnifiFiltroBanda');
     const botaoAtualizar = document.getElementById('botaoAtualizarRedesVizinhasUnifi');
     if (!nav || !carregando) return;
 
@@ -2700,12 +2795,85 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
         });
     }
 
+    // -70dBm ou mais forte = sinal bom (verde); até -85 = razoável (amarelo); mais fraco = ruim (cinza) -- faixas usuais de site survey Wi-Fi.
+    function corSinal(dbm) {
+        if (dbm == null) return 'secondary';
+        if (dbm >= -70) return 'success';
+        if (dbm >= -85) return 'warning';
+        return 'secondary';
+    }
+
+    function barraSinal(dbm) {
+        if (dbm == null) return '';
+        const pct = Math.max(0, Math.min(100, Math.round((dbm + 100) * (100 / 60))));
+        return '<div class="progress" style="height:4px;width:56px;display:inline-block;vertical-align:middle;margin-right:6px">' +
+            '<div class="progress-bar bg-' + corSinal(dbm) + '" style="width:' + pct + '%"></div>' +
+        '</div>';
+    }
+
+    let redesCarregadas = [];
+
+    function redesFiltradas() {
+        const busca = campoBusca.value.trim().toLowerCase();
+        const banda = campoFiltroBanda.value;
+
+        return redesCarregadas.filter(function (r) {
+            if (banda && r.banda !== banda) return false;
+            if (busca && r.ssid.toLowerCase().indexOf(busca) === -1) return false;
+            return true;
+        });
+    }
+
+    function renderizarCanais() {
+        const contagem = {};
+        redesCarregadas.forEach(function (r) {
+            if (r.canal == null) return;
+            contagem[r.canal] = (contagem[r.canal] || 0) + 1;
+        });
+
+        const canais = Object.keys(contagem).map(Number).sort(function (a, b) { return a - b; });
+        const maiorContagem = Math.max(1, ...Object.values(contagem));
+
+        canaisEl.innerHTML = canais.map(function (canal) {
+            const qtd = contagem[canal];
+            const intensidade = qtd / maiorContagem;
+            const cor = intensidade > 0.66 ? 'danger' : (intensidade > 0.33 ? 'warning' : 'light border');
+            return '<span class="badge text-bg-' + cor + '" title="' + qtd + ' rede(s) no canal ' + canal + '">Canal ' + canal + ' -- ' + qtd + '</span>';
+        }).join('') || '<span class="text-muted small">—</span>';
+    }
+
+    function renderizarTabela(redes) {
+        corpo.innerHTML = redes.map(function (r) {
+            return '<tr>' +
+                '<td>' + escapeHtml(r.ssid) + '</td>' +
+                '<td>' + escapeHtml(r.banda || '—') + '</td>' +
+                '<td>' + escapeHtml(String(r.canal ?? '—')) + '</td>' +
+                '<td>' + barraSinal(r.sinal_dbm) + (r.sinal_dbm != null ? r.sinal_dbm + ' dBm' : '—') + '</td>' +
+                '<td>' + escapeHtml(r.seguranca || '—') + '</td>' +
+                '<td>' + (r.suspeita ? '<span class="badge text-bg-danger">Suspeita</span>' : '<span class="badge text-bg-light border">Vizinha</span>') + '</td>' +
+            '</tr>';
+        }).join('') || '<tr><td colspan="6" class="text-muted small">Nenhuma rede encontrada com esse filtro.</td></tr>';
+
+        contadorEl.textContent = redes.length + ' de ' + redesCarregadas.length + ' rede(s)';
+    }
+
+    function aplicarFiltroEOrdenar() {
+        renderizarTabela(redesFiltradas());
+    }
+
+    configurarOrdenacaoTabela(thead, redesFiltradas, function (ordenados) {
+        renderizarTabela(ordenados);
+    });
+
+    campoBusca.addEventListener('input', aplicarFiltroEOrdenar);
+    campoFiltroBanda.addEventListener('change', aplicarFiltroEOrdenar);
+
     let carregadoUmaVez = false;
 
     async function carregar() {
         carregando.style.display = '';
         carregando.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Consultando o Controller...';
-        tabelaWrap.style.display = 'none';
+        conteudo.style.display = 'none';
 
         const res = await fetch(<?= json_encode(url('/ativos/unifi/redes-vizinhas')) ?>, { method: 'POST' });
         const resultado = await res.json();
@@ -2715,18 +2883,12 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
             return;
         }
 
-        corpo.innerHTML = resultado.redes.map(function (r) {
-            return '<tr>' +
-                '<td>' + escapeHtml(r.ssid) + '</td>' +
-                '<td>' + escapeHtml(String(r.canal ?? '—')) + '</td>' +
-                '<td>' + (r.sinal_dbm != null ? r.sinal_dbm + ' dBm' : '—') + '</td>' +
-                '<td>' + escapeHtml(r.seguranca || '—') + '</td>' +
-                '<td>' + (r.suspeita ? '<span class="badge text-bg-danger">Suspeita</span>' : '<span class="badge text-bg-light border">Vizinha</span>') + '</td>' +
-            '</tr>';
-        }).join('') || '<tr><td colspan="5" class="text-muted small">Nenhuma rede vizinha detectada.</td></tr>';
+        redesCarregadas = resultado.redes;
+        renderizarCanais();
+        aplicarFiltroEOrdenar();
 
         carregando.style.display = 'none';
-        tabelaWrap.style.display = '';
+        conteudo.style.display = '';
     }
 
     nav.addEventListener('shown.bs.tab', function () {
