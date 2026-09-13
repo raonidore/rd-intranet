@@ -976,6 +976,8 @@ $router->post('/ativos/intelbras-dvr/seguranca/alerta-login-falho', [AtivoContro
 $router->post('/ativos/unifi/desconectar-cliente', [AtivoController::class, 'unifiDesconectarCliente']);
 $router->post('/ativos/unifi/bloquear-cliente', [AtivoController::class, 'unifiBloquearCliente']);
 $router->post('/ativos/unifi/desbloquear-cliente', [AtivoController::class, 'unifiDesbloquearCliente']);
+$router->post('/ativos/unifi/firewall', [AtivoController::class, 'unifiFirewall']);
+$router->post('/ativos/unifi/clientes-rede', [AtivoController::class, 'unifiClientesRede']);
 $router->post('/ativos/agente/regenerar-chave', [AtivoController::class, 'regenerarChaveAgente']);
 $router->post('/ativos/agente/desativar-chave', [AtivoController::class, 'desativarChaveAgente']);
 $router->post('/ativos/elevacao/credenciais', [AtivoController::class, 'salvarCredenciaisElevacao']);

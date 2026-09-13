@@ -309,6 +309,18 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             <i class="bi bi-diagram-3"></i> Rede/WAN
         </button>
     </li>
+    <?php if ((new UnifiService())->configurado()): ?>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaClientesRedeUnifi" type="button">
+            <i class="bi bi-hdd-network"></i> Clientes
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaFirewallUnifi" type="button">
+            <i class="bi bi-shield-lock"></i> Firewall
+        </button>
+    </li>
+    <?php endif; ?>
     <?php endif; ?>
     <?php if (($ativo['tipo_slug'] ?? '') === 'dvr_nvr'): ?>
     <?php $canaisDvr = $detalhes['dvr_canais'] ?? []; ?>
@@ -1113,6 +1125,80 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             </div>
         </div>
     </div>
+
+    <?php if ((new UnifiService())->configurado()): ?>
+    <!-- Clientes da rede (UniFi Gateway) -- lista completa, com fio + Wi-Fi, só leitura -->
+    <div class="tab-pane fade" id="abaClientesRedeUnifi">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <strong>Clientes conectados na rede</strong>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="botaoAtualizarClientesRedeUnifi">
+                    <i class="bi bi-arrow-repeat"></i> Atualizar
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="small text-muted mb-3" id="clientesRedeUnifiCarregando"><div class="spinner-border spinner-border-sm"></div> Consultando o Controller...</div>
+                <div class="table-responsive" style="display:none" id="clientesRedeUnifiTabelaWrap">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Cliente</th>
+                                <th>IP</th>
+                                <th>Rede</th>
+                                <th>Conexão</th>
+                                <th>Baixado</th>
+                                <th>Upload</th>
+                                <th>Total</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="clientesRedeUnifiCorpo"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firewall (UniFi Gateway, zone-based) -- só leitura -->
+    <div class="tab-pane fade" id="abaFirewallUnifi">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <strong>Regras de firewall</strong>
+                <div class="d-flex align-items-center gap-3">
+                    <div class="form-check form-switch mb-0">
+                        <input type="checkbox" class="form-check-input" id="campoMostrarRegrasAutomaticasFirewall">
+                        <label class="form-check-label small" for="campoMostrarRegrasAutomaticasFirewall">Mostrar regras internas do sistema</label>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="botaoAtualizarFirewallUnifi">
+                        <i class="bi bi-arrow-repeat"></i> Atualizar
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-secondary small mb-3">
+                    <i class="bi bi-info-circle"></i> Só leitura por aqui -- pra alterar uma regra, acesse o UniFi Controller diretamente.
+                </div>
+                <div class="small text-muted mb-3" id="firewallUnifiCarregando"><div class="spinner-border spinner-border-sm"></div> Consultando o Controller...</div>
+                <div class="table-responsive" style="display:none" id="firewallUnifiTabelaWrap">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Regra</th>
+                                <th>Ação</th>
+                                <th>De</th>
+                                <th>Para</th>
+                                <th>Agendamento</th>
+                                <th>Hits</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="firewallUnifiCorpo"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
     <?php endif; ?>
 
     <?php if (($ativo['tipo_slug'] ?? '') === 'dvr_nvr'): ?>
@@ -2189,6 +2275,142 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
             }
         });
     });
+})();
+
+// Clientes da rede (UniFi Gateway) -- lista site inteira (com fio + Wi-Fi), só leitura, carregada sob demanda.
+(function () {
+    const nav = document.querySelector('.nav-link[data-bs-target="#abaClientesRedeUnifi"]');
+    if (!nav) return;
+
+    const carregando = document.getElementById('clientesRedeUnifiCarregando');
+    const tabelaWrap = document.getElementById('clientesRedeUnifiTabelaWrap');
+    const corpo = document.getElementById('clientesRedeUnifiCorpo');
+    const botaoAtualizar = document.getElementById('botaoAtualizarClientesRedeUnifi');
+    let carregadoUmaVez = false;
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    function formatarBytes(bytes) {
+        if (!bytes) return '0 MB';
+        const mb = bytes / (1024 * 1024);
+        return mb >= 1024 ? (mb / 1024).toFixed(2) + ' GB' : mb.toFixed(1) + ' MB';
+    }
+
+    async function carregar() {
+        carregando.style.display = '';
+        carregando.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Consultando o Controller...';
+        tabelaWrap.style.display = 'none';
+
+        const res = await fetch(<?= json_encode(url('/ativos/unifi/clientes-rede')) ?>, { method: 'POST' });
+        const resultado = await res.json();
+
+        if (!resultado.success) {
+            carregando.innerHTML = '<span class="text-danger">' + escapeHtml(resultado.message || 'Falha ao consultar clientes.') + '</span>';
+            return;
+        }
+
+        corpo.innerHTML = resultado.clientes.map(function (c) {
+            return '<tr>' +
+                '<td>' + escapeHtml(c.nome) + '</td>' +
+                '<td>' + escapeHtml(c.ip) + '</td>' +
+                '<td>' + escapeHtml(c.rede) + '</td>' +
+                '<td>' + (c.com_fio ? '<i class="bi bi-ethernet"></i> Cabo' : '<i class="bi bi-wifi"></i> Wi-Fi') + '</td>' +
+                '<td>' + formatarBytes(c.rx_bytes) + '</td>' +
+                '<td>' + formatarBytes(c.tx_bytes) + '</td>' +
+                '<td>' + formatarBytes(c.total_bytes) + '</td>' +
+                '<td>' + (c.bloqueado ? '<span class="badge text-bg-danger">Bloqueado</span>' : '<span class="badge text-bg-success">' + escapeHtml(c.status || 'Online') + '</span>') + '</td>' +
+            '</tr>';
+        }).join('') || '<tr><td colspan="8" class="text-muted small">Nenhum cliente conectado agora.</td></tr>';
+
+        carregando.style.display = 'none';
+        tabelaWrap.style.display = '';
+    }
+
+    nav.addEventListener('shown.bs.tab', function () {
+        if (!carregadoUmaVez) {
+            carregadoUmaVez = true;
+            carregar();
+        }
+    });
+
+    if (botaoAtualizar) {
+        botaoAtualizar.addEventListener('click', carregar);
+    }
+})();
+
+// Firewall (UniFi Gateway, zone-based) -- só leitura, carregado sob demanda.
+(function () {
+    const nav = document.querySelector('.nav-link[data-bs-target="#abaFirewallUnifi"]');
+    if (!nav) return;
+
+    const carregando = document.getElementById('firewallUnifiCarregando');
+    const tabelaWrap = document.getElementById('firewallUnifiTabelaWrap');
+    const corpo = document.getElementById('firewallUnifiCorpo');
+    const botaoAtualizar = document.getElementById('botaoAtualizarFirewallUnifi');
+    const campoMostrarAutomaticas = document.getElementById('campoMostrarRegrasAutomaticasFirewall');
+    let carregadoUmaVez = false;
+    let regrasCarregadas = [];
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    function renderizar() {
+        const mostrarTudo = campoMostrarAutomaticas.checked;
+        const filtradas = mostrarTudo ? regrasCarregadas : regrasCarregadas.filter(r => !r.automatica);
+
+        corpo.innerHTML = filtradas.map(function (r) {
+            const acaoCor = r.acao === 'ALLOW' ? 'success' : (r.acao === 'BLOCK' ? 'danger' : 'secondary');
+            const acaoTexto = r.acao === 'ALLOW' ? 'Permitir' : (r.acao === 'BLOCK' ? 'Bloquear' : escapeHtml(r.acao));
+            return '<tr>' +
+                '<td>' + escapeHtml(r.nome) + (r.personalizada ? ' <span class="badge text-bg-info">personalizada</span>' : '') + '</td>' +
+                '<td><span class="badge text-bg-' + acaoCor + '">' + acaoTexto + '</span></td>' +
+                '<td>' + escapeHtml(r.zona_origem || '—') + '</td>' +
+                '<td>' + escapeHtml(r.zona_destino || '—') + (r.porta_destino ? ' :' + escapeHtml(String(r.porta_destino)) : '') + '</td>' +
+                '<td>' + (r.agendamento === 'ALWAYS' ? 'Sempre' : escapeHtml(r.agendamento)) + '</td>' +
+                '<td>' + (r.hits != null ? r.hits.toLocaleString('pt-BR') : '—') + '</td>' +
+                '<td>' + (r.habilitada ? '<span class="badge text-bg-success">Ativa</span>' : '<span class="badge text-bg-secondary">Desativada</span>') + '</td>' +
+            '</tr>';
+        }).join('') || '<tr><td colspan="7" class="text-muted small">Nenhuma regra encontrada.</td></tr>';
+    }
+
+    async function carregar() {
+        carregando.style.display = '';
+        carregando.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Consultando o Controller...';
+        tabelaWrap.style.display = 'none';
+
+        const res = await fetch(<?= json_encode(url('/ativos/unifi/firewall')) ?>, { method: 'POST' });
+        const resultado = await res.json();
+
+        if (!resultado.success) {
+            carregando.innerHTML = '<span class="text-danger">' + escapeHtml(resultado.message || 'Falha ao consultar o firewall.') + '</span>';
+            return;
+        }
+
+        regrasCarregadas = resultado.regras;
+        renderizar();
+
+        carregando.style.display = 'none';
+        tabelaWrap.style.display = '';
+    }
+
+    nav.addEventListener('shown.bs.tab', function () {
+        if (!carregadoUmaVez) {
+            carregadoUmaVez = true;
+            carregar();
+        }
+    });
+
+    if (botaoAtualizar) {
+        botaoAtualizar.addEventListener('click', carregar);
+    }
+    campoMostrarAutomaticas.addEventListener('change', renderizar);
 })();
 
 (function () {

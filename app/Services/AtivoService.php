@@ -2709,6 +2709,18 @@ class AtivoService
         return $resultado;
     }
 
+    /** Regras de firewall (zone-based) do UniFi Controller -- só leitura, site inteiro (não é por Ativo específico). */
+    public function listarFirewallUnifi(): array
+    {
+        return (new UnifiService())->listarPoliticasFirewall();
+    }
+
+    /** Todos os clientes conectados na rede (com fio + Wi-Fi) via UniFi Controller -- só leitura, site inteiro. */
+    public function listarClientesRedeUnifi(): array
+    {
+        return (new UnifiService())->listarClientesRede();
+    }
+
     /** @return array<int, array{mac:string, nome:string}> */
     public function listarClientesUnifiBloqueados(): array
     {

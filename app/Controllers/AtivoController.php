@@ -840,6 +840,22 @@ class AtivoController extends Controller
         echo json_encode($this->service->desbloquearClienteUnifi($mac, $nome));
     }
 
+    public function unifiFirewall(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        echo json_encode($this->service->listarFirewallUnifi());
+    }
+
+    public function unifiClientesRede(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        echo json_encode($this->service->listarClientesRedeUnifi());
+    }
+
     public function salvarIntervaloComunicacao(): void
     {
         AuthMiddleware::checkModulo('ativos_dashboard');

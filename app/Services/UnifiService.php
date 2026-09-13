@@ -420,6 +420,149 @@ class UnifiService
         return array_values(array_filter($resultado['dados']['data'] ?? [], fn($u) => !empty($u['blocked'])));
     }
 
+    /**
+     * Nomes dos "zone-based firewall" (id -> nome), ex: "Internal",
+     * "External", "Gateway", "Vpn", "Hotspot", "Dmz" -- confirmado ao vivo
+     * contra o Controller real (UCG) do smb-pmpe. As políticas em si
+     * (listarPoliticasFirewall()) só trazem o ID da zona, não o nome.
+     *
+     * @return array<string,string> id da zona => nome
+     */
+    private function nomesZonasFirewall(string $ref): array
+    {
+        $resultado = $this->chamarApi('GET', "/proxy/network/v2/api/site/{$ref}/firewall/zone-matrix");
+
+        if (!$resultado['sucesso']) {
+            return [];
+        }
+
+        $nomes = [];
+        foreach ($resultado['dados'] ?? [] as $zona) {
+            if (isset($zona['_id'], $zona['name'])) {
+                $nomes[$zona['_id']] = $zona['name'];
+            }
+        }
+
+        return $nomes;
+    }
+
+    /**
+     * Nomes de regra que são só a "malha" automática entre zonas (uma
+     * combinação fixa de Allow/Block/Return/Invalid por par de zonas, criada
+     * sozinha pelo Controller) -- confirmado ao vivo: das 132 regras reais
+     * desse Controller, só ~20 são coisa que um humano configurou de
+     * verdade (bloqueio de app específico, regra de porta/serviço
+     * personalizada); o resto é essa malha repetida pra cada par de zonas.
+     * Escondida por padrão na tela (dá pra mostrar tudo com um toggle) --
+     * senão a lista de "regras" vira ruído puro de operação interna do
+     * Controller, sem nada acionável.
+     */
+    private const NOMES_REGRA_FIREWALL_AUTOMATICA = [
+        'Allow All Traffic', 'Block All Traffic', 'Allow Return Traffic', 'Block Invalid Traffic',
+        'Allow mDNS', 'Allow DHCP', 'Allow DHCPv6', 'Allow DNS', 'Allow Public DNS',
+        'Allow ICMP', 'Allow ICMPv6', 'Allow RADIUS Authentication', 'Allow RADIUS Accounting',
+        'Allow Hotspot Portal', 'Allow Hotspot Portal Authentication', 'Allow Hotspot Portal Redirects',
+        'Post-Authorization Restrictions', 'Block Unauthorized Traffic',
+        'Allow Neighbor Solicitations', 'Allow Neighbor Advertisements', 'Allow Link-Local DHCPv6',
+        'Allow Router Advertisements', 'Allow OpenVPN Server',
+    ];
+
+    /**
+     * Regras de firewall (zone-based, UniFi OS 8+) -- só leitura. Confirmado
+     * ao vivo: `/rest/firewallrule` (API clássica) responde OK mas sempre
+     * vazio nesse Controller -- as regras de verdade vivem só na API v2
+     * (`/v2/api/site/{ref}/firewall-policies`), que não existia nas versões
+     * mais antigas do Controller/UniFi OS.
+     *
+     * @return array{success:bool, message?:string, regras?:array}
+     */
+    public function listarPoliticasFirewall(): array
+    {
+        $ref = $this->siteRefAtual();
+
+        if ($ref === null) {
+            return ['success' => false, 'message' => 'Site do UniFi Controller ainda não identificado -- use "Testar conexão" em Integrações > UniFi.'];
+        }
+
+        $resultado = $this->chamarApi('GET', "/proxy/network/v2/api/site/{$ref}/firewall-policies");
+
+        if (!$resultado['sucesso']) {
+            return ['success' => false, 'message' => $resultado['mensagem']];
+        }
+
+        $zonas = $this->nomesZonasFirewall($ref);
+
+        $regras = [];
+        foreach ($resultado['dados'] ?? [] as $p) {
+            $nome = $p['name'] ?? '';
+            $regras[] = [
+                'nome' => $nome,
+                'acao' => $p['action'] ?? '',
+                'habilitada' => (bool)($p['enabled'] ?? false),
+                'automatica' => in_array($nome, self::NOMES_REGRA_FIREWALL_AUTOMATICA, true),
+                'protocolo' => $p['protocol'] ?? '',
+                'zona_origem' => $zonas[$p['source']['zone_id'] ?? ''] ?? null,
+                'zona_destino' => $zonas[$p['destination']['zone_id'] ?? ''] ?? null,
+                'porta_destino' => $p['destination']['port'] ?? null,
+                'agendamento' => $p['schedule']['mode'] ?? 'ALWAYS',
+                'hits' => isset($p['hits']) ? (int)$p['hits'] : null,
+                'ultimo_hit' => isset($p['last_hit']) ? (int)round($p['last_hit'] / 1000) : null,
+                'personalizada' => empty($p['predefined']),
+            ];
+        }
+
+        return ['success' => true, 'regras' => $regras];
+    }
+
+    /**
+     * Todos os clientes conectados agora no site (com fio + Wi-Fi, todos os
+     * dispositivos, não só os de um AP) -- confirmado ao vivo via
+     * `/v2/api/site/{ref}/clients/active`. Complementa
+     * listarClientesLegado() (que só traz Wi-Fi de UM AP específico, usado
+     * na aba "Wi-Fi" de cada ponto de acesso): esse aqui é pro Gateway
+     * mostrar a rede inteira num lugar só.
+     *
+     * @return array{success:bool, message?:string, clientes?:array}
+     */
+    public function listarClientesRede(): array
+    {
+        $ref = $this->siteRefAtual();
+
+        if ($ref === null) {
+            return ['success' => false, 'message' => 'Site do UniFi Controller ainda não identificado -- use "Testar conexão" em Integrações > UniFi.'];
+        }
+
+        $resultado = $this->chamarApi('GET', "/proxy/network/v2/api/site/{$ref}/clients/active");
+
+        if (!$resultado['sucesso']) {
+            return ['success' => false, 'message' => $resultado['mensagem']];
+        }
+
+        $clientes = [];
+        foreach ($resultado['dados'] ?? [] as $c) {
+            $rx = (int)($c['rx_bytes'] ?? 0);
+            $tx = (int)($c['tx_bytes'] ?? 0);
+            $clientes[] = [
+                'nome' => $c['display_name'] ?? ($c['name'] ?? ($c['mac'] ?? '')),
+                'mac' => $c['mac'] ?? '',
+                'ip' => $c['ip'] ?? '',
+                'com_fio' => (bool)($c['is_wired'] ?? false),
+                'rede' => $c['network_name'] ?? '',
+                'rx_bytes' => $rx,
+                'tx_bytes' => $tx,
+                'total_bytes' => $rx + $tx,
+                'status' => $c['status'] ?? '',
+                'bloqueado' => (bool)($c['blocked'] ?? false),
+                'uptime_segundos' => isset($c['uptime']) ? (int)$c['uptime'] : null,
+            ];
+        }
+
+        // Maior consumo primeiro -- é o que mais interessa numa lista de tráfego.
+        usort($clientes, fn ($a, $b) => $b['total_bytes'] <=> $a['total_bytes']);
+
+        return ['success' => true, 'clientes' => $clientes];
+    }
+
     /** Desconecta o cliente agora -- reconecta sozinho em seguida (não é um bloqueio, só força uma nova associação). */
     public function desconectarCliente(string $mac): array
     {
