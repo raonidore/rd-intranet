@@ -26,6 +26,20 @@ class AuthMiddleware
         }
     }
 
+    /** Libera se o usuário tiver QUALQUER UM dos módulos listados (ex: tela que serve tanto quem atende quanto quem só abre chamado). */
+    public static function checkQualquerModulo(array $modulos): void
+    {
+        self::check();
+
+        foreach ($modulos as $modulo) {
+            if (PermissionService::temAcesso($modulo)) {
+                return;
+            }
+        }
+
+        self::negarAcesso();
+    }
+
     /** Ver PermissionService::temAcessoRestrito() -- sem bypass de admin. */
     public static function checkModuloRestrito(string $modulo): void
     {

@@ -341,6 +341,7 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
 
     <?php
     $temChamados = PermissionService::temAcesso('chamados_atendimentos')
+        || PermissionService::temAcesso('chamados_abrir')
         || PermissionService::temAcesso('chamados_fila')
         || PermissionService::temAcesso('chamados_categorias')
         || PermissionService::temAcesso('chamados_setores')
@@ -371,6 +372,11 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         <i class="bi bi-chevron-right chevron"></i>
     </button>
     <div class="collapse <?= $abrirChamados ? 'show' : '' ?>" id="menuChamados">
+        <?php if (PermissionService::temAcesso('chamados_atendimentos') || PermissionService::temAcesso('chamados_abrir')): ?>
+        <a href="<?= url('/chamados/abrir') ?>" class="<?= $uriAtual === '/chamados/abrir' ? 'active' : '' ?>">
+            <i class="bi bi-plus-circle me-2"></i> Abrir chamado
+        </a>
+        <?php endif; ?>
         <?php if (PermissionService::temAcesso('chamados_atendimentos')): ?>
         <a href="<?= url('/chamados/atendimentos') ?>" class="rd-menu-item-badge <?= str_starts_with($uriAtual, '/chamados/atendimentos') ? 'active' : '' ?>">
             <span><i class="bi bi-ticket-detailed me-2"></i> Atendimentos</span>

@@ -401,6 +401,8 @@ $router->get('/chamados/fila', [ChamadoFilaController::class, 'index']);
 $router->get('/chamados/fila/contador', [ChamadoFilaController::class, 'contadorApi']);
 $router->post('/chamados/fila/assumir', [ChamadoFilaController::class, 'assumir']);
 
+$router->get('/chamados/abrir', [ChamadoController::class, 'abrirPagina']);
+
 $router->get('/chamados/atendimentos', [ChamadoController::class, 'index']);
 $router->get('/chamados/atendimentos/novo', [ChamadoController::class, 'novoForm']);
 $router->post('/chamados/atendimentos/novo', [ChamadoController::class, 'novo']);

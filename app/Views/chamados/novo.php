@@ -3,6 +3,11 @@ ob_start();
 
 use App\Components\Alert;
 use App\Services\ChamadoService;
+use App\Services\PermissionService;
+
+// Quem só tem chamados_abrir (não é atendente) não enxerga a tela de
+// Atendimentos -- volta/cancela pra "Abrir Chamado" em vez disso.
+$urlVoltarChamados = url(PermissionService::temAcesso('chamados_atendimentos') ? '/chamados/atendimentos' : '/chamados/abrir');
 ?>
 
 <?= Alert::flash() ?>
@@ -12,7 +17,7 @@ use App\Services\ChamadoService;
         <i class="bi bi-plus-circle me-1"></i> Abrir Chamado
         <span class="badge text-bg-light border font-monospace fs-6 align-middle ms-1"><?= htmlspecialchars($proximoNumero) ?></span>
     </h4>
-    <small class="text-muted"><a href="<?= url('/chamados/atendimentos') ?>"><i class="bi bi-arrow-left"></i> Voltar</a></small>
+    <small class="text-muted"><a href="<?= $urlVoltarChamados ?>"><i class="bi bi-arrow-left"></i> Voltar</a></small>
 </div>
 
 <form method="post" action="<?= url('/chamados/atendimentos/novo') ?>">
@@ -106,7 +111,7 @@ use App\Services\ChamadoService;
     </div>
 
     <button type="submit" class="btn btn-primary"><i class="bi bi-send"></i> Abrir chamado</button>
-    <a href="<?= url('/chamados/atendimentos') ?>" class="btn btn-secondary">Cancelar</a>
+    <a href="<?= $urlVoltarChamados ?>" class="btn btn-secondary">Cancelar</a>
 </form>
 
 <script>

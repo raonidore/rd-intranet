@@ -14,6 +14,7 @@ use App\Services\ChamadoSetorService;
 use App\Services\KbService;
 use App\Services\NotificationService;
 use App\Services\NumeroControleService;
+use App\Services\PermissionService;
 use App\Services\UnidadeService;
 use App\Services\UserService;
 
@@ -35,9 +36,23 @@ class ChamadoController extends Controller
         ]);
     }
 
+    /**
+     * Tela "Abrir chamado" (Chamados > Abrir chamado) -- ponto de entrada
+     * pra quem só tem o módulo chamados_abrir (não é atendente, só
+     * precisa conseguir abrir um chamado pra si). Quem já tem
+     * chamados_atendimentos também enxerga esse atalho, mas normalmente
+     * usa o botão "+ Abrir Chamado" direto em Atendimentos.
+     */
+    public function abrirPagina(): void
+    {
+        AuthMiddleware::checkQualquerModulo(['chamados_atendimentos', 'chamados_abrir']);
+
+        $this->view('chamados/abrir', []);
+    }
+
     public function novoForm(): void
     {
-        AuthMiddleware::checkModulo('chamados_atendimentos');
+        AuthMiddleware::checkQualquerModulo(['chamados_atendimentos', 'chamados_abrir']);
 
         $this->view('chamados/novo', [
             'categorias' => (new ChamadoCategoriaService())->listarAtivas(),
@@ -49,13 +64,21 @@ class ChamadoController extends Controller
 
     public function novo(): void
     {
-        AuthMiddleware::checkModulo('chamados_atendimentos');
+        AuthMiddleware::checkQualquerModulo(['chamados_atendimentos', 'chamados_abrir']);
 
         $resultado = (new ChamadoService())->abrir($_POST);
 
         if ($resultado['success']) {
             NotificationService::success($resultado['message']);
-            header('Location: ' . url('/chamados/atendimentos/ver?id=' . $resultado['id']));
+            // Quem só tem chamados_abrir não enxerga a ficha do chamado
+            // (é a tela de atendente, com botões de status/nota interna)
+            // -- volta pra "Abrir chamado" com a confirmação, em vez de
+            // redirecionar pra uma tela que ele não tem acesso.
+            if (PermissionService::temAcesso('chamados_atendimentos')) {
+                header('Location: ' . url('/chamados/atendimentos/ver?id=' . $resultado['id']));
+            } else {
+                header('Location: ' . url('/chamados/abrir'));
+            }
             exit;
         }
 
@@ -154,7 +177,7 @@ class ChamadoController extends Controller
     /** Autocomplete de Ativo (código/nome/nº de série) na abertura do chamado. */
     public function ativosBuscarApi(): void
     {
-        AuthMiddleware::checkModulo('chamados_atendimentos');
+        AuthMiddleware::checkQualquerModulo(['chamados_atendimentos', 'chamados_abrir']);
         header('Content-Type: application/json');
 
         $termo = trim($_GET['q'] ?? '');
@@ -179,7 +202,7 @@ class ChamadoController extends Controller
     /** Busca de usuário cadastrado no sistema -- mesmo raciocínio do autocomplete de Ativo relacionado, pra preencher o Solicitante sem redigitar. */
     public function usuariosBuscarApi(): void
     {
-        AuthMiddleware::checkModulo('chamados_atendimentos');
+        AuthMiddleware::checkQualquerModulo(['chamados_atendimentos', 'chamados_abrir']);
         header('Content-Type: application/json');
 
         $termo = trim($_GET['q'] ?? '');
@@ -203,7 +226,7 @@ class ChamadoController extends Controller
     /** Sugestão de artigos da Base de Conhecimento enquanto o chamado é aberto. */
     public function kbSugestoesApi(): void
     {
-        AuthMiddleware::checkModulo('chamados_atendimentos');
+        AuthMiddleware::checkQualquerModulo(['chamados_atendimentos', 'chamados_abrir']);
         header('Content-Type: application/json');
 
         $termo = trim($_GET['q'] ?? '');

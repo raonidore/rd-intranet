@@ -74,6 +74,7 @@ class ModuloCatalogo
         'whatsapp_estatisticas' => ['label' => 'WhatsApp - Estatísticas', 'grupo' => 'WhatsApp'],
         'whatsapp_configuracoes' => ['label' => 'WhatsApp - Configurações', 'grupo' => 'WhatsApp'],
         'chamados_atendimentos' => ['label' => 'Chamados - Atendimentos', 'grupo' => 'Chamados'],
+        'chamados_abrir' => ['label' => 'Chamados - Abrir chamado', 'grupo' => 'Chamados'],
         'chamados_fila' => ['label' => 'Chamados - Fila', 'grupo' => 'Chamados'],
         'chamados_categorias' => ['label' => 'Chamados - Categorias', 'grupo' => 'Chamados'],
         'chamados_setores' => ['label' => 'Chamados - Setores', 'grupo' => 'Chamados'],
