@@ -419,7 +419,13 @@ button.expl-crumb:hover { background:#eff6ff; color:#2563eb; }
             const valor = nav.dataset.valor;
             if (tipo === 'compartilhamento') estado.compartilhamento = valor;
             else if (tipo === 'data') estado.timestamp = valor;
-            else if (tipo === 'subpasta') estado.subpath = valor;
+            // o "Path" de cada item vem relativo ao subpath consultado (regra
+            // do rclone lsjson), nao ja acumulado a partir da raiz do
+            // compartilhamento -- por isso precisa concatenar aqui, nunca
+            // substituir, senao a navegacao perde os niveis anteriores ao
+            // entrar na 2a subpasta em diante (o "Nada aqui ainda" que
+            // aparecia era a tela perguntando por um caminho que nao existe)
+            else if (tipo === 'subpasta') estado.subpath = estado.subpath ? estado.subpath + '/' + valor : valor;
             carregar();
             return;
         }
