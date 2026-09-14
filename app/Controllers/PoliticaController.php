@@ -270,8 +270,9 @@ class PoliticaController extends Controller
         $resultado = $this->service->aplicarEmLote($regraId, $ativoIds, $ativar, $solicitadoPor);
 
         if ($resultado['success'] ?? false) {
+            $sufixoFalhas = ($resultado['falhas'] ?? 0) > 0 ? " ({$resultado['falhas']} falharam ao enviar)" : '';
             NotificationService::success(
-                ($ativar ? 'Aplicação' : 'Remoção') . " solicitada em {$resultado['enviados']} máquina(s) -- confira o resultado no histórico de solicitações de cada uma em alguns segundos."
+                ($ativar ? 'Aplicação' : 'Remoção') . " solicitada em {$resultado['enviados']} máquina(s){$sufixoFalhas} -- confira o resultado no histórico de solicitações de cada uma em alguns segundos."
             );
         } else {
             NotificationService::error($resultado['message'] ?? 'Falha ao aplicar a regra.');

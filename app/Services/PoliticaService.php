@@ -403,12 +403,25 @@ PS1;
             return ['success' => false, 'message' => 'Essa regra não tem "desligar" -- ela só reforça, nunca enfraquece a máquina de propósito.'];
         }
 
+        // Checado uma vez, ANTES do loop -- checar só dentro do loop (por
+        // máquina) fazia o motivo real da falha (imagem nunca enviada)
+        // virar um NotificationService::error() enterrado no meio da
+        // solicitação, sobrescrito segundos depois pelo
+        // NotificationService::success() do controller (flash é slot
+        // único, não fila -- ver NotificationService). Resultado: "0
+        // máquina(s)" relatado como sucesso, sem pista nenhuma do motivo.
+        if ($regraId === 'papel_parede_padrao' && $ativar && !$this->wallpaperConfigurado()) {
+            return ['success' => false, 'message' => 'Envie a imagem do papel de parede corporativo antes de aplicar essa regra.'];
+        }
+
         $enviados = 0;
+        $falhas = 0;
 
         foreach ($ativoIds as $ativoId) {
             $ativoId = (int)$ativoId;
 
             if ($regraId === 'papel_parede_padrao' && $ativar && !$this->enviarWallpaperParaAtivo($ativoId, $solicitadoPor)) {
+                $falhas++;
                 continue;
             }
 
@@ -418,12 +431,24 @@ PS1;
             if ($resultado['success'] ?? false) {
                 $this->repository->upsertEstado($ativoId, $regraId, $ativar ? 1 : 0, 'pendente', null, $resultado['id']);
                 $enviados++;
+            } else {
+                $falhas++;
             }
         }
 
         AuditService::registrar('Ativos', 'Regras de Segurança', ($ativar ? 'Aplicação' : 'Remoção') . " em lote da regra \"{$regraId}\" -- {$enviados} máquina(s).");
 
-        return ['success' => true, 'enviados' => $enviados];
+        // Sem isso, "0 de N enviadas" voltava como success=true (o
+        // controller só olha pra esse campo, nunca pro valor de
+        // 'enviados') e o usuário via uma mensagem de sucesso mentirosa.
+        if ($enviados === 0) {
+            return [
+                'success' => false,
+                'message' => 'Não foi possível enviar pra nenhuma das ' . count($ativoIds) . ' máquina(s) selecionada(s) -- confira se o agente está online e tente de novo.',
+            ];
+        }
+
+        return ['success' => true, 'enviados' => $enviados, 'falhas' => $falhas];
     }
 
     /*
