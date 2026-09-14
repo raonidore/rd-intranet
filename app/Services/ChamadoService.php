@@ -96,13 +96,20 @@ class ChamadoService
 
         [$slaResposta, $slaResolucao] = $this->calcularPrazos($categoriaId, $prioridade);
 
+        // Quem preencheu o formulário (se logado) -- diferente de usuario_id
+        // (o ATENDENTE, só setado quando alguém assume na Fila) e de
+        // solicitante_id (contato solto, nem sempre ligado a um login).
+        // É o que permite "Meus Chamados" (Dashboard + Chamados > Meus
+        // Chamados) mostrar só o que esse usuário efetivamente abriu.
+        $usuarioAberturaId = (int)($_SESSION['usuario']['id'] ?? 0) ?: null;
+
         $stmt = $this->pdo->prepare(
             "INSERT INTO chamados
-             (titulo, descricao, categoria_id, setor_id, unidade_id, ativo_id, solicitante_id, prioridade, canal_abertura, aguardando_resposta, sla_resposta_prazo, sla_resolucao_prazo)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)"
+             (titulo, descricao, categoria_id, setor_id, unidade_id, ativo_id, solicitante_id, usuario_abertura_id, prioridade, canal_abertura, aguardando_resposta, sla_resposta_prazo, sla_resolucao_prazo)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)"
         );
         $stmt->execute([
-            $titulo, $descricao, $categoriaId, $setorId, $unidadeId, $ativoId, $solicitante['id'], $prioridade, $canal, $slaResposta, $slaResolucao,
+            $titulo, $descricao, $categoriaId, $setorId, $unidadeId, $ativoId, $solicitante['id'], $usuarioAberturaId, $prioridade, $canal, $slaResposta, $slaResolucao,
         ]);
 
         $id = (int)$this->pdo->lastInsertId();
@@ -266,6 +273,17 @@ class ChamadoService
     {
         $stmt = $this->pdo->prepare(
             self::SELECT_ENRIQUECIDO . " WHERE c.usuario_id = ? AND c.status NOT IN ('resolvido','fechado') ORDER BY c.ultima_mensagem_em DESC"
+        );
+        $stmt->execute([$usuarioId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Chamados que ESSE usuário abriu pelo painel (usuario_abertura_id) -- "Meus Chamados", não confundir com listarDoUsuario() (chamados ATRIBUÍDOS a ele como atendente). */
+    public function listarAbertosPeloUsuario(int $usuarioId): array
+    {
+        $stmt = $this->pdo->prepare(
+            self::SELECT_ENRIQUECIDO . " WHERE c.usuario_abertura_id = ? ORDER BY c.ultima_mensagem_em DESC"
         );
         $stmt->execute([$usuarioId]);
 

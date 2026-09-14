@@ -69,6 +69,7 @@ use App\Controllers\ChamadoController;
 use App\Controllers\ChamadoCategoriaController;
 use App\Controllers\ChamadoEstatisticaController;
 use App\Controllers\ChamadoConfiguracaoController;
+use App\Controllers\ChamadoMeuController;
 use App\Controllers\PortalChamadoController;
 use App\Controllers\ChatController;
 use App\Controllers\IntegracoesController;
@@ -402,6 +403,12 @@ $router->get('/chamados/fila/contador', [ChamadoFilaController::class, 'contador
 $router->post('/chamados/fila/assumir', [ChamadoFilaController::class, 'assumir']);
 
 $router->get('/chamados/abrir', [ChamadoController::class, 'abrirPagina']);
+
+$router->get('/chamados/meus', [ChamadoMeuController::class, 'index']);
+$router->get('/chamados/meus/ver', [ChamadoMeuController::class, 'ver']);
+$router->post('/chamados/meus/responder', [ChamadoMeuController::class, 'responder']);
+$router->post('/chamados/meus/anexo', [ChamadoMeuController::class, 'anexo']);
+$router->get('/chamados/meus/anexo', [ChamadoMeuController::class, 'anexoBaixar']);
 
 $router->get('/chamados/atendimentos', [ChamadoController::class, 'index']);
 $router->get('/chamados/atendimentos/novo', [ChamadoController::class, 'novoForm']);

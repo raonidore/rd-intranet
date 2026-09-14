@@ -6,7 +6,7 @@ use App\Services\PermissionService;
 $hora = date('H:i');
 $dataExtenso = date('d/m/Y');
 
-$temAlgumModulo = $samba !== null || $apache !== null || $servidor !== null || $ativos !== null || $backup !== null || $whatsapp !== null || $chamados !== null;
+$temAlgumModulo = $samba !== null || $apache !== null || $servidor !== null || $ativos !== null || $backup !== null || $whatsapp !== null || $chamados !== null || $meusChamados !== null;
 
 function techCorPercentual(float $p): string {
     if ($p >= 90) return '#ef4444';
@@ -38,6 +38,7 @@ $cardsDisponiveis = [
     'backup' => ['label' => 'Backup em Nuvem', 'padrao' => true],
     'whatsapp' => ['label' => 'Módulo WhatsApp', 'padrao' => true],
     'chamados' => ['label' => 'Módulo Chamados', 'padrao' => true],
+    'meus_chamados' => ['label' => 'Meus Chamados', 'padrao' => true],
     'hardware' => ['label' => 'Hardware', 'padrao' => false],
     'rede' => ['label' => 'Network', 'padrao' => false],
     'servicos' => ['label' => 'Serviços', 'padrao' => false],
@@ -425,6 +426,31 @@ if ($servidor) {
                 <div class="stat-mini-row">
                     <span class="tech-label mb-0">SLA estourado</span>
                     <span class="tech-mini" style="<?= $chamados['sla_estourado'] > 0 ? 'color:#e08674' : '' ?>"><?= (int)$chamados['sla_estourado'] ?></span>
+                </div>
+            </div>
+        </a>
+    </div>
+    <?php endif; ?>
+
+    <?php if ($meusChamados): ?>
+    <div class="col-md-4" data-card="meus_chamados">
+        <a href="<?= url('/chamados/meus') ?>" class="tech-card">
+            <div class="accent" style="background:#6366f1"></div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <div>
+                        <div class="tech-label">Meus Chamados</div>
+                        <h5 class="mb-0"><i class="bi bi-inbox me-1"></i> Acompanhamento</h5>
+                    </div>
+                </div>
+
+                <div class="stat-mini-row">
+                    <span class="tech-label mb-0">Em andamento</span>
+                    <span class="tech-num" style="font-size:18px"><?= (int)$meusChamados['em_andamento'] ?></span>
+                </div>
+                <div class="stat-mini-row">
+                    <span class="tech-label mb-0">Total aberto por mim</span>
+                    <span class="tech-mini"><?= (int)$meusChamados['total'] ?></span>
                 </div>
             </div>
         </a>

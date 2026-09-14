@@ -15,6 +15,7 @@ use App\Services\BackupService;
 use App\Services\PermissionService;
 use App\Services\WhatsAppEstatisticaService;
 use App\Services\ChamadoEstatisticaService;
+use App\Services\ChamadoService;
 
 class DashboardController extends Controller
 {
@@ -31,6 +32,7 @@ class DashboardController extends Controller
             'backup' => null,
             'whatsapp' => null,
             'chamados' => null,
+            'meusChamados' => null,
             'avisos' => null,
         ];
 
@@ -98,6 +100,21 @@ class DashboardController extends Controller
             || PermissionService::temAcesso('chamados_configuracoes')
         ) {
             $dados['chamados'] = (new ChamadoEstatisticaService())->tempoReal();
+        }
+
+        // Diferente do card "chamados" acima (visão de atendente, gatilhada
+        // pelos módulos de gestão da fila) -- esse é "o que EU abri pelo
+        // painel", visível pra quem só tem chamados_abrir também.
+        if (
+            PermissionService::temAcesso('chamados_atendimentos')
+            || PermissionService::temAcesso('chamados_abrir')
+        ) {
+            $meusChamados = (new ChamadoService())->listarAbertosPeloUsuario((int)$_SESSION['usuario']['id']);
+            $dados['meusChamados'] = [
+                'itens' => array_slice($meusChamados, 0, 5),
+                'total' => count($meusChamados),
+                'em_andamento' => count(array_filter($meusChamados, fn (array $c) => !in_array($c['status'], ['resolvido', 'fechado'], true))),
+            ];
         }
 
         $this->view('dashboard/index', $dados);

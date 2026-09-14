@@ -376,6 +376,9 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         <a href="<?= url('/chamados/abrir') ?>" class="<?= $uriAtual === '/chamados/abrir' ? 'active' : '' ?>">
             <i class="bi bi-plus-circle me-2"></i> Abrir chamado
         </a>
+        <a href="<?= url('/chamados/meus') ?>" class="<?= str_starts_with($uriAtual, '/chamados/meus') ? 'active' : '' ?>">
+            <i class="bi bi-inbox me-2"></i> Meus Chamados
+        </a>
         <?php endif; ?>
         <?php if (PermissionService::temAcesso('chamados_atendimentos')): ?>
         <a href="<?= url('/chamados/atendimentos') ?>" class="rd-menu-item-badge <?= str_starts_with($uriAtual, '/chamados/atendimentos') ? 'active' : '' ?>">
