@@ -9,6 +9,9 @@ $rotuloProvider = fn(string $p) => match ($p) {
     'b2' => 'Backblaze B2',
     's3' => 'Amazon S3',
     'drive' => 'Google Drive',
+    'dropbox' => 'Dropbox',
+    'storj' => 'Storj.io',
+    'scaleway' => 'Scaleway',
     default => $p,
 };
 
@@ -16,6 +19,9 @@ $corProvider = fn(string $p) => match ($p) {
     'b2' => 'info',
     's3' => 'warning',
     'drive' => 'success',
+    'dropbox' => 'primary',
+    'storj' => 'dark',
+    'scaleway' => 'danger',
     default => 'secondary',
 };
 
@@ -66,7 +72,7 @@ foreach ($jobsCron as $job) {
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h4 class="mb-1"><i class="bi bi-cloud-arrow-up me-1"></i> Backup em Nuvem</h4>
-        <small class="text-muted">Espelha os compartilhamentos do Samba para Backblaze B2, Amazon S3 ou Google Drive.</small>
+        <small class="text-muted">Espelha os compartilhamentos do Samba para Backblaze B2, Amazon S3, Google Drive, Dropbox, Storj.io ou Scaleway.</small>
     </div>
     <button type="button" class="btn btn-primary" id="botaoNovoDestino">
         <i class="bi bi-plus-lg"></i> Novo destino
@@ -230,6 +236,9 @@ foreach ($jobsCron as $job) {
                                 <option value="b2">Backblaze B2</option>
                                 <option value="s3">Amazon S3</option>
                                 <option value="drive">Google Drive</option>
+                                <option value="dropbox">Dropbox</option>
+                                <option value="storj">Storj.io</option>
+                                <option value="scaleway">Scaleway</option>
                             </select>
                         </div>
                         <div class="col-md-6">
@@ -359,6 +368,91 @@ foreach ($jobsCron as $job) {
                         <div class="col-md-12">
                             <label class="form-label">ID da pasta no Drive (opcional)</label>
                             <input type="text" class="form-control" name="drive_pasta_id" id="campoDrivePastaId" placeholder="restringe o backup a uma pasta específica">
+                        </div>
+                    </div>
+
+                    <div id="grupoDropbox" class="row g-3 d-none">
+                        <div class="col-12">
+                            <div class="form-text mb-2">
+                                O Dropbox também usa OAuth: numa máquina com navegador, rode
+                                <code>rclone authorize "dropbox"</code>, autorize a conta que vai receber o backup e cole
+                                abaixo o token JSON gerado (isso só precisa ser feito uma vez).
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Client ID (opcional)</label>
+                            <input type="text" class="form-control" name="dropbox_client_id" id="campoDropboxClientId">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Client Secret (opcional)</label>
+                            <input type="password" class="form-control" name="dropbox_client_secret" id="campoDropboxClientSecret" placeholder="deixe em branco para manter a atual">
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label">Token (rclone authorize dropbox)</label>
+                            <textarea class="form-control font-monospace" name="dropbox_token" id="campoDropboxToken" rows="3" placeholder="deixe em branco para manter o atual"></textarea>
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label">Pasta/prefixo dentro do Dropbox (opcional)</label>
+                            <input type="text" class="form-control" name="dropbox_prefixo" id="campoDropboxPrefixo" placeholder="ex.: Backups/RD Tecnologia">
+                        </div>
+                    </div>
+
+                    <div id="grupoStorj" class="row g-3 d-none">
+                        <div class="col-12">
+                            <div class="form-text mb-2">
+                                Em <a href="https://storj.io" target="_blank" rel="noopener">storj.io</a>, dentro do projeto: crie um
+                                <strong>Bucket</strong> e depois, em <strong>Access &gt; Create Access Grant</strong>, gere um
+                                <strong>Access Grant</strong> com permissão de leitura e escrita restrita a esse bucket -- cole a
+                                string gerada abaixo (ela concentra satélite, API key e passphrase, então é a única credencial
+                                necessária).
+                            </div>
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label">Access Grant</label>
+                            <textarea class="form-control font-monospace" name="storj_access_grant" id="campoStorjAccessGrant" rows="3" placeholder="deixe em branco para manter o atual"></textarea>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label">Bucket</label>
+                            <input type="text" class="form-control" name="storj_bucket" id="campoStorjBucket">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Prefixo (opcional)</label>
+                            <input type="text" class="form-control" name="storj_prefixo" id="campoStorjPrefixo" placeholder="ex.: rd-backup">
+                        </div>
+                    </div>
+
+                    <div id="grupoScaleway" class="row g-3 d-none">
+                        <div class="col-12">
+                            <div class="form-text mb-2">
+                                Em <a href="https://console.scaleway.com" target="_blank" rel="noopener">console.scaleway.com</a>:
+                                (1) crie um <strong>Bucket</strong> em Object Storage na região desejada;
+                                (2) em <strong>Credenciais &gt; API Keys</strong>, gere uma chave e copie o
+                                <code>Access Key</code> e o <code>Secret Key</code> (o Secret Key só aparece uma vez).
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Access Key</label>
+                            <input type="text" class="form-control" name="scaleway_access_key_id" id="campoScalewayAccessKey">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Secret Key</label>
+                            <input type="password" class="form-control" name="scaleway_secret_access_key" id="campoScalewaySecretKey" placeholder="deixe em branco para manter a atual">
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label">Bucket</label>
+                            <input type="text" class="form-control" name="scaleway_bucket" id="campoScalewayBucket">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Região</label>
+                            <select class="form-select" name="scaleway_regiao" id="campoScalewayRegiao">
+                                <option value="fr-par">Paris (fr-par)</option>
+                                <option value="nl-ams">Amsterdã (nl-ams)</option>
+                                <option value="pl-waw">Varsóvia (pl-waw)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label">Prefixo (opcional)</label>
+                            <input type="text" class="form-control" name="scaleway_prefixo" id="campoScalewayPrefixo" placeholder="ex.: rd-backup">
                         </div>
                     </div>
 
@@ -505,7 +599,14 @@ foreach ($jobsCron as $job) {
     const erroBox = document.getElementById('destinoErro');
     const testeOkBox = document.getElementById('destinoTesteOk');
 
-    const grupos = { b2: document.getElementById('grupoB2'), s3: document.getElementById('grupoS3'), drive: document.getElementById('grupoDrive') };
+    const grupos = {
+        b2: document.getElementById('grupoB2'),
+        s3: document.getElementById('grupoS3'),
+        drive: document.getElementById('grupoDrive'),
+        dropbox: document.getElementById('grupoDropbox'),
+        storj: document.getElementById('grupoStorj'),
+        scaleway: document.getElementById('grupoScaleway'),
+    };
 
     function mostrarGrupo(provider) {
         Object.keys(grupos).forEach(function (p) {
@@ -601,6 +702,14 @@ foreach ($jobsCron as $job) {
             document.getElementById('campoS3Prefixo').value = d.s3_prefixo || '';
             document.getElementById('campoDriveClientId').value = d.drive_client_id || '';
             document.getElementById('campoDrivePastaId').value = d.drive_pasta_id || '';
+            document.getElementById('campoDropboxClientId').value = d.dropbox_client_id || '';
+            document.getElementById('campoDropboxPrefixo').value = d.dropbox_prefixo || '';
+            document.getElementById('campoStorjBucket').value = d.storj_bucket || '';
+            document.getElementById('campoStorjPrefixo').value = d.storj_prefixo || '';
+            document.getElementById('campoScalewayAccessKey').value = d.scaleway_access_key_id || '';
+            document.getElementById('campoScalewayBucket').value = d.scaleway_bucket || '';
+            document.getElementById('campoScalewayRegiao').value = d.scaleway_regiao || 'fr-par';
+            document.getElementById('campoScalewayPrefixo').value = d.scaleway_prefixo || '';
             document.getElementById('campoRelatorioDiario').checked = !!Number(d.relatorio_diario_ativo);
             document.getElementById('campoAlertaFalha').checked = !!Number(d.alerta_falha_ativo);
             definirEmailsNotificacao(d.email_notificacao || '');

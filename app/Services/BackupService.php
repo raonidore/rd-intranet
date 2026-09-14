@@ -10,7 +10,14 @@ use App\Repositories\SambaCompartilhamentoRepository;
 class BackupService
 {
     private const STATUS_DIR = '/var/www/rd.intranet/storage/backup_status';
-    private const PROVIDERS = ['b2', 's3', 'drive'];
+    private const PROVIDERS = ['b2', 's3', 'drive', 'dropbox', 'storj', 'scaleway'];
+
+    /** Scaleway Object Storage e compativel com S3, mas o endpoint e fixo por regiao -- nao pedimos URL crua do usuario. */
+    private const SCALEWAY_ENDPOINTS = [
+        'fr-par' => 's3.fr-par.scw.cloud',
+        'nl-ams' => 's3.nl-ams.scw.cloud',
+        'pl-waw' => 's3.pl-waw.scw.cloud',
+    ];
 
     private LinuxService $linux;
     private BackupDestinoRepository $repo;
@@ -315,8 +322,8 @@ class BackupService
 
                 $destino = $this->repo->buscar((int)$execucao['destino_id']);
 
-                if ($destino && $status === 'concluida' && $destino['provider'] === 'drive') {
-                    $this->atualizarTokenDriveAposExecucao((int)$destino['id']);
+                if ($destino && $status === 'concluida' && in_array($destino['provider'], ['drive', 'dropbox'], true)) {
+                    $this->atualizarTokenOAuthAposExecucao((int)$destino['id'], $destino['provider']);
                 }
 
                 if ($destino) {
@@ -796,6 +803,58 @@ class BackupService
                     return 'Cole o token gerado pelo comando "rclone authorize drive" (rode-o uma vez na sua máquina, com um navegador).';
                 }
                 break;
+
+            case 'dropbox':
+                $dados['dropbox_client_id'] = trim($post['dropbox_client_id'] ?? '') ?: null;
+                $dados['dropbox_prefixo'] = trim($post['dropbox_prefixo'] ?? '') ?: null;
+
+                $clientSecret = trim($post['dropbox_client_secret'] ?? '');
+                $dados['dropbox_client_secret_cifrada'] = $clientSecret !== ''
+                    ? CryptoService::encriptar($clientSecret)
+                    : ($existente['dropbox_client_secret_cifrada'] ?? null);
+
+                $token = trim($post['dropbox_token'] ?? '');
+                $dados['dropbox_token_cifrado'] = $token !== ''
+                    ? CryptoService::encriptar($token)
+                    : ($existente['dropbox_token_cifrado'] ?? null);
+
+                if (!$dados['dropbox_token_cifrado']) {
+                    return 'Cole o token gerado pelo comando "rclone authorize dropbox" (rode-o uma vez na sua máquina, com um navegador).';
+                }
+                break;
+
+            case 'storj':
+                $dados['storj_bucket'] = trim($post['storj_bucket'] ?? '');
+
+                $accessGrant = trim($post['storj_access_grant'] ?? '');
+                $dados['storj_access_grant_cifrado'] = $accessGrant !== ''
+                    ? CryptoService::encriptar($accessGrant)
+                    : ($existente['storj_access_grant_cifrado'] ?? null);
+                $dados['storj_prefixo'] = trim($post['storj_prefixo'] ?? '') ?: null;
+
+                if ($dados['storj_bucket'] === '' || !$dados['storj_access_grant_cifrado']) {
+                    return 'Preencha o Access Grant e o Bucket do Storj.io.';
+                }
+                break;
+
+            case 'scaleway':
+                $dados['scaleway_access_key_id'] = trim($post['scaleway_access_key_id'] ?? '');
+                $dados['scaleway_bucket'] = trim($post['scaleway_bucket'] ?? '');
+                $dados['scaleway_regiao'] = trim($post['scaleway_regiao'] ?? '');
+                $dados['scaleway_prefixo'] = trim($post['scaleway_prefixo'] ?? '') ?: null;
+
+                $chaveScw = trim($post['scaleway_secret_access_key'] ?? '');
+                $dados['scaleway_secret_access_key_cifrada'] = $chaveScw !== ''
+                    ? CryptoService::encriptar($chaveScw)
+                    : ($existente['scaleway_secret_access_key_cifrada'] ?? null);
+
+                if (!array_key_exists($dados['scaleway_regiao'], self::SCALEWAY_ENDPOINTS)) {
+                    return 'Selecione uma região válida do Scaleway.';
+                }
+                if ($dados['scaleway_access_key_id'] === '' || $dados['scaleway_bucket'] === '' || !$dados['scaleway_secret_access_key_cifrada']) {
+                    return 'Preencha Access Key, Secret Key e Bucket do Scaleway.';
+                }
+                break;
         }
 
         return null;
@@ -843,12 +902,45 @@ class BackupService
                     $linhas[] = 'root_folder_id = ' . $this->limpar((string)$destino['drive_pasta_id']);
                 }
                 return $linhas;
+
+            case 'dropbox':
+                $linhas = ['type = dropbox'];
+                if (!empty($destino['dropbox_client_id'])) {
+                    $linhas[] = 'client_id = ' . $this->limpar((string)$destino['dropbox_client_id']);
+                }
+                if (!empty($destino['dropbox_client_secret_cifrada'])) {
+                    $linhas[] = 'client_secret = ' . $this->limpar(CryptoService::decriptar((string)$destino['dropbox_client_secret_cifrada']));
+                }
+                $linhas[] = 'token = ' . $this->limpar(CryptoService::decriptar((string)$destino['dropbox_token_cifrado']));
+                return $linhas;
+
+            case 'storj':
+                return [
+                    'type = storj',
+                    'provider = existing',
+                    'access_grant = ' . $this->limpar(CryptoService::decriptar((string)$destino['storj_access_grant_cifrado'])),
+                ];
+
+            case 'scaleway':
+                $regiao = (string)($destino['scaleway_regiao'] ?? '');
+                return [
+                    'type = s3',
+                    'provider = Scaleway',
+                    'access_key_id = ' . $this->limpar((string)($destino['scaleway_access_key_id'] ?? '')),
+                    'secret_access_key = ' . $this->limpar(CryptoService::decriptar((string)$destino['scaleway_secret_access_key_cifrada'])),
+                    'region = ' . $this->limpar($regiao),
+                    'endpoint = ' . $this->limpar(self::SCALEWAY_ENDPOINTS[$regiao] ?? ''),
+                ];
         }
 
         return [];
     }
 
-    /** bucket[/prefixo] (B2/S3) ou vazio (Drive, escopado por root_folder_id) */
+    /**
+     * bucket[/prefixo] (B2/S3/Storj/Scaleway), so o prefixo (Dropbox, que
+     * enderaca por caminho direto) ou vazio (Drive, escopado por
+     * root_folder_id).
+     */
     public function destinoRemoto(array $destino): string
     {
         switch ($destino['provider']) {
@@ -860,6 +952,16 @@ class BackupService
                 $base = trim((string)($destino['s3_bucket'] ?? ''), '/');
                 $prefixo = trim((string)($destino['s3_prefixo'] ?? ''), '/');
                 break;
+            case 'storj':
+                $base = trim((string)($destino['storj_bucket'] ?? ''), '/');
+                $prefixo = trim((string)($destino['storj_prefixo'] ?? ''), '/');
+                break;
+            case 'scaleway':
+                $base = trim((string)($destino['scaleway_bucket'] ?? ''), '/');
+                $prefixo = trim((string)($destino['scaleway_prefixo'] ?? ''), '/');
+                break;
+            case 'dropbox':
+                return trim((string)($destino['dropbox_prefixo'] ?? ''), '/');
             default:
                 return '';
         }
@@ -878,7 +980,14 @@ class BackupService
      * cifrado salvo em backup_destinos fica cada vez mais desatualizado
      * até parar de funcionar.
      */
-    private function atualizarTokenDriveAposExecucao(int $destinoId): void
+    /**
+     * OAuth (Drive/Dropbox): rclone renova o access_token a cada uso e
+     * reescreve o rclone.conf em disco -- como esse arquivo e regenerado do
+     * zero a partir do banco a cada salvamento (aplicarConfig()), sem isso
+     * a renovacao se perderia e a proxima execucao falharia quando o token
+     * antigo expirasse.
+     */
+    private function atualizarTokenOAuthAposExecucao(int $destinoId, string $provider): void
     {
         $resultado = $this->linux->executarScript(
             '/opt/rdtecnologia/scripts/backup_ler_config_web.sh',
@@ -887,7 +996,12 @@ class BackupService
 
         foreach (explode("\n", $resultado['output']) as $linha) {
             if (preg_match('/^\s*token\s*=\s*(.+)$/', $linha, $m)) {
-                $this->repo->atualizarDriveToken($destinoId, CryptoService::encriptar(trim($m[1])));
+                $tokenCifrado = CryptoService::encriptar(trim($m[1]));
+                if ($provider === 'dropbox') {
+                    $this->repo->atualizarDropboxToken($destinoId, $tokenCifrado);
+                } else {
+                    $this->repo->atualizarDriveToken($destinoId, $tokenCifrado);
+                }
                 return;
             }
         }

@@ -39,12 +39,18 @@ class BackupDestinoRepository
                 b2_key_id, b2_application_key_cifrada, b2_bucket, b2_prefixo,
                 s3_access_key_id, s3_secret_access_key_cifrada, s3_bucket, s3_regiao, s3_endpoint, s3_prefixo,
                 drive_token_cifrado, drive_client_id, drive_client_secret_cifrada, drive_pasta_id,
+                dropbox_token_cifrado, dropbox_client_id, dropbox_client_secret_cifrada, dropbox_prefixo,
+                storj_access_grant_cifrado, storj_bucket, storj_prefixo,
+                scaleway_access_key_id, scaleway_secret_access_key_cifrada, scaleway_bucket, scaleway_regiao, scaleway_prefixo,
                 relatorio_diario_ativo, alerta_falha_ativo, email_notificacao
             ) VALUES (
                 :provider, :nome, :ativo, :retencao_dias,
                 :b2_key_id, :b2_application_key_cifrada, :b2_bucket, :b2_prefixo,
                 :s3_access_key_id, :s3_secret_access_key_cifrada, :s3_bucket, :s3_regiao, :s3_endpoint, :s3_prefixo,
                 :drive_token_cifrado, :drive_client_id, :drive_client_secret_cifrada, :drive_pasta_id,
+                :dropbox_token_cifrado, :dropbox_client_id, :dropbox_client_secret_cifrada, :dropbox_prefixo,
+                :storj_access_grant_cifrado, :storj_bucket, :storj_prefixo,
+                :scaleway_access_key_id, :scaleway_secret_access_key_cifrada, :scaleway_bucket, :scaleway_regiao, :scaleway_prefixo,
                 :relatorio_diario_ativo, :alerta_falha_ativo, :email_notificacao
             )
         ");
@@ -65,6 +71,14 @@ class BackupDestinoRepository
                 s3_bucket = :s3_bucket, s3_regiao = :s3_regiao, s3_endpoint = :s3_endpoint, s3_prefixo = :s3_prefixo,
                 drive_token_cifrado = :drive_token_cifrado, drive_client_id = :drive_client_id,
                 drive_client_secret_cifrada = :drive_client_secret_cifrada, drive_pasta_id = :drive_pasta_id,
+                dropbox_token_cifrado = :dropbox_token_cifrado, dropbox_client_id = :dropbox_client_id,
+                dropbox_client_secret_cifrada = :dropbox_client_secret_cifrada, dropbox_prefixo = :dropbox_prefixo,
+                storj_access_grant_cifrado = :storj_access_grant_cifrado, storj_bucket = :storj_bucket,
+                storj_prefixo = :storj_prefixo,
+                scaleway_access_key_id = :scaleway_access_key_id,
+                scaleway_secret_access_key_cifrada = :scaleway_secret_access_key_cifrada,
+                scaleway_bucket = :scaleway_bucket, scaleway_regiao = :scaleway_regiao,
+                scaleway_prefixo = :scaleway_prefixo,
                 relatorio_diario_ativo = :relatorio_diario_ativo, alerta_falha_ativo = :alerta_falha_ativo,
                 email_notificacao = :email_notificacao
             WHERE id = :id
@@ -96,6 +110,13 @@ class BackupDestinoRepository
         $stmt->execute([$tokenCifrado, $id]);
     }
 
+    /** Mesma logica de atualizarDriveToken(), pro Dropbox (tambem OAuth). */
+    public function atualizarDropboxToken(int $id, string $tokenCifrado): void
+    {
+        $stmt = $this->pdo->prepare("UPDATE backup_destinos SET dropbox_token_cifrado = ? WHERE id = ?");
+        $stmt->execute([$tokenCifrado, $id]);
+    }
+
     private function parametros(array $dados): array
     {
         return [
@@ -117,6 +138,18 @@ class BackupDestinoRepository
             'drive_client_id' => $dados['drive_client_id'] ?? null,
             'drive_client_secret_cifrada' => $dados['drive_client_secret_cifrada'] ?? null,
             'drive_pasta_id' => $dados['drive_pasta_id'] ?? null,
+            'dropbox_token_cifrado' => $dados['dropbox_token_cifrado'] ?? null,
+            'dropbox_client_id' => $dados['dropbox_client_id'] ?? null,
+            'dropbox_client_secret_cifrada' => $dados['dropbox_client_secret_cifrada'] ?? null,
+            'dropbox_prefixo' => $dados['dropbox_prefixo'] ?? null,
+            'storj_access_grant_cifrado' => $dados['storj_access_grant_cifrado'] ?? null,
+            'storj_bucket' => $dados['storj_bucket'] ?? null,
+            'storj_prefixo' => $dados['storj_prefixo'] ?? null,
+            'scaleway_access_key_id' => $dados['scaleway_access_key_id'] ?? null,
+            'scaleway_secret_access_key_cifrada' => $dados['scaleway_secret_access_key_cifrada'] ?? null,
+            'scaleway_bucket' => $dados['scaleway_bucket'] ?? null,
+            'scaleway_regiao' => $dados['scaleway_regiao'] ?? null,
+            'scaleway_prefixo' => $dados['scaleway_prefixo'] ?? null,
             'relatorio_diario_ativo' => !empty($dados['relatorio_diario_ativo']) ? 1 : 0,
             'alerta_falha_ativo' => !empty($dados['alerta_falha_ativo']) ? 1 : 0,
             'email_notificacao' => $dados['email_notificacao'] ?? null,

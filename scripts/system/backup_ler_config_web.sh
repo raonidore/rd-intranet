@@ -2,12 +2,12 @@
 # backup_ler_config_web.sh <remote>
 #
 # Imprime a secao [<remote>] do rclone.conf (chave = valor, uma por
-# linha). Usado so pra reler o token do Google Drive depois de uma
-# execucao -- o rclone renova (e reescreve no rclone.conf) o access_token
-# a cada uso, e o portal precisa capturar essa renovacao pra re-cifrar e
-# salvar em backup_destinos, senao o token cifrado no banco fica
-# desatualizado e a proxima execucao falha quando o antigo expirar (ver
-# BackupService::atualizarTokenDriveAposExecucao()).
+# linha). Usado so pra reler o token dos provedores OAuth (Google Drive,
+# Dropbox) depois de uma execucao -- o rclone renova (e reescreve no
+# rclone.conf) o access_token a cada uso, e o portal precisa capturar essa
+# renovacao pra re-cifrar e salvar em backup_destinos, senao o token
+# cifrado no banco fica desatualizado e a proxima execucao falha quando o
+# antigo expirar (ver BackupService::atualizarTokenOAuthAposExecucao()).
 
 set -u
 
