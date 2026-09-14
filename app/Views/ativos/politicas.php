@@ -163,6 +163,26 @@ use App\Services\PoliticaService;
 </div>
 
 <?php
+    // Antes disso, um erro só existia como tooltip em cima de um pontinho
+    // vermelho no meio de uma grade densa -- fácil de nunca ver. Junta
+    // tudo que está com status='erro' agora num painel visível, sem
+    // precisar passar o mouse máquina por máquina.
+    $errosAtuais = [];
+    foreach ($matrizStatus as $linha) {
+        foreach ($catalogo as $regraId => $info) {
+            $r = $linha['regras'][$regraId];
+            if ($r['status'] === 'erro') {
+                $errosAtuais[] = [
+                    'ativo_id' => $linha['ativo']['id'],
+                    'maquina' => $linha['ativo']['nome'],
+                    'codigo' => $linha['ativo']['codigo_patrimonio'],
+                    'regra' => $info['label'],
+                    'mensagem' => $r['mensagem'] ?: 'Erro sem detalhe registrado.',
+                ];
+            }
+        }
+    }
+
     $iconesPorRegra = [
         'usb_bloqueado' => 'bi-usb-drive',
         'painel_controle_bloqueado' => 'bi-sliders',
@@ -175,6 +195,31 @@ use App\Services\PoliticaService;
         'ip_fixo_bloqueado' => 'bi-hdd-network-fill',
     ];
 ?>
+
+<?php if (!empty($errosAtuais)): ?>
+<div class="card border-0 shadow-sm mb-3 border-start border-danger" style="border-left-width:4px !important">
+    <div class="card-header bg-white">
+        <strong class="text-danger"><i class="bi bi-exclamation-triangle-fill"></i> <?= count($errosAtuais) ?> erro(s) ao aplicar regras</strong>
+    </div>
+    <div class="card-body p-0">
+        <table class="table table-sm mb-0 align-middle">
+            <tbody>
+                <?php foreach ($errosAtuais as $e): ?>
+                    <tr>
+                        <td class="small" style="width:260px">
+                            <a href="<?= url('/ativos/ver?id=' . (int)$e['ativo_id']) ?>"><?= htmlspecialchars($e['maquina']) ?></a>
+                            <span class="text-muted font-monospace">(<?= htmlspecialchars($e['codigo']) ?>)</span>
+                            <div class="text-muted"><?= htmlspecialchars($e['regra']) ?></div>
+                        </td>
+                        <td class="small text-danger"><?= htmlspecialchars($e['mensagem']) ?></td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+<?php endif; ?>
+
 <div class="card border-0 shadow-sm mb-3">
     <div class="card-header bg-white d-flex justify-content-between align-items-center">
         <strong><i class="bi bi-grid-3x3-gap-fill"></i> Status das regras por máquina</strong>

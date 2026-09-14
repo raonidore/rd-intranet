@@ -2123,25 +2123,30 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                     <?php foreach ($categoriasPoliticas as $categoria => $regras): ?>
                         <p class="text-muted small text-uppercase mb-1 mt-2"><?= htmlspecialchars($categoria) ?></p>
                         <?php foreach ($regras as $regraId => $r): ?>
-                            <div class="form-check d-flex justify-content-between align-items-center mb-1" style="max-width:560px">
-                                <span>
-                                    <input class="form-check-input" type="checkbox" name="regras[]" value="<?= htmlspecialchars($regraId) ?>"
-                                           id="regra-<?= htmlspecialchars($regraId) ?>" <?= $r['desejado'] ? 'checked' : '' ?>>
-                                    <label class="form-check-label small" for="regra-<?= htmlspecialchars($regraId) ?>"><?= htmlspecialchars($r['label']) ?></label>
-                                </span>
-                                <span class="badge-status-regra" data-regra="<?= htmlspecialchars($regraId) ?>" title="<?= htmlspecialchars($r['mensagem'] ?? '') ?>">
-                                    <?php if ($r['status'] === 'erro'): ?>
-                                        <?= Badge::make('Erro', 'danger') ?>
-                                    <?php elseif ($r['status'] === 'pendente'): ?>
-                                        <?= Badge::make('Aplicando...', 'warning') ?>
-                                    <?php elseif ($r['status'] === 'aplicado' && $r['desejado']): ?>
-                                        <?= Badge::make('Aplicado', 'success') ?>
-                                    <?php elseif ($r['status'] === 'aplicado' && !$r['desejado']): ?>
-                                        <?= Badge::make('Removida', 'secondary') ?>
-                                    <?php else: ?>
-                                        <?= Badge::make('Nunca aplicado', 'secondary') ?>
-                                    <?php endif; ?>
-                                </span>
+                            <div class="mb-1" style="max-width:560px">
+                                <div class="form-check d-flex justify-content-between align-items-center">
+                                    <span>
+                                        <input class="form-check-input" type="checkbox" name="regras[]" value="<?= htmlspecialchars($regraId) ?>"
+                                               id="regra-<?= htmlspecialchars($regraId) ?>" <?= $r['desejado'] ? 'checked' : '' ?>>
+                                        <label class="form-check-label small" for="regra-<?= htmlspecialchars($regraId) ?>"><?= htmlspecialchars($r['label']) ?></label>
+                                    </span>
+                                    <span class="badge-status-regra" data-regra="<?= htmlspecialchars($regraId) ?>" title="<?= htmlspecialchars($r['mensagem'] ?? '') ?>">
+                                        <?php if ($r['status'] === 'erro'): ?>
+                                            <?= Badge::make('Erro', 'danger') ?>
+                                        <?php elseif ($r['status'] === 'pendente'): ?>
+                                            <?= Badge::make('Aplicando...', 'warning') ?>
+                                        <?php elseif ($r['status'] === 'aplicado' && $r['desejado']): ?>
+                                            <?= Badge::make('Aplicado', 'success') ?>
+                                        <?php elseif ($r['status'] === 'aplicado' && !$r['desejado']): ?>
+                                            <?= Badge::make('Removida', 'secondary') ?>
+                                        <?php else: ?>
+                                            <?= Badge::make('Nunca aplicado', 'secondary') ?>
+                                        <?php endif; ?>
+                                    </span>
+                                </div>
+                                <?php if ($r['status'] === 'erro' && !empty($r['mensagem'])): ?>
+                                    <div class="small text-danger mt-1 erro-regra-texto" style="padding-left:1.6rem"><i class="bi bi-exclamation-triangle"></i> <?= htmlspecialchars($r['mensagem']) ?></div>
+                                <?php endif; ?>
                             </div>
                         <?php endforeach; ?>
                     <?php endforeach; ?>
@@ -5362,6 +5367,12 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro) {
         return '<span class="badge text-bg-' + par[1] + '">' + par[0] + '</span>';
     }
 
+    function escapeHtmlRegra(s) {
+        const div = document.createElement('div');
+        div.textContent = s == null ? '' : String(s);
+        return div.innerHTML;
+    }
+
     function redesenharBadges(estado) {
         Object.keys(estado).forEach(function (regraId) {
             const span = form.querySelector('.badge-status-regra[data-regra="' + regraId + '"]');
@@ -5369,6 +5380,23 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro) {
             const r = estado[regraId];
             span.innerHTML = badgeHtml(r.status, r.desejado);
             span.title = r.mensagem || '';
+
+            // Mesma mensagem do badge, mas visível sem precisar passar o
+            // mouse -- ver comentário em app/Views/ativos/politicas.php
+            // sobre esse erro só existir em tooltip antes.
+            const linha = span.closest('.mb-1');
+            let linhaErro = linha ? linha.querySelector('.erro-regra-texto') : null;
+            if (r.status === 'erro' && r.mensagem) {
+                if (!linhaErro) {
+                    linhaErro = document.createElement('div');
+                    linhaErro.className = 'small text-danger mt-1 erro-regra-texto';
+                    linhaErro.style.paddingLeft = '1.6rem';
+                    linha.appendChild(linhaErro);
+                }
+                linhaErro.innerHTML = '<i class="bi bi-exclamation-triangle"></i> ' + escapeHtmlRegra(r.mensagem);
+            } else if (linhaErro) {
+                linhaErro.remove();
+            }
         });
     }
 
