@@ -103,10 +103,10 @@ button.expl-crumb:hover { background:#eff6ff; color:#2563eb; }
         </div>
         <table class="table table-hover align-middle mb-0 d-none" id="explTabela">
             <thead>
-                <tr>
-                    <th>Nome</th>
-                    <th>Tamanho</th>
-                    <th>Modificado</th>
+                <tr id="explTheadOrdenacao">
+                    <th data-campo="nome">Nome</th>
+                    <th data-campo="tamanho">Tamanho</th>
+                    <th data-campo="modificado">Modificado</th>
                     <th class="text-end">Ação</th>
                 </tr>
             </thead>
@@ -162,6 +162,62 @@ button.expl-crumb:hover { background:#eff6ff; color:#2563eb; }
         const [, ano, mes, dia, h, min] = m;
         const data = `${dia}/${mes}/${ano} ${h}:${min}`;
         return seguranca ? `Cópia de segurança -- ${data}` : data;
+    }
+
+    // Ordenação da listagem -- o rclone devolve os itens na ordem que bem
+    // entender (nem alfabética, nem pastas separadas de arquivos), então a
+    // organização "pasta primeiro, depois arquivo, cada grupo em ordem"
+    // é sempre aplicada aqui no front, além do clique nos cabeçalhos pra
+    // trocar o critério dentro de cada grupo.
+    let itensCarregados = [];
+    let tipoListaAtual = null;
+    let ordenacao = { campo: 'nome', dir: 'asc' };
+
+    // Nas pastas de "Versões antigas" o nome exibido já vem formatado
+    // (dd/mm/aaaa hh:mm) -- pra ordenar cronologicamente de verdade (e não
+    // por ordem alfabética do texto formatado) usa-se o timestamp bruto
+    // (item.Path) como chave, tanto pra "nome" quanto pra "modificado".
+    function chaveOrdenavel(item, campo) {
+        if (campo === 'tamanho') return item.IsDir ? -1 : (item.Size || 0);
+        if (campo === 'modificado') return item.ModTime || (tipoListaAtual === 'data' ? (item.Path || '') : '');
+        return (tipoListaAtual === 'data' && item.Path) ? item.Path : (item.Name || '').toLowerCase();
+    }
+
+    function compararItens(a, b) {
+        if (!!a.IsDir !== !!b.IsDir) return a.IsDir ? -1 : 1; // pasta sempre antes de arquivo
+        const va = chaveOrdenavel(a, ordenacao.campo);
+        const vb = chaveOrdenavel(b, ordenacao.campo);
+        let cmp;
+        if (typeof va === 'number' && typeof vb === 'number') cmp = va - vb;
+        else cmp = va < vb ? -1 : (va > vb ? 1 : 0);
+        return ordenacao.dir === 'asc' ? cmp : -cmp;
+    }
+
+    function atualizarIconesOrdenacao() {
+        document.querySelectorAll('#explTheadOrdenacao th[data-campo]').forEach(function (th) {
+            const icone = th.querySelector('i');
+            if (!icone) return;
+            icone.className = th.dataset.campo === ordenacao.campo
+                ? 'bi ' + (ordenacao.dir === 'asc' ? 'bi-sort-up' : 'bi-sort-down') + ' ms-1'
+                : 'bi bi-arrow-down-up small text-muted ms-1';
+        });
+    }
+
+    function configurarCabecalhoOrdenacao() {
+        document.querySelectorAll('#explTheadOrdenacao th[data-campo]').forEach(function (th) {
+            th.style.cursor = 'pointer';
+            th.style.userSelect = 'none';
+            const icone = document.createElement('i');
+            icone.className = 'bi bi-arrow-down-up small text-muted ms-1';
+            th.appendChild(icone);
+
+            th.addEventListener('click', function () {
+                const campo = th.dataset.campo;
+                ordenacao.dir = (ordenacao.campo === campo) ? (ordenacao.dir === 'asc' ? 'desc' : 'asc') : 'asc';
+                ordenacao.campo = campo;
+                renderizarLinhas();
+            });
+        });
     }
 
     function mostrarResultado(msg, ok) {
@@ -246,6 +302,31 @@ button.expl-crumb:hover { background:#eff6ff; color:#2563eb; }
             '<i class="bi bi-arrow-counterclockwise"></i></button>';
     }
 
+    function renderizarLinhas() {
+        const ordenados = itensCarregados.slice().sort(compararItens);
+        document.getElementById('explCorpo').innerHTML = ordenados.map(function (item) {
+            const nome = item.Name;
+            const icone = item.IsDir ? 'bi-folder-fill text-warning' : 'bi-file-earmark';
+            let onClickAttr = '';
+            if (item.IsDir) {
+                if (tipoListaAtual === 'compartilhamento') onClickAttr = 'data-nav="compartilhamento" data-valor="' + escapeHtml(nome) + '"';
+                else if (tipoListaAtual === 'data') onClickAttr = 'data-nav="data" data-valor="' + escapeHtml(item.Path) + '"';
+                else onClickAttr = 'data-nav="subpasta" data-valor="' + escapeHtml(item.Path) + '"';
+            }
+            return '<tr>' +
+                '<td><i class="bi ' + icone + ' me-2"></i>' +
+                (item.IsDir
+                    ? '<span class="expl-item-nome" ' + onClickAttr + '>' + escapeHtml(nome) + '</span>'
+                    : escapeHtml(nome)) +
+                '</td>' +
+                '<td class="small text-muted">' + (item.IsDir ? '-' : formatarBytes(item.Size)) + '</td>' +
+                '<td class="small text-muted">' + (item.ModTime ? escapeHtml(item.ModTime.substring(0, 16).replace('T', ' ')) : '-') + '</td>' +
+                '<td class="text-end">' + celulaAcao(item) + '</td>' +
+                '</tr>';
+        }).join('');
+        atualizarIconesOrdenacao();
+    }
+
     async function carregar() {
         renderBreadcrumb();
 
@@ -312,26 +393,16 @@ button.expl-crumb:hover { background:#eff6ff; color:#2563eb; }
                 return;
             }
 
-            document.getElementById('explCorpo').innerHTML = itens.map(function (item) {
-                const nome = item.Name;
-                const icone = item.IsDir ? 'bi-folder-fill text-warning' : 'bi-file-earmark';
-                let onClickAttr = '';
-                if (item.IsDir) {
-                    if (tipo === 'compartilhamento') onClickAttr = 'data-nav="compartilhamento" data-valor="' + escapeHtml(nome) + '"';
-                    else if (tipo === 'data') onClickAttr = 'data-nav="data" data-valor="' + escapeHtml(item.Path) + '"';
-                    else onClickAttr = 'data-nav="subpasta" data-valor="' + escapeHtml(item.Path) + '"';
-                }
-                return '<tr>' +
-                    '<td><i class="bi ' + icone + ' me-2"></i>' +
-                    (item.IsDir
-                        ? '<span class="expl-item-nome" ' + onClickAttr + '>' + escapeHtml(nome) + '</span>'
-                        : escapeHtml(nome)) +
-                    '</td>' +
-                    '<td class="small text-muted">' + (item.IsDir ? '-' : formatarBytes(item.Size)) + '</td>' +
-                    '<td class="small text-muted">' + (item.ModTime ? escapeHtml(item.ModTime.substring(0, 16).replace('T', ' ')) : '-') + '</td>' +
-                    '<td class="text-end">' + celulaAcao(item) + '</td>' +
-                    '</tr>';
-            }).join('');
+            // Trocar de "tipo" de listagem (compartilhamentos <-> datas <-> itens)
+            // é trocar de contexto -- reseta pro critério padrão de cada um.
+            // Dentro do mesmo tipo (ex: navegando entre subpastas), preserva
+            // o critério escolhido pelo usuário.
+            if (tipo !== tipoListaAtual) {
+                ordenacao = (tipo === 'data') ? { campo: 'nome', dir: 'desc' } : { campo: 'nome', dir: 'asc' };
+            }
+            tipoListaAtual = tipo;
+            itensCarregados = itens;
+            renderizarLinhas();
 
             tabela.classList.remove('d-none');
         } catch (e) {
@@ -392,6 +463,8 @@ button.expl-crumb:hover { background:#eff6ff; color:#2563eb; }
         estado = { destinoId: this.value, compartilhamento: null, modo: null, timestamp: null, subpath: '' };
         carregar();
     });
+
+    configurarCabecalhoOrdenacao();
 
     estado.destinoId = document.getElementById('selectDestino').value;
     carregar();
