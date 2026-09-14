@@ -588,18 +588,57 @@ del ""%~f0""
                     }
                 };
                 processo.Start();
+                var erroSchtasks = processo.StandardError.ReadToEnd();
                 processo.WaitForExit(15000);
+
+                // Sem essa tarefa registrada, TODO login volta a pedir o
+                // UAC de "runas" do Program.cs -- silencioso até aqui (só
+                // "perdia o autostart"), sem pista nenhuma de qual foi o
+                // motivo real (GPO bloqueando, antivírus, tarefa antiga
+                // com dono diferente etc.). Grava no log de Eventos
+                // (Aplicativo) pra aparecer sozinho na aba Alertas da
+                // ficha do ativo (ObterAlertas() já lê Erro/Aviso de lá),
+                // sem precisar de acesso à máquina pra descobrir.
+                if (processo.ExitCode != 0)
+                {
+                    RegistrarFalhaAutoStart(
+                        $"schtasks /create falhou (código {processo.ExitCode}): {erroSchtasks.Trim()}");
+                }
             }
             finally
             {
                 try { File.Delete(caminhoXml); } catch { }
             }
         }
-        catch
+        catch (Exception ex)
         {
             // Melhor esforço -- se falhar, só perde o "iniciar com o
             // Windows" nessa máquina, não impede o agente de continuar
             // rodando na sessão atual.
+            RegistrarFalhaAutoStart(ex.Message);
+        }
+    }
+
+    private static void RegistrarFalhaAutoStart(string detalhe)
+    {
+        try
+        {
+            const string origem = "RdIntranetAgente";
+            if (!EventLog.SourceExists(origem))
+            {
+                EventLog.CreateEventSource(origem, "Application");
+            }
+
+            EventLog.WriteEntry(
+                origem,
+                "Falha ao registrar o início automático elevado (tarefa RDIntranetAgenteAutoStart) -- " +
+                "sem essa tarefa, todo login volta a pedir confirmação do UAC pra abrir o agente. Detalhe: " + detalhe,
+                EventLogEntryType.Warning);
+        }
+        catch
+        {
+            // Se nem o log de Eventos aceitar a escrita, não há mais nada
+            // a fazer daqui -- segue sem essa pista, mas sem travar o agente.
         }
     }
 
