@@ -401,15 +401,18 @@ foreach ($jobsCron as $job) {
                         <div class="col-12">
                             <div class="form-text mb-2">
                                 Em <a href="https://storj.io" target="_blank" rel="noopener">storj.io</a>, dentro do projeto: crie um
-                                <strong>Bucket</strong> e depois, em <strong>Access &gt; Create Access Grant</strong>, gere um
-                                <strong>Access Grant</strong> com permissão de leitura e escrita restrita a esse bucket -- cole a
-                                string gerada abaixo (ela concentra satélite, API key e passphrase, então é a única credencial
-                                necessária).
+                                <strong>Bucket</strong> e depois, em <strong>Access &gt; Create S3 Credentials</strong>, gere um
+                                <strong>Access Key</strong> e <strong>Secret Key</strong> compatíveis com S3 (o acesso do servidor
+                                passa pelo gateway S3 do Storj, <code>gateway.storjshare.io</code>).
                             </div>
                         </div>
-                        <div class="col-md-12">
-                            <label class="form-label">Access Grant</label>
-                            <textarea class="form-control font-monospace" name="storj_access_grant" id="campoStorjAccessGrant" rows="3" placeholder="deixe em branco para manter o atual"></textarea>
+                        <div class="col-md-6">
+                            <label class="form-label">Access Key</label>
+                            <input type="text" class="form-control" name="storj_access_key_id" id="campoStorjAccessKey">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Secret Key</label>
+                            <input type="password" class="form-control" name="storj_secret_access_key" id="campoStorjSecretKey" placeholder="deixe em branco para manter a atual">
                         </div>
                         <div class="col-md-8">
                             <label class="form-label">Bucket</label>
@@ -704,6 +707,7 @@ foreach ($jobsCron as $job) {
             document.getElementById('campoDrivePastaId').value = d.drive_pasta_id || '';
             document.getElementById('campoDropboxClientId').value = d.dropbox_client_id || '';
             document.getElementById('campoDropboxPrefixo').value = d.dropbox_prefixo || '';
+            document.getElementById('campoStorjAccessKey').value = d.storj_access_key_id || '';
             document.getElementById('campoStorjBucket').value = d.storj_bucket || '';
             document.getElementById('campoStorjPrefixo').value = d.storj_prefixo || '';
             document.getElementById('campoScalewayAccessKey').value = d.scaleway_access_key_id || '';

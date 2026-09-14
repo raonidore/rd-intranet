@@ -19,6 +19,15 @@ class BackupService
         'pl-waw' => 's3.pl-waw.scw.cloud',
     ];
 
+    /**
+     * A versao do rclone instalada nos servidores (v1.60.1-DEV, confirmado
+     * ao vivo) nao tem o backend nativo "storj" -- so da pra falar com o
+     * Storj via gateway S3-compativel (backend "s3", provider=Storj),
+     * usando credenciais S3 (Access Key/Secret Key), nao o "access grant"
+     * nativo. Gateway global fixo, unico ponto de acesso oficial.
+     */
+    private const STORJ_ENDPOINT = 'gateway.storjshare.io';
+
     private LinuxService $linux;
     private BackupDestinoRepository $repo;
     private BackupExecucaoRepository $execucaoRepo;
@@ -824,16 +833,17 @@ class BackupService
                 break;
 
             case 'storj':
+                $dados['storj_access_key_id'] = trim($post['storj_access_key_id'] ?? '');
                 $dados['storj_bucket'] = trim($post['storj_bucket'] ?? '');
-
-                $accessGrant = trim($post['storj_access_grant'] ?? '');
-                $dados['storj_access_grant_cifrado'] = $accessGrant !== ''
-                    ? CryptoService::encriptar($accessGrant)
-                    : ($existente['storj_access_grant_cifrado'] ?? null);
                 $dados['storj_prefixo'] = trim($post['storj_prefixo'] ?? '') ?: null;
 
-                if ($dados['storj_bucket'] === '' || !$dados['storj_access_grant_cifrado']) {
-                    return 'Preencha o Access Grant e o Bucket do Storj.io.';
+                $chaveStorj = trim($post['storj_secret_access_key'] ?? '');
+                $dados['storj_secret_access_key_cifrada'] = $chaveStorj !== ''
+                    ? CryptoService::encriptar($chaveStorj)
+                    : ($existente['storj_secret_access_key_cifrada'] ?? null);
+
+                if ($dados['storj_access_key_id'] === '' || $dados['storj_bucket'] === '' || !$dados['storj_secret_access_key_cifrada']) {
+                    return 'Preencha Access Key, Secret Key e Bucket do Storj.io.';
                 }
                 break;
 
@@ -916,9 +926,11 @@ class BackupService
 
             case 'storj':
                 return [
-                    'type = storj',
-                    'provider = existing',
-                    'access_grant = ' . $this->limpar(CryptoService::decriptar((string)$destino['storj_access_grant_cifrado'])),
+                    'type = s3',
+                    'provider = Storj',
+                    'access_key_id = ' . $this->limpar((string)($destino['storj_access_key_id'] ?? '')),
+                    'secret_access_key = ' . $this->limpar(CryptoService::decriptar((string)$destino['storj_secret_access_key_cifrada'])),
+                    'endpoint = ' . self::STORJ_ENDPOINT,
                 ];
 
             case 'scaleway':

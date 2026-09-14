@@ -40,7 +40,7 @@ class BackupDestinoRepository
                 s3_access_key_id, s3_secret_access_key_cifrada, s3_bucket, s3_regiao, s3_endpoint, s3_prefixo,
                 drive_token_cifrado, drive_client_id, drive_client_secret_cifrada, drive_pasta_id,
                 dropbox_token_cifrado, dropbox_client_id, dropbox_client_secret_cifrada, dropbox_prefixo,
-                storj_access_grant_cifrado, storj_bucket, storj_prefixo,
+                storj_access_key_id, storj_secret_access_key_cifrada, storj_bucket, storj_prefixo,
                 scaleway_access_key_id, scaleway_secret_access_key_cifrada, scaleway_bucket, scaleway_regiao, scaleway_prefixo,
                 relatorio_diario_ativo, alerta_falha_ativo, email_notificacao
             ) VALUES (
@@ -49,7 +49,7 @@ class BackupDestinoRepository
                 :s3_access_key_id, :s3_secret_access_key_cifrada, :s3_bucket, :s3_regiao, :s3_endpoint, :s3_prefixo,
                 :drive_token_cifrado, :drive_client_id, :drive_client_secret_cifrada, :drive_pasta_id,
                 :dropbox_token_cifrado, :dropbox_client_id, :dropbox_client_secret_cifrada, :dropbox_prefixo,
-                :storj_access_grant_cifrado, :storj_bucket, :storj_prefixo,
+                :storj_access_key_id, :storj_secret_access_key_cifrada, :storj_bucket, :storj_prefixo,
                 :scaleway_access_key_id, :scaleway_secret_access_key_cifrada, :scaleway_bucket, :scaleway_regiao, :scaleway_prefixo,
                 :relatorio_diario_ativo, :alerta_falha_ativo, :email_notificacao
             )
@@ -73,8 +73,9 @@ class BackupDestinoRepository
                 drive_client_secret_cifrada = :drive_client_secret_cifrada, drive_pasta_id = :drive_pasta_id,
                 dropbox_token_cifrado = :dropbox_token_cifrado, dropbox_client_id = :dropbox_client_id,
                 dropbox_client_secret_cifrada = :dropbox_client_secret_cifrada, dropbox_prefixo = :dropbox_prefixo,
-                storj_access_grant_cifrado = :storj_access_grant_cifrado, storj_bucket = :storj_bucket,
-                storj_prefixo = :storj_prefixo,
+                storj_access_key_id = :storj_access_key_id,
+                storj_secret_access_key_cifrada = :storj_secret_access_key_cifrada,
+                storj_bucket = :storj_bucket, storj_prefixo = :storj_prefixo,
                 scaleway_access_key_id = :scaleway_access_key_id,
                 scaleway_secret_access_key_cifrada = :scaleway_secret_access_key_cifrada,
                 scaleway_bucket = :scaleway_bucket, scaleway_regiao = :scaleway_regiao,
@@ -142,7 +143,8 @@ class BackupDestinoRepository
             'dropbox_client_id' => $dados['dropbox_client_id'] ?? null,
             'dropbox_client_secret_cifrada' => $dados['dropbox_client_secret_cifrada'] ?? null,
             'dropbox_prefixo' => $dados['dropbox_prefixo'] ?? null,
-            'storj_access_grant_cifrado' => $dados['storj_access_grant_cifrado'] ?? null,
+            'storj_access_key_id' => $dados['storj_access_key_id'] ?? null,
+            'storj_secret_access_key_cifrada' => $dados['storj_secret_access_key_cifrada'] ?? null,
             'storj_bucket' => $dados['storj_bucket'] ?? null,
             'storj_prefixo' => $dados['storj_prefixo'] ?? null,
             'scaleway_access_key_id' => $dados['scaleway_access_key_id'] ?? null,
