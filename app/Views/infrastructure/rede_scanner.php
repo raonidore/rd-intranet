@@ -23,10 +23,13 @@ use App\Components\Alert;
     background: conic-gradient(from 0deg, rgba(13,110,253,.55), rgba(13,110,253,0) 70deg);
     animation: ipscan-spin 1.8s linear infinite; }
 @keyframes ipscan-spin { to { transform: rotate(360deg); } }
-.ipscan-radar-pct { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
-.ipscan-radar-pct b { font-size: 2.1rem; color:#0d6efd; line-height:1; }
-.ipscan-radar-pct small { color:#6c757d; margin-top:4px; }
+.ipscan-radar-pct { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+.ipscan-radar-pct b { font-size: 2.4rem; color:#0d6efd; line-height:1; }
 @media (prefers-reduced-motion: reduce) { .ipscan-radar-sweep span { animation: none; } }
+/* Mensagem de status fica FORA do círculo -- uma faixa com várias CIDR
+   gera um texto longo, que dentro do radar acabava sobrepondo o "sweep"
+   girando e o percentual. */
+.ipscan-radar-msg { max-width: 480px; text-align: center; margin-top: 18px; font-size: .95rem; color: #344054; line-height: 1.5; }
 
 .ipscan-stat { text-align:center; }
 .ipscan-stat b { font-size: 1.6rem; display:block; }
@@ -89,21 +92,23 @@ use App\Components\Alert;
 
 <div class="card ipscan-card mb-4">
     <div class="card-body">
-        <form id="form-scanner" class="d-flex gap-2 align-items-end flex-wrap">
-            <div class="flex-grow-1" style="min-width:280px">
-                <label class="form-label small mb-1">Faixa(s) de IP (CIDR)</label>
-                <div class="ipscan-tags-box form-control" id="caixa-faixas">
-                    <input type="text" id="input-faixa-novo" placeholder="ex: 192.168.1.0/24" autocomplete="off">
+        <form id="form-scanner">
+            <label class="form-label small mb-1">Faixa(s) de IP (CIDR)</label>
+            <div class="d-flex gap-2 align-items-start flex-wrap">
+                <div class="flex-grow-1" style="min-width:280px">
+                    <div class="ipscan-tags-box form-control" id="caixa-faixas">
+                        <input type="text" id="input-faixa-novo" placeholder="ex: 192.168.1.0/24" autocomplete="off">
+                    </div>
                 </div>
-                <input type="hidden" name="cidr" id="input-cidr" value="<?= htmlspecialchars($faixaSugerida ?? '') ?>" required>
-                <div class="field-help text-muted small mt-1" id="ajuda-faixas">
-                    <?= $faixaSugerida ? 'Sugerido a partir da rede deste servidor -- aperte Enter pra confirmar.' : 'Digite uma faixa e aperte Enter (ou vírgula) pra adicionar.' ?>
-                    Até 8 faixas na mesma varredura, cada uma privada (RFC1918) e no máximo /22 (1024 endereços).
-                </div>
+                <button type="submit" class="btn btn-primary" id="btn-iniciar">
+                    <i class="bi bi-radar me-1"></i> Iniciar varredura
+                </button>
             </div>
-            <button type="submit" class="btn btn-primary" id="btn-iniciar">
-                <i class="bi bi-radar me-1"></i> Iniciar varredura
-            </button>
+            <input type="hidden" name="cidr" id="input-cidr" value="<?= htmlspecialchars($faixaSugerida ?? '') ?>" required>
+            <div class="field-help text-muted small mt-1" id="ajuda-faixas">
+                <?= $faixaSugerida ? 'Sugerido a partir da rede deste servidor -- aperte Enter pra confirmar.' : 'Digite uma faixa e aperte Enter (ou vírgula) pra adicionar.' ?>
+                Até 8 faixas na mesma varredura, cada uma privada (RFC1918) e no máximo /22 (1024 endereços).
+            </div>
         </form>
     </div>
 </div>
@@ -124,9 +129,9 @@ use App\Components\Alert;
                 <div class="ipscan-radar-sweep"><span></span></div>
                 <div class="ipscan-radar-pct">
                     <b id="radar-pct">0%</b>
-                    <small id="radar-msg">Iniciando...</small>
                 </div>
             </div>
+            <div class="ipscan-radar-msg" id="radar-msg">Iniciando...</div>
         </div>
     </div>
 </div>
@@ -583,6 +588,19 @@ use App\Components\Alert;
         }
     }
 
+    function descricaoHost(h) {
+        const partes = [h.ip];
+        if (h.hostname) partes.push(h.hostname);
+        if (h.vendor) partes.push(h.vendor);
+        return partes.join(' &middot; ');
+    }
+
+    function listaHosts(hosts, corTexto) {
+        return '<ul class="mb-0 mt-2 ps-3 small' + (corTexto ? ' ' + corTexto : '') + '">' +
+            hosts.map(h => '<li class="font-monospace">' + descricaoHost(h) + '</li>').join('') +
+            '</ul>';
+    }
+
     function renderizarComparacao(comparacao) {
         const banner = document.getElementById('banner-comparacao');
         if (!comparacao || comparacao.primeira_execucao) {
@@ -595,11 +613,25 @@ use App\Components\Alert;
             banner.innerHTML = '<div class="alert alert-secondary mb-0"><i class="bi bi-check2-circle me-1"></i> Nenhuma mudança desde a última varredura desta faixa.</div>';
             return;
         }
-        let html = '<div class="alert alert-success ipscan-badge-novo mb-0"><i class="bi bi-stars me-1"></i>';
-        const partes = [];
-        if (novos.length) partes.push('<strong>' + novos.length + '</strong> novo(s) dispositivo(s)');
-        if (sumiram.length) partes.push('<strong>' + sumiram.length + '</strong> não respondeu(ram) mais');
-        html += partes.join(' &middot; ') + ' desde a última varredura desta faixa.</div>';
+
+        const partesResumo = [];
+        if (novos.length) partesResumo.push('<strong>' + novos.length + '</strong> novo(s) dispositivo(s)');
+        if (sumiram.length) partesResumo.push('<strong>' + sumiram.length + '</strong> não respondeu(ram) mais');
+
+        let html = '<div class="alert alert-success ipscan-badge-novo mb-0"><i class="bi bi-stars me-1"></i>'
+            + partesResumo.join(' &middot; ') + ' desde a última varredura desta faixa.</div>';
+
+        if (novos.length || sumiram.length) {
+            html += '<div class="row g-3 mt-1">';
+            if (novos.length) {
+                html += '<div class="col-md-6"><div class="small text-success fw-semibold"><i class="bi bi-plus-circle me-1"></i>Novo(s) nesta varredura</div>' + listaHosts(novos) + '</div>';
+            }
+            if (sumiram.length) {
+                html += '<div class="col-md-6"><div class="small text-danger fw-semibold"><i class="bi bi-dash-circle me-1"></i>Não respondeu(ram) mais</div>' + listaHosts(sumiram) + '</div>';
+            }
+            html += '</div>';
+        }
+
         banner.innerHTML = html;
     }
 
