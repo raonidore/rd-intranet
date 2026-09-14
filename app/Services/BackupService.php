@@ -10,7 +10,7 @@ use App\Repositories\SambaCompartilhamentoRepository;
 class BackupService
 {
     private const STATUS_DIR = '/var/www/rd.intranet/storage/backup_status';
-    private const PROVIDERS = ['b2', 's3', 'drive', 'dropbox', 'storj', 'scaleway'];
+    private const PROVIDERS = ['b2', 's3', 'drive', 'dropbox', 'storj', 'scaleway', 'hetzner', 'akamai'];
 
     /** Scaleway Object Storage e compativel com S3, mas o endpoint e fixo por regiao -- nao pedimos URL crua do usuario. */
     private const SCALEWAY_ENDPOINTS = [
@@ -27,6 +27,50 @@ class BackupService
      * nativo. Gateway global fixo, unico ponto de acesso oficial.
      */
     private const STORJ_ENDPOINT = 'gateway.storjshare.io';
+
+    /**
+     * Hetzner Object Storage e compativel com S3. Assim como o Storj, essa
+     * versao do rclone nao tem "Hetzner" como nome de provider (adicionado
+     * so em versoes mais novas) -- usa provider=Other com o endpoint fixo
+     * por regiao.
+     */
+    private const HETZNER_ENDPOINTS = [
+        'fsn1' => 'fsn1.your-objectstorage.com',
+        'nbg1' => 'nbg1.your-objectstorage.com',
+        'hel1' => 'hel1.your-objectstorage.com',
+    ];
+
+    /**
+     * Akamai Cloud Object Storage = a antiga Linode Object Storage (a
+     * Akamai comprou a Linode e renomeou a nuvem pra "Akamai Cloud
+     * Computing"; o rclone -- e o resto da industria -- ainda chama o
+     * provider de "Linode" por baixo). Mesmo motivo do Hetzner/Storj:
+     * nome de provider recente demais pra essa versao do rclone, usa
+     * provider=Other com endpoint fixo por regiao.
+     */
+    private const AKAMAI_ENDPOINTS = [
+        'nl-ams-1' => 'nl-ams-1.linodeobjects.com',
+        'us-southeast-1' => 'us-southeast-1.linodeobjects.com',
+        'in-maa-1' => 'in-maa-1.linodeobjects.com',
+        'us-ord-1' => 'us-ord-1.linodeobjects.com',
+        'eu-central-1' => 'eu-central-1.linodeobjects.com',
+        'id-cgk-1' => 'id-cgk-1.linodeobjects.com',
+        'gb-lon-1' => 'gb-lon-1.linodeobjects.com',
+        'us-lax-1' => 'us-lax-1.linodeobjects.com',
+        'es-mad-1' => 'es-mad-1.linodeobjects.com',
+        'us-mia-1' => 'us-mia-1.linodeobjects.com',
+        'it-mil-1' => 'it-mil-1.linodeobjects.com',
+        'us-east-1' => 'us-east-1.linodeobjects.com',
+        'jp-osa-1' => 'jp-osa-1.linodeobjects.com',
+        'fr-par-1' => 'fr-par-1.linodeobjects.com',
+        'br-gru-1' => 'br-gru-1.linodeobjects.com',
+        'us-sea-1' => 'us-sea-1.linodeobjects.com',
+        'ap-south-1' => 'ap-south-1.linodeobjects.com',
+        'sg-sin-1' => 'sg-sin-1.linodeobjects.com',
+        'se-sto-1' => 'se-sto-1.linodeobjects.com',
+        'jp-tyo-1' => 'jp-tyo-1.linodeobjects.com',
+        'us-iad-10' => 'us-iad-10.linodeobjects.com',
+    ];
 
     private LinuxService $linux;
     private BackupDestinoRepository $repo;
@@ -206,6 +250,32 @@ class BackupService
 
         $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/backup_aplicar_config_web.sh', [$tmp]);
         @unlink($tmp);
+
+        $dados = json_decode(trim($resultado['output']), true);
+
+        return is_array($dados) ? $dados : ['success' => false, 'message' => $resultado['output']];
+    }
+
+    /**
+     * Soma o tamanho ocupado HOJE no destino (cópia atual + .versoes/),
+     * pra coluna "Tamanho do backup" (Backup > Configuração). Chamado sob
+     * demanda via AJAX -- em destinos com muitos arquivos, listar tudo pra
+     * somar pode levar alguns segundos, então nunca roda no carregamento
+     * da página.
+     *
+     * @return array{success: bool, bytes?: int, arquivos?: int, message?: string}
+     */
+    public function tamanhoDestino(int $destinoId): array
+    {
+        $destino = $this->repo->buscar($destinoId);
+        if (!$destino) {
+            return ['success' => false, 'message' => 'Destino não encontrado.'];
+        }
+
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/backup_tamanho_web.sh', [
+            self::nomeRemote($destinoId),
+            $this->destinoRemoto($destino),
+        ]);
 
         $dados = json_decode(trim($resultado['output']), true);
 
@@ -865,6 +935,44 @@ class BackupService
                     return 'Preencha Access Key, Secret Key e Bucket do Scaleway.';
                 }
                 break;
+
+            case 'hetzner':
+                $dados['hetzner_access_key_id'] = trim($post['hetzner_access_key_id'] ?? '');
+                $dados['hetzner_bucket'] = trim($post['hetzner_bucket'] ?? '');
+                $dados['hetzner_regiao'] = trim($post['hetzner_regiao'] ?? '');
+                $dados['hetzner_prefixo'] = trim($post['hetzner_prefixo'] ?? '') ?: null;
+
+                $chaveHetzner = trim($post['hetzner_secret_access_key'] ?? '');
+                $dados['hetzner_secret_access_key_cifrada'] = $chaveHetzner !== ''
+                    ? CryptoService::encriptar($chaveHetzner)
+                    : ($existente['hetzner_secret_access_key_cifrada'] ?? null);
+
+                if (!array_key_exists($dados['hetzner_regiao'], self::HETZNER_ENDPOINTS)) {
+                    return 'Selecione uma região válida do Hetzner.';
+                }
+                if ($dados['hetzner_access_key_id'] === '' || $dados['hetzner_bucket'] === '' || !$dados['hetzner_secret_access_key_cifrada']) {
+                    return 'Preencha Access Key, Secret Key e Bucket do Hetzner.';
+                }
+                break;
+
+            case 'akamai':
+                $dados['akamai_access_key_id'] = trim($post['akamai_access_key_id'] ?? '');
+                $dados['akamai_bucket'] = trim($post['akamai_bucket'] ?? '');
+                $dados['akamai_regiao'] = trim($post['akamai_regiao'] ?? '');
+                $dados['akamai_prefixo'] = trim($post['akamai_prefixo'] ?? '') ?: null;
+
+                $chaveAkamai = trim($post['akamai_secret_access_key'] ?? '');
+                $dados['akamai_secret_access_key_cifrada'] = $chaveAkamai !== ''
+                    ? CryptoService::encriptar($chaveAkamai)
+                    : ($existente['akamai_secret_access_key_cifrada'] ?? null);
+
+                if (!array_key_exists($dados['akamai_regiao'], self::AKAMAI_ENDPOINTS)) {
+                    return 'Selecione uma região válida do Akamai.';
+                }
+                if ($dados['akamai_access_key_id'] === '' || $dados['akamai_bucket'] === '' || !$dados['akamai_secret_access_key_cifrada']) {
+                    return 'Preencha Access Key, Secret Key e Bucket do Akamai.';
+                }
+                break;
         }
 
         return null;
@@ -943,6 +1051,24 @@ class BackupService
                     'region = ' . $this->limpar($regiao),
                     'endpoint = ' . $this->limpar(self::SCALEWAY_ENDPOINTS[$regiao] ?? ''),
                 ];
+
+            case 'hetzner':
+                return [
+                    'type = s3',
+                    'provider = Other',
+                    'access_key_id = ' . $this->limpar((string)($destino['hetzner_access_key_id'] ?? '')),
+                    'secret_access_key = ' . $this->limpar(CryptoService::decriptar((string)$destino['hetzner_secret_access_key_cifrada'])),
+                    'endpoint = ' . $this->limpar(self::HETZNER_ENDPOINTS[(string)($destino['hetzner_regiao'] ?? '')] ?? ''),
+                ];
+
+            case 'akamai':
+                return [
+                    'type = s3',
+                    'provider = Other',
+                    'access_key_id = ' . $this->limpar((string)($destino['akamai_access_key_id'] ?? '')),
+                    'secret_access_key = ' . $this->limpar(CryptoService::decriptar((string)$destino['akamai_secret_access_key_cifrada'])),
+                    'endpoint = ' . $this->limpar(self::AKAMAI_ENDPOINTS[(string)($destino['akamai_regiao'] ?? '')] ?? ''),
+                ];
         }
 
         return [];
@@ -971,6 +1097,14 @@ class BackupService
             case 'scaleway':
                 $base = trim((string)($destino['scaleway_bucket'] ?? ''), '/');
                 $prefixo = trim((string)($destino['scaleway_prefixo'] ?? ''), '/');
+                break;
+            case 'hetzner':
+                $base = trim((string)($destino['hetzner_bucket'] ?? ''), '/');
+                $prefixo = trim((string)($destino['hetzner_prefixo'] ?? ''), '/');
+                break;
+            case 'akamai':
+                $base = trim((string)($destino['akamai_bucket'] ?? ''), '/');
+                $prefixo = trim((string)($destino['akamai_prefixo'] ?? ''), '/');
                 break;
             case 'dropbox':
                 return trim((string)($destino['dropbox_prefixo'] ?? ''), '/');

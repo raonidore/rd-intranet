@@ -80,6 +80,17 @@ class BackupController extends Controller
         echo json_encode($this->service->testarConexao($_POST));
     }
 
+    public function tamanho(): void
+    {
+        AuthMiddleware::checkModulo('backup_configuracao');
+        header('Content-Type: application/json');
+
+        set_time_limit(100);
+
+        $id = (int)($_GET['id'] ?? 0);
+        echo json_encode($this->service->tamanhoDestino($id));
+    }
+
     public function agendar(): void
     {
         AuthMiddleware::checkModulo('backup_configuracao');

@@ -42,6 +42,8 @@ class BackupDestinoRepository
                 dropbox_token_cifrado, dropbox_client_id, dropbox_client_secret_cifrada, dropbox_prefixo,
                 storj_access_key_id, storj_secret_access_key_cifrada, storj_bucket, storj_prefixo,
                 scaleway_access_key_id, scaleway_secret_access_key_cifrada, scaleway_bucket, scaleway_regiao, scaleway_prefixo,
+                hetzner_access_key_id, hetzner_secret_access_key_cifrada, hetzner_bucket, hetzner_regiao, hetzner_prefixo,
+                akamai_access_key_id, akamai_secret_access_key_cifrada, akamai_bucket, akamai_regiao, akamai_prefixo,
                 relatorio_diario_ativo, alerta_falha_ativo, email_notificacao
             ) VALUES (
                 :provider, :nome, :ativo, :retencao_dias,
@@ -51,6 +53,8 @@ class BackupDestinoRepository
                 :dropbox_token_cifrado, :dropbox_client_id, :dropbox_client_secret_cifrada, :dropbox_prefixo,
                 :storj_access_key_id, :storj_secret_access_key_cifrada, :storj_bucket, :storj_prefixo,
                 :scaleway_access_key_id, :scaleway_secret_access_key_cifrada, :scaleway_bucket, :scaleway_regiao, :scaleway_prefixo,
+                :hetzner_access_key_id, :hetzner_secret_access_key_cifrada, :hetzner_bucket, :hetzner_regiao, :hetzner_prefixo,
+                :akamai_access_key_id, :akamai_secret_access_key_cifrada, :akamai_bucket, :akamai_regiao, :akamai_prefixo,
                 :relatorio_diario_ativo, :alerta_falha_ativo, :email_notificacao
             )
         ");
@@ -80,6 +84,14 @@ class BackupDestinoRepository
                 scaleway_secret_access_key_cifrada = :scaleway_secret_access_key_cifrada,
                 scaleway_bucket = :scaleway_bucket, scaleway_regiao = :scaleway_regiao,
                 scaleway_prefixo = :scaleway_prefixo,
+                hetzner_access_key_id = :hetzner_access_key_id,
+                hetzner_secret_access_key_cifrada = :hetzner_secret_access_key_cifrada,
+                hetzner_bucket = :hetzner_bucket, hetzner_regiao = :hetzner_regiao,
+                hetzner_prefixo = :hetzner_prefixo,
+                akamai_access_key_id = :akamai_access_key_id,
+                akamai_secret_access_key_cifrada = :akamai_secret_access_key_cifrada,
+                akamai_bucket = :akamai_bucket, akamai_regiao = :akamai_regiao,
+                akamai_prefixo = :akamai_prefixo,
                 relatorio_diario_ativo = :relatorio_diario_ativo, alerta_falha_ativo = :alerta_falha_ativo,
                 email_notificacao = :email_notificacao
             WHERE id = :id
@@ -152,6 +164,16 @@ class BackupDestinoRepository
             'scaleway_bucket' => $dados['scaleway_bucket'] ?? null,
             'scaleway_regiao' => $dados['scaleway_regiao'] ?? null,
             'scaleway_prefixo' => $dados['scaleway_prefixo'] ?? null,
+            'hetzner_access_key_id' => $dados['hetzner_access_key_id'] ?? null,
+            'hetzner_secret_access_key_cifrada' => $dados['hetzner_secret_access_key_cifrada'] ?? null,
+            'hetzner_bucket' => $dados['hetzner_bucket'] ?? null,
+            'hetzner_regiao' => $dados['hetzner_regiao'] ?? null,
+            'hetzner_prefixo' => $dados['hetzner_prefixo'] ?? null,
+            'akamai_access_key_id' => $dados['akamai_access_key_id'] ?? null,
+            'akamai_secret_access_key_cifrada' => $dados['akamai_secret_access_key_cifrada'] ?? null,
+            'akamai_bucket' => $dados['akamai_bucket'] ?? null,
+            'akamai_regiao' => $dados['akamai_regiao'] ?? null,
+            'akamai_prefixo' => $dados['akamai_prefixo'] ?? null,
             'relatorio_diario_ativo' => !empty($dados['relatorio_diario_ativo']) ? 1 : 0,
             'alerta_falha_ativo' => !empty($dados['alerta_falha_ativo']) ? 1 : 0,
             'email_notificacao' => $dados['email_notificacao'] ?? null,

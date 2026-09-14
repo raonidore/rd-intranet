@@ -12,6 +12,8 @@ $rotuloProvider = fn(string $p) => match ($p) {
     'dropbox' => 'Dropbox',
     'storj' => 'Storj.io',
     'scaleway' => 'Scaleway',
+    'hetzner' => 'Hetzner',
+    'akamai' => 'Akamai',
     default => $p,
 };
 
@@ -22,6 +24,8 @@ $corProvider = fn(string $p) => match ($p) {
     'dropbox' => 'primary',
     'storj' => 'dark',
     'scaleway' => 'danger',
+    'hetzner' => 'secondary',
+    'akamai' => 'light',
     default => 'secondary',
 };
 
@@ -72,7 +76,7 @@ foreach ($jobsCron as $job) {
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h4 class="mb-1"><i class="bi bi-cloud-arrow-up me-1"></i> Backup em Nuvem</h4>
-        <small class="text-muted">Espelha os compartilhamentos do Samba para Backblaze B2, Amazon S3, Google Drive, Dropbox, Storj.io ou Scaleway.</small>
+        <small class="text-muted">Espelha os compartilhamentos do Samba para Backblaze B2, Amazon S3, Google Drive, Dropbox, Storj.io, Scaleway, Hetzner ou Akamai.</small>
     </div>
     <button type="button" class="btn btn-primary" id="botaoNovoDestino">
         <i class="bi bi-plus-lg"></i> Novo destino
@@ -127,6 +131,7 @@ foreach ($jobsCron as $job) {
                     <tr>
                         <th>Nome</th>
                         <th>Provedor</th>
+                        <th>Tamanho do backup</th>
                         <th>Retenção</th>
                         <th>Ativo</th>
                         <th>Agendamento</th>
@@ -147,6 +152,14 @@ foreach ($jobsCron as $job) {
                                 <?php endif; ?>
                             </td>
                             <td><?= Badge::make($rotuloProvider($d['provider']), $corProvider($d['provider'])) ?></td>
+                            <td class="small">
+                                <span class="span-tamanho-destino" data-id="<?= (int)$d['id'] ?>">
+                                    <span class="spinner-border spinner-border-sm text-muted" role="status"></span>
+                                </span>
+                                <button type="button" class="btn btn-sm btn-link p-0 ms-1 botao-atualizar-tamanho" data-id="<?= (int)$d['id'] ?>" title="Recalcular">
+                                    <i class="bi bi-arrow-clockwise"></i>
+                                </button>
+                            </td>
                             <td><?= (int)$d['retencao_dias'] ?> dias</td>
                             <td>
                                 <?= $d['ativo'] ? Badge::make('Ativo', 'success') : Badge::make('Inativo', 'secondary') ?>
@@ -239,6 +252,8 @@ foreach ($jobsCron as $job) {
                                 <option value="dropbox">Dropbox</option>
                                 <option value="storj">Storj.io</option>
                                 <option value="scaleway">Scaleway</option>
+                                <option value="hetzner">Hetzner Object Storage</option>
+                                <option value="akamai">Akamai Cloud (Object Storage)</option>
                             </select>
                         </div>
                         <div class="col-md-6">
@@ -459,6 +474,93 @@ foreach ($jobsCron as $job) {
                         </div>
                     </div>
 
+                    <div id="grupoHetzner" class="row g-3 d-none">
+                        <div class="col-12">
+                            <div class="form-text mb-2">
+                                Em <a href="https://console.hetzner.com" target="_blank" rel="noopener">console.hetzner.com</a>, na
+                                seção <strong>Object Storage</strong>: (1) crie um <strong>Bucket</strong> na região desejada;
+                                (2) gere uma <strong>Access Key</strong> (o Secret Key só aparece uma vez, copie na hora).
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Access Key</label>
+                            <input type="text" class="form-control" name="hetzner_access_key_id" id="campoHetznerAccessKey">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Secret Key</label>
+                            <input type="password" class="form-control" name="hetzner_secret_access_key" id="campoHetznerSecretKey" placeholder="deixe em branco para manter a atual">
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label">Bucket</label>
+                            <input type="text" class="form-control" name="hetzner_bucket" id="campoHetznerBucket">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Região</label>
+                            <select class="form-select" name="hetzner_regiao" id="campoHetznerRegiao">
+                                <option value="fsn1">Falkenstein (fsn1)</option>
+                                <option value="nbg1">Nuremberg (nbg1)</option>
+                                <option value="hel1">Helsinque (hel1)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label">Prefixo (opcional)</label>
+                            <input type="text" class="form-control" name="hetzner_prefixo" id="campoHetznerPrefixo" placeholder="ex.: rd-backup">
+                        </div>
+                    </div>
+
+                    <div id="grupoAkamai" class="row g-3 d-none">
+                        <div class="col-12">
+                            <div class="form-text mb-2">
+                                Em <a href="https://cloud.linode.com/object-storage" target="_blank" rel="noopener">cloud.linode.com</a>
+                                (painel da Akamai Cloud Computing, antiga Linode): (1) crie um <strong>Bucket</strong> na região
+                                desejada; (2) em <strong>Object Storage &gt; Access Keys</strong>, gere uma chave e copie o
+                                <code>Access Key</code> e o <code>Secret Key</code> (o Secret Key só aparece uma vez).
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Access Key</label>
+                            <input type="text" class="form-control" name="akamai_access_key_id" id="campoAkamaiAccessKey">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Secret Key</label>
+                            <input type="password" class="form-control" name="akamai_secret_access_key" id="campoAkamaiSecretKey" placeholder="deixe em branco para manter a atual">
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label">Bucket</label>
+                            <input type="text" class="form-control" name="akamai_bucket" id="campoAkamaiBucket">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Região</label>
+                            <select class="form-select" name="akamai_regiao" id="campoAkamaiRegiao">
+                                <option value="us-east-1">Newark, NJ, US (us-east-1)</option>
+                                <option value="us-southeast-1">Atlanta, GA, US (us-southeast-1)</option>
+                                <option value="us-ord-1">Chicago, IL, US (us-ord-1)</option>
+                                <option value="us-lax-1">Los Angeles, CA, US (us-lax-1)</option>
+                                <option value="us-mia-1">Miami, FL, US (us-mia-1)</option>
+                                <option value="us-sea-1">Seattle, WA, US (us-sea-1)</option>
+                                <option value="us-iad-10">Washington, DC, US (us-iad-10)</option>
+                                <option value="br-gru-1">São Paulo, BR (br-gru-1)</option>
+                                <option value="nl-ams-1">Amsterdã, NL (nl-ams-1)</option>
+                                <option value="gb-lon-1">Londres, UK (gb-lon-1)</option>
+                                <option value="fr-par-1">Paris, FR (fr-par-1)</option>
+                                <option value="es-mad-1">Madri, ES (es-mad-1)</option>
+                                <option value="it-mil-1">Milão, IT (it-mil-1)</option>
+                                <option value="eu-central-1">Frankfurt, DE (eu-central-1)</option>
+                                <option value="se-sto-1">Estocolmo, SE (se-sto-1)</option>
+                                <option value="in-maa-1">Chennai, IN (in-maa-1)</option>
+                                <option value="id-cgk-1">Jacarta, ID (id-cgk-1)</option>
+                                <option value="ap-south-1">Singapura (ap-south-1)</option>
+                                <option value="sg-sin-1">Singapura 2 (sg-sin-1)</option>
+                                <option value="jp-osa-1">Osaka, JP (jp-osa-1)</option>
+                                <option value="jp-tyo-1">Tóquio, JP (jp-tyo-1)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label">Prefixo (opcional)</label>
+                            <input type="text" class="form-control" name="akamai_prefixo" id="campoAkamaiPrefixo" placeholder="ex.: rd-backup">
+                        </div>
+                    </div>
+
                     <div class="alert alert-danger mt-3 d-none" id="destinoErro"></div>
                     <div class="alert alert-success mt-3 d-none" id="destinoTesteOk"></div>
                 </div>
@@ -586,6 +688,7 @@ foreach ($jobsCron as $job) {
         agendar: <?= json_encode(url('/backup/configuracao/agendar')) ?>,
         executar: <?= json_encode(url('/backup/executar')) ?>,
         status: <?= json_encode(url('/backup/status')) ?>,
+        tamanho: <?= json_encode(url('/backup/configuracao/tamanho')) ?>,
     };
 
     // bootstrap.bundle.min.js so carrega no rodape do layout, depois deste
@@ -609,6 +712,8 @@ foreach ($jobsCron as $job) {
         dropbox: document.getElementById('grupoDropbox'),
         storj: document.getElementById('grupoStorj'),
         scaleway: document.getElementById('grupoScaleway'),
+        hetzner: document.getElementById('grupoHetzner'),
+        akamai: document.getElementById('grupoAkamai'),
     };
 
     function mostrarGrupo(provider) {
@@ -714,6 +819,14 @@ foreach ($jobsCron as $job) {
             document.getElementById('campoScalewayBucket').value = d.scaleway_bucket || '';
             document.getElementById('campoScalewayRegiao').value = d.scaleway_regiao || 'fr-par';
             document.getElementById('campoScalewayPrefixo').value = d.scaleway_prefixo || '';
+            document.getElementById('campoHetznerAccessKey').value = d.hetzner_access_key_id || '';
+            document.getElementById('campoHetznerBucket').value = d.hetzner_bucket || '';
+            document.getElementById('campoHetznerRegiao').value = d.hetzner_regiao || 'fsn1';
+            document.getElementById('campoHetznerPrefixo').value = d.hetzner_prefixo || '';
+            document.getElementById('campoAkamaiAccessKey').value = d.akamai_access_key_id || '';
+            document.getElementById('campoAkamaiBucket').value = d.akamai_bucket || '';
+            document.getElementById('campoAkamaiRegiao').value = d.akamai_regiao || 'us-east-1';
+            document.getElementById('campoAkamaiPrefixo').value = d.akamai_prefixo || '';
             document.getElementById('campoRelatorioDiario').checked = !!Number(d.relatorio_diario_ativo);
             document.getElementById('campoAlertaFalha').checked = !!Number(d.alerta_falha_ativo);
             definirEmailsNotificacao(d.email_notificacao || '');
@@ -1102,6 +1215,50 @@ foreach ($jobsCron as $job) {
     painel.classList.remove('d-none');
     consultarStatus(<?= (int)$execucaoEmAndamento['id'] ?>);
     <?php endif; ?>
+
+    // Tamanho do backup por destino -- soma via `rclone size` (lista tudo
+    // pra somar, funciona em qualquer provedor), por isso e sob demanda
+    // (aqui, ao carregar a pagina) e nao bloqueia o resto da tela: cada
+    // linha resolve em paralelo, independente das outras.
+    function formatarBytesTamanho(bytes) {
+        if (!bytes || bytes <= 0) return '0 B';
+        const unidades = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), unidades.length - 1);
+        return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + unidades[i];
+    }
+
+    async function carregarTamanhoDestino(id) {
+        const span = document.querySelector('.span-tamanho-destino[data-id="' + id + '"]');
+        if (!span) return;
+
+        span.innerHTML = '<span class="spinner-border spinner-border-sm text-muted" role="status"></span>';
+
+        try {
+            const res = await fetch(URLS.tamanho + '?id=' + id);
+            const resposta = await res.json();
+
+            if (!resposta.success) {
+                span.innerHTML = '<i class="bi bi-exclamation-triangle text-danger" title="' +
+                    (resposta.message || 'Falha ao calcular.').replace(/"/g, '&quot;') + '"></i> <span class="text-danger">Falha</span>';
+                return;
+            }
+
+            span.innerHTML = '<strong>' + formatarBytesTamanho(resposta.bytes) + '</strong>' +
+                '<span class="text-muted"> (' + (resposta.arquivos || 0).toLocaleString('pt-BR') + ' arquivo(s))</span>';
+        } catch (e) {
+            span.innerHTML = '<i class="bi bi-exclamation-triangle text-danger" title="Erro de rede"></i> <span class="text-danger">Falha</span>';
+        }
+    }
+
+    document.querySelectorAll('.span-tamanho-destino').forEach(function (span) {
+        carregarTamanhoDestino(span.dataset.id);
+    });
+
+    document.querySelectorAll('.botao-atualizar-tamanho').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+            carregarTamanhoDestino(botao.dataset.id);
+        });
+    });
 })();
 </script>
 

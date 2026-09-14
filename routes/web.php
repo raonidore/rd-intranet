@@ -620,6 +620,7 @@ $router->post('/backup/configuracao/salvar', [BackupController::class, 'salvar']
 $router->post('/backup/configuracao/excluir', [BackupController::class, 'excluir']);
 $router->post('/backup/configuracao/ativar', [BackupController::class, 'ativar']);
 $router->post('/backup/configuracao/testar', [BackupController::class, 'testarConexao']);
+$router->get('/backup/configuracao/tamanho', [BackupController::class, 'tamanho']);
 $router->post('/backup/configuracao/agendar', [BackupController::class, 'agendar']);
 $router->post('/backup/executar', [BackupController::class, 'executarAgora']);
 $router->get('/backup/status', [BackupController::class, 'status']);
