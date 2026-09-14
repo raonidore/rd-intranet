@@ -6,10 +6,84 @@ use App\Components\Alert;
 
 <?= Alert::flash() ?>
 
-<div class="mb-4">
-    <h4 class="mb-1"><i class="bi bi-diagram-3 me-1"></i> Chamados - Setores</h4>
-    <small class="text-muted">Setores de atendimento e quais usuários (já cadastrados no sistema) atendem em cada um.</small>
+<div class="mb-4 d-flex justify-content-between align-items-start">
+    <div>
+        <h4 class="mb-1"><i class="bi bi-diagram-3 me-1"></i> Chamados - Setores</h4>
+        <small class="text-muted">Setores de atendimento e quais usuários (já cadastrados no sistema) atendem em cada um.</small>
+    </div>
+    <button type="button" class="btn btn-outline-dark text-nowrap" data-bs-toggle="modal" data-bs-target="#modalPopSetores">
+        <i class="bi bi-broadcast"></i> POP - Setores
+    </button>
 </div>
+
+<!-- POP -- Procedimento Operacional Padrão de gestão de setores -->
+<div class="modal fade pop-modal" id="modalPopSetores" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="pop-topbar">
+                <span class="pop-breadcrumb"><i class="bi bi-broadcast"></i> POP -- Setores de Atendimento</span>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="pop-body">
+                <p class="pop-intro">Setor é o "departamento" que atende o chamado -- toda categoria tem um setor padrão, e quem abre o chamado ainda pode escolher outro na hora, se precisar.</p>
+
+                <div class="pop-step">
+                    <div class="pop-step-num">1</div>
+                    <div>
+                        <div class="pop-step-title"><i class="bi bi-plus-lg"></i> Adicionar setor</div>
+                        <div class="pop-step-text">Só o <strong>nome</strong> é necessário pra criar (ex: "Suporte técnico", "Financeiro", "Infraestrutura") -- o resto se configura depois, expandindo o card do setor.</div>
+                    </div>
+                </div>
+
+                <div class="pop-step">
+                    <div class="pop-step-num">2</div>
+                    <div>
+                        <div class="pop-step-title"><i class="bi bi-toggle-on"></i> Setor ativo</div>
+                        <div class="pop-step-text">Desmarcado, o setor some das opções de "Categoria" e "Setor responsável" na abertura de chamados novos -- chamados que já usam ele continuam normalmente.</div>
+                    </div>
+                </div>
+
+                <div class="pop-step">
+                    <div class="pop-step-num">3</div>
+                    <div>
+                        <div class="pop-step-title"><i class="bi bi-people"></i> Usuários que atendem neste setor</div>
+                        <div class="pop-step-text">Marque, entre os usuários já cadastrados no sistema, quem faz parte deste setor -- são eles que <strong>enxergam e atendem</strong> os chamados direcionados aqui. Um usuário pode estar em mais de um setor ao mesmo tempo.</div>
+                    </div>
+                </div>
+
+                <div class="pop-step">
+                    <div class="pop-step-num">4</div>
+                    <div>
+                        <div class="pop-step-title"><i class="bi bi-link-45deg"></i> Onde este setor é usado</div>
+                        <div class="pop-step-text">Além de aparecer na abertura de chamado, é o setor escolhido aqui que vira o <strong>"setor responsável padrão"</strong> de uma categoria (Chamados &gt; Categorias) -- configure os setores primeiro, categorias depois.</div>
+                    </div>
+                </div>
+
+                <div class="pop-step">
+                    <div class="pop-step-num">5</div>
+                    <div>
+                        <div class="pop-step-title"><i class="bi bi-trash"></i> Excluir setor</div>
+                        <div class="pop-step-text">Dentro do card expandido -- <strong>prefira desativar</strong> se alguma categoria ou chamado já usa esse setor, pra não perder a referência.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.pop-modal .modal-content { background:#0d1117; color:#c9d1d9; border:1px solid #30363d; border-radius:14px; }
+.pop-topbar { display:flex; justify-content:space-between; align-items:center; padding:14px 20px; background:#161b22; border-bottom:1px solid #30363d; border-radius:14px 14px 0 0; }
+.pop-topbar .pop-breadcrumb { font-weight:600; color:#58a6ff; display:flex; align-items:center; gap:8px; font-size:1rem; }
+.pop-body { padding:1.3rem 1.6rem; max-height:72vh; overflow-y:auto; }
+.pop-intro { color:#8b949e; font-size:.88rem; margin-bottom:1.2rem; padding-bottom:1rem; border-bottom:1px dashed #30363d; }
+.pop-step { display:flex; gap:1rem; padding:.85rem 0; border-bottom:1px solid #21262d; }
+.pop-step:last-child { border-bottom:0; padding-bottom:0; }
+.pop-step-num { flex:0 0 auto; width:34px; height:34px; border-radius:9px; background:#132030; color:#58a6ff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:.95rem; border:1px solid #1f3b57; }
+.pop-step-title { font-weight:600; color:#e6edf3; font-size:.92rem; display:flex; align-items:center; gap:6px; }
+.pop-step-text { color:#8b949e; font-size:.83rem; margin-top:3px; line-height:1.55; }
+.pop-step-text strong { color:#c9d1d9; }
+</style>
 
 <div class="card border-0 shadow-sm mb-3">
     <div class="card-body">

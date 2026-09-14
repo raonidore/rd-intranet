@@ -38,11 +38,112 @@ $prioridadeClasses = [
                 <i class="bi bi-tags"></i> Categorias
             </a>
         <?php endif; ?>
+        <button type="button" class="btn btn-outline-dark text-nowrap" data-bs-toggle="modal" data-bs-target="#modalPopChamadosExternos">
+            <i class="bi bi-broadcast"></i> POP - Chamados Externos
+        </button>
         <a href="<?= url('/chamados-externos/novo') ?>" class="btn btn-primary text-nowrap">
             <i class="bi bi-plus-lg"></i> Novo chamado
         </a>
     </div>
 </div>
+
+<!-- POP -- Procedimento Operacional Padrão de abertura de chamado externo -->
+<div class="modal fade pop-modal" id="modalPopChamadosExternos" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="pop-topbar">
+                <span class="pop-breadcrumb"><i class="bi bi-broadcast"></i> POP -- Abertura de Chamado Externo</span>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="pop-body">
+                <p class="pop-intro">
+                    Chamado externo é diferente do chamado normal: aqui é <strong>você</strong> (o time interno)
+                    quem abre um chamado <strong>contra um fornecedor</strong> pra resolver algo -- ex: link de
+                    internet instável, garantia de equipamento, suporte de um sistema terceirizado. Passo a passo
+                    do formulário "Novo chamado":
+                </p>
+
+                <div class="pop-step">
+                    <div class="pop-step-num">1</div>
+                    <div>
+                        <div class="pop-step-title"><i class="bi bi-card-text"></i> Título</div>
+                        <div class="pop-step-text">Resuma o problema numa linha -- ex: "Instabilidade no link de internet".</div>
+                    </div>
+                </div>
+
+                <div class="pop-step">
+                    <div class="pop-step-num">2</div>
+                    <div>
+                        <div class="pop-step-title"><i class="bi bi-building"></i> Fornecedor</div>
+                        <div class="pop-step-text">Obrigatório -- quem vai resolver o problema. Não achou na lista? Tem um atalho pra cadastrar um fornecedor novo sem sair da tela.</div>
+                    </div>
+                </div>
+
+                <div class="pop-step">
+                    <div class="pop-step-num">3</div>
+                    <div>
+                        <div class="pop-step-title"><i class="bi bi-tags"></i> Categoria <span class="text-muted small fw-normal">(opcional)</span></div>
+                        <div class="pop-step-text">Classificação própria dos chamados externos -- gerenciada em "Categorias" nesta mesma tela, separada das categorias dos chamados internos.</div>
+                    </div>
+                </div>
+
+                <div class="pop-step">
+                    <div class="pop-step-num">4</div>
+                    <div>
+                        <div class="pop-step-title"><i class="bi bi-flag"></i> Prioridade</div>
+                        <div class="pop-step-text">Baixa, Média, Alta ou Urgente -- ajuda a priorizar visualmente na lista, não tem SLA automático como o chamado interno.</div>
+                    </div>
+                </div>
+
+                <div class="pop-step">
+                    <div class="pop-step-num">5</div>
+                    <div>
+                        <div class="pop-step-title"><i class="bi bi-hash"></i> Protocolo do fornecedor <span class="text-muted small fw-normal">(opcional)</span></div>
+                        <div class="pop-step-text">Se o fornecedor já te passou um número de protocolo/chamado do lado dele, registre aqui -- facilita muito na hora de cobrar retorno.</div>
+                    </div>
+                </div>
+
+                <div class="pop-step">
+                    <div class="pop-step-num">6</div>
+                    <div>
+                        <div class="pop-step-title"><i class="bi bi-hdd-network"></i> Ativo relacionado <span class="text-muted small fw-normal">(opcional)</span></div>
+                        <div class="pop-step-text">Busque por patrimônio ou nome se o problema for sobre um equipamento específico já cadastrado.</div>
+                    </div>
+                </div>
+
+                <div class="pop-step">
+                    <div class="pop-step-num">7</div>
+                    <div>
+                        <div class="pop-step-title"><i class="bi bi-file-text"></i> Descrição</div>
+                        <div class="pop-step-text">O que está acontecendo, com o máximo de detalhe -- é o que você vai repassar (ou copiar) pro fornecedor no primeiro contato.</div>
+                    </div>
+                </div>
+
+                <div class="pop-step">
+                    <div class="pop-step-num">8</div>
+                    <div>
+                        <div class="pop-step-title"><i class="bi bi-check-lg"></i> Abrir chamado</div>
+                        <div class="pop-step-text">Registra o chamado -- depois, na ficha dele, dá pra comentar o andamento, anexar arquivo (inclusive de compartilhamento de rede/Samba) e mudar o status conforme o fornecedor responde.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.pop-modal .modal-content { background:#0d1117; color:#c9d1d9; border:1px solid #30363d; border-radius:14px; }
+.pop-topbar { display:flex; justify-content:space-between; align-items:center; padding:14px 20px; background:#161b22; border-bottom:1px solid #30363d; border-radius:14px 14px 0 0; }
+.pop-topbar .pop-breadcrumb { font-weight:600; color:#58a6ff; display:flex; align-items:center; gap:8px; font-size:1rem; }
+.pop-body { padding:1.3rem 1.6rem; max-height:72vh; overflow-y:auto; }
+.pop-intro { color:#8b949e; font-size:.88rem; margin-bottom:1.2rem; padding-bottom:1rem; border-bottom:1px dashed #30363d; }
+.pop-step { display:flex; gap:1rem; padding:.85rem 0; border-bottom:1px solid #21262d; }
+.pop-step:last-child { border-bottom:0; padding-bottom:0; }
+.pop-step-num { flex:0 0 auto; width:34px; height:34px; border-radius:9px; background:#132030; color:#58a6ff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:.95rem; border:1px solid #1f3b57; }
+.pop-step-title { font-weight:600; color:#e6edf3; font-size:.92rem; display:flex; align-items:center; gap:6px; }
+.pop-step-text { color:#8b949e; font-size:.83rem; margin-top:3px; line-height:1.55; }
+.pop-step-text strong { color:#c9d1d9; }
+</style>
 
 <form method="get" class="card border-0 shadow-sm mb-3">
     <div class="card-body row g-3 align-items-end">
