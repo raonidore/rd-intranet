@@ -4,9 +4,9 @@ ob_start();
 use App\Components\Alert;
 use App\Components\Badge;
 
-$rotuloAcao = ['renomeado' => 'Renomeado/Movido', 'excluido' => 'Excluído', 'gravado' => 'Conteúdo gravado', 'criado' => 'Pasta criada'];
-$corAcao = ['renomeado' => 'primary', 'excluido' => 'danger', 'gravado' => 'success', 'criado' => 'info'];
-$iconeAcao = ['renomeado' => 'bi-arrow-left-right', 'excluido' => 'bi-trash3', 'gravado' => 'bi-pencil-square', 'criado' => 'bi-folder-plus'];
+$rotuloAcao = ['renomeado' => 'Renomeado/Movido', 'excluido' => 'Excluído', 'gravado' => 'Conteúdo gravado', 'pasta_criada' => 'Pasta criada', 'arquivo_criado' => 'Arquivo criado'];
+$corAcao = ['renomeado' => 'primary', 'excluido' => 'danger', 'gravado' => 'success', 'pasta_criada' => 'info', 'arquivo_criado' => 'success'];
+$iconeAcao = ['renomeado' => 'bi-arrow-left-right', 'excluido' => 'bi-trash3', 'gravado' => 'bi-pencil-square', 'pasta_criada' => 'bi-folder-plus', 'arquivo_criado' => 'bi-file-earmark-plus'];
 ?>
 
 <?= Alert::flash() ?>
@@ -31,7 +31,7 @@ $iconeAcao = ['renomeado' => 'bi-arrow-left-right', 'excluido' => 'bi-trash3', '
     <div class="card-body">
         <strong><i class="bi bi-question-circle"></i> Como funciona</strong>
         <ul class="small text-muted mb-0 mt-2 ps-3">
-            <li>Registra, por usuário e por compartilhamento: <strong>criar pasta</strong>, <strong>renomear/mover</strong>, <strong>excluir</strong> e <strong>gravar conteúdo</strong> (criar/modificar um arquivo, inclusive copiar de outro lugar da rede).</li>
+            <li>Registra, por usuário e por compartilhamento: <strong>criar pasta</strong>, <strong>criar arquivo</strong>, <strong>renomear/mover</strong>, <strong>excluir</strong> e <strong>gravar conteúdo</strong> (modificar um arquivo já existente, inclusive copiar de outro lugar da rede).</li>
             <li>Copiar arquivos pela rede (Explorer, "Copiar e Colar") costuma usar um atalho do próprio Windows/Samba que não informa o nome do arquivo -- aparece como "Conteúdo gravado" com uma observação em vez do caminho.</li>
             <li>
                 Como a <a href="<?= url('/samba/lixeira') ?>">Lixeira Administrativa</a> fica sempre ativa, uma

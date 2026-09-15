@@ -39,17 +39,26 @@
 #   4. Copiar pasta/arquivo pela rede (Explorer, "scopy" no smbclient)
 #      quase sempre usa Server-Side Copy (FSCTL_SRV_COPYCHUNK) em vez
 #      de leitura+escrita normal -- confirmado ao vivo que isso NUNCA
-#      aparece como pwrite, e sim como offload_write_recv. Criar pasta
-#      tambem tem operacao propria (mkdirat). Sem os dois, uma copia de
-#      pastas inteira (exatamente o caso que motivou essa investigacao)
-#      passava 100% em branco pela auditoria, mesmo com tudo configurado
-#      certo. IMPORTANTE: full_audit nao consegue resolver o nome do
-#      arquivo pra offload_write (send OU recv) -- confirmado ao vivo,
-#      o campo de caminho vem sempre vazio nessa operacao especifica
-#      (limitacao do proprio modulo, nao tem como contornar via config).
+#      aparece como pwrite, e sim como offload_write_recv. IMPORTANTE:
+#      full_audit nao consegue resolver o nome do arquivo pra
+#      offload_write (send OU recv) -- confirmado ao vivo, o campo de
+#      caminho vem sempre vazio nessa operacao especifica (limitacao do
+#      proprio modulo, nao tem como contornar via config).
 #      SambaAuditoriaService::parsear() troca esse vazio por um texto
 #      explicando a limitacao, em vez de mostrar uma celula em branco
 #      sem explicacao nenhuma.
+#   5. "create_file" (aberturas/criacoes SMB2, o pedido unico que um
+#      cliente moderno usa tanto pra ABRIR quanto pra CRIAR arquivo OU
+#      pasta) e o sinal mais confiavel de criacao -- mas so entra na
+#      lista de sucesso porque o proprio log carrega o "disposition" do
+#      pedido (create/overwrite_if/... vs so "open"), permitindo ao
+#      parser filtrar e manter SO criacao/sobrescrita real, descartando
+#      toda abertura comum (navegar pasta, abrir arquivo pra leitura) --
+#      confirmado ao vivo que um simples "ls" gera create_file com
+#      disposition="open", nunca aparece como criacao na tela. Substitui
+#      "mkdirat" (que so cobria alguns clientes -- confirmado ao vivo
+#      que smbclient dispara os DOIS pro mesmo mkdir, e um Explorer real
+#      pode so disparar create_file).
 #   4. "vfs objects" nao acumula entre [global] e um include -- igual
 #      antivirus_tempo_real_web.sh, repete "acl_xattr recycle" (base
 #      do SambaTemplate::global()) e, se o antivirus em tempo real
@@ -102,7 +111,7 @@ fi
   echo "# Gerado pela RD Intranet (Samba > Auditoria de Arquivos). Nao edite manualmente."
   echo "vfs objects = ${VFS_OBJECTS}"
   echo "full_audit:prefix = %u|%I|%m|%S"
-  echo "full_audit:success = renameat unlinkat pwrite_recv mkdirat offload_write_recv"
+  echo "full_audit:success = renameat unlinkat pwrite_recv offload_write_recv create_file"
   echo "full_audit:failure = none"
   echo "full_audit:facility = LOCAL5"
   echo "full_audit:priority = NOTICE"
