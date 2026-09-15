@@ -4,9 +4,9 @@ ob_start();
 use App\Components\Alert;
 use App\Components\Badge;
 
-$rotuloAcao = ['renomeado' => 'Renomeado/Movido', 'excluido' => 'Excluído', 'gravado' => 'Conteúdo gravado'];
-$corAcao = ['renomeado' => 'primary', 'excluido' => 'danger', 'gravado' => 'success'];
-$iconeAcao = ['renomeado' => 'bi-arrow-left-right', 'excluido' => 'bi-trash3', 'gravado' => 'bi-pencil-square'];
+$rotuloAcao = ['renomeado' => 'Renomeado/Movido', 'excluido' => 'Excluído', 'gravado' => 'Conteúdo gravado', 'criado' => 'Pasta criada'];
+$corAcao = ['renomeado' => 'primary', 'excluido' => 'danger', 'gravado' => 'success', 'criado' => 'info'];
+$iconeAcao = ['renomeado' => 'bi-arrow-left-right', 'excluido' => 'bi-trash3', 'gravado' => 'bi-pencil-square', 'criado' => 'bi-folder-plus'];
 ?>
 
 <?= Alert::flash() ?>
@@ -31,7 +31,8 @@ $iconeAcao = ['renomeado' => 'bi-arrow-left-right', 'excluido' => 'bi-trash3', '
     <div class="card-body">
         <strong><i class="bi bi-question-circle"></i> Como funciona</strong>
         <ul class="small text-muted mb-0 mt-2 ps-3">
-            <li>Registra, por usuário e por compartilhamento: <strong>renomear/mover</strong>, <strong>excluir</strong> e <strong>gravar conteúdo</strong> (criar ou modificar um arquivo).</li>
+            <li>Registra, por usuário e por compartilhamento: <strong>criar pasta</strong>, <strong>renomear/mover</strong>, <strong>excluir</strong> e <strong>gravar conteúdo</strong> (criar/modificar um arquivo, inclusive copiar de outro lugar da rede).</li>
+            <li>Copiar arquivos pela rede (Explorer, "Copiar e Colar") costuma usar um atalho do próprio Windows/Samba que não informa o nome do arquivo -- aparece como "Conteúdo gravado" com uma observação em vez do caminho.</li>
             <li>
                 Como a <a href="<?= url('/samba/lixeira') ?>">Lixeira Administrativa</a> fica sempre ativa, uma
                 exclusão de usuário nunca some de verdade na hora -- ela move o arquivo pra dentro de

@@ -130,11 +130,25 @@ class SambaAuditoriaService
                 $operacao === 'renameat' => 'renomeado',
                 $operacao === 'unlinkat' => 'excluido',
                 $operacao === 'pwrite_recv' => 'gravado',
+                // Copia de pasta/arquivo pela rede (Explorer, Server-Side
+                // Copy) quase sempre passa por aqui, nao por pwrite -- ver
+                // comentario em samba_auditoria_web.sh.
+                $operacao === 'offload_write_recv' => 'gravado',
+                $operacao === 'mkdirat' => 'criado',
                 default => null,
             };
 
             if ($acao === null) {
                 continue;
+            }
+
+            // full_audit nao consegue resolver o nome do arquivo pra
+            // offload_write (limitacao do proprio modulo, confirmada ao
+            // vivo -- nao e bug de configuracao) -- melhor avisar isso
+            // explicitamente do que mostrar uma celula em branco sem
+            // explicacao nenhuma.
+            if ($operacao === 'offload_write_recv' && $caminho === '') {
+                $caminho = '(cópia feita direto no servidor -- Samba não informa o nome do arquivo pra esse tipo de operação)';
             }
 
             $linhas[] = [

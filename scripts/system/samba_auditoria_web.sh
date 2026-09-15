@@ -36,6 +36,20 @@
 #   3. Uma escrita de arquivo (SMB2) dispara pwrite_send E pwrite_recv
 #      -- so pwrite_recv entra na lista (recv = operacao concluida,
 #      evita duplicar cada gravacao em duas linhas de log).
+#   4. Copiar pasta/arquivo pela rede (Explorer, "scopy" no smbclient)
+#      quase sempre usa Server-Side Copy (FSCTL_SRV_COPYCHUNK) em vez
+#      de leitura+escrita normal -- confirmado ao vivo que isso NUNCA
+#      aparece como pwrite, e sim como offload_write_recv. Criar pasta
+#      tambem tem operacao propria (mkdirat). Sem os dois, uma copia de
+#      pastas inteira (exatamente o caso que motivou essa investigacao)
+#      passava 100% em branco pela auditoria, mesmo com tudo configurado
+#      certo. IMPORTANTE: full_audit nao consegue resolver o nome do
+#      arquivo pra offload_write (send OU recv) -- confirmado ao vivo,
+#      o campo de caminho vem sempre vazio nessa operacao especifica
+#      (limitacao do proprio modulo, nao tem como contornar via config).
+#      SambaAuditoriaService::parsear() troca esse vazio por um texto
+#      explicando a limitacao, em vez de mostrar uma celula em branco
+#      sem explicacao nenhuma.
 #   4. "vfs objects" nao acumula entre [global] e um include -- igual
 #      antivirus_tempo_real_web.sh, repete "acl_xattr recycle" (base
 #      do SambaTemplate::global()) e, se o antivirus em tempo real
@@ -88,7 +102,7 @@ fi
   echo "# Gerado pela RD Intranet (Samba > Auditoria de Arquivos). Nao edite manualmente."
   echo "vfs objects = ${VFS_OBJECTS}"
   echo "full_audit:prefix = %u|%I|%m|%S"
-  echo "full_audit:success = renameat unlinkat pwrite_recv"
+  echo "full_audit:success = renameat unlinkat pwrite_recv mkdirat offload_write_recv"
   echo "full_audit:failure = none"
   echo "full_audit:facility = LOCAL5"
   echo "full_audit:priority = NOTICE"
