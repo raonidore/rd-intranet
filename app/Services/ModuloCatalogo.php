@@ -13,6 +13,7 @@ class ModuloCatalogo
         'samba_arquivos' => ['label' => 'Arquivos', 'grupo' => 'Samba'],
         'samba_diagnostico' => ['label' => 'Diagnóstico', 'grupo' => 'Samba'],
         'samba_lixeira' => ['label' => 'Lixeira Administrativa', 'grupo' => 'Samba'],
+        'samba_auditoria' => ['label' => 'Auditoria de Arquivos', 'grupo' => 'Samba'],
         'deploy' => ['label' => 'Central de Configurações', 'grupo' => 'Samba'],
         'samba_config' => ['label' => 'Config. Global Samba', 'grupo' => 'Samba'],
         'samba_dominio' => ['label' => 'Domínio (AD)', 'grupo' => 'Samba'],

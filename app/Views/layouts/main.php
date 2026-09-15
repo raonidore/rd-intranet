@@ -673,6 +673,7 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         || PermissionService::temAcesso('samba_config')
         || PermissionService::temAcesso('samba_dominio')
         || PermissionService::temAcesso('samba_diagnostico')
+        || PermissionService::temAcesso('samba_auditoria')
         || PermissionService::temAcesso('samba_grupos')
         || PermissionService::temAcesso('samba_lixeira')
         || PermissionService::temAcesso('samba_monitor')
@@ -724,6 +725,12 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         <?php if (PermissionService::temAcesso('samba_diagnostico')): ?>
         <a href="<?= url('/samba/diagnostico') ?>" class="<?= $uriAtual === '/samba/diagnostico' ? 'active' : '' ?>">
             <i class="bi bi-activity me-2"></i> Diagnóstico
+        </a>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('samba_auditoria')): ?>
+        <a href="<?= url('/samba/auditoria') ?>" class="<?= $uriAtual === '/samba/auditoria' ? 'active' : '' ?>">
+            <i class="bi bi-eye me-2"></i> Auditoria
         </a>
         <?php endif; ?>
 

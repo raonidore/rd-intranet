@@ -24,6 +24,13 @@ fi
 if [ "$ACAO" = "desativar" ]; then
   : > "$ARQUIVO"
   systemctl reload smbd 2>/dev/null || systemctl restart smbd
+  # Auditoria de arquivos (audit.conf) e incluida DEPOIS deste arquivo no
+  # smb.conf, entao continua valendo mesmo com o antivirus desligado --
+  # mas se ela estava ativa com "virusfilter" na propria lista (porque o
+  # antivirus estava ligado quando foi configurada), precisa recompor sem
+  # virusfilter agora, senao o smbd reclama de um modulo cujas diretivas
+  # sumiram. Reprocessa (idempotente) so se a auditoria estiver ligada.
+  [ -s /etc/samba/audit.conf ] && /opt/rdtecnologia/scripts/samba_auditoria_web.sh ativar >/dev/null 2>&1
   echo '{"success":true,"message":"Escaneamento em tempo real desativado."}'
   exit 0
 fi
@@ -63,5 +70,11 @@ if ! testparm -s >/dev/null 2>&1; then
 fi
 
 systemctl reload smbd 2>/dev/null || systemctl restart smbd
+
+# Mesmo raciocinio do "desativar" acima, na direcao oposta: se a
+# auditoria ja estava ligada, recompoe agora incluindo virusfilter (que
+# acabou de ficar ativo), senao o antivirus ligaria mas audit.conf (que
+# vem depois no smb.conf) sobrescreveria "vfs objects" sem ele.
+[ -s /etc/samba/audit.conf ] && /opt/rdtecnologia/scripts/samba_auditoria_web.sh ativar >/dev/null 2>&1
 
 echo '{"success":true,"message":"Escaneamento em tempo real ativado -- arquivos infectados sao movidos para quarentena ao serem abertos."}'

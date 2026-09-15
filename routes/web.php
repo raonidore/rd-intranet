@@ -12,6 +12,7 @@ use App\Controllers\SambaActionController;
 use App\Controllers\SambaCompartilhamentoController;
 use App\Controllers\SambaController;
 use App\Controllers\SambaDiagnosticoController;
+use App\Controllers\SambaAuditoriaController;
 use App\Controllers\SambaLixeiraController;
 use App\Controllers\SambaDashboardController;
 use App\Controllers\SambaMonitorController;
@@ -190,6 +191,10 @@ $router->get('/samba/dominio/gpos/desvincular', [SambaDominioController::class, 
 
 $router->get('/samba/diagnostico', [SambaDiagnosticoController::class, 'index']);
 $router->get('/samba/diagnostico/logs-completos', [SambaDiagnosticoController::class, 'logsCompletos']);
+
+$router->get('/samba/auditoria', [SambaAuditoriaController::class, 'index']);
+$router->post('/samba/auditoria/ativar', [SambaAuditoriaController::class, 'ativar']);
+$router->post('/samba/auditoria/desativar', [SambaAuditoriaController::class, 'desativar']);
 $router->post('/samba/actions/importar-compartilhamento', [SambaActionController::class, 'importarCompartilhamento']);
 $router->post('/samba/actions/mover-pasta-lixeira', [SambaActionController::class, 'moverPastaParaLixeira']);
 $router->get('/samba/dashboard', [SambaDashboardController::class, 'index']);
