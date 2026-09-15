@@ -369,6 +369,12 @@ class AtivoService
         return $this->repository->buscarPorIds($ids);
     }
 
+    /** @return array<string, array{id:int, codigo_patrimonio:string, nome:string}> indexado pelo nome em maiúsculas */
+    public function buscarPorNomesMaquina(array $nomes): array
+    {
+        return $this->repository->buscarPorNomesMaquina($nomes);
+    }
+
     public function listarProgramas(int $ativoId): array
     {
         return $this->repository->listarProgramas($ativoId);

@@ -211,10 +211,50 @@ class SambaArquivosController extends Controller
         ];
     }
 
+    /**
+     * Converte um caminho absoluto como vem do log de auditoria
+     * (ex: "/srv/samba/Compartilhamentos/TI/pasta/arquivo.txt") pro "rel"
+     * que estes controllers esperam (ex: "TI/pasta/arquivo.txt") -- null
+     * se o caminho não estiver dentro de BASE_PATH (ex: o texto
+     * explicativo que SambaAuditoriaService usa no lugar de um caminho
+     * pra offload_write_recv, que nunca vem preenchido pelo módulo).
+     */
+    public static function relFromAbsoluto(?string $absoluto): ?string
+    {
+        if ($absoluto === null || $absoluto === '') {
+            return null;
+        }
+
+        $base = rtrim(self::BASE_PATH, '/') . '/';
+        if (!str_starts_with($absoluto, $base)) {
+            return null;
+        }
+
+        $rel = trim(substr($absoluto, strlen($base)), '/');
+        return $rel !== '' ? $rel : null;
+    }
+
+    /** Mesma classificação de shapeItem(), exposta pra outras telas (ex: Samba > Auditoria) decidirem quais botões de ação mostrar. */
+    public static function classificarExtensao(string $ext): array
+    {
+        $ext = strtolower($ext);
+        $ehImagem = in_array($ext, self::IMAGE_EXTS, true);
+        $ehVideo  = in_array($ext, self::VIDEO_EXTS, true);
+        $cfg = self::extConfig();
+
+        return [
+            'isImage'  => $ehImagem,
+            'isVideo'  => $ehVideo,
+            'isPdf'    => $ext === 'pdf',
+            'viewable' => !$ehImagem && !$ehVideo && in_array($ext, $cfg['visualizar'], true),
+            'editable' => !$ehImagem && !$ehVideo && in_array($ext, $cfg['editar'], true),
+        ];
+    }
+
     // ── Download ─────────────────────────────────────────────────────────
     public function download(): void
     {
-        AuthMiddleware::checkModulo('samba_arquivos');
+        AuthMiddleware::checkQualquerModulo(['samba_arquivos', 'samba_auditoria']);
 
         $rel = $this->validarRel($_GET['path'] ?? '');
         if ($rel === null) {
@@ -233,7 +273,7 @@ class SambaArquivosController extends Controller
     // ── Visualizar PDF ────────────────────────────────────────────────────
     public function visualizar(): void
     {
-        AuthMiddleware::checkModulo('samba_arquivos');
+        AuthMiddleware::checkQualquerModulo(['samba_arquivos', 'samba_auditoria']);
 
         $rel = $this->validarRel($_GET['path'] ?? '');
         if ($rel === null) {
@@ -264,7 +304,7 @@ class SambaArquivosController extends Controller
     // ── Ler conteúdo (para editor) ────────────────────────────────────────
     public function ler(): void
     {
-        AuthMiddleware::checkModulo('samba_arquivos');
+        AuthMiddleware::checkQualquerModulo(['samba_arquivos', 'samba_auditoria']);
         header('Content-Type: application/json');
 
         $rel = $this->validarRel($_GET['path'] ?? '');
@@ -284,7 +324,7 @@ class SambaArquivosController extends Controller
     // ── Salvar texto editado ──────────────────────────────────────────────
     public function salvar(): void
     {
-        AuthMiddleware::checkModulo('samba_arquivos');
+        AuthMiddleware::checkQualquerModulo(['samba_arquivos', 'samba_auditoria']);
         header('Content-Type: application/json');
 
         $rel = $this->validarRel($_POST['path'] ?? '');

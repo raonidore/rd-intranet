@@ -98,6 +98,34 @@ class AtivoRepository
         return $item ?: null;
     }
 
+    /**
+     * Busca ativos por nome de máquina, comparação case-insensitive --
+     * o hostname reportado pelo agente (Environment.MachineName) e o
+     * "%m" que o Samba loga podem vir em caixas diferentes. Usado pela
+     * Auditoria de Arquivos pra cruzar a máquina do log com um Ativo já
+     * cadastrado, numa única consulta em vez de uma por linha.
+     *
+     * @return array<string, array{id:int, codigo_patrimonio:string, nome:string}> indexado pelo nome em maiúsculas
+     */
+    public function buscarPorNomesMaquina(array $nomes): array
+    {
+        $nomes = array_values(array_unique(array_filter(array_map('trim', $nomes))));
+        if (empty($nomes)) {
+            return [];
+        }
+
+        $placeholders = implode(',', array_fill(0, count($nomes), '?'));
+        $stmt = $this->pdo->prepare("SELECT id, codigo_patrimonio, nome FROM ativos WHERE UPPER(nome) IN ($placeholders)");
+        $stmt->execute(array_map('mb_strtoupper', $nomes));
+
+        $porNome = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $ativo) {
+            $porNome[mb_strtoupper($ativo['nome'])] = $ativo;
+        }
+
+        return $porNome;
+    }
+
     public function buscarPorIds(array $ids): array
     {
         if (empty($ids)) {
