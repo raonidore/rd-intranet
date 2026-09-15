@@ -80,6 +80,30 @@ class SambaAuditoriaService
         return array_slice($linhas, 0, $limite);
     }
 
+    /**
+     * Estado da retenção do histórico completo (/var/log/samba/audit.log
+     * no servidor -- a tela só mostra as últimas 5000 linhas, ver
+     * listar()). Dias configurados vêm do logrotate.d/samba-audit;
+     * tamanho e data do arquivo rotacionado mais antigo vêm de
+     * samba_auditoria_retencao_web.sh, que também é o único autorizado
+     * a MUDAR esse valor (ver salvarRetencaoDias()).
+     */
+    public function retencao(): array
+    {
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/samba_auditoria_retencao_web.sh');
+        $dados = json_decode(trim($resultado['output'] ?? ''), true);
+
+        return is_array($dados) ? $dados : ['success' => false, 'message' => $resultado['output']];
+    }
+
+    public function salvarRetencaoDias(int $dias): array
+    {
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/samba_auditoria_retencao_web.sh', [(string) $dias]);
+        $dados = json_decode(trim($resultado['output'] ?? ''), true);
+
+        return is_array($dados) ? $dados : ['success' => false, 'message' => $resultado['output']];
+    }
+
     public function compartilhamentosNoLog(): array
     {
         $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/samba_auditoria_logs_web.sh');

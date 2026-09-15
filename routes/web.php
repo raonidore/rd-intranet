@@ -195,6 +195,7 @@ $router->get('/samba/diagnostico/logs-completos', [SambaDiagnosticoController::c
 $router->get('/samba/auditoria', [SambaAuditoriaController::class, 'index']);
 $router->post('/samba/auditoria/ativar', [SambaAuditoriaController::class, 'ativar']);
 $router->post('/samba/auditoria/desativar', [SambaAuditoriaController::class, 'desativar']);
+$router->post('/samba/auditoria/retencao', [SambaAuditoriaController::class, 'salvarRetencao']);
 $router->post('/samba/actions/importar-compartilhamento', [SambaActionController::class, 'importarCompartilhamento']);
 $router->post('/samba/actions/mover-pasta-lixeira', [SambaActionController::class, 'moverPastaParaLixeira']);
 $router->get('/samba/dashboard', [SambaDashboardController::class, 'index']);

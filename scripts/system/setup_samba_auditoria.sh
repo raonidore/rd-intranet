@@ -19,7 +19,11 @@
 #      já perdeu um teste inteiro antes de ser encontrada.
 #   4. logrotate: log de auditoria pode crescer rápido (uma gravação de
 #      arquivo grande já gera várias linhas via pwrite_recv) -- sem
-#      rotação, cresce sem limite.
+#      rotação, cresce sem limite. So cria o arquivo com um padrao (30
+#      dias) na primeira instalacao -- se o admin ja mudou a retencao
+#      pela tela (Samba > Auditoria), samba_auditoria_retencao_web.sh
+#      e o UNICO autorizado a reescrever "rotate N" depois disso, pra
+#      "Aplicar atualizacao" nunca apagar essa escolha sem querer.
 
 set -euo pipefail
 
@@ -69,7 +73,8 @@ mkdir -p /var/log/samba
 chown syslog:adm "$ARQUIVO_LOG"
 chmod 640 "$ARQUIVO_LOG"
 
-cat > "$ARQUIVO_LOGROTATE" <<EOF
+if [ ! -f "$ARQUIVO_LOGROTATE" ]; then
+  cat > "$ARQUIVO_LOGROTATE" <<EOF
 ${ARQUIVO_LOG} {
     daily
     rotate 30
@@ -83,6 +88,7 @@ ${ARQUIVO_LOG} {
     endscript
 }
 EOF
+fi
 
 systemctl restart rsyslog
 

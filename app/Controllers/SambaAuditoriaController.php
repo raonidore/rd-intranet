@@ -34,7 +34,20 @@ class SambaAuditoriaController extends Controller
             'filtros' => $filtros,
             'registros' => $ativa ? $this->service->listar($filtros) : [],
             'compartilhamentos' => $ativa ? $this->service->compartilhamentosNoLog() : [],
+            'retencao' => $ativa ? $this->service->retencao() : null,
         ]);
+    }
+
+    public function salvarRetencao(): void
+    {
+        AuthMiddleware::checkModulo('samba_auditoria');
+
+        $dias = (int) ($_POST['dias'] ?? 0);
+        $resultado = $this->service->salvarRetencaoDias($dias);
+        $resultado['success'] ? NotificationService::success('Retenção do log de auditoria atualizada.') : NotificationService::error($resultado['message']);
+
+        header('Location: ' . url('/samba/auditoria'));
+        exit;
     }
 
     public function ativar(): void

@@ -57,11 +57,19 @@ class SambaGlobalConfigService
             ],
         ],
         'logs' => [
-            'titulo' => 'Logs e Auditoria',
+            // Nome de propósito: "Logs de Conexão", NUNCA "Auditoria" --
+            // esse grupo só controla o log geral de protocolo/conexão do
+            // smbd (um arquivo por máquina, via %m), sem nenhum dado de
+            // quem criou/renomeou/excluiu arquivo. O rastro de arquivo de
+            // verdade é outra tela (Samba > Auditoria, audit.log,
+            // SambaAuditoriaService) -- usar a palavra "Auditoria" aqui
+            // de novo já confundiu um admin real (achou que era o mesmo
+            // arquivo).
+            'titulo' => 'Logs de Conexão (Samba)',
             'icone'  => 'bi-journal-text',
             'campos' => [
                 ['key' => 'log file',    'label' => 'Arquivo de log',    'tipo' => 'text',
-                 'help' => 'Caminho do arquivo de log. Use %m para separar por máquina (ex: /var/log/samba/%m.log)'],
+                 'help' => 'Log geral de conexão/protocolo do smbd (um arquivo por máquina, %m). Não registra quem criou/renomeou/excluiu arquivo -- isso fica em Samba > Auditoria (/var/log/samba/audit.log).'],
                 ['key' => 'max log size','label' => 'Tamanho máximo (KB)','tipo' => 'number',
                  'help' => 'Tamanho máximo do log em KB antes de rotacionar (0 = ilimitado)'],
                 ['key' => 'logging',     'label' => 'Modo de logging',   'tipo' => 'select',

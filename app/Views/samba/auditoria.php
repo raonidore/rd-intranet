@@ -39,7 +39,8 @@ $iconeAcao = ['renomeado' => 'bi-arrow-left-right', 'excluido' => 'bi-trash3', '
                 <code>.recycle/</code>, e é esse movimento que aparece aqui como "Excluído".
             </li>
             <li>Não registra leitura/abertura de arquivo (só o que muda algo), pra não lotar a tela com ruído.</li>
-            <li>O histórico completo fica gravado em <code>/var/log/samba/audit.log</code> no servidor (rotacionado automaticamente); esta tela mostra as últimas 5.000 entradas.</li>
+            <li>O histórico completo fica gravado em <code>/var/log/samba/audit.log</code> no servidor (rotacionado conforme a retenção configurada abaixo); esta tela mostra as últimas 5.000 entradas.</li>
+            <li>Isso é um arquivo <strong>diferente</strong> do <code>log file</code> (<code>/var/log/samba/%m.log</code>) que aparece em <a href="<?= url('/samba/configuracao') ?>">Samba &gt; Configuração</a> -- aquele é o log geral de conexão/protocolo do Samba (um arquivo por máquina que conecta), não registra quem apagou ou renomeou um arquivo. <strong>Pra investigar quem apagou/moveu/gravou um arquivo, o arquivo certo é o desta tela.</strong></li>
         </ul>
     </div>
 </div>
@@ -52,6 +53,43 @@ $iconeAcao = ['renomeado' => 'bi-arrow-left-right', 'excluido' => 'bi-trash3', '
         </div>
     </div>
 <?php else: ?>
+
+    <div class="card border-0 shadow-sm mb-3">
+        <div class="card-body">
+            <strong><i class="bi bi-clock-history"></i> Retenção do histórico</strong>
+            <p class="small text-muted mt-1 mb-3">Por quanto tempo o <code>audit.log</code> completo (não só as 5.000 entradas mostradas abaixo) fica guardado no servidor antes de ser descartado. Um arquivo apagado/renomeado só pode ser rastreado enquanto o dia dele ainda estiver dentro desse prazo.</p>
+            <?php if (!$retencao || empty($retencao['success'])): ?>
+                <div class="text-danger small"><i class="bi bi-exclamation-triangle"></i> Não foi possível ler a configuração de retenção no servidor<?= !empty($retencao['message']) ? ': ' . htmlspecialchars($retencao['message']) : '.' ?></div>
+            <?php else: ?>
+                <?php
+                    $tamanhoMb = round(($retencao['tamanho_bytes'] ?? 0) / 1048576, 1);
+                    $maisAntiga = $retencao['data_mais_antiga'] ?? '';
+                ?>
+                <div class="row g-3 mb-3">
+                    <div class="col-sm-4">
+                        <div class="text-muted small">Guardando há</div>
+                        <div class="fw-semibold"><?= (int) ($retencao['dias'] ?? 0) ?> dias</div>
+                    </div>
+                    <div class="col-sm-4">
+                        <div class="text-muted small">Espaço ocupado hoje</div>
+                        <div class="fw-semibold"><?= number_format($tamanhoMb, 1, ',', '.') ?> MB</div>
+                    </div>
+                    <div class="col-sm-4">
+                        <div class="text-muted small">Registro mais antigo em disco</div>
+                        <div class="fw-semibold"><?= $maisAntiga ? htmlspecialchars(data_br($maisAntiga, 'd/m/Y')) : '<span class="text-muted">ainda não rotacionou</span>' ?></div>
+                    </div>
+                </div>
+                <form method="post" action="<?= url('/samba/auditoria/retencao') ?>" class="d-flex align-items-end gap-2">
+                    <div>
+                        <label class="form-label small text-muted mb-1">Guardar por quantos dias</label>
+                        <input type="number" name="dias" min="1" max="3650" class="form-control form-control-sm" style="width:110px" value="<?= (int) ($retencao['dias'] ?? 30) ?>" required>
+                    </div>
+                    <button type="submit" class="btn btn-outline-primary btn-sm">Salvar retenção</button>
+                </form>
+                <p class="small text-muted mt-2 mb-0">Referência: <?= number_format($tamanhoMb, 1, ',', '.') ?> MB acumulados em <?= (int) ($retencao['dias'] ?? 0) ?> dias -- use essa média pra estimar quanto espaço um prazo maior vai ocupar (ex: dobrar os dias tende a dobrar o espaço).</p>
+            <?php endif; ?>
+        </div>
+    </div>
 
     <div class="card border-0 shadow-sm mb-3">
         <div class="card-body">
