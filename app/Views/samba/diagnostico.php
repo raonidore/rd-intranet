@@ -319,12 +319,22 @@ $comparacao = $diagnostico['comparacao'];
                 <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabJournalctl" type="button">journalctl smbd</button></li>
                 <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabApache" type="button">Erro Apache</button></li>
                 <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabCores" type="button">Core dumps</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabAuditoriaJournal" type="button">Auditoria (journal)</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabAuditoriaArquivo" type="button">Auditoria (arquivo)</button></li>
                 <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabClientes" type="button">Por cliente</button></li>
             </ul>
             <div class="tab-content border border-top-0 p-2">
                 <div class="tab-pane fade show active" id="tabJournalctl"><pre class="bg-dark text-light p-3 rounded mb-0" style="max-height:450px;overflow:auto;" id="conteudoJournalctl"></pre></div>
                 <div class="tab-pane fade" id="tabApache"><pre class="bg-dark text-light p-3 rounded mb-0" style="max-height:450px;overflow:auto;" id="conteudoApache"></pre></div>
                 <div class="tab-pane fade" id="tabCores"><pre class="bg-dark text-light p-3 rounded mb-0" style="max-height:450px;overflow:auto;" id="conteudoCores"></pre></div>
+                <div class="tab-pane fade" id="tabAuditoriaJournal">
+                    <p class="text-muted small px-2 pt-2 mb-1">Mensagens do módulo full_audit vistas pelo systemd journal -- chegam aqui independente do roteamento pro arquivo próprio ter funcionado ou não.</p>
+                    <pre class="bg-dark text-light p-3 rounded mb-0" style="max-height:450px;overflow:auto;" id="conteudoAuditoriaJournal"></pre>
+                </div>
+                <div class="tab-pane fade" id="tabAuditoriaArquivo">
+                    <p class="text-muted small px-2 pt-2 mb-1">/var/log/samba/audit.log -- se a aba anterior tiver conteúdo e esta estiver vazia, o problema é só o roteamento syslog para o arquivo (dono/permissão).</p>
+                    <pre class="bg-dark text-light p-3 rounded mb-0" style="max-height:450px;overflow:auto;" id="conteudoAuditoriaArquivo"></pre>
+                </div>
                 <div class="tab-pane fade" id="tabClientes"><pre class="bg-dark text-light p-3 rounded mb-0" style="max-height:450px;overflow:auto;" id="conteudoClientes"></pre></div>
             </div>
         </div>
@@ -351,6 +361,8 @@ $comparacao = $diagnostico['comparacao'];
             document.getElementById('conteudoJournalctl').textContent = dados.journalctl_smbd || '(vazio)';
             document.getElementById('conteudoApache').textContent = dados.apache_error || '(vazio)';
             document.getElementById('conteudoCores').textContent = dados.core_dumps || '(vazio)';
+            document.getElementById('conteudoAuditoriaJournal').textContent = dados.auditoria_journal || '(vazio)';
+            document.getElementById('conteudoAuditoriaArquivo').textContent = dados.auditoria_arquivo || '(vazio)';
             document.getElementById('conteudoClientes').textContent = dados.logs_por_cliente || '(vazio)';
 
             bloco.classList.remove('d-none');

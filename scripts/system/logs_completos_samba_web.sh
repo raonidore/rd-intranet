@@ -29,6 +29,29 @@ else
 fi
 
 echo ""
+echo "### AUDITORIA_JOURNAL"
+# Diagnostico da Auditoria de Arquivos (Samba > Auditoria): o modulo
+# full_audit manda a mensagem por syslog (facility LOCAL5, tag
+# "smbd_audit") -- ela chega no journal SEMPRE, independente do
+# roteamento pro arquivo proprio ter dado certo ou nao (ver
+# setup_samba_auditoria.sh). Comparar isto com AUDITORIA_ARQUIVO logo
+# abaixo aponta exatamente onde esta o problema quando "nao aparece
+# nada": se aqui tambem estiver vazio, o full_audit nao esta nem
+# tentando logar aquela operacao (nome de operacao fora da lista
+# configurada, ex: offload_write em copia server-side, ou auditoria
+# desligada); se aqui tiver entrada mas o arquivo abaixo estiver vazio,
+# o problema e so o roteamento rsyslog->arquivo (dono/permissao).
+journalctl -t smbd_audit -n 200 --no-pager 2>/dev/null
+
+echo ""
+echo "### AUDITORIA_ARQUIVO"
+if [ -f /var/log/samba/audit.log ]; then
+  tail -n 200 /var/log/samba/audit.log
+else
+  echo "(arquivo nao encontrado)"
+fi
+
+echo ""
 echo "### LOGS_POR_CLIENTE"
 if [ -d /var/log/samba ]; then
   for arquivo in /var/log/samba/*.log /var/log/samba/log.*; do

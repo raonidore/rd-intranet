@@ -121,6 +121,8 @@ class SambaDiagnosticoService
             'journalctl_smbd' => $this->extrairSecao($output, 'JOURNALCTL_SMBD'),
             'apache_error' => $this->extrairSecao($output, 'APACHE_ERROR'),
             'core_dumps' => $this->extrairSecao($output, 'CORE_DUMPS'),
+            'auditoria_journal' => $this->extrairSecao($output, 'AUDITORIA_JOURNAL'),
+            'auditoria_arquivo' => $this->extrairSecao($output, 'AUDITORIA_ARQUIVO'),
             'logs_por_cliente' => $this->extrairSecao($output, 'LOGS_POR_CLIENTE'),
         ];
     }
