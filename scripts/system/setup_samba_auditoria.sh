@@ -37,6 +37,25 @@ ARQUIVO_LOGROTATE="/etc/logrotate.d/samba-audit"
 chown root:root "$ARQUIVO_AUDIT_CONF"
 chmod 644 "$ARQUIVO_AUDIT_CONF"
 
+# SambaGlobalConfigService::gerarSmbConf() ja escreve esse include em
+# qualquer regeneracao NOVA do smb.conf -- mas um servidor que ja
+# tinha o [global] gerado ANTES dessa mudanca so ganha a linha de novo
+# se um admin reabrir e salvar Samba > Config Global manualmente (sem
+# motivo nenhum pra saber que precisa fazer isso). Idempotente: so
+# insere se realmente estiver faltando, logo apos o include do
+# antivirus (mesma posicao que gerarSmbConf() usa).
+if [ -f /etc/samba/smb.conf ] && grep -q "^include = /etc/samba/antivirus.conf$" /etc/samba/smb.conf \
+   && ! grep -q "^include = ${ARQUIVO_AUDIT_CONF}$" /etc/samba/smb.conf; then
+  cp /etc/samba/smb.conf /etc/samba/smb.conf.antes-auditoria
+  sed -i "\\#^include = /etc/samba/antivirus.conf\$#a include = ${ARQUIVO_AUDIT_CONF}" /etc/samba/smb.conf
+  if testparm -s >/dev/null 2>&1; then
+    systemctl reload smbd 2>/dev/null || systemctl restart smbd
+  else
+    mv /etc/samba/smb.conf.antes-auditoria /etc/samba/smb.conf
+  fi
+  rm -f /etc/samba/smb.conf.antes-auditoria
+fi
+
 cat > "$ARQUIVO_RSYSLOG" <<EOF
 # Gerado pela RD Intranet -- roteia o log da Auditoria de Arquivos
 # (Samba > Auditoria, modulo VFS full_audit) pra um arquivo proprio, em
