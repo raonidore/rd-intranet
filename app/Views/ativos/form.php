@@ -43,7 +43,12 @@ $idsTiposComSnmp = array_column(array_filter($tipos, fn (array $t) => (bool)$t['
                 <?php if ($editando): ?>
                     <div class="col-md-3">
                         <label class="form-label">Código</label>
-                        <input type="text" class="form-control font-monospace" value="<?= htmlspecialchars($ativo['codigo_patrimonio']) ?>" disabled>
+                        <div class="input-group">
+                            <input type="text" class="form-control font-monospace" id="campoCodigoAtivo" value="<?= htmlspecialchars($ativo['codigo_patrimonio']) ?>" disabled>
+                            <button type="button" class="btn btn-outline-secondary" id="botaoAtualizarCodigo" data-id="<?= (int)$ativo['id'] ?>" title="Gerar um código novo pra unidade atual (use depois de mudar a unidade -- salve a mudança de unidade primeiro)">
+                                <i class="bi bi-arrow-repeat"></i>
+                            </button>
+                        </div>
                     </div>
                 <?php endif; ?>
                 <div class="col-md-3">
@@ -290,6 +295,29 @@ $idsTiposComSnmp = array_column(array_filter($tipos, fn (array $t) => (bool)$t['
         } finally {
             botao.disabled = false;
             botao.innerHTML = textoOriginal;
+        }
+    });
+})();
+
+(function () {
+    const botao = document.getElementById('botaoAtualizarCodigo');
+    if (!botao) return;
+
+    botao.addEventListener('click', async function () {
+        if (!confirm('Gerar um código novo de patrimônio pra unidade atual deste ativo? O código antigo deixa de existir.\n\nSe você mudou a Unidade agora e ainda não salvou, salve primeiro -- o código novo usa a unidade que já está gravada.')) return;
+
+        const dados = new URLSearchParams();
+        dados.set('id', botao.dataset.id);
+
+        try {
+            const res = await fetch(<?= json_encode(url('/ativos/atualizar-codigo')) ?>, { method: 'POST', body: dados });
+            const resultado = await res.json();
+            if (resultado.success) {
+                document.getElementById('campoCodigoAtivo').value = resultado.codigo;
+            }
+            alert(resultado.success ? ('Código atualizado para "' + resultado.codigo + '".') : (resultado.message || 'Falha ao atualizar o código.'));
+        } catch (e) {
+            alert('Erro ao comunicar com o servidor.');
         }
     });
 })();
