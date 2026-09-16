@@ -34,9 +34,24 @@ use App\Components\Badge;
                 (<?= (int)$porta ?>), separado do Apache/PHP. Não expõe nada na internet sozinho -- a porta só
                 fica alcançável de onde o Firewall permitir.
             </p>
-            <button type="button" class="btn btn-primary" id="botaoInstalar">
+
+            <button type="button" class="btn btn-primary" id="botaoInstalar" <?= ($statusInstalacao['status'] ?? 'ausente') === 'rodando' ? 'style="display:none"' : '' ?>>
                 <i class="bi bi-download"></i> Instalar
             </button>
+
+            <div id="painelProgresso" class="rd-progresso-install" <?= ($statusInstalacao['status'] ?? 'ausente') === 'rodando' ? '' : 'style="display:none"' ?>>
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span id="progressoEtapa" class="small fw-semibold text-primary">Iniciando…</span>
+                    <span class="small text-muted font-monospace" id="progressoTempo">00:00</span>
+                </div>
+                <div class="progress" style="height:10px">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" id="progressoBarra" role="progressbar" style="width:5%"></div>
+                </div>
+                <p class="small text-muted mt-2 mb-0" id="progressoAviso">
+                    Pode levar alguns minutos (o Node.js e o pacote do MeshCentral são baixados na hora) --
+                    fique à vontade pra sair dessa tela e voltar depois, o progresso continua sendo salvo no servidor.
+                </p>
+            </div>
         <?php else: ?>
             <p class="text-muted small">
                 Console próprio do MeshCentral (criação da conta de administrador, instalador do
@@ -267,24 +282,133 @@ use App\Components\Badge;
 <script>
 (function () {
     const botao = document.getElementById('botaoInstalar');
-    if (!botao) return;
+    const painel = document.getElementById('painelProgresso');
+    if (!botao || !painel) return;
+
+    const URL_STATUS = <?= json_encode(url('/ativos/acesso-remoto/instalar-status')) ?>;
+    const elEtapa = document.getElementById('progressoEtapa');
+    const elTempo = document.getElementById('progressoTempo');
+    const elBarra = document.getElementById('progressoBarra');
+    const elAviso = document.getElementById('progressoAviso');
+
+    let pollTimer = null;
+    let tickTimer = null;
+    let elapsedBase = 0;
+    let elapsedBaseSetAt = Date.now();
+
+    function formatarTempo(segundos) {
+        const m = Math.floor(segundos / 60).toString().padStart(2, '0');
+        const s = Math.floor(segundos % 60).toString().padStart(2, '0');
+        return m + ':' + s;
+    }
+
+    function atualizarTempoExibido() {
+        const decorrido = elapsedBase + Math.floor((Date.now() - elapsedBaseSetAt) / 1000);
+        elTempo.textContent = formatarTempo(decorrido);
+    }
+
+    function pararTudo() {
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+        if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+    }
+
+    function mostrarPainel() {
+        botao.style.display = 'none';
+        painel.style.display = '';
+    }
+
+    function esconderPainel() {
+        painel.style.display = 'none';
+        botao.style.display = '';
+    }
+
+    async function consultarStatus() {
+        let dados;
+        try {
+            const res = await fetch(URL_STATUS);
+            dados = await res.json();
+        } catch (e) {
+            return; // falha de rede pontual -- tenta de novo no proximo tick, sem derrubar o polling
+        }
+
+        if (dados.status === 'rodando' || dados.status === 'concluido' || dados.status === 'erro') {
+            elapsedBase = Math.max(0, (dados.atualizado_em || 0) - (dados.iniciado_em || 0));
+            elapsedBaseSetAt = Date.now();
+            atualizarTempoExibido();
+        }
+
+        if (dados.status === 'rodando') {
+            elEtapa.textContent = dados.etapa || 'Instalando…';
+            elBarra.style.width = (dados.percentual || 5) + '%';
+            elBarra.parentElement.setAttribute('aria-valuenow', dados.percentual || 5);
+            return;
+        }
+
+        if (dados.status === 'concluido') {
+            elBarra.style.width = '100%';
+            elEtapa.textContent = 'Concluído';
+            pararTudo();
+            alert(dados.mensagem || 'MeshCentral instalado.');
+            location.reload();
+            return;
+        }
+
+        if (dados.status === 'erro') {
+            pararTudo();
+            elBarra.classList.remove('progress-bar-animated', 'bg-primary');
+            elBarra.classList.add('bg-danger');
+            elEtapa.textContent = 'Falha na instalação';
+            elAviso.textContent = dados.mensagem || 'Falha ao instalar -- confira os logs no servidor.';
+            elAviso.classList.remove('text-muted');
+            elAviso.classList.add('text-danger');
+            return;
+        }
+
+        // "ausente" enquanto o painel esta visivel so acontece se a pagina
+        // carregou achando que estava rodando mas na verdade ja tinha
+        // terminado (raro) -- volta pro botao em vez de ficar preso.
+        pararTudo();
+        esconderPainel();
+    }
+
+    function iniciarAcompanhamento() {
+        mostrarPainel();
+        elBarra.classList.remove('bg-danger');
+        elBarra.classList.add('progress-bar-animated', 'bg-primary');
+        elAviso.classList.remove('text-danger');
+        elAviso.classList.add('text-muted');
+        elAviso.textContent = 'Pode levar alguns minutos (o Node.js e o pacote do MeshCentral são baixados na hora) -- fique à vontade pra sair dessa tela e voltar depois, o progresso continua sendo salvo no servidor.';
+        pararTudo();
+        consultarStatus();
+        pollTimer = setInterval(consultarStatus, 1500);
+        tickTimer = setInterval(atualizarTempoExibido, 1000);
+    }
 
     botao.addEventListener('click', async function () {
         botao.disabled = true;
-        botao.innerHTML = '<i class="bi bi-hourglass-split"></i> Instalando (pode levar um minuto)...';
-
         try {
             const res = await fetch(<?= json_encode(url('/ativos/acesso-remoto/instalar')) ?>, { method: 'POST' });
             const resultado = await res.json();
-            alert(resultado.message || (resultado.success ? 'Instalado.' : 'Falha ao instalar.'));
-            if (resultado.success) location.reload();
+            if (!resultado.success) {
+                alert(resultado.message || 'Falha ao iniciar a instalação.');
+                botao.disabled = false;
+                return;
+            }
+            elapsedBase = 0;
+            elapsedBaseSetAt = Date.now();
+            iniciarAcompanhamento();
         } catch (e) {
             alert('Erro ao comunicar com o servidor.');
-        } finally {
             botao.disabled = false;
-            botao.innerHTML = '<i class="bi bi-download"></i> Instalar';
         }
     });
+
+    // Instalação já em andamento (detectado no carregamento da página --
+    // ex: usuário deu F5 ou voltou depois) -- retoma o acompanhamento sem
+    // precisar clicar em nada.
+    if (painel.style.display !== 'none') {
+        iniciarAcompanhamento();
+    }
 })();
 
 (function () {

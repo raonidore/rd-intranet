@@ -34,6 +34,7 @@ class AcessoRemotoController extends Controller
 
         $this->view('ativos/acesso_remoto', [
             'instalado' => $this->service->instalado(),
+            'statusInstalacao' => $this->service->statusInstalacao(),
             'rodando' => $rodando,
             'porta' => $this->service->porta(),
             'urlConsole' => $this->service->urlConsole(),
@@ -122,7 +123,17 @@ class AcessoRemotoController extends Controller
         AuthMiddleware::checkModulo('ativos_acesso_remoto');
         header('Content-Type: application/json');
 
-        echo json_encode($this->service->instalar());
+        $this->service->instalarEmSegundoPlano();
+
+        echo json_encode(['success' => true]);
+    }
+
+    public function instalarStatus(): void
+    {
+        AuthMiddleware::checkModulo('ativos_acesso_remoto');
+        header('Content-Type: application/json');
+
+        echo json_encode($this->service->statusInstalacao());
     }
 
     public function salvarCredenciais(): void

@@ -1044,6 +1044,7 @@ $router->post('/ativos/cadastros/tipo-excluir', [AtivoController::class, 'tipoEx
 
 $router->get('/ativos/acesso-remoto', [AcessoRemotoController::class, 'index']);
 $router->post('/ativos/acesso-remoto/instalar', [AcessoRemotoController::class, 'instalar']);
+$router->get('/ativos/acesso-remoto/instalar-status', [AcessoRemotoController::class, 'instalarStatus']);
 $router->post('/ativos/acesso-remoto/credenciais', [AcessoRemotoController::class, 'salvarCredenciais']);
 $router->post('/ativos/acesso-remoto/vincular', [AcessoRemotoController::class, 'vincular']);
 $router->post('/ativos/acesso-remoto/compartilhar', [AcessoRemotoController::class, 'compartilhar']);

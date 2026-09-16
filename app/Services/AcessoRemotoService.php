@@ -15,6 +15,9 @@ class AcessoRemotoService
 {
     private const MESHCTRL_PATH = '/opt/meshcentral/node_modules/meshcentral/meshctrl.js';
 
+    /** Escrito pelo próprio script (roda em segundo plano, sem stdout capturado) -- ver instalarEmSegundoPlano()/statusInstalacao(). */
+    private const STATUS_INSTALACAO_ARQUIVO = __DIR__ . '/../../storage/cache/meshcentral_instalacao.json';
+
     private LinuxService $linux;
 
     public function __construct()
@@ -165,18 +168,37 @@ class AcessoRemotoService
         return trim($resultado['output']) === 'active';
     }
 
-    public function instalar(): array
+    /**
+     * Dispara a instalação em segundo plano (npm install do MeshCentral
+     * sozinho já passa de 1 minuto) e volta na hora -- a tela acompanha
+     * via statusInstalacao(), tanto por polling quanto ao carregar/
+     * recarregar a página, pra nunca dar a impressão de ter travado.
+     */
+    public function instalarEmSegundoPlano(): void
     {
-        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/meshcentral_instalar_web.sh');
+        @unlink(self::STATUS_INSTALACAO_ARQUIVO);
+        $this->linux->executarScriptEmSegundoPlano('/opt/rdtecnologia/scripts/meshcentral_instalar_web.sh');
+    }
 
-        $dados = json_decode($resultado['output'], true);
+    /**
+     * @return array{status: string, etapa?: string, percentual?: int, mensagem?: string, iniciado_em?: int, atualizado_em?: int}
+     *   status: "ausente" (nunca rodou, ou já foi consultado até concluir e a tela seguiu em frente),
+     *   "rodando", "concluido" ou "erro".
+     */
+    public function statusInstalacao(): array
+    {
+        $conteudo = @file_get_contents(self::STATUS_INSTALACAO_ARQUIVO);
+        $dados = $conteudo !== false ? json_decode($conteudo, true) : null;
 
         if (!is_array($dados)) {
-            return ['success' => false, 'message' => 'Resposta inesperada do instalador: ' . $resultado['output']];
+            return ['status' => 'ausente'];
         }
 
-        if (!empty($dados['success'])) {
+        if (($dados['status'] ?? '') === 'concluido' && !empty($dados['mensagem'])) {
             AuditService::registrar('Ativos', 'Acesso Remoto', 'MeshCentral instalado.');
+            // Só registra uma vez -- limpa pra essa checagem não repetir a
+            // cada novo carregamento da tela depois de já concluído.
+            @unlink(self::STATUS_INSTALACAO_ARQUIVO);
         }
 
         return $dados;
