@@ -37,6 +37,9 @@ if [ -n "$ARG" ]; then
     systemctl restart isc-dhcp-server >/dev/null 2>&1
   else
     systemctl stop isc-dhcp-server >/dev/null 2>&1
+    # limpa o estado "failed" que a config ruim deixou -- ja foi
+    # corrigido, nao deve continuar aparecendo como problema na tela
+    systemctl reset-failed isc-dhcp-server >/dev/null 2>&1
   fi
 fi
 

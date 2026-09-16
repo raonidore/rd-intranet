@@ -39,14 +39,22 @@ fi
 CONF="/etc/dhcp/dhcpd.conf"
 DEFAULTS="/etc/default/isc-dhcp-server"
 
-# valida sintaxe primeiro, sem tocar no arquivo real nem no servico
-if ! dhcpd -t -cf "$ORIGEM" >/tmp/rd_dhcp_err_$$ 2>&1; then
+# dhcpd roda confinado por AppArmor (perfil usr.sbin.dhcpd) -- só pode ler
+# dentro de /etc/dhcp/, NUNCA /tmp/ (confirmado ao vivo: "dhcpd -t -cf
+# /tmp/arquivo" falha com "Permission denied" mesmo rodando como root,
+# porque AppArmor é controle obrigatório, independente de dono/permissão
+# Unix do arquivo). Por isso copia pra dentro de /etc/dhcp/ ANTES de
+# validar, em vez de apontar o -cf direto pro caminho que o PHP gerou.
+ARQUIVO_TESTE="/etc/dhcp/.rd-intranet-teste.conf"
+cp "$ORIGEM" "$ARQUIVO_TESTE"
+
+if ! dhcpd -t -cf "$ARQUIVO_TESTE" >/tmp/rd_dhcp_err_$$ 2>&1; then
   ERRO="$(tail -15 /tmp/rd_dhcp_err_$$ | tr '\n' ' ' | sed 's/"/\\"/g')"
-  rm -f /tmp/rd_dhcp_err_$$
+  rm -f /tmp/rd_dhcp_err_$$ "$ARQUIVO_TESTE"
   echo "{\"success\":false,\"message\":\"Configuracao invalida, nada foi alterado: ${ERRO}\"}"
   exit 1
 fi
-rm -f /tmp/rd_dhcp_err_$$
+rm -f /tmp/rd_dhcp_err_$$ "$ARQUIVO_TESTE"
 
 mkdir -p /etc/rd-intranet/.dhcp-backups
 CARIMBO="$(date +%Y%m%d%H%M%S%N)"
@@ -70,13 +78,26 @@ cp "$ORIGEM" "$CONF"
 echo "INTERFACESv4=\"${IFACE}\"" > "$DEFAULTS"
 
 systemctl restart isc-dhcp-server 2>/tmp/rd_dhcp_err_$$
-if [ $? -ne 0 ] || ! systemctl is-active --quiet isc-dhcp-server; then
+RESTART_RC=$?
+# dhcpd pode subir (Type=simple reporta "active" no fork) e cair sozinho
+# poucos milissegundos depois -- ex: interface sem nenhuma subnet
+# declarada pra rede dela ("No subnet declaration for eth0 (x.x.x.x)").
+# Confirmado ao vivo: sem essa espera, o "is-active" logo em seguida
+# ainda pega o servico de pe e a falha so aparece na janela de rollback
+# (ate 600s de DHCP fora do ar), em vez de ser revertida na hora.
+sleep 2
+if [ "$RESTART_RC" -ne 0 ] || ! systemctl is-active --quiet isc-dhcp-server; then
   ERRO="$(journalctl -u isc-dhcp-server -n 15 --no-pager 2>/dev/null | tr '\n' ' ' | sed 's/"/\\"/g')"
   rm -f /tmp/rd_dhcp_err_$$
   # restaura na hora, nao espera a janela de rollback pra um erro ja detectado agora
   [ -f "$BACKUP_CONF" ] && cp "$BACKUP_CONF" "$CONF" || rm -f "$CONF"
   [ -f "$BACKUP_DEFAULTS" ] && cp "$BACKUP_DEFAULTS" "$DEFAULTS" || rm -f "$DEFAULTS"
-  [ "$ESTAVA_ATIVO" = "1" ] && systemctl restart isc-dhcp-server >/dev/null 2>&1 || systemctl stop isc-dhcp-server >/dev/null 2>&1
+  if [ "$ESTAVA_ATIVO" = "1" ]; then
+    systemctl restart isc-dhcp-server >/dev/null 2>&1
+  else
+    systemctl stop isc-dhcp-server >/dev/null 2>&1
+    systemctl reset-failed isc-dhcp-server >/dev/null 2>&1
+  fi
   echo "{\"success\":false,\"message\":\"Servico nao subiu com a config nova, revertido na hora: ${ERRO}\"}"
   exit 1
 fi
