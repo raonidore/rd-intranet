@@ -33,7 +33,16 @@ if [ -z "$VERSAO" ]; then
   exit 1
 fi
 
-mkdir -p "$(dirname "$DESTINO")"
+PASTA_DESTINO="$(dirname "$DESTINO")"
+mkdir -p "$PASTA_DESTINO"
+# Esse script roda como root (sudo) -- sem isso, mkdir -p acima cria a
+# pasta dona root:root (o chown mais abaixo só troca o dono do ARQUIVO,
+# nunca da pasta). O .exe fica servível normalmente, mas qualquer coisa
+# que precise gravar OUTRO arquivo nessa mesma pasta rodando como
+# www-data (ex: upload manual do .NET Desktop Runtime, que usa o mesmo
+# storage/uploads/agente/) falha com "permissão de escrita?" -- visto ao
+# vivo num servidor novo.
+chown www-data:www-data "$PASTA_DESTINO"
 TEMP="${DESTINO}.baixando"
 
 if ! sudo -u "$REPO_USER" git show "origin/${BRANCH}:agente-windows/dist/RdIntranetAgente.exe" > "$TEMP" 2>/dev/null; then
