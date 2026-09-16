@@ -33,6 +33,21 @@ public class CheckinPayload
     [JsonPropertyName("versao_agente")]
     public string? VersaoAgente { get; set; }
 
+    /// <summary>
+    /// Escolhidos pelo operador na instalação (ConfigForm, a partir da
+    /// v1.0.24), via GET /api/ativos/cadastros. Só têm efeito no PRIMEIRO
+    /// checkin desta máquina (ativo novo) -- ver AtivoService::checkinAgente().
+    /// Unidade nula cai na unidade padrão do servidor, como sempre foi.
+    /// </summary>
+    [JsonPropertyName("unidade_id")]
+    public int? UnidadeId { get; set; }
+
+    [JsonPropertyName("setor_id")]
+    public int? SetorId { get; set; }
+
+    [JsonPropertyName("localizacao_id")]
+    public int? LocalizacaoId { get; set; }
+
     [JsonPropertyName("sistema_operacional")]
     public string? SistemaOperacional { get; set; }
 

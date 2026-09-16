@@ -351,14 +351,16 @@ class AtivoRepository
     {
         $stmt = $this->pdo->prepare("
             INSERT INTO ativos
-            (tipo_id, unidade_id, codigo_patrimonio, nome, marca, modelo, numero_serie, ip, status, machine_guid, origem, agente_versao, ultimo_checkin, detalhes)
+            (tipo_id, unidade_id, setor_id, localizacao_id, codigo_patrimonio, nome, marca, modelo, numero_serie, ip, status, machine_guid, origem, agente_versao, ultimo_checkin, detalhes)
             VALUES
-            (:tipo_id, :unidade_id, :codigo_patrimonio, :nome, :marca, :modelo, :numero_serie, :ip, 'ativo', :machine_guid, 'agente', :agente_versao, NOW(), :detalhes)
+            (:tipo_id, :unidade_id, :setor_id, :localizacao_id, :codigo_patrimonio, :nome, :marca, :modelo, :numero_serie, :ip, 'ativo', :machine_guid, 'agente', :agente_versao, NOW(), :detalhes)
         ");
 
         $stmt->execute([
             'tipo_id' => $dados['tipo_id'],
             'unidade_id' => $dados['unidade_id'],
+            'setor_id' => $dados['setor_id'] ?? null,
+            'localizacao_id' => $dados['localizacao_id'] ?? null,
             'codigo_patrimonio' => $dados['codigo_patrimonio'],
             'nome' => $dados['nome'],
             'marca' => $dados['marca'],

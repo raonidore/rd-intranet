@@ -42,6 +42,18 @@ public class Config
     /// </summary>
     public string MachineGuidCache { get; set; } = "";
 
+    /// <summary>
+    /// Escolhidos na tela de configuração (a partir da v1.0.24), a partir
+    /// da lista que GET /api/ativos/cadastros devolve. Só têm efeito no
+    /// PRIMEIRO checkin desta máquina -- ver CheckinPayload/AtivoService::
+    /// checkinAgente(). Unidade nula cai na unidade padrão do servidor,
+    /// como sempre foi (compatível com config.json pré-existente/
+    /// distribuído em massa via GPO sem esses campos).
+    /// </summary>
+    public int? UnidadeId { get; set; }
+    public int? SetorId { get; set; }
+    public int? LocalizacaoId { get; set; }
+
     public bool EstaConfigurado => !string.IsNullOrWhiteSpace(ServerUrl) && !string.IsNullOrWhiteSpace(ApiKey);
 
     private static string PastaDados => Path.Combine(

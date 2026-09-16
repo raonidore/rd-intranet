@@ -18,6 +18,11 @@ class AtivoCatalogoService
         $this->repository = new AtivoCatalogoRepository();
     }
 
+    public function buscar(int $id): ?array
+    {
+        return $this->repository->buscarPorId($id);
+    }
+
     public function listarSetores(): array
     {
         return $this->repository->listarPorTipo('setor');

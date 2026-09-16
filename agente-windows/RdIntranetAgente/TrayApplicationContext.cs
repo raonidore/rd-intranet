@@ -297,6 +297,13 @@ public class TrayApplicationContext : ApplicationContext
         try
         {
             var payload = await Task.Run(() => CollectorService.Coletar(_estado.MarcaEventos));
+            // Só tem efeito de verdade no PRIMEIRO checkin desta máquina
+            // (ver AtivoService::checkinAgente()) -- escolhidos uma vez na
+            // instalação (ConfigForm), reenviados em todo checkin sem
+            // custo nenhum, sem sobrescrever nada depois que o ativo já existe.
+            payload.UnidadeId = _config.UnidadeId;
+            payload.SetorId = _config.SetorId;
+            payload.LocalizacaoId = _config.LocalizacaoId;
             var resultado = await new CheckinClient(_config).EnviarAsync(payload);
 
             _estado.UltimoCheckinEm = DateTime.Now;

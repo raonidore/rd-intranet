@@ -200,6 +200,36 @@ class AtivoAgenteController extends Controller
         readfile($caminho);
     }
 
+    /**
+     * Consultado pelo instalador do agente (X-RD-Agente-Chave) logo
+     * depois do operador digitar URL+chave, pra listar unidade (obrigatória
+     * na tela) e setor/localização (opcionais) antes do primeiro checkin --
+     * evita cair sempre na unidade padrão e precisar corrigir depois.
+     * Serve de quebra também como teste de "a chave/URL estão certas?".
+     */
+    public function cadastros(): void
+    {
+        header('Content-Type: application/json');
+
+        $chaveEnviada = $_SERVER['HTTP_X_RD_AGENTE_CHAVE'] ?? '';
+
+        if (!$this->service->chaveValida($chaveEnviada)) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'message' => 'Chave de API inválida.']);
+            return;
+        }
+
+        $unidadeService = new \App\Services\UnidadeService();
+        $catalogoService = new \App\Services\AtivoCatalogoService();
+
+        echo json_encode([
+            'success' => true,
+            'unidades' => array_map(fn (array $u) => ['id' => (int)$u['id'], 'nome' => $u['nome']], $unidadeService->listarAtivas()),
+            'setores' => array_map(fn (array $s) => ['id' => (int)$s['id'], 'nome' => $s['nome']], $catalogoService->listarSetores()),
+            'localizacoes' => array_map(fn (array $l) => ['id' => (int)$l['id'], 'nome' => $l['nome']], $catalogoService->listarLocalizacoes()),
+        ]);
+    }
+
     /** Consultado pelo próprio agente (X-RD-Agente-Chave) pra saber se há versão nova. */
     public function versaoExecutavel(): void
     {

@@ -1029,6 +1029,7 @@ $router->post('/api/ativos/solicitacoes/arquivo', [AtivoAgenteController::class,
 $router->get('/api/ativos/comandos/anexo', [AtivoAgenteController::class, 'baixarAnexoComando']);
 $router->get('/api/ativos/agente/versao', [AtivoAgenteController::class, 'versaoExecutavel']);
 $router->get('/api/ativos/agente/download', [AtivoAgenteController::class, 'downloadAtualizacao']);
+$router->get('/api/ativos/cadastros', [AtivoAgenteController::class, 'cadastros']);
 
 $router->post('/api/whatsapp/webhook', [WhatsAppWebhookController::class, 'receber']);
 $router->get('/api/whatsapp/webhook/meta', [WhatsAppWebhookController::class, 'verificarMeta']);
