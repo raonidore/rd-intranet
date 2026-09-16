@@ -951,6 +951,7 @@ $router->get('/ativos/novo', [AtivoController::class, 'novoForm']);
 $router->post('/ativos/novo', [AtivoController::class, 'novo']);
 $router->get('/ativos/editar', [AtivoController::class, 'editarForm']);
 $router->post('/ativos/editar', [AtivoController::class, 'editar']);
+$router->post('/ativos/atualizar-codigo', [AtivoController::class, 'atualizarCodigo']);
 $router->get('/ativos/excluir', [AtivoController::class, 'excluirForm']);
 $router->post('/ativos/excluir', [AtivoController::class, 'excluir']);
 $router->get('/ativos/etiqueta', [AtivoController::class, 'etiqueta']);

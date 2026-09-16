@@ -175,6 +175,9 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             <div class="text-muted small mb-1">Nome: <?= htmlspecialchars($ativo['nome']) ?></div>
         <?php endif; ?>
         <span class="font-monospace text-muted"><?= htmlspecialchars($ativo['codigo_patrimonio']) ?></span>
+        <button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="botaoAtualizarCodigo" data-id="<?= (int)$ativo['id'] ?>" title="Gerar um código novo pra unidade atual (use depois de mudar a unidade do ativo -- o código não muda sozinho ao editar)">
+            <i class="bi bi-arrow-repeat"></i>
+        </button>
         <span class="badge text-bg-light border"><?= htmlspecialchars($ativo['unidade_nome']) ?></span>
         <?= Badge::make(htmlspecialchars(AtivoService::STATUS[$ativo['status']] ?? $ativo['status']), $statusCores[$ativo['status']] ?? 'secondary') ?>
         <?php if ($ativo['origem'] === 'agente'): ?>
@@ -4269,6 +4272,27 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
         } finally {
             botao.disabled = false;
             botao.innerHTML = textoOriginal;
+        }
+    });
+})();
+
+(function () {
+    const botao = document.getElementById('botaoAtualizarCodigo');
+    if (!botao) return;
+
+    botao.addEventListener('click', async function () {
+        if (!confirm('Gerar um código novo de patrimônio pra unidade atual deste ativo? O código antigo deixa de existir.')) return;
+
+        const dados = new URLSearchParams();
+        dados.set('id', botao.dataset.id);
+
+        try {
+            const res = await fetch(<?= json_encode(url('/ativos/atualizar-codigo')) ?>, { method: 'POST', body: dados });
+            const resultado = await res.json();
+            alert(resultado.success ? ('Código atualizado para "' + resultado.codigo + '".') : (resultado.message || 'Falha ao atualizar o código.'));
+            if (resultado.success) location.reload();
+        } catch (e) {
+            alert('Erro ao comunicar com o servidor.');
         }
     });
 })();

@@ -203,6 +203,16 @@ class AtivoController extends Controller
         exit;
     }
 
+    public function atualizarCodigo(): void
+    {
+        AuthMiddleware::checkModulo('ativos_novo');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+
+        echo json_encode($this->service->regenerarCodigo($id));
+    }
+
     public function excluirForm(): void
     {
         AuthMiddleware::checkModulo('ativos_novo');

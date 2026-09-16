@@ -215,6 +215,13 @@ class AtivoRepository
         ]);
     }
 
+    public function atualizarCodigoPatrimonio(int $id, string $codigo): bool
+    {
+        $stmt = $this->pdo->prepare("UPDATE ativos SET codigo_patrimonio = :codigo WHERE id = :id");
+
+        return $stmt->execute(['id' => $id, 'codigo' => $codigo]);
+    }
+
     /** $senhaCifrada null mantém a senha atual (só o usuário mudou); usuario+senha null juntos removem a credencial. */
     public function salvarCredenciaisElevacao(int $id, ?string $usuario, ?string $senhaCifrada): bool
     {

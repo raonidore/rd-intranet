@@ -192,6 +192,37 @@ class AtivoService
         return $ativo;
     }
 
+    /**
+     * Regenera o código de patrimônio pegando um número novo na sequência
+     * da unidade ATUAL do ativo (tipo+unidade, ver proximoCodigo()) --
+     * necessário depois de mudar a unidade pela tela de edição, já que
+     * "editar" nunca mexe em codigo_patrimonio sozinho (o código antigo,
+     * com a sigla da unidade errada, ficaria preso pra sempre).
+     */
+    public function regenerarCodigo(int $id): array
+    {
+        $ativo = $this->buscar($id);
+        if (!$ativo) {
+            return ['success' => false, 'message' => 'Ativo não encontrado.'];
+        }
+
+        $tipo = (new AtivoTipoService())->buscar((int)$ativo['tipo_id']);
+        $unidade = (new UnidadeService())->buscar((int)$ativo['unidade_id']);
+
+        if (!$tipo || !$unidade) {
+            return ['success' => false, 'message' => 'Tipo ou unidade do ativo inválidos.'];
+        }
+
+        $codigoAntigo = $ativo['codigo_patrimonio'];
+        $codigoNovo = $this->proximoCodigo($tipo, $unidade);
+
+        $this->repository->atualizarCodigoPatrimonio($id, $codigoNovo);
+
+        AuditService::registrar('Ativos', 'Atualizar Código', "Código do ativo \"{$ativo['nome']}\" alterado de \"{$codigoAntigo}\" para \"{$codigoNovo}\" (unidade: {$unidade['nome']}).");
+
+        return ['success' => true, 'codigo' => $codigoNovo];
+    }
+
     public function dashboard(): array
     {
         return [
