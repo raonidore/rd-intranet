@@ -161,11 +161,20 @@ class VpnWireguardService
         }
 
         foreach ($peers as $peer) {
+            // "rotas_extras" existe pra peer site-to-site (ex: RD.Bridge em
+            // modo VPN) -- o peer representa uma unidade remota inteira, não
+            // só o próprio host. Sem isso o servidor nunca roteia pacote
+            // nenhum pra rede atrás do peer, mesmo com o túnel no ar.
+            $allowedIps = $peer['ip_atribuido'] . '/32';
+            if (!empty($peer['rotas_extras'])) {
+                $allowedIps .= ', ' . $peer['rotas_extras'];
+            }
+
             $linhas[] = '';
             $linhas[] = "# {$peer['nome']}";
             $linhas[] = '[Peer]';
             $linhas[] = "PublicKey = {$peer['chave_publica']}";
-            $linhas[] = "AllowedIPs = {$peer['ip_atribuido']}/32";
+            $linhas[] = "AllowedIPs = {$allowedIps}";
         }
 
         return implode("\n", $linhas) . "\n";
@@ -174,7 +183,12 @@ class VpnWireguardService
     /**
      * @return array{success: bool, message: string, peer_id?: int, config_texto?: string, qr_base64?: ?string}
      */
-    public function criarPeer(string $nome): array
+    /**
+     * $rotasExtras: sub-redes adicionais que esse peer representa (site-to-site,
+     * ex: RD.Bridge em modo VPN) -- lista de CIDR separada por vírgula, cada
+     * uma validada solta. Vazio = peer normal, um único host (road warrior).
+     */
+    public function criarPeer(string $nome, string $rotasExtras = ''): array
     {
         $config = $this->repo->config();
         if (empty($config['chave_privada'])) {
@@ -186,6 +200,11 @@ class VpnWireguardService
             return ['success' => false, 'message' => 'Informe um nome para o peer.'];
         }
 
+        $rotasValidadas = $this->validarRotasExtras($rotasExtras);
+        if ($rotasValidadas === null) {
+            return ['success' => false, 'message' => 'Sub-rede adicional inválida -- use o formato CIDR (ex: 192.168.10.0/24), uma ou mais separadas por vírgula.'];
+        }
+
         $ip = $this->proximoIpDisponivel($config);
         if ($ip === null) {
             return ['success' => false, 'message' => 'Não há mais endereços disponíveis nessa subnet.'];
@@ -193,7 +212,7 @@ class VpnWireguardService
 
         [$privada, $publica] = $this->gerarParDeChaves();
 
-        $peerId = $this->repo->criarPeer($nome, $publica, $ip);
+        $peerId = $this->repo->criarPeer($nome, $publica, $ip, $rotasValidadas);
 
         $resultadoDeploy = $this->reaplicarConfig();
         if (!$resultadoDeploy['success']) {
@@ -365,6 +384,31 @@ class VpnWireguardService
     public function trafegoAgregadoHoje(): array
     {
         return $this->repo->trafegoAgregadoHoje();
+    }
+
+    /** @return string|null string normalizada ("cidr1, cidr2") pronta pra AllowedIPs, ou null se algum item não é CIDR válido */
+    private function validarRotasExtras(string $rotasExtras): ?string
+    {
+        $rotasExtras = trim($rotasExtras);
+        if ($rotasExtras === '') {
+            return '';
+        }
+
+        $validas = [];
+        foreach (explode(',', $rotasExtras) as $rota) {
+            $rota = trim($rota);
+            if ($rota === '') {
+                continue;
+            }
+
+            if (!preg_match('/^(\d{1,3}\.){3}\d{1,3}\/(\d|[12]\d|3[0-2])$/', $rota)) {
+                return null;
+            }
+
+            $validas[] = $rota;
+        }
+
+        return implode(', ', $validas);
     }
 
     private function proximoIpDisponivel(array $config): ?string

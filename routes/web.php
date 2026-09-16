@@ -74,6 +74,7 @@ use App\Controllers\ChamadoMeuController;
 use App\Controllers\PortalChamadoController;
 use App\Controllers\ChatController;
 use App\Controllers\IntegracoesController;
+use App\Controllers\RdBridgeController;
 use App\Controllers\DependenciaController;
 use App\Controllers\SpeedtestController;
 use App\Controllers\DdnsController;
@@ -484,6 +485,11 @@ $router->post('/administracao/integracoes/intelbras-dvr/salvar', [IntegracoesCon
 $router->post('/administracao/integracoes/intelbras-dvr/remover', [IntegracoesController::class, 'intelbrasDvrRemover']);
 $router->post('/administracao/integracoes/intelbras-dvr/credenciais/salvar', [IntegracoesController::class, 'intelbrasDvrCredencialSalvar']);
 $router->post('/administracao/integracoes/intelbras-dvr/credenciais/remover', [IntegracoesController::class, 'intelbrasDvrCredencialRemover']);
+$router->get('/administracao/integracoes/rd-bridge', [RdBridgeController::class, 'index']);
+$router->post('/administracao/integracoes/rd-bridge/criar', [RdBridgeController::class, 'criar']);
+$router->post('/administracao/integracoes/rd-bridge/revogar', [RdBridgeController::class, 'revogar']);
+$router->post('/api/rd-bridge/heartbeat', [RdBridgeController::class, 'apiHeartbeat']);
+$router->post('/api/rd-bridge/coleta/resultado', [RdBridgeController::class, 'apiColetaResultado']);
 
 $router->get('/administracao/integracoes/whatsapp', [WhatsAppIntegracaoController::class, 'form']);
 $router->post('/administracao/integracoes/whatsapp/tipo', [WhatsAppIntegracaoController::class, 'salvarTipo']);

@@ -120,7 +120,8 @@ class VpnWireguardController extends Controller
         header('Content-Type: application/json');
 
         $nome = trim($_POST['nome'] ?? '');
-        $resultado = $this->service->criarPeer($nome);
+        $rotasExtras = trim($_POST['rotas_extras'] ?? '');
+        $resultado = $this->service->criarPeer($nome, $rotasExtras);
 
         if ($resultado['success']) {
             AuditService::registrar('VPN WireGuard', 'Criar peer', "Peer \"{$nome}\" criado.");

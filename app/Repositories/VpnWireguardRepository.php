@@ -83,13 +83,13 @@ class VpnWireguardRepository
         return $this->pdo->query('SELECT ip_atribuido FROM vpn_wireguard_peers')->fetchAll(PDO::FETCH_COLUMN);
     }
 
-    public function criarPeer(string $nome, string $chavePublica, string $ip): int
+    public function criarPeer(string $nome, string $chavePublica, string $ip, ?string $rotasExtras = null): int
     {
         $stmt = $this->pdo->prepare('
-            INSERT INTO vpn_wireguard_peers (nome, chave_publica, ip_atribuido)
-            VALUES (?, ?, ?)
+            INSERT INTO vpn_wireguard_peers (nome, chave_publica, ip_atribuido, rotas_extras)
+            VALUES (?, ?, ?, ?)
         ');
-        $stmt->execute([$nome, $chavePublica, $ip]);
+        $stmt->execute([$nome, $chavePublica, $ip, $rotasExtras ?: null]);
 
         return (int)$this->pdo->lastInsertId();
     }

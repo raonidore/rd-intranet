@@ -47,6 +47,7 @@ $instalado = (bool)($config['instalado'] ?? false);
                     <tr>
                         <th>Nome</th>
                         <th>IP</th>
+                        <th>Rotas extras</th>
                         <th>Status</th>
                         <th>Último handshake</th>
                         <th>Config entregue</th>
@@ -59,6 +60,7 @@ $instalado = (bool)($config['instalado'] ?? false);
                         <tr>
                             <td><?= htmlspecialchars($p['nome']) ?></td>
                             <td class="font-monospace small"><?= htmlspecialchars($p['ip_atribuido']) ?></td>
+                            <td class="font-monospace small text-muted"><?= !empty($p['rotas_extras']) ? htmlspecialchars($p['rotas_extras']) : '—' ?></td>
                             <td><?= $p['online'] ? Badge::make('Online', 'success') : Badge::make('Offline', 'secondary') ?></td>
                             <td class="small"><?= $p['ultimo_handshake'] ? htmlspecialchars(data_br($p['ultimo_handshake'])) : '—' ?></td>
                             <td><?= (int)$p['config_entregue'] === 1 ? Badge::make('Sim', 'success') : Badge::make('Não', 'warning') ?></td>
@@ -90,6 +92,9 @@ $instalado = (bool)($config['instalado'] ?? false);
             <div class="modal-body">
                 <label class="form-label">Nome</label>
                 <input type="text" class="form-control" id="campoNomePeer" placeholder="Ex: Notebook do João">
+                <label class="form-label mt-3">Sub-rede adicional (opcional)</label>
+                <input type="text" class="form-control font-monospace" id="campoRotasExtrasPeer" placeholder="Ex: 192.168.10.0/24">
+                <small class="text-muted">Só preencha pra um peer site-to-site (ex: coletor RD.Bridge) que representa uma rede inteira atrás dele, não um dispositivo só. Deixe em branco pro caso comum (peer = um único aparelho).</small>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
@@ -169,6 +174,7 @@ $instalado = (bool)($config['instalado'] ?? false);
     if (botaoNovoPeer) {
         botaoNovoPeer.addEventListener('click', function () {
             document.getElementById('campoNomePeer').value = '';
+            document.getElementById('campoRotasExtrasPeer').value = '';
             bootstrap.Modal.getOrCreateInstance(document.getElementById('modalNovoPeer')).show();
         });
     }
@@ -183,6 +189,7 @@ $instalado = (bool)($config['instalado'] ?? false);
 
             const dados = new URLSearchParams();
             dados.set('nome', nome);
+            dados.set('rotas_extras', document.getElementById('campoRotasExtrasPeer').value.trim());
 
             try {
                 const res = await fetch(URLS.novoPeer, { method: 'POST', body: dados });

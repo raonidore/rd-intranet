@@ -298,6 +298,24 @@ class AtivoRepository
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * Mesma coisa que listarComSnmpHabilitado(), escopado a uma unidade --
+     * usado pelo RD.Bridge (RdBridgeService::heartbeat()) pra montar a
+     * lista de ativos que o coletor daquela unidade deve coletar via
+     * SNMP, já que o servidor na nuvem não alcança essa rede direto.
+     */
+    public function listarComSnmpHabilitadoPorUnidade(int $unidadeId): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT a.*, t.slug AS tipo_slug FROM ativos a
+            JOIN ativos_tipos t ON t.id = a.tipo_id
+            WHERE a.unidade_id = :unidade_id AND a.snmp_habilitado = 1 AND a.ip IS NOT NULL AND a.ip <> ''
+        ");
+        $stmt->execute(['unidade_id' => $unidadeId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     /** @param string $detalhesJson igual a atualizarDetalhesSnmp(), mas grava origem='api' -- dado vindo de uma API (UniFi Controller etc.), não de SNMP. */
     public function atualizarDetalhesApi(int $id, string $detalhesJson): bool
     {
