@@ -501,7 +501,8 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         || PermissionService::temAcesso('infra_certificado')
         || PermissionService::temAcesso('infra_speedtest')
         || PermissionService::temAcesso('infra_ddns')
-        || PermissionService::temAcesso('infra_tuneis');
+        || PermissionService::temAcesso('infra_tuneis')
+        || PermissionService::temAcesso('infra_dhcp');
     ?>
     <?php if ($temInfra): ?>
     <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuInfra"
@@ -620,6 +621,12 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         <?php if (PermissionService::temAcesso('infra_tuneis')): ?>
         <a href="<?= url('/infraestrutura/tuneis') ?>" class="<?= str_starts_with($uriAtual, '/infraestrutura/tuneis') ? 'active' : '' ?>">
             <i class="bi bi-signpost-split me-2"></i> Túneis
+        </a>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('infra_dhcp')): ?>
+        <a href="<?= url('/infraestrutura/dhcp') ?>" class="<?= str_starts_with($uriAtual, '/infraestrutura/dhcp') ? 'active' : '' ?>">
+            <i class="bi bi-hdd-network-fill me-2"></i> Servidor DHCP
         </a>
         <?php endif; ?>
     </div>

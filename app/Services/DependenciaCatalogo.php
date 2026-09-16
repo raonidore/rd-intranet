@@ -254,6 +254,14 @@ class DependenciaCatalogo
                 'usado_em' => 'Base de Conhecimento',
                 'obrigatorio' => false,
             ],
+            [
+                'chave' => 'isc-dhcp-server',
+                'nome' => 'isc-dhcp-server',
+                'pacote' => 'isc-dhcp-server',
+                'descricao' => 'Motor do servidor DHCP gerenciado pela tela -- instalado sob demanda pelo próprio botão "Instalar" em Infraestrutura > Servidor DHCP, não pelo instalador genérico de dependências.',
+                'usado_em' => 'Infraestrutura > Servidor DHCP',
+                'obrigatorio' => false,
+            ],
         ];
     }
 

@@ -52,6 +52,7 @@ use App\Controllers\SshConexaoController;
 use App\Controllers\DbConsoleController;
 use App\Controllers\CronController;
 use App\Controllers\IptablesController;
+use App\Controllers\DhcpController;
 use App\Controllers\CertificadoController;
 use App\Controllers\KbController;
 use App\Controllers\WhatsAppSetorController;
@@ -330,6 +331,21 @@ $router->post('/infraestrutura/iptables/templates/aplicar', [IptablesController:
 $router->get('/infraestrutura/iptables/exportar', [IptablesController::class, 'exportar']);
 $router->get('/infraestrutura/iptables/importar', [IptablesController::class, 'importarForm']);
 $router->post('/infraestrutura/iptables/importar', [IptablesController::class, 'importar']);
+
+$router->get('/infraestrutura/dhcp', [DhcpController::class, 'index']);
+$router->post('/infraestrutura/dhcp/instalar', [DhcpController::class, 'instalar']);
+$router->post('/infraestrutura/dhcp/config', [DhcpController::class, 'salvarConfig']);
+$router->post('/infraestrutura/dhcp/subnet', [DhcpController::class, 'salvarSubnet']);
+$router->post('/infraestrutura/dhcp/subnet/excluir', [DhcpController::class, 'excluirSubnet']);
+$router->post('/infraestrutura/dhcp/reserva', [DhcpController::class, 'criarReserva']);
+$router->post('/infraestrutura/dhcp/reserva/excluir', [DhcpController::class, 'excluirReserva']);
+$router->post('/infraestrutura/dhcp/aplicar', [DhcpController::class, 'aplicar']);
+$router->post('/infraestrutura/dhcp/confirmar', [DhcpController::class, 'confirmar']);
+$router->post('/infraestrutura/dhcp/reverter', [DhcpController::class, 'reverterAgora']);
+$router->get('/infraestrutura/dhcp/status', [DhcpController::class, 'status']);
+$router->get('/infraestrutura/dhcp/ao-vivo', [DhcpController::class, 'statusAoVivo']);
+$router->post('/infraestrutura/dhcp/ligar', [DhcpController::class, 'ligar']);
+$router->post('/infraestrutura/dhcp/desligar', [DhcpController::class, 'desligar']);
 
 $router->get('/infraestrutura/certificado', [CertificadoController::class, 'index']);
 $router->get('/infraestrutura/certificado/autoassinado', [CertificadoController::class, 'autoassinadoForm']);

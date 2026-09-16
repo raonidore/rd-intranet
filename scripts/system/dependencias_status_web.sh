@@ -33,6 +33,7 @@ declare -A COMANDOS=(
   [rclone]="rclone"
   [mtr]="mtr"
   [bind9-dnsutils]="dig"
+  [isc-dhcp-server]="dhcpd"
 )
 
 for CHAVE in "${!COMANDOS[@]}"; do
