@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>RdIntranetBridge</RootNamespace>
+    <AssemblyName>RdIntranetBridge</AssemblyName>
+    <!-- Mesma convenção do agente Windows (RdIntranetAgente.csproj),
+         atualize junto com qualquer mudança relevante no código. -->
+    <Version>0.1.0</Version>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Host dual: sc.exe/New-Service no Windows, unidade systemd no
+         Linux, mesmo binário, hospedagem escolhida em tempo de
+         execução (ver Program.cs). Sem isso, "dotnet run" comum já
+         funciona pra testar, mas não sobrevive a reboot/logoff em
+         nenhum dos dois sistemas. -->
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="8.0.1" />
+    <!-- SNMP v2c puro-gerenciado (sem depender de snmpget/snmpwalk do
+         pacote `snmp`, que só existe garantido no Linux), funciona
+         igual nos dois sistemas operacionais. -->
+    <PackageReference Include="Lextm.SharpSnmpLib" Version="12.5.4" />
+  </ItemGroup>
+
+</Project>
