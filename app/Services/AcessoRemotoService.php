@@ -111,6 +111,33 @@ class AcessoRemotoService
     }
 
     /**
+     * @return array<string, string> meshid (só a parte depois de "mesh/<dominio>/") => nome do grupo
+     */
+    public function listarGruposDispositivos(): array
+    {
+        $resultado = $this->executarMeshctrl(['ListDeviceGroups']);
+
+        if (!$resultado['success'] || !is_array($resultado['data'])) {
+            return [];
+        }
+
+        $grupos = [];
+        foreach ($resultado['data'] as $grupo) {
+            // "_id" vem como "mesh/<dominio>/<meshid>" -- dominio vazio no
+            // domínio padrão (único usado aqui). O "/meshagents?...&meshid="
+            // do servidor espera só a última parte.
+            $partes = explode('/', (string)($grupo['_id'] ?? ''), 3);
+            $meshId = $partes[2] ?? '';
+
+            if ($meshId !== '') {
+                $grupos[$meshId] = $grupo['name'] ?? $meshId;
+            }
+        }
+
+        return $grupos;
+    }
+
+    /**
      * Gera um link de compartilhamento de uso único (sem exigir login
      * separado no MeshCentral -- é a peça que permite embutir a tela
      * remota num iframe na ficha do ativo). Inclui desktop + arquivos +
@@ -307,6 +334,22 @@ class AcessoRemotoService
         'arm64' => 'Windows ARM-64 (.exe)',
     ];
 
+    /**
+     * IDs internos do MeshCentral pra cada variante "service" (a que
+     * instala como serviço do Windows, mesma coisa que o diálogo
+     * "Adicionar Agente Mesh" do console oferece) -- extraídos direto de
+     * meshcentral.js (obj.meshAgentsArchitectureNumbers) da versão
+     * instalada, não de documentação genérica: 3 = Windows x86-32
+     * service, 4 = Windows x86-64 service, 43 = Windows ARM-64 service.
+     * As variantes "console" (1/2/42, sem instalação como serviço) e
+     * tudo que não é win32 ficam de fora de propósito.
+     */
+    private const ARQUITETURA_MESHCENTRAL_ID = [
+        'x86' => 3,
+        'x64' => 4,
+        'arm64' => 43,
+    ];
+
     private function caminhoMeshAgente(string $arquitetura): ?string
     {
         if (!isset(self::ARQUITETURAS_MESH_AGENTE[$arquitetura])) {
@@ -359,5 +402,76 @@ class AcessoRemotoService
         NotificationService::success("Instalador \"{$label}\" enviado.");
 
         return ['success' => true];
+    }
+
+    /**
+     * Busca os 3 instaladores direto do MeshCentral (endpoint nativo
+     * /meshagents, confirmado ao vivo contra a instalação real -- exige
+     * "meshid" só pras variantes Windows, e sem isso o .exe volta genérico,
+     * sem servidor/grupo embutido, inútil pra instalar numa máquina sem
+     * configuração manual extra). O binário já sai customizado pro grupo
+     * escolhido -- a máquina entra nele sozinha ao rodar o instalador,
+     * sem precisar digitar nada. Salva no mesmo lugar do upload manual
+     * (storage/uploads/mesh/{arquitetura}.exe), então o resto da tela
+     * (download, indicador de "enviado") não muda nada.
+     */
+    public function baixarMeshAgentesAutomaticamente(string $grupoMeshId): array
+    {
+        if (!$this->credenciaisConfiguradas()) {
+            return ['success' => false, 'message' => 'Configure as credenciais de integração antes.'];
+        }
+
+        $grupos = $this->listarGruposDispositivos();
+        if (!isset($grupos[$grupoMeshId])) {
+            return ['success' => false, 'message' => 'Grupo de dispositivos não encontrado -- atualize a página e tente de novo.'];
+        }
+
+        $meshIdCodificado = rawurlencode($grupoMeshId);
+        $baixados = [];
+        $falhas = [];
+
+        foreach (self::ARQUITETURA_MESHCENTRAL_ID as $arquitetura => $agentId) {
+            $url = 'https://127.0.0.1:' . $this->porta() . "/meshagents?id={$agentId}&meshid={$meshIdCodificado}";
+
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_SSL_VERIFYPEER => false, // certificado autoassinado, conexao fica em 127.0.0.1
+                CURLOPT_SSL_VERIFYHOST => false,
+                CURLOPT_TIMEOUT => 30,
+            ]);
+            $conteudo = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            // Um .exe de verdade do MeshAgent nunca sai abaixo de ~1MB --
+            // corpo pequeno aqui é sinal de página de erro (401/404) em
+            // vez do binário, não vale a pena sobrescrever o que já
+            // existia com isso.
+            if ($conteudo === false || $httpCode !== 200 || strlen($conteudo) < 500000) {
+                $falhas[] = self::ARQUITETURAS_MESH_AGENTE[$arquitetura];
+                continue;
+            }
+
+            $destino = $this->caminhoMeshAgente($arquitetura);
+            $pasta = dirname($destino);
+            if (!is_dir($pasta)) {
+                @mkdir($pasta, 0777, true);
+            }
+            file_put_contents($destino, $conteudo);
+            $baixados[] = self::ARQUITETURAS_MESH_AGENTE[$arquitetura];
+        }
+
+        if (empty($baixados)) {
+            return ['success' => false, 'message' => 'Falha ao baixar os instaladores do MeshCentral -- confira se o grupo ainda existe.'];
+        }
+
+        AuditService::registrar('Ativos', 'Acesso Remoto', 'Instaladores do MeshAgent baixados automaticamente do MeshCentral (grupo "' . $grupos[$grupoMeshId] . '").');
+
+        $mensagem = empty($falhas)
+            ? 'Os 3 instaladores foram baixados automaticamente do MeshCentral.'
+            : 'Baixados: ' . implode(', ', $baixados) . '. Falharam: ' . implode(', ', $falhas) . '.';
+
+        return ['success' => true, 'message' => $mensagem];
     }
 }

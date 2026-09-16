@@ -181,6 +181,42 @@ use App\Components\Badge;
         <div class="progress mt-2 d-none" id="progressoUploadMeshAgente" style="height:20px">
             <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width:0%">0%</div>
         </div>
+
+        <?php if ($rodando && $credenciaisConfiguradas): ?>
+        <hr>
+        <strong>Baixar automaticamente do MeshCentral</strong>
+        <p class="text-muted small mt-1 mb-2">
+            Busca os 3 instaladores direto do MeshCentral, já customizados pro grupo de dispositivos
+            escolhido -- a máquina entra sozinha nesse grupo ao instalar, sem precisar digitar nada.
+            Substitui os arquivos acima.
+        </p>
+        <?php if (empty($gruposDispositivos)): ?>
+            <p class="small text-warning mb-0">
+                <i class="bi bi-exclamation-triangle"></i> Nenhum grupo de dispositivos encontrado ainda --
+                crie um primeiro no <a href="<?= htmlspecialchars($urlConsole) ?>" target="_blank">console do MeshCentral</a>
+                ("Meus dispositivos" &gt; "Criar Novo Grupo").
+            </p>
+        <?php else: ?>
+            <form class="d-flex gap-2 align-items-end flex-wrap" id="formBaixarMeshAutomatico">
+                <?php if (count($gruposDispositivos) > 1): ?>
+                <div>
+                    <label class="form-label small mb-1">Grupo de dispositivos</label>
+                    <select name="grupo_id" class="form-select form-select-sm" style="min-width:220px">
+                        <?php foreach ($gruposDispositivos as $id => $nome): ?>
+                            <option value="<?= htmlspecialchars($id) ?>"><?= htmlspecialchars($nome) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <?php else: ?>
+                    <input type="hidden" name="grupo_id" value="<?= htmlspecialchars((string) array_key_first($gruposDispositivos)) ?>">
+                    <span class="small text-muted mb-2">Grupo: <strong><?= htmlspecialchars(reset($gruposDispositivos)) ?></strong></span>
+                <?php endif; ?>
+                <button type="submit" class="btn btn-sm btn-primary" id="botaoBaixarMeshAutomatico">
+                    <i class="bi bi-cloud-download"></i> Baixar automaticamente
+                </button>
+            </form>
+        <?php endif; ?>
+        <?php endif; ?>
     </div>
 </div>
 <?php endif; ?>
@@ -470,6 +506,33 @@ use App\Components\Badge;
         } finally {
             botao.disabled = false;
             botao.innerHTML = '<i class="bi bi-arrow-repeat"></i> Aplicar';
+        }
+    });
+})();
+
+(function () {
+    const form = document.getElementById('formBaixarMeshAutomatico');
+    if (!form) return;
+
+    const botao = document.getElementById('botaoBaixarMeshAutomatico');
+
+    form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+
+        botao.disabled = true;
+        botao.innerHTML = '<i class="bi bi-hourglass-split"></i> Baixando...';
+
+        try {
+            const body = new URLSearchParams(new FormData(form));
+            const res = await fetch(<?= json_encode(url('/ativos/acesso-remoto/mesh-agente/baixar-automatico')) ?>, { method: 'POST', body });
+            const resultado = await res.json();
+            alert(resultado.message || (resultado.success ? 'Instaladores baixados.' : 'Falha ao baixar os instaladores.'));
+            if (resultado.success) location.reload();
+        } catch (e) {
+            alert('Erro ao comunicar com o servidor.');
+        } finally {
+            botao.disabled = false;
+            botao.innerHTML = '<i class="bi bi-cloud-download"></i> Baixar automaticamente';
         }
     });
 })();

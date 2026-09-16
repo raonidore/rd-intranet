@@ -46,6 +46,7 @@ class AcessoRemotoController extends Controller
             'modoRedeAtual' => $this->service->modoRedeAtual(),
             'arquiteturasMeshAgente' => AcessoRemotoService::ARQUITETURAS_MESH_AGENTE,
             'meshAgentesDisponiveis' => $meshAgentesDisponiveis,
+            'gruposDispositivos' => ($rodando && $credenciaisConfiguradas) ? $this->service->listarGruposDispositivos() : [],
         ]);
     }
 
@@ -83,6 +84,20 @@ class AcessoRemotoController extends Controller
         }
 
         $this->redirecionarAposUpload(url('/ativos/acesso-remoto'));
+    }
+
+    public function baixarMeshAgentesAutomatico(): void
+    {
+        AuthMiddleware::checkModulo('ativos_acesso_remoto');
+        header('Content-Type: application/json');
+
+        $grupoId = trim($_POST['grupo_id'] ?? '');
+        if ($grupoId === '') {
+            echo json_encode(['success' => false, 'message' => 'Selecione um grupo de dispositivos.']);
+            return;
+        }
+
+        echo json_encode($this->service->baixarMeshAgentesAutomaticamente($grupoId));
     }
 
     public function liberarPorta(): void

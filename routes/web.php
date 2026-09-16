@@ -1052,6 +1052,7 @@ $router->post('/ativos/acesso-remoto/liberar-porta', [AcessoRemotoController::cl
 $router->post('/ativos/acesso-remoto/modo-rede', [AcessoRemotoController::class, 'configurarModoRede']);
 $router->get('/ativos/acesso-remoto/mesh-agente', [AcessoRemotoController::class, 'baixarMeshAgente']);
 $router->post('/ativos/acesso-remoto/mesh-agente/upload', [AcessoRemotoController::class, 'uploadMeshAgente']);
+$router->post('/ativos/acesso-remoto/mesh-agente/baixar-automatico', [AcessoRemotoController::class, 'baixarMeshAgentesAutomatico']);
 
 $router->get('/ativos/rdp/status', [RdpController::class, 'status']);
 $router->post('/ativos/rdp/credencial', [RdpController::class, 'salvarCredencial']);
