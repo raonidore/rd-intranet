@@ -304,7 +304,7 @@ $idsTiposComSnmp = array_column(array_filter($tipos, fn (array $t) => (bool)$t['
     if (!botao) return;
 
     botao.addEventListener('click', async function () {
-        if (!confirm('Gerar um código novo de patrimônio pra unidade atual deste ativo? O código antigo deixa de existir.\n\nSe você mudou a Unidade agora e ainda não salvou, salve primeiro -- o código novo usa a unidade que já está gravada.')) return;
+        if (!confirm('Gerar um código novo de patrimônio pra unidade atual deste ativo? O código antigo deixa de existir.\n\nSe você mudou a Unidade agora e ainda não salvou, salve primeiro -- o código novo usa a unidade que já está gravada.\n\nSe o equipamento já tem etiqueta impressa, ela precisa ser reimpressa e trocada -- o código nela vai ficar desatualizado.')) return;
 
         const dados = new URLSearchParams();
         dados.set('id', botao.dataset.id);

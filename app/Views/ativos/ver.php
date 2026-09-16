@@ -4281,7 +4281,7 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
     if (!botao) return;
 
     botao.addEventListener('click', async function () {
-        if (!confirm('Gerar um código novo de patrimônio pra unidade atual deste ativo? O código antigo deixa de existir.')) return;
+        if (!confirm('Gerar um código novo de patrimônio pra unidade atual deste ativo? O código antigo deixa de existir.\n\nSe o equipamento já tem etiqueta impressa, ela precisa ser reimpressa e trocada -- o código nela vai ficar desatualizado.')) return;
 
         const dados = new URLSearchParams();
         dados.set('id', botao.dataset.id);

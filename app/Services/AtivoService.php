@@ -220,7 +220,66 @@ class AtivoService
 
         AuditService::registrar('Ativos', 'Atualizar Código', "Código do ativo \"{$ativo['nome']}\" alterado de \"{$codigoAntigo}\" para \"{$codigoNovo}\" (unidade: {$unidade['nome']}).");
 
+        $this->registrarChamadoTrocaCodigo($ativo, $codigoAntigo, $codigoNovo, $unidade['nome']);
+
         return ['success' => true, 'codigo' => $codigoNovo];
+    }
+
+    /**
+     * Abre e já fecha um chamado automático (robô, mesmo padrão dos
+     * chamados de alerta de DVR/NVR -- ver abrirChamadoCanalDvrSemSinal())
+     * registrando a troca de código no histórico do ativo, com o nome de
+     * quem clicou no botão. Não bloqueia a troca do código se a categoria
+     * "Patrimônio" ainda não existir nessa instância (migration cria na
+     * primeira atualização; se por algum motivo não rodou, só não abre
+     * o chamado, silenciosamente).
+     */
+    private function registrarChamadoTrocaCodigo(array $ativo, string $codigoAntigo, string $codigoNovo, string $nomeUnidade): void
+    {
+        $categoriaId = $this->categoriaChamadoPatrimonioId();
+        if ($categoriaId === null) {
+            return;
+        }
+
+        $nomeAdmin = trim((string)($_SESSION['usuario']['nome'] ?? '')) ?: 'um administrador';
+        $chamadoService = new ChamadoService();
+
+        $resultado = $chamadoService->abrir([
+            'titulo' => "{$codigoAntigo} -- Código de patrimônio atualizado para {$codigoNovo}",
+            'descricao' => "Registro automático: o código de patrimônio do ativo \"{$ativo['nome']}\" foi alterado de \"{$codigoAntigo}\" para \"{$codigoNovo}\", refletindo a unidade atual ({$nomeUnidade}).\n\n"
+                . "Se este equipamento já tem etiqueta impressa com o código antigo, ela precisa ser reimpressa e trocada -- o código antigo deixou de existir e não deve mais ser usado pra identificar o equipamento.",
+            'categoria_id' => $categoriaId,
+            'unidade_id' => $ativo['unidade_id'],
+            'ativo_id' => $ativo['id'],
+            'prioridade' => 'baixa',
+            'solicitante_nome' => 'RD.Intranet - Robô',
+            'solicitante_email' => 'robo@rd.intranet',
+        ], 'sistema');
+
+        if (!$resultado['success']) {
+            return;
+        }
+
+        $chamadoId = (int)$resultado['id'];
+        $usuarioId = (int)($_SESSION['usuario']['id'] ?? 0);
+
+        $chamadoService->responder(
+            $chamadoId,
+            "Alteração feita por {$nomeAdmin}, pela tela de Ativos.",
+            'interna',
+            $usuarioId ?: null
+        );
+
+        $chamadoService->mudarStatus($chamadoId, 'fechado', $usuarioId);
+    }
+
+    private function categoriaChamadoPatrimonioId(): ?int
+    {
+        $stmt = Database::connection()->prepare("SELECT id FROM chamados_categorias WHERE nome = 'Patrimônio' LIMIT 1");
+        $stmt->execute();
+        $id = $stmt->fetchColumn();
+
+        return $id !== false ? (int)$id : null;
     }
 
     public function dashboard(): array
@@ -3335,14 +3394,21 @@ class AtivoService
 
             $this->repository->atualizarViaAgente($id, $camposBase, json_encode($detalhesNovos, JSON_UNESCAPED_UNICODE));
         } else {
-            // O agente não sabe em qual unidade física a máquina está --
-            // entra na unidade padrão até um admin reatribuir manualmente.
+            // A partir do agente 1.0.24, o instalador pergunta a unidade
+            // (obrigatória) e opcionalmente setor/localização antes do
+            // primeiro checkin -- ver ConfigForm.cs. Máquinas com agente
+            // mais antigo (ou payload sem esses campos) continuam caindo
+            // na unidade padrão, como sempre foi.
             $tipo = (new AtivoTipoService())->buscarPorSlug($slugTipo);
-            $unidade = (new UnidadeService())->padrao();
+            $unidade = (new UnidadeService())->buscar((int)($payload['unidade_id'] ?? 0)) ?? (new UnidadeService())->padrao();
+            $setor = (new AtivoCatalogoService())->buscar((int)($payload['setor_id'] ?? 0));
+            $localizacao = (new AtivoCatalogoService())->buscar((int)($payload['localizacao_id'] ?? 0));
 
             $id = $this->repository->criarViaAgente(array_merge($camposBase, [
                 'tipo_id' => (int)$tipo['id'],
                 'unidade_id' => (int)$unidade['id'],
+                'setor_id' => ($setor && $setor['tipo'] === 'setor') ? (int)$setor['id'] : null,
+                'localizacao_id' => ($localizacao && $localizacao['tipo'] === 'localizacao') ? (int)$localizacao['id'] : null,
                 'codigo_patrimonio' => $this->proximoCodigo($tipo, $unidade),
                 'machine_guid' => $machineGuid,
                 'detalhes' => json_encode($camposTecnicos, JSON_UNESCAPED_UNICODE),
