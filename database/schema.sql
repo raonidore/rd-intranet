@@ -3,7 +3,7 @@
 -- cria todas as tabelas ja no estado final, sem precisar repetir o
 -- historico incremental de database/migrations/ (algumas dessas
 -- migrations usam ALTER TABLE, que nao e seguro reaplicar aqui).
--- Gerado em 2026-08-22 03:46:03.
+-- Gerado em 2026-09-16 03:01:52.
 
 -- Import nao respeita ordem de dependencia entre tabelas (algumas tem FK
 -- pra tabelas que so aparecem depois neste arquivo) -- desliga a checagem
@@ -46,8 +46,9 @@ CREATE TABLE IF NOT EXISTS `antivirus_verificacoes` (
 -- ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `ativos` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
-  `tipo` enum('computador','monitor','impressora','switch','servidor') NOT NULL,
-  `codigo_patrimonio` varchar(20) NOT NULL,
+  `tipo_id` int(11) NOT NULL,
+  `unidade_id` int(11) NOT NULL,
+  `codigo_patrimonio` varchar(48) NOT NULL,
   `nome` varchar(150) NOT NULL,
   `apelido` varchar(150) DEFAULT NULL,
   `marca` varchar(100) DEFAULT NULL,
@@ -62,7 +63,7 @@ CREATE TABLE IF NOT EXISTS `ativos` (
   `snmp_community` varchar(100) DEFAULT NULL,
   `observacoes` text DEFAULT NULL,
   `detalhes` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`detalhes`)),
-  `origem` enum('manual','agente','snmp') NOT NULL DEFAULT 'manual',
+  `origem` enum('manual','agente','snmp','api') NOT NULL DEFAULT 'manual',
   `agente_versao` varchar(20) DEFAULT NULL,
   `chave_api_atual` varchar(64) DEFAULT NULL,
   `elevacao_usuario` varchar(150) DEFAULT NULL,
@@ -79,12 +80,15 @@ CREATE TABLE IF NOT EXISTS `ativos` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `codigo_patrimonio` (`codigo_patrimonio`),
   UNIQUE KEY `machine_guid` (`machine_guid`),
-  KEY `idx_ativos_tipo` (`tipo`),
   KEY `idx_ativos_status` (`status`),
   KEY `fk_ativos_setor` (`setor_id`),
   KEY `fk_ativos_localizacao` (`localizacao_id`),
+  KEY `fk_ativos_tipo` (`tipo_id`),
+  KEY `fk_ativos_unidade` (`unidade_id`),
   CONSTRAINT `fk_ativos_localizacao` FOREIGN KEY (`localizacao_id`) REFERENCES `ativos_catalogos` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `fk_ativos_setor` FOREIGN KEY (`setor_id`) REFERENCES `ativos_catalogos` (`id`) ON DELETE SET NULL
+  CONSTRAINT `fk_ativos_setor` FOREIGN KEY (`setor_id`) REFERENCES `ativos_catalogos` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_ativos_tipo` FOREIGN KEY (`tipo_id`) REFERENCES `ativos_tipos` (`id`),
+  CONSTRAINT `fk_ativos_unidade` FOREIGN KEY (`unidade_id`) REFERENCES `unidades` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ----------------------------------------------------------------
@@ -181,6 +185,19 @@ CREATE TABLE IF NOT EXISTS `ativos_comandos` (
   PRIMARY KEY (`id`),
   KEY `idx_ativos_comandos_ativo` (`ativo_id`),
   CONSTRAINT `fk_ativos_comandos_ativo` FOREIGN KEY (`ativo_id`) REFERENCES `ativos` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
+-- ativos_contadores
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `ativos_contadores` (
+  `tipo_id` int(11) NOT NULL,
+  `unidade_id` int(11) NOT NULL,
+  `ultimo_numero` int(11) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`tipo_id`,`unidade_id`),
+  KEY `fk_ativos_contadores_unidade` (`unidade_id`),
+  CONSTRAINT `fk_ativos_contadores_tipo` FOREIGN KEY (`tipo_id`) REFERENCES `ativos_tipos` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_ativos_contadores_unidade` FOREIGN KEY (`unidade_id`) REFERENCES `unidades` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ----------------------------------------------------------------
@@ -382,6 +399,24 @@ CREATE TABLE IF NOT EXISTS `ativos_solicitacoes` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ----------------------------------------------------------------
+-- ativos_tipos
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `ativos_tipos` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `slug` varchar(40) DEFAULT NULL,
+  `nome` varchar(100) NOT NULL,
+  `sigla` varchar(6) NOT NULL,
+  `icone` varchar(40) NOT NULL DEFAULT 'bi-box-seam',
+  `snmp_elegivel` tinyint(1) NOT NULL DEFAULT 0,
+  `ativo` tinyint(1) NOT NULL DEFAULT 1,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_ativos_tipos_nome` (`nome`),
+  UNIQUE KEY `uq_ativos_tipos_sigla` (`sigla`),
+  UNIQUE KEY `uq_ativos_tipos_slug` (`slug`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
 -- ativos_volumes
 -- ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `ativos_volumes` (
@@ -434,11 +469,62 @@ CREATE TABLE IF NOT EXISTS `auditoria` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------
+-- avisos
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `avisos` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `titulo` varchar(200) NOT NULL,
+  `conteudo` text NOT NULL,
+  `severidade` enum('informativo','atencao','urgente') NOT NULL DEFAULT 'informativo',
+  `fixado` tinyint(1) NOT NULL DEFAULT 0,
+  `confirmacao_obrigatoria` tinyint(1) NOT NULL DEFAULT 0,
+  `ativo` tinyint(1) NOT NULL DEFAULT 1,
+  `criado_por` int(11) DEFAULT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  `atualizado_em` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_avisos_fixado` (`fixado`),
+  KEY `idx_avisos_ativo` (`ativo`),
+  KEY `fk_avisos_criado_por` (`criado_por`),
+  CONSTRAINT `fk_avisos_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- avisos_destinatarios
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `avisos_destinatarios` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `aviso_id` int(11) NOT NULL,
+  `tipo` enum('todos','grupo','usuario') NOT NULL,
+  `destinatario_id` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_avisos_destinatarios_aviso` (`aviso_id`),
+  KEY `idx_avisos_destinatarios_lookup` (`tipo`,`destinatario_id`),
+  CONSTRAINT `fk_avisos_destinatarios_aviso` FOREIGN KEY (`aviso_id`) REFERENCES `avisos` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- avisos_leituras
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `avisos_leituras` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `aviso_id` int(11) NOT NULL,
+  `usuario_id` int(11) NOT NULL,
+  `visto_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  `confirmado_em` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_avisos_leituras` (`aviso_id`,`usuario_id`),
+  KEY `idx_avisos_leituras_usuario` (`usuario_id`),
+  CONSTRAINT `fk_avisos_leituras_aviso` FOREIGN KEY (`aviso_id`) REFERENCES `avisos` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_avisos_leituras_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
 -- backup_destinos
 -- ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `backup_destinos` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
-  `provider` enum('b2','s3','drive') NOT NULL,
+  `provider` enum('b2','s3','drive','dropbox','storj','scaleway','hetzner','akamai') NOT NULL,
   `nome` varchar(100) NOT NULL,
   `ativo` tinyint(1) NOT NULL DEFAULT 0,
   `retencao_dias` int(11) NOT NULL DEFAULT 30,
@@ -461,6 +547,29 @@ CREATE TABLE IF NOT EXISTS `backup_destinos` (
   `relatorio_diario_ativo` tinyint(1) NOT NULL DEFAULT 0,
   `alerta_falha_ativo` tinyint(1) NOT NULL DEFAULT 0,
   `email_notificacao` varchar(255) DEFAULT NULL,
+  `dropbox_token_cifrado` text DEFAULT NULL,
+  `dropbox_client_id` varchar(255) DEFAULT NULL,
+  `dropbox_client_secret_cifrada` text DEFAULT NULL,
+  `dropbox_prefixo` varchar(255) DEFAULT NULL,
+  `storj_bucket` varchar(255) DEFAULT NULL,
+  `storj_prefixo` varchar(255) DEFAULT NULL,
+  `storj_access_key_id` varchar(255) DEFAULT NULL,
+  `storj_secret_access_key_cifrada` text DEFAULT NULL,
+  `scaleway_access_key_id` varchar(255) DEFAULT NULL,
+  `scaleway_secret_access_key_cifrada` text DEFAULT NULL,
+  `scaleway_bucket` varchar(255) DEFAULT NULL,
+  `scaleway_regiao` varchar(32) DEFAULT NULL,
+  `scaleway_prefixo` varchar(255) DEFAULT NULL,
+  `hetzner_access_key_id` varchar(255) DEFAULT NULL,
+  `hetzner_secret_access_key_cifrada` text DEFAULT NULL,
+  `hetzner_bucket` varchar(255) DEFAULT NULL,
+  `hetzner_regiao` varchar(32) DEFAULT NULL,
+  `hetzner_prefixo` varchar(255) DEFAULT NULL,
+  `akamai_access_key_id` varchar(255) DEFAULT NULL,
+  `akamai_secret_access_key_cifrada` text DEFAULT NULL,
+  `akamai_bucket` varchar(255) DEFAULT NULL,
+  `akamai_regiao` varchar(32) DEFAULT NULL,
+  `akamai_prefixo` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -570,6 +679,394 @@ CREATE TABLE IF NOT EXISTS `base_conhecimento_subcategorias` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------
+-- chamados
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `chamados` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `numero_controle` varchar(20) DEFAULT NULL,
+  `titulo` varchar(200) NOT NULL,
+  `descricao` text NOT NULL,
+  `categoria_id` int(11) NOT NULL,
+  `setor_id` int(11) DEFAULT NULL,
+  `unidade_id` int(11) NOT NULL,
+  `ativo_id` int(11) DEFAULT NULL,
+  `solicitante_id` int(11) NOT NULL,
+  `usuario_id` int(11) DEFAULT NULL,
+  `usuario_abertura_id` int(11) DEFAULT NULL,
+  `prioridade` enum('baixa','media','alta','urgente') NOT NULL DEFAULT 'media',
+  `status` enum('fila','em_atendimento','aguardando_cliente','resolvido','fechado') NOT NULL DEFAULT 'fila',
+  `canal_abertura` enum('painel','email','whatsapp','portal','sistema') NOT NULL DEFAULT 'painel',
+  `aguardando_resposta` tinyint(1) NOT NULL DEFAULT 0,
+  `sla_resposta_prazo` datetime DEFAULT NULL,
+  `sla_resolucao_prazo` datetime DEFAULT NULL,
+  `sla_pausado_em` datetime DEFAULT NULL,
+  `primeira_resposta_em` datetime DEFAULT NULL,
+  `atribuido_em` datetime DEFAULT NULL,
+  `resolvido_em` datetime DEFAULT NULL,
+  `fechado_em` datetime DEFAULT NULL,
+  `ultima_mensagem_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  `aberto_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  `atualizado_em` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_chamados_numero_controle` (`numero_controle`),
+  KEY `idx_chamados_status` (`status`),
+  KEY `idx_chamados_setor` (`setor_id`),
+  KEY `idx_chamados_usuario` (`usuario_id`),
+  KEY `idx_chamados_categoria` (`categoria_id`),
+  KEY `idx_chamados_unidade` (`unidade_id`),
+  KEY `idx_chamados_ativo` (`ativo_id`),
+  KEY `idx_chamados_solicitante` (`solicitante_id`),
+  KEY `idx_chamados_usuario_abertura` (`usuario_abertura_id`),
+  CONSTRAINT `fk_chamados_ativo` FOREIGN KEY (`ativo_id`) REFERENCES `ativos` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_chamados_categoria` FOREIGN KEY (`categoria_id`) REFERENCES `chamados_categorias` (`id`),
+  CONSTRAINT `fk_chamados_setor` FOREIGN KEY (`setor_id`) REFERENCES `chamados_setores` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_chamados_solicitante` FOREIGN KEY (`solicitante_id`) REFERENCES `chamados_solicitantes` (`id`),
+  CONSTRAINT `fk_chamados_unidade` FOREIGN KEY (`unidade_id`) REFERENCES `unidades` (`id`),
+  CONSTRAINT `fk_chamados_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_chamados_usuario_abertura` FOREIGN KEY (`usuario_abertura_id`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- chamados_anexos
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `chamados_anexos` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `chamado_id` int(11) NOT NULL,
+  `comentario_id` int(11) DEFAULT NULL,
+  `caminho_arquivo` varchar(255) NOT NULL,
+  `nome_original` varchar(255) NOT NULL,
+  `tipo_mime` varchar(100) DEFAULT NULL,
+  `tamanho_bytes` int(11) DEFAULT NULL,
+  `usuario_id` int(11) DEFAULT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_chamados_anexos_chamado` (`chamado_id`),
+  KEY `fk_chamados_anexos_comentario` (`comentario_id`),
+  KEY `fk_chamados_anexos_usuario` (`usuario_id`),
+  CONSTRAINT `fk_chamados_anexos_chamado` FOREIGN KEY (`chamado_id`) REFERENCES `chamados` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_chamados_anexos_comentario` FOREIGN KEY (`comentario_id`) REFERENCES `chamados_comentarios` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_chamados_anexos_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- chamados_avaliacoes
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `chamados_avaliacoes` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `chamado_id` int(11) NOT NULL,
+  `solicitante_id` int(11) NOT NULL,
+  `pergunta_estado` enum('aguardando_nota','aguardando_resolvido') DEFAULT NULL,
+  `nota` int(11) DEFAULT NULL,
+  `resolvido` tinyint(1) DEFAULT NULL,
+  `comentario` text DEFAULT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_chamados_avaliacoes_chamado` (`chamado_id`),
+  KEY `fk_chamados_avaliacoes_solicitante` (`solicitante_id`),
+  CONSTRAINT `fk_chamados_avaliacoes_chamado` FOREIGN KEY (`chamado_id`) REFERENCES `chamados` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_chamados_avaliacoes_solicitante` FOREIGN KEY (`solicitante_id`) REFERENCES `chamados_solicitantes` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- chamados_categorias
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `chamados_categorias` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nome` varchar(100) NOT NULL,
+  `setor_padrao_id` int(11) DEFAULT NULL,
+  `ativo` tinyint(1) NOT NULL DEFAULT 1,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_chamados_categoria_nome` (`nome`),
+  KEY `idx_chamados_categorias_setor` (`setor_padrao_id`),
+  CONSTRAINT `fk_chamados_categorias_setor` FOREIGN KEY (`setor_padrao_id`) REFERENCES `chamados_setores` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- chamados_comentarios
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `chamados_comentarios` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `chamado_id` int(11) NOT NULL,
+  `usuario_id` int(11) DEFAULT NULL,
+  `tipo` enum('interna','publica') NOT NULL DEFAULT 'publica',
+  `conteudo` text NOT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_chamados_comentarios_chamado` (`chamado_id`),
+  KEY `fk_chamados_comentarios_usuario` (`usuario_id`),
+  CONSTRAINT `fk_chamados_comentarios_chamado` FOREIGN KEY (`chamado_id`) REFERENCES `chamados` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_chamados_comentarios_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- chamados_externos
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `chamados_externos` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `numero_controle` varchar(20) DEFAULT NULL,
+  `titulo` varchar(200) NOT NULL,
+  `descricao` text DEFAULT NULL,
+  `fornecedor_id` int(11) NOT NULL,
+  `categoria_id` int(11) DEFAULT NULL,
+  `ativo_id` int(11) DEFAULT NULL,
+  `protocolo_fornecedor` varchar(100) DEFAULT NULL,
+  `status` enum('aberto','aguardando_fornecedor','em_andamento','resolvido','fechado') NOT NULL DEFAULT 'aberto',
+  `prioridade` enum('baixa','media','alta','urgente') NOT NULL DEFAULT 'media',
+  `criado_por` int(11) DEFAULT NULL,
+  `aberto_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  `resolvido_em` timestamp NULL DEFAULT NULL,
+  `fechado_em` timestamp NULL DEFAULT NULL,
+  `atualizado_em` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_chamados_externos_numero_controle` (`numero_controle`),
+  KEY `idx_chamados_externos_fornecedor` (`fornecedor_id`),
+  KEY `idx_chamados_externos_categoria` (`categoria_id`),
+  KEY `idx_chamados_externos_ativo` (`ativo_id`),
+  KEY `idx_chamados_externos_status` (`status`),
+  KEY `fk_chamados_externos_criado_por` (`criado_por`),
+  CONSTRAINT `fk_chamados_externos_ativo` FOREIGN KEY (`ativo_id`) REFERENCES `ativos` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_chamados_externos_categoria` FOREIGN KEY (`categoria_id`) REFERENCES `chamados_externos_categorias` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_chamados_externos_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_chamados_externos_fornecedor` FOREIGN KEY (`fornecedor_id`) REFERENCES `fornecedores` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- chamados_externos_anexos
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `chamados_externos_anexos` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `chamado_externo_id` int(11) NOT NULL,
+  `comentario_id` int(11) DEFAULT NULL,
+  `anexo_origem` enum('upload','samba') NOT NULL,
+  `anexo_caminho` varchar(500) NOT NULL,
+  `anexo_nome_original` varchar(255) NOT NULL,
+  `usuario_id` int(11) DEFAULT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_chamados_externos_anexos_chamado` (`chamado_externo_id`),
+  KEY `fk_chamados_externos_anexos_comentario` (`comentario_id`),
+  KEY `fk_chamados_externos_anexos_usuario` (`usuario_id`),
+  CONSTRAINT `fk_chamados_externos_anexos_chamado` FOREIGN KEY (`chamado_externo_id`) REFERENCES `chamados_externos` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_chamados_externos_anexos_comentario` FOREIGN KEY (`comentario_id`) REFERENCES `chamados_externos_comentarios` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_chamados_externos_anexos_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- chamados_externos_categorias
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `chamados_externos_categorias` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nome` varchar(100) NOT NULL,
+  `ativo` tinyint(1) NOT NULL DEFAULT 1,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_chamados_externos_categoria_nome` (`nome`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- chamados_externos_comentarios
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `chamados_externos_comentarios` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `chamado_externo_id` int(11) NOT NULL,
+  `usuario_id` int(11) DEFAULT NULL,
+  `tipo` enum('nota','sistema') NOT NULL DEFAULT 'nota',
+  `conteudo` text NOT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_chamados_externos_comentarios_chamado` (`chamado_externo_id`),
+  KEY `fk_chamados_externos_comentarios_usuario` (`usuario_id`),
+  CONSTRAINT `fk_chamados_externos_comentarios_chamado` FOREIGN KEY (`chamado_externo_id`) REFERENCES `chamados_externos` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_chamados_externos_comentarios_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- chamados_historico
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `chamados_historico` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `chamado_id` int(11) NOT NULL,
+  `campo` varchar(40) NOT NULL,
+  `valor_anterior` varchar(150) DEFAULT NULL,
+  `valor_novo` varchar(150) DEFAULT NULL,
+  `usuario_id` int(11) DEFAULT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_chamados_historico_chamado` (`chamado_id`),
+  KEY `fk_chamados_historico_usuario` (`usuario_id`),
+  CONSTRAINT `fk_chamados_historico_chamado` FOREIGN KEY (`chamado_id`) REFERENCES `chamados` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_chamados_historico_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- chamados_setor_usuarios
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `chamados_setor_usuarios` (
+  `setor_id` int(11) NOT NULL,
+  `usuario_id` int(11) NOT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`setor_id`,`usuario_id`),
+  KEY `idx_chamados_setor_usuarios_usuario` (`usuario_id`),
+  CONSTRAINT `fk_chamados_setor_usuarios_setor` FOREIGN KEY (`setor_id`) REFERENCES `chamados_setores` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_chamados_setor_usuarios_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- chamados_setores
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `chamados_setores` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nome` varchar(100) NOT NULL,
+  `ativo` tinyint(1) NOT NULL DEFAULT 1,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_chamados_setor_nome` (`nome`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- chamados_slas
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `chamados_slas` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `categoria_id` int(11) NOT NULL,
+  `prioridade` enum('baixa','media','alta','urgente') NOT NULL,
+  `tempo_primeira_resposta_min` int(11) NOT NULL,
+  `tempo_resolucao_min` int(11) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_chamados_slas_categoria_prioridade` (`categoria_id`,`prioridade`),
+  CONSTRAINT `fk_chamados_slas_categoria` FOREIGN KEY (`categoria_id`) REFERENCES `chamados_categorias` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- chamados_solicitante_tokens
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `chamados_solicitante_tokens` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `solicitante_id` int(11) NOT NULL,
+  `token_hash` varchar(64) NOT NULL,
+  `expira_em` datetime NOT NULL,
+  `usado_em` datetime DEFAULT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_chamados_solicitante_tokens_hash` (`token_hash`),
+  KEY `idx_chamados_solicitante_tokens_solicitante` (`solicitante_id`),
+  CONSTRAINT `fk_chamados_solicitante_tokens_solicitante` FOREIGN KEY (`solicitante_id`) REFERENCES `chamados_solicitantes` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- chamados_solicitantes
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `chamados_solicitantes` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nome` varchar(150) NOT NULL,
+  `email` varchar(150) DEFAULT NULL,
+  `telefone` varchar(30) DEFAULT NULL,
+  `unidade_id` int(11) DEFAULT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  `atualizado_em` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_chamados_solicitantes_email` (`email`),
+  KEY `idx_chamados_solicitantes_telefone` (`telefone`),
+  KEY `fk_chamados_solicitantes_unidade` (`unidade_id`),
+  CONSTRAINT `fk_chamados_solicitantes_unidade` FOREIGN KEY (`unidade_id`) REFERENCES `unidades` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- chat_conversas
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `chat_conversas` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `tipo` enum('direta','grupo') NOT NULL DEFAULT 'direta',
+  `nome` varchar(150) DEFAULT NULL,
+  `criado_por` int(11) DEFAULT NULL,
+  `ultima_mensagem_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `fk_chat_conversas_criador` (`criado_por`),
+  CONSTRAINT `fk_chat_conversas_criador` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- chat_mencoes
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `chat_mencoes` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `mensagem_id` int(11) NOT NULL,
+  `usuario_id` int(11) NOT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_chat_mencoes_usuario` (`usuario_id`),
+  KEY `fk_chat_mencoes_mensagem` (`mensagem_id`),
+  CONSTRAINT `fk_chat_mencoes_mensagem` FOREIGN KEY (`mensagem_id`) REFERENCES `chat_mensagens` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_chat_mencoes_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- chat_mensagens
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `chat_mensagens` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `conversa_id` int(11) NOT NULL,
+  `usuario_id` int(11) NOT NULL,
+  `tipo` enum('texto','imagem','audio','documento') NOT NULL DEFAULT 'texto',
+  `midia_path` varchar(255) DEFAULT NULL,
+  `conteudo` text NOT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_chat_mensagens_conversa` (`conversa_id`,`id`),
+  KEY `fk_chat_mensagens_usuario` (`usuario_id`),
+  CONSTRAINT `fk_chat_mensagens_conversa` FOREIGN KEY (`conversa_id`) REFERENCES `chat_conversas` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_chat_mensagens_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- chat_participantes
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `chat_participantes` (
+  `conversa_id` int(11) NOT NULL,
+  `usuario_id` int(11) NOT NULL,
+  `ultima_leitura_em` timestamp NULL DEFAULT NULL,
+  `entrou_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`conversa_id`,`usuario_id`),
+  KEY `idx_chat_participantes_usuario` (`usuario_id`),
+  CONSTRAINT `fk_chat_participantes_conversa` FOREIGN KEY (`conversa_id`) REFERENCES `chat_conversas` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_chat_participantes_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- chat_reacoes
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `chat_reacoes` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `mensagem_id` int(11) NOT NULL,
+  `usuario_id` int(11) NOT NULL,
+  `emoji` varchar(16) NOT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_chat_reacao` (`mensagem_id`,`usuario_id`,`emoji`),
+  KEY `idx_chat_reacoes_usuario` (`usuario_id`),
+  CONSTRAINT `fk_chat_reacoes_mensagem` FOREIGN KEY (`mensagem_id`) REFERENCES `chat_mensagens` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_chat_reacoes_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- chat_socket_tokens
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `chat_socket_tokens` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `usuario_id` int(11) NOT NULL,
+  `token_hash` varchar(64) NOT NULL,
+  `expira_em` datetime NOT NULL,
+  `usado_em` datetime DEFAULT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_chat_socket_tokens_hash` (`token_hash`),
+  KEY `idx_chat_socket_tokens_usuario` (`usuario_id`),
+  CONSTRAINT `fk_chat_socket_tokens_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
 -- config_backups
 -- ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `config_backups` (
@@ -613,6 +1110,29 @@ CREATE TABLE IF NOT EXISTS `configuracoes` (
   `atualizado_em` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   UNIQUE KEY `chave` (`chave`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- contratos
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `contratos` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `fornecedor_id` int(11) NOT NULL,
+  `numero` varchar(100) DEFAULT NULL,
+  `descricao` text DEFAULT NULL,
+  `data_inicio` date DEFAULT NULL,
+  `data_termino` date DEFAULT NULL,
+  `valor` decimal(12,2) DEFAULT NULL,
+  `anexo_origem` enum('upload','samba') DEFAULT NULL,
+  `anexo_caminho` varchar(500) DEFAULT NULL,
+  `anexo_nome_original` varchar(255) DEFAULT NULL,
+  `criado_por` int(11) DEFAULT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_contratos_fornecedor` (`fornecedor_id`),
+  KEY `fk_contratos_criado_por` (`criado_por`),
+  CONSTRAINT `fk_contratos_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_contratos_fornecedor` FOREIGN KEY (`fornecedor_id`) REFERENCES `fornecedores` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------
@@ -699,6 +1219,194 @@ CREATE TABLE IF NOT EXISTS `deploy_pendencias` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------
+-- documentos
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `documentos` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `categoria_id` int(11) NOT NULL,
+  `titulo` varchar(200) NOT NULL,
+  `descricao` text DEFAULT NULL,
+  `anexo_origem` enum('upload','samba') DEFAULT NULL,
+  `anexo_caminho` varchar(500) DEFAULT NULL,
+  `anexo_nome_original` varchar(255) DEFAULT NULL,
+  `versao` int(11) NOT NULL DEFAULT 1,
+  `criado_por` int(11) DEFAULT NULL,
+  `atualizado_por` int(11) DEFAULT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  `atualizado_em` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_documentos_categoria` (`categoria_id`),
+  KEY `fk_documentos_criado_por` (`criado_por`),
+  KEY `fk_documentos_atualizado_por` (`atualizado_por`),
+  CONSTRAINT `fk_documentos_atualizado_por` FOREIGN KEY (`atualizado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_documentos_categoria` FOREIGN KEY (`categoria_id`) REFERENCES `documentos_categorias` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_documentos_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- documentos_categorias
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `documentos_categorias` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nome` varchar(150) NOT NULL,
+  `descricao` varchar(255) DEFAULT NULL,
+  `ativo` tinyint(1) NOT NULL DEFAULT 1,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_documentos_categoria_nome` (`nome`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- documentos_permissoes
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `documentos_permissoes` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `categoria_id` int(11) NOT NULL,
+  `sujeito_tipo` enum('usuario','grupo') NOT NULL,
+  `sujeito_id` int(11) NOT NULL,
+  `pode_visualizar` tinyint(1) NOT NULL DEFAULT 1,
+  `pode_editar` tinyint(1) NOT NULL DEFAULT 0,
+  `pode_excluir` tinyint(1) NOT NULL DEFAULT 0,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_documentos_permissao` (`categoria_id`,`sujeito_tipo`,`sujeito_id`),
+  KEY `idx_documentos_permissoes_categoria` (`categoria_id`),
+  CONSTRAINT `fk_documentos_permissoes_categoria` FOREIGN KEY (`categoria_id`) REFERENCES `documentos_categorias` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- documentos_versoes
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `documentos_versoes` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `documento_id` int(11) NOT NULL,
+  `versao` int(11) NOT NULL,
+  `anexo_origem` enum('upload','samba') DEFAULT NULL,
+  `anexo_caminho` varchar(500) DEFAULT NULL,
+  `anexo_nome_original` varchar(255) DEFAULT NULL,
+  `substituido_por` int(11) DEFAULT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_documentos_versoes_documento` (`documento_id`),
+  KEY `fk_documentos_versoes_usuario` (`substituido_por`),
+  CONSTRAINT `fk_documentos_versoes_documento` FOREIGN KEY (`documento_id`) REFERENCES `documentos` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_documentos_versoes_usuario` FOREIGN KEY (`substituido_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- fornecedor_tipos_servico
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `fornecedor_tipos_servico` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nome` varchar(100) NOT NULL,
+  `ativo` tinyint(1) NOT NULL DEFAULT 1,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_fornecedor_tipo_servico_nome` (`nome`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- fornecedores
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `fornecedores` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `razao_social` varchar(200) NOT NULL,
+  `nome_fantasia` varchar(150) NOT NULL,
+  `cnpj_cpf` varchar(20) DEFAULT NULL,
+  `inscricao_estadual` varchar(30) DEFAULT NULL,
+  `inscricao_estadual_isento` tinyint(1) NOT NULL DEFAULT 0,
+  `inscricao_municipal` varchar(30) DEFAULT NULL,
+  `porte` enum('ME','EPP','Demais') DEFAULT NULL,
+  `cep` varchar(10) DEFAULT NULL,
+  `logradouro` varchar(200) DEFAULT NULL,
+  `numero` varchar(20) DEFAULT NULL,
+  `complemento` varchar(100) DEFAULT NULL,
+  `bairro` varchar(100) DEFAULT NULL,
+  `cidade` varchar(100) DEFAULT NULL,
+  `uf` char(2) DEFAULT NULL,
+  `pais` varchar(60) NOT NULL DEFAULT 'Brasil',
+  `tipo_servico_id` int(11) DEFAULT NULL,
+  `contato_nome` varchar(150) DEFAULT NULL,
+  `email` varchar(190) DEFAULT NULL,
+  `telefone` varchar(30) DEFAULT NULL,
+  `site` varchar(255) DEFAULT NULL,
+  `canal_abertura_chamado` text DEFAULT NULL,
+  `ativo` tinyint(1) NOT NULL DEFAULT 1,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_fornecedor_cnpj_cpf` (`cnpj_cpf`),
+  KEY `idx_fornecedores_tipo_servico` (`tipo_servico_id`),
+  CONSTRAINT `fk_fornecedores_tipo_servico` FOREIGN KEY (`tipo_servico_id`) REFERENCES `fornecedor_tipos_servico` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- grupo_modulos
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `grupo_modulos` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `grupo_id` int(11) NOT NULL,
+  `modulo` varchar(60) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_grupo_modulo` (`grupo_id`,`modulo`),
+  CONSTRAINT `fk_grupo_modulos_grupo` FOREIGN KEY (`grupo_id`) REFERENCES `grupos` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- grupo_usuarios
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `grupo_usuarios` (
+  `grupo_id` int(11) NOT NULL,
+  `usuario_id` int(11) NOT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`grupo_id`,`usuario_id`),
+  KEY `idx_grupo_usuarios_usuario` (`usuario_id`),
+  CONSTRAINT `fk_grupo_usuarios_grupo` FOREIGN KEY (`grupo_id`) REFERENCES `grupos` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_grupo_usuarios_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- grupos
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `grupos` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nome` varchar(100) NOT NULL,
+  `descricao` varchar(255) DEFAULT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_grupo_nome` (`nome`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- intelbras_dvr_credenciais
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `intelbras_dvr_credenciais` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `ip` varchar(45) NOT NULL,
+  `usuario` varchar(100) NOT NULL,
+  `senha_cifrada` text NOT NULL,
+  `criado_em` datetime NOT NULL DEFAULT current_timestamp(),
+  `atualizado_em` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `idx_intelbras_dvr_credenciais_ip` (`ip`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
+-- ip_scanner_execucoes
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `ip_scanner_execucoes` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `cidr` varchar(255) NOT NULL,
+  `executado_em` datetime NOT NULL,
+  `executado_por` int(11) DEFAULT NULL,
+  `total_hosts` int(11) NOT NULL DEFAULT 0,
+  `hosts` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (json_valid(`hosts`)),
+  PRIMARY KEY (`id`),
+  KEY `fk_ip_scanner_execucoes_usuario` (`executado_por`),
+  KEY `idx_ip_scanner_execucoes_cidr` (`cidr`,`executado_em`),
+  CONSTRAINT `fk_ip_scanner_execucoes_usuario` FOREIGN KEY (`executado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
 -- iptables_log_eventos
 -- ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `iptables_log_eventos` (
@@ -757,6 +1465,22 @@ CREATE TABLE IF NOT EXISTS `iptables_regras_historico` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ----------------------------------------------------------------
+-- mapas_rede
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `mapas_rede` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nome` varchar(150) NOT NULL,
+  `descricao` varchar(255) DEFAULT NULL,
+  `dados` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (json_valid(`dados`)),
+  `criado_em` datetime NOT NULL,
+  `atualizado_em` datetime NOT NULL,
+  `criado_por` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `fk_mapas_rede_usuario` (`criado_por`),
+  CONSTRAINT `fk_mapas_rede_usuario` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
 -- migrations_aplicadas
 -- ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `migrations_aplicadas` (
@@ -774,6 +1498,239 @@ CREATE TABLE IF NOT EXISTS `passos_manuais_confirmacoes` (
   `confirmado_por` int(11) DEFAULT NULL,
   PRIMARY KEY (`chave`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
+-- projetos
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `projetos` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `area_id` int(11) NOT NULL,
+  `titulo` varchar(200) NOT NULL,
+  `descricao` text DEFAULT NULL,
+  `cliente` varchar(150) DEFAULT NULL,
+  `status` enum('planejamento','em_andamento','pausado','concluido','cancelado') NOT NULL DEFAULT 'planejamento',
+  `prioridade` enum('baixa','media','alta','urgente') NOT NULL DEFAULT 'media',
+  `usa_fases` tinyint(1) NOT NULL DEFAULT 1,
+  `data_inicio` date DEFAULT NULL,
+  `data_fim_prevista` date DEFAULT NULL,
+  `criado_por` int(11) DEFAULT NULL,
+  `aberto_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  `atualizado_em` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `excluido_em` datetime DEFAULT NULL,
+  `excluido_por` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_projetos_area` (`area_id`),
+  KEY `idx_projetos_status` (`status`),
+  KEY `fk_projetos_criado_por` (`criado_por`),
+  KEY `idx_projetos_excluido_em` (`excluido_em`),
+  KEY `fk_projetos_excluido_por` (`excluido_por`),
+  CONSTRAINT `fk_projetos_area` FOREIGN KEY (`area_id`) REFERENCES `projetos_areas` (`id`),
+  CONSTRAINT `fk_projetos_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_projetos_excluido_por` FOREIGN KEY (`excluido_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- projetos_anexos
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `projetos_anexos` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `projeto_id` int(11) NOT NULL,
+  `tarefa_id` int(11) DEFAULT NULL,
+  `comentario_id` int(11) DEFAULT NULL,
+  `anexo_origem` enum('upload','samba') NOT NULL,
+  `anexo_caminho` varchar(500) NOT NULL,
+  `anexo_nome_original` varchar(255) NOT NULL,
+  `usuario_id` int(11) DEFAULT NULL,
+  `participante_externo_id` int(11) DEFAULT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_projetos_anexos_projeto` (`projeto_id`),
+  KEY `idx_projetos_anexos_tarefa` (`tarefa_id`),
+  KEY `fk_projetos_anexos_comentario` (`comentario_id`),
+  KEY `fk_projetos_anexos_usuario` (`usuario_id`),
+  KEY `fk_projetos_anexos_participante` (`participante_externo_id`),
+  CONSTRAINT `fk_projetos_anexos_comentario` FOREIGN KEY (`comentario_id`) REFERENCES `projetos_comentarios` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_projetos_anexos_participante` FOREIGN KEY (`participante_externo_id`) REFERENCES `projetos_participantes_externos` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_projetos_anexos_projeto` FOREIGN KEY (`projeto_id`) REFERENCES `projetos` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_projetos_anexos_tarefa` FOREIGN KEY (`tarefa_id`) REFERENCES `projetos_tarefas` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_projetos_anexos_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- projetos_areas
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `projetos_areas` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nome` varchar(100) NOT NULL,
+  `ativo` tinyint(1) NOT NULL DEFAULT 1,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_projetos_areas_nome` (`nome`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- projetos_areas_gestores
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `projetos_areas_gestores` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `area_id` int(11) NOT NULL,
+  `usuario_id` int(11) NOT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_projetos_areas_gestores` (`area_id`,`usuario_id`),
+  KEY `idx_projetos_areas_gestores_usuario` (`usuario_id`),
+  CONSTRAINT `fk_projetos_areas_gestores_area` FOREIGN KEY (`area_id`) REFERENCES `projetos_areas` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_projetos_areas_gestores_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- projetos_comentarios
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `projetos_comentarios` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `projeto_id` int(11) NOT NULL,
+  `tarefa_id` int(11) DEFAULT NULL,
+  `usuario_id` int(11) DEFAULT NULL,
+  `participante_externo_id` int(11) DEFAULT NULL,
+  `tipo` enum('nota','sistema') NOT NULL DEFAULT 'nota',
+  `conteudo` text NOT NULL,
+  `latitude` decimal(10,7) DEFAULT NULL,
+  `longitude` decimal(10,7) DEFAULT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_projetos_comentarios_projeto` (`projeto_id`),
+  KEY `idx_projetos_comentarios_tarefa` (`tarefa_id`),
+  KEY `fk_projetos_comentarios_usuario` (`usuario_id`),
+  KEY `fk_projetos_comentarios_participante` (`participante_externo_id`),
+  CONSTRAINT `fk_projetos_comentarios_participante` FOREIGN KEY (`participante_externo_id`) REFERENCES `projetos_participantes_externos` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_projetos_comentarios_projeto` FOREIGN KEY (`projeto_id`) REFERENCES `projetos` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_projetos_comentarios_tarefa` FOREIGN KEY (`tarefa_id`) REFERENCES `projetos_tarefas` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_projetos_comentarios_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- projetos_fases
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `projetos_fases` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `projeto_id` int(11) NOT NULL,
+  `nome` varchar(150) NOT NULL,
+  `ordem` int(11) NOT NULL DEFAULT 0,
+  `data_inicio` date DEFAULT NULL,
+  `data_fim_prevista` date DEFAULT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_projetos_fases_projeto` (`projeto_id`),
+  CONSTRAINT `fk_projetos_fases_projeto` FOREIGN KEY (`projeto_id`) REFERENCES `projetos` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- projetos_paineis_tv
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `projetos_paineis_tv` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `area_id` int(11) NOT NULL,
+  `token_hash` varchar(64) NOT NULL,
+  `criado_por` int(11) DEFAULT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  `revogado_em` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_projetos_paineis_tv_hash` (`token_hash`),
+  KEY `idx_projetos_paineis_tv_area` (`area_id`),
+  KEY `fk_projetos_paineis_tv_criado_por` (`criado_por`),
+  CONSTRAINT `fk_projetos_paineis_tv_area` FOREIGN KEY (`area_id`) REFERENCES `projetos_areas` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_projetos_paineis_tv_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- projetos_participante_tokens
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `projetos_participante_tokens` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `participante_externo_id` int(11) NOT NULL,
+  `token_hash` varchar(64) NOT NULL,
+  `expira_em` datetime NOT NULL,
+  `usado_em` datetime DEFAULT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_projetos_participante_tokens_hash` (`token_hash`),
+  KEY `idx_projetos_participante_tokens_participante` (`participante_externo_id`),
+  CONSTRAINT `fk_projetos_participante_tokens_participante` FOREIGN KEY (`participante_externo_id`) REFERENCES `projetos_participantes_externos` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- projetos_participantes_externos
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `projetos_participantes_externos` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nome` varchar(150) NOT NULL,
+  `email` varchar(150) DEFAULT NULL,
+  `telefone` varchar(30) DEFAULT NULL,
+  `empresa` varchar(150) DEFAULT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_projetos_participantes_externos_email` (`email`),
+  KEY `idx_projetos_participantes_externos_telefone` (`telefone`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- projetos_tarefas
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `projetos_tarefas` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `projeto_id` int(11) NOT NULL,
+  `fase_id` int(11) DEFAULT NULL,
+  `titulo` varchar(200) NOT NULL,
+  `descricao` text DEFAULT NULL,
+  `tag` varchar(60) DEFAULT NULL,
+  `cor` varchar(20) DEFAULT NULL,
+  `data_inicio` date DEFAULT NULL,
+  `coluna` enum('a_fazer','em_andamento','aguardando_terceiro','concluido') NOT NULL DEFAULT 'a_fazer',
+  `posicao` int(11) NOT NULL DEFAULT 0,
+  `prazo` date DEFAULT NULL,
+  `concluida_em` timestamp NULL DEFAULT NULL,
+  `criado_por` int(11) DEFAULT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  `atualizado_em` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_projetos_tarefas_projeto` (`projeto_id`),
+  KEY `idx_projetos_tarefas_fase` (`fase_id`),
+  KEY `idx_projetos_tarefas_coluna` (`coluna`),
+  KEY `fk_projetos_tarefas_criado_por` (`criado_por`),
+  CONSTRAINT `fk_projetos_tarefas_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_projetos_tarefas_fase` FOREIGN KEY (`fase_id`) REFERENCES `projetos_fases` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_projetos_tarefas_projeto` FOREIGN KEY (`projeto_id`) REFERENCES `projetos` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- projetos_tarefas_externos
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `projetos_tarefas_externos` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `tarefa_id` int(11) NOT NULL,
+  `participante_externo_id` int(11) NOT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_projetos_tarefas_externos` (`tarefa_id`,`participante_externo_id`),
+  KEY `idx_projetos_tarefas_externos_participante` (`participante_externo_id`),
+  CONSTRAINT `fk_projetos_tarefas_externos_participante` FOREIGN KEY (`participante_externo_id`) REFERENCES `projetos_participantes_externos` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_projetos_tarefas_externos_tarefa` FOREIGN KEY (`tarefa_id`) REFERENCES `projetos_tarefas` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- projetos_tarefas_responsaveis
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `projetos_tarefas_responsaveis` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `tarefa_id` int(11) NOT NULL,
+  `usuario_id` int(11) NOT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_projetos_tarefas_responsaveis` (`tarefa_id`,`usuario_id`),
+  KEY `idx_projetos_tarefas_responsaveis_usuario` (`usuario_id`),
+  CONSTRAINT `fk_projetos_tarefas_responsaveis_tarefa` FOREIGN KEY (`tarefa_id`) REFERENCES `projetos_tarefas` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_projetos_tarefas_responsaveis_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------
 -- rede_trafego_historico
@@ -797,13 +1754,28 @@ CREATE TABLE IF NOT EXISTS `redefinicao_senha_tokens` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `usuario_id` int(11) NOT NULL,
   `token_hash` varchar(64) NOT NULL,
-  `expira_em` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `expira_em` timestamp NOT NULL,
   `usado_em` timestamp NULL DEFAULT NULL,
   `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   UNIQUE KEY `token_hash` (`token_hash`),
   KEY `usuario_id` (`usuario_id`),
   CONSTRAINT `fk_redefinicao_senha_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- samba_compartilhamento_portal_usuarios
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `samba_compartilhamento_portal_usuarios` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `compartilhamento_id` int(11) NOT NULL,
+  `usuario_id` int(11) NOT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_samba_portal_usuario` (`compartilhamento_id`,`usuario_id`),
+  KEY `idx_samba_portal_usuario_usuario` (`usuario_id`),
+  CONSTRAINT `fk_samba_portal_usuarios_compartilhamento` FOREIGN KEY (`compartilhamento_id`) REFERENCES `samba_compartilhamentos` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_samba_portal_usuarios_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------
@@ -859,6 +1831,22 @@ CREATE TABLE IF NOT EXISTS `samba_usuarios` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------
+-- seguranca_auditorias
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `seguranca_auditorias` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `tipo` enum('local','credenciais_padrao','forca_bruta_ssh') NOT NULL,
+  `alvo` varchar(255) DEFAULT NULL,
+  `resultado` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (json_valid(`resultado`)),
+  `executado_em` datetime NOT NULL,
+  `executado_por` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `fk_seguranca_auditorias_usuario` (`executado_por`),
+  KEY `idx_seguranca_auditorias_tipo` (`tipo`,`executado_em`),
+  CONSTRAINT `fk_seguranca_auditorias_usuario` FOREIGN KEY (`executado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
 -- speedtest_historico
 -- ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `speedtest_historico` (
@@ -896,6 +1884,20 @@ CREATE TABLE IF NOT EXISTS `ssh_conexoes` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ----------------------------------------------------------------
+-- unidades
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `unidades` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nome` varchar(150) NOT NULL,
+  `sigla` varchar(6) NOT NULL,
+  `padrao` tinyint(1) NOT NULL DEFAULT 0,
+  `ativo` tinyint(1) NOT NULL DEFAULT 1,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_unidades_sigla` (`sigla`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
 -- usuario_modulos
 -- ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `usuario_modulos` (
@@ -919,6 +1921,7 @@ CREATE TABLE IF NOT EXISTS `usuarios` (
   `perfil` enum('admin','ti','consulta') NOT NULL DEFAULT 'ti',
   `ativo` tinyint(1) NOT NULL DEFAULT 1,
   `criado_em` timestamp NULL DEFAULT current_timestamp(),
+  `ultimo_acesso` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `login` (`login`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -1112,11 +2115,14 @@ CREATE TABLE IF NOT EXISTS `vpn_wireguard_trafego_historico` (
 CREATE TABLE IF NOT EXISTS `whatsapp_atendimentos` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `contato_id` int(11) NOT NULL,
+  `conexao_id` int(11) DEFAULT NULL,
   `setor_id` int(11) DEFAULT NULL,
   `usuario_id` int(11) DEFAULT NULL,
   `no_bot_atual_id` int(11) DEFAULT NULL,
+  `chamado_id` int(11) DEFAULT NULL,
   `tentativas_invalidas_bot` int(11) NOT NULL DEFAULT 0,
-  `status` enum('bot','fila','em_atendimento','encerrado') NOT NULL DEFAULT 'bot',
+  `status` enum('bot','fila','em_atendimento','aguardando_nps_atendente','aguardando_nps_resolucao','encerrado') NOT NULL DEFAULT 'bot',
+  `aguardando_resposta` tinyint(1) NOT NULL DEFAULT 0,
   `aberto_em` timestamp NOT NULL DEFAULT current_timestamp(),
   `atribuido_em` timestamp NULL DEFAULT NULL,
   `encerrado_em` timestamp NULL DEFAULT NULL,
@@ -1127,6 +2133,11 @@ CREATE TABLE IF NOT EXISTS `whatsapp_atendimentos` (
   KEY `idx_whatsapp_atendimentos_setor` (`setor_id`),
   KEY `idx_whatsapp_atendimentos_usuario` (`usuario_id`),
   KEY `fk_whatsapp_atendimentos_no_bot` (`no_bot_atual_id`),
+  KEY `fk_whatsapp_atendimentos_chamado` (`chamado_id`),
+  KEY `fk_whatsapp_atendimentos_conexao` (`conexao_id`),
+  KEY `idx_whatsapp_atendimentos_contato_conexao_status` (`contato_id`,`conexao_id`,`status`),
+  CONSTRAINT `fk_whatsapp_atendimentos_chamado` FOREIGN KEY (`chamado_id`) REFERENCES `chamados` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_whatsapp_atendimentos_conexao` FOREIGN KEY (`conexao_id`) REFERENCES `whatsapp_conexoes` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_whatsapp_atendimentos_contato` FOREIGN KEY (`contato_id`) REFERENCES `whatsapp_contatos` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_whatsapp_atendimentos_no_bot` FOREIGN KEY (`no_bot_atual_id`) REFERENCES `whatsapp_chatbot_nos` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_whatsapp_atendimentos_setor` FOREIGN KEY (`setor_id`) REFERENCES `whatsapp_setores` (`id`) ON DELETE SET NULL,
@@ -1142,15 +2153,49 @@ CREATE TABLE IF NOT EXISTS `whatsapp_chatbot_nos` (
   `ordem` int(11) NOT NULL DEFAULT 0,
   `rotulo` varchar(150) NOT NULL,
   `mensagem` text NOT NULL,
-  `tipo` enum('menu','resposta_final','encaminhar_setor') NOT NULL DEFAULT 'menu',
+  `tipo` enum('menu','resposta_final','encaminhar_setor','abrir_chamado') NOT NULL DEFAULT 'menu',
   `setor_destino_id` int(11) DEFAULT NULL,
+  `categoria_chamado_id` int(11) DEFAULT NULL,
   `ativo` tinyint(1) NOT NULL DEFAULT 1,
   `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `idx_whatsapp_chatbot_nos_pai` (`no_pai_id`),
   KEY `fk_whatsapp_chatbot_nos_setor` (`setor_destino_id`),
+  KEY `fk_whatsapp_chatbot_nos_categoria_chamado` (`categoria_chamado_id`),
+  CONSTRAINT `fk_whatsapp_chatbot_nos_categoria_chamado` FOREIGN KEY (`categoria_chamado_id`) REFERENCES `chamados_categorias` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_whatsapp_chatbot_nos_pai` FOREIGN KEY (`no_pai_id`) REFERENCES `whatsapp_chatbot_nos` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_whatsapp_chatbot_nos_setor` FOREIGN KEY (`setor_destino_id`) REFERENCES `whatsapp_setores` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- whatsapp_conexao_setores
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `whatsapp_conexao_setores` (
+  `conexao_id` int(11) NOT NULL,
+  `setor_id` int(11) NOT NULL,
+  PRIMARY KEY (`conexao_id`,`setor_id`),
+  KEY `fk_wpp_conexao_setores_setor` (`setor_id`),
+  CONSTRAINT `fk_wpp_conexao_setores_conexao` FOREIGN KEY (`conexao_id`) REFERENCES `whatsapp_conexoes` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_wpp_conexao_setores_setor` FOREIGN KEY (`setor_id`) REFERENCES `whatsapp_setores` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- whatsapp_conexoes
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `whatsapp_conexoes` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nome` varchar(100) NOT NULL,
+  `porta` int(11) NOT NULL,
+  `api_key_cifrada` text DEFAULT NULL,
+  `diretorio_instalacao` varchar(255) NOT NULL,
+  `usuario_sistema` varchar(100) NOT NULL,
+  `unit_systemd` varchar(150) NOT NULL,
+  `instalado` tinyint(1) NOT NULL DEFAULT 0,
+  `ativo` tinyint(1) NOT NULL DEFAULT 1,
+  `padrao` tinyint(1) NOT NULL DEFAULT 0,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_whatsapp_conexoes_porta` (`porta`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------
@@ -1174,6 +2219,7 @@ CREATE TABLE IF NOT EXISTS `whatsapp_mensagens` (
   `atendimento_id` int(11) NOT NULL,
   `direcao` enum('entrada','saida') NOT NULL,
   `tipo` enum('texto','imagem','audio','documento','video','outro') NOT NULL DEFAULT 'texto',
+  `contexto` enum('atendimento','nps') NOT NULL DEFAULT 'atendimento',
   `conteudo` text DEFAULT NULL,
   `midia_path` varchar(255) DEFAULT NULL,
   `origem` enum('cliente','usuario','bot') NOT NULL,
@@ -1202,12 +2248,56 @@ CREATE TABLE IF NOT EXISTS `whatsapp_mensagens_rapidas` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------
+-- whatsapp_nps_respostas
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `whatsapp_nps_respostas` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `atendimento_id` int(11) NOT NULL,
+  `contato_id` int(11) NOT NULL,
+  `setor_id` int(11) DEFAULT NULL,
+  `usuario_id` int(11) DEFAULT NULL,
+  `nota_atendente` tinyint(4) DEFAULT NULL,
+  `resolvido` tinyint(1) DEFAULT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_whatsapp_nps_setor` (`setor_id`),
+  KEY `idx_whatsapp_nps_atendimento` (`atendimento_id`),
+  KEY `fk_whatsapp_nps_contato` (`contato_id`),
+  KEY `fk_whatsapp_nps_usuario` (`usuario_id`),
+  CONSTRAINT `fk_whatsapp_nps_atendimento` FOREIGN KEY (`atendimento_id`) REFERENCES `whatsapp_atendimentos` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_whatsapp_nps_contato` FOREIGN KEY (`contato_id`) REFERENCES `whatsapp_contatos` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_whatsapp_nps_setor` FOREIGN KEY (`setor_id`) REFERENCES `whatsapp_setores` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_whatsapp_nps_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- whatsapp_permissao_encerrados
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `whatsapp_permissao_encerrados` (
+  `usuario_id` int(11) NOT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`usuario_id`),
+  CONSTRAINT `fk_whatsapp_permissao_encerrados_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- whatsapp_permissao_nps
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `whatsapp_permissao_nps` (
+  `usuario_id` int(11) NOT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`usuario_id`),
+  CONSTRAINT `fk_whatsapp_permissao_nps_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
 -- whatsapp_setor_usuarios
 -- ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `whatsapp_setor_usuarios` (
   `setor_id` int(11) NOT NULL,
   `usuario_id` int(11) NOT NULL,
   `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  `supervisor` tinyint(1) NOT NULL DEFAULT 0,
   PRIMARY KEY (`setor_id`,`usuario_id`),
   KEY `idx_whatsapp_setor_usuarios_usuario` (`usuario_id`),
   CONSTRAINT `fk_whatsapp_setor_usuarios_setor` FOREIGN KEY (`setor_id`) REFERENCES `whatsapp_setores` (`id`) ON DELETE CASCADE,
@@ -1221,6 +2311,8 @@ CREATE TABLE IF NOT EXISTS `whatsapp_setores` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `nome` varchar(100) NOT NULL,
   `ativo` tinyint(1) NOT NULL DEFAULT 1,
+  `nps_ativo` tinyint(1) NOT NULL DEFAULT 0,
+  `visivel_equipe` tinyint(1) NOT NULL DEFAULT 0,
   `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_whatsapp_setor_nome` (`nome`)
