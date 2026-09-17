@@ -6,9 +6,14 @@ use App\Components\Badge;
 ob_start();
 ?>
 
-<div class="mb-4">
-    <h4 class="mb-1"><i class="bi bi-hdd-network-fill me-1"></i> Servidor DHCP</h4>
-    <small class="text-muted">Infraestrutura</small>
+<div class="mb-4 d-flex justify-content-between align-items-start flex-wrap gap-2">
+    <div>
+        <h4 class="mb-1"><i class="bi bi-hdd-network-fill me-1"></i> Servidor DHCP</h4>
+        <small class="text-muted">Infraestrutura</small>
+    </div>
+    <a href="<?= url('/infraestrutura/guia-dhcp-vlan') ?>" class="btn btn-outline-primary btn-sm" target="_blank">
+        <i class="bi bi-book"></i> Como usar (DHCP + VLANs)
+    </a>
 </div>
 
 <?= Alert::flash() ?>
@@ -74,15 +79,19 @@ ob_start();
         <strong><i class="bi bi-gear"></i> Configuração geral</strong>
         <form id="form-config" class="mt-3">
             <div class="row g-3">
-                <div class="col-md-4">
-                    <label class="form-label">Interface de rede</label>
-                    <select name="interface" class="form-select" required>
-                        <option value="">-- selecione --</option>
+                <div class="col-12">
+                    <label class="form-label">Interfaces de rede</label>
+                    <div class="d-flex flex-wrap gap-3 p-2 border rounded">
+                        <?php $interfacesSelecionadas = array_filter(explode(' ', trim($config['interface'] ?? ''))); ?>
                         <?php foreach ($interfaces as $iface): ?>
-                            <option value="<?= htmlspecialchars($iface) ?>" <?= ($config['interface'] ?? '') === $iface ? 'selected' : '' ?>><?= htmlspecialchars($iface) ?></option>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="interfaces[]" value="<?= htmlspecialchars($iface) ?>"
+                                       id="iface-<?= htmlspecialchars($iface) ?>" <?= in_array($iface, $interfacesSelecionadas, true) ? 'checked' : '' ?>>
+                                <label class="form-check-label font-monospace" for="iface-<?= htmlspecialchars($iface) ?>"><?= htmlspecialchars($iface) ?></label>
+                            </div>
                         <?php endforeach; ?>
-                    </select>
-                    <div class="form-text">O DHCP só escuta pedidos chegando por esta interface.</div>
+                    </div>
+                    <div class="form-text">O DHCP escuta pedidos em cada interface marcada -- selecione a física e/ou cada VLAN (Infraestrutura &gt; VLANs) que precisa de concessão automática de IP.</div>
                 </div>
                 <div class="col-md-4">
                     <label class="form-label">Domínio (opcional)</label>

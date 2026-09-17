@@ -1,5 +1,5 @@
 #!/bin/bash
-# dhcp_aplicar_web.sh <arquivo_dhcpd_conf_tmp> <interface> <segundos_rollback>
+# dhcp_aplicar_web.sh <arquivo_dhcpd_conf_tmp> <interfaces (separadas por espaco)> <segundos_rollback>
 #
 # Aplica um dhcpd.conf novo com validacao de sintaxe (dhcpd -t -cf, o
 # equivalente do "testparm -s"/"iptables-restore --test" ja usados
@@ -27,10 +27,19 @@ if [ ! -f "$ORIGEM" ]; then
   exit 1
 fi
 
-if [ -z "$IFACE" ] || ! ip link show "$IFACE" >/dev/null 2>&1; then
-  echo "{\"success\":false,\"message\":\"Interface '${IFACE}' nao existe nesta maquina.\"}"
+if [ -z "$IFACE" ]; then
+  echo '{"success":false,"message":"Nenhuma interface selecionada."}'
   exit 1
 fi
+# IFACE pode trazer mais de um nome separado por espaco (ex: a fisica +
+# uma ou mais sub-interfaces de VLAN) -- confere cada uma individualmente
+# antes de aceitar, senao dhcpd recusa subir citando a que nao existe.
+for IFACE_UNICA in $IFACE; do
+  if ! ip link show "$IFACE_UNICA" >/dev/null 2>&1; then
+    echo "{\"success\":false,\"message\":\"Interface '${IFACE_UNICA}' nao existe nesta maquina.\"}"
+    exit 1
+  fi
+done
 
 if ! [[ "$SEGUNDOS" =~ ^[0-9]+$ ]] || [ "$SEGUNDOS" -lt 15 ] || [ "$SEGUNDOS" -gt 600 ]; then
   SEGUNDOS=90

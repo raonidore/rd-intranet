@@ -63,10 +63,18 @@ class DhcpService
     /** @return array{success: bool, message: string} */
     public function salvarConfig(array $post): array
     {
-        $interface = trim($post['interface'] ?? '');
-        if ($interface === '' || !in_array($interface, $this->interfacesDisponiveis(), true)) {
-            return ['success' => false, 'message' => 'Selecione uma interface válida.'];
+        $interfacesEscolhidas = array_map('trim', (array)($post['interfaces'] ?? []));
+        $interfacesEscolhidas = array_values(array_filter($interfacesEscolhidas, fn ($v) => $v !== ''));
+
+        if (empty($interfacesEscolhidas)) {
+            return ['success' => false, 'message' => 'Selecione ao menos uma interface (a física e/ou cada VLAN que deve responder DHCP).'];
         }
+        foreach ($interfacesEscolhidas as $iface) {
+            if (!in_array($iface, $this->interfacesDisponiveis(), true)) {
+                return ['success' => false, 'message' => "Interface inválida: \"{$iface}\"."];
+            }
+        }
+        $interface = implode(' ', $interfacesEscolhidas);
 
         $leasePadrao = (int)($post['lease_padrao_segundos'] ?? 43200);
         $leaseMaximo = (int)($post['lease_maximo_segundos'] ?? 86400);
@@ -83,7 +91,7 @@ class DhcpService
             'lease_maximo_segundos' => $leaseMaximo,
         ]);
 
-        AuditService::registrar('Infraestrutura', 'Servidor DHCP', "Configuração geral salva (interface {$interface}).");
+        AuditService::registrar('Infraestrutura', 'Servidor DHCP', "Configuração geral salva (interfaces: {$interface}).");
 
         return ['success' => true, 'message' => 'Configuração salva -- clique em "Aplicar" pra ativar de verdade.'];
     }

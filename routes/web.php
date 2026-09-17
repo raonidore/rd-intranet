@@ -53,6 +53,7 @@ use App\Controllers\DbConsoleController;
 use App\Controllers\CronController;
 use App\Controllers\IptablesController;
 use App\Controllers\DhcpController;
+use App\Controllers\VlanController;
 use App\Controllers\CertificadoController;
 use App\Controllers\KbController;
 use App\Controllers\WhatsAppSetorController;
@@ -346,6 +347,17 @@ $router->get('/infraestrutura/dhcp/status', [DhcpController::class, 'status']);
 $router->get('/infraestrutura/dhcp/ao-vivo', [DhcpController::class, 'statusAoVivo']);
 $router->post('/infraestrutura/dhcp/ligar', [DhcpController::class, 'ligar']);
 $router->post('/infraestrutura/dhcp/desligar', [DhcpController::class, 'desligar']);
+
+$router->get('/infraestrutura/vlan', [VlanController::class, 'index']);
+$router->get('/infraestrutura/vlan/proximo-id', [VlanController::class, 'proximoId']);
+$router->post('/infraestrutura/vlan/salvar', [VlanController::class, 'salvar']);
+$router->post('/infraestrutura/vlan/excluir', [VlanController::class, 'excluir']);
+$router->post('/infraestrutura/vlan/aplicar', [VlanController::class, 'aplicar']);
+$router->post('/infraestrutura/vlan/confirmar', [VlanController::class, 'confirmar']);
+$router->post('/infraestrutura/vlan/reverter', [VlanController::class, 'reverterAgora']);
+$router->get('/infraestrutura/vlan/status', [VlanController::class, 'status']);
+
+$router->get('/infraestrutura/guia-dhcp-vlan', [VlanController::class, 'guia']);
 
 $router->get('/infraestrutura/certificado', [CertificadoController::class, 'index']);
 $router->get('/infraestrutura/certificado/autoassinado', [CertificadoController::class, 'autoassinadoForm']);
