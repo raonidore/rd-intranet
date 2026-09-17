@@ -37,12 +37,25 @@ class VlanService
         $this->linux = new LinuxService();
     }
 
-    /** Interfaces físicas/trunk válidas como "pai" de uma VLAN -- exclui sub-interfaces de VLAN já existentes (evita empilhar tag em cima de tag). */
+    /** Prefixos de interface virtual (VPN, container, bridge...) que nunca fazem sentido como trunk 802.1Q -- reduz a lista pra só o que é plausível escolher. */
+    private const PREFIXOS_INTERFACE_VIRTUAL = ['tailscale', 'wg', 'docker', 'veth', 'br-', 'virbr', 'tun', 'tap', 'ppp'];
+
+    /** Interfaces físicas/trunk válidas como "pai" de uma VLAN -- exclui sub-interfaces de VLAN já existentes (evita empilhar tag em cima de tag) e interfaces virtuais óbvias (VPN, container, bridge). */
     public function interfacesFisicasDisponiveis(): array
     {
         return array_values(array_filter(
             (new NetworkConfigService())->interfacesValidas(),
-            fn (string $nome) => !str_contains($nome, '.')
+            function (string $nome) {
+                if (str_contains($nome, '.')) {
+                    return false;
+                }
+                foreach (self::PREFIXOS_INTERFACE_VIRTUAL as $prefixo) {
+                    if (str_starts_with($nome, $prefixo)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
         ));
     }
 

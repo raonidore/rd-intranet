@@ -18,14 +18,35 @@ fi
 
 CONFIG="${CONFIG:-/etc/netplan/95-rd-intranet-vlans.yaml}"
 
+# Mesma extracao usada em vlan_aplicar_web.sh.
+extrair_vlans() {
+  grep -E '^    [A-Za-z0-9_.@-]+:$' "$1" 2>/dev/null | sed -E 's/^    //; s/:$//'
+}
+
+ANTIGAS=""
+[ -f "$CONFIG" ] && ANTIGAS="$(extrair_vlans "$CONFIG")"
+
 if [ -n "$BACKUP" ] && [ -f "$BACKUP" ]; then
   cp "$BACKUP" "$CONFIG"
 else
   rm -f "$CONFIG"
 fi
 
+NOVAS=""
+[ -f "$CONFIG" ] && NOVAS="$(extrair_vlans "$CONFIG")"
+
 netplan generate >/dev/null 2>&1
 netplan apply >/dev/null 2>&1
+
+# netplan NAO remove interfaces que saem da configuracao (mesma limitacao
+# de vlan_aplicar_web.sh) -- apaga na unha cada VLAN que existia antes do
+# revert e nao existe mais no estado restaurado.
+while IFS= read -r IFACE_ANTIGA; do
+  [ -z "$IFACE_ANTIGA" ] && continue
+  if ! printf '%s\n' "$NOVAS" | grep -qxF "$IFACE_ANTIGA"; then
+    ip link delete "$IFACE_ANTIGA" >/dev/null 2>&1
+  fi
+done <<< "$ANTIGAS"
 
 systemctl stop rd-vlan-rollback.timer >/dev/null 2>&1
 systemctl reset-failed rd-vlan-rollback >/dev/null 2>&1
