@@ -130,7 +130,25 @@ $urlVoltarChamados = url(PermissionService::temAcesso('chamados_atendimentos') ?
     }
 
     campoEmail.addEventListener('input', limparAvisoContato);
-    campoTelefone.addEventListener('input', limparAvisoContato);
+    campoTelefone.addEventListener('input', () => {
+        limparAvisoContato();
+        campoTelefone.value = mascararTelefone(campoTelefone.value);
+    });
+
+    // --- Telefone: máscara (DD) DDDDD-DDDD (celular) ou (DD) DDDD-DDDD (fixo) ---
+    function mascararTelefone(valor) {
+        valor = valor.replace(/\D/g, '').slice(0, 11);
+        if (valor.length > 10) {
+            valor = valor.replace(/^(\d{2})(\d{5})(\d{0,4}).*/, '($1) $2-$3');
+        } else if (valor.length > 6) {
+            valor = valor.replace(/^(\d{2})(\d{4})(\d{0,4}).*/, '($1) $2-$3');
+        } else if (valor.length > 2) {
+            valor = valor.replace(/^(\d{2})(\d{0,5}).*/, '($1) $2');
+        } else if (valor.length > 0) {
+            valor = valor.replace(/^(\d*)/, '($1');
+        }
+        return valor;
+    }
 
     formChamado.addEventListener('submit', (ev) => {
         if (campoEmail.value.trim() !== '' || campoTelefone.value.trim() !== '') {
