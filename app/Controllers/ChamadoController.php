@@ -58,6 +58,7 @@ class ChamadoController extends Controller
             'categorias' => (new ChamadoCategoriaService())->listarAtivas(),
             'setores' => (new ChamadoSetorService())->listarAtivos(),
             'unidades' => (new UnidadeService())->listarAtivas(),
+            'ativoPreSelecionado' => !empty($_GET['ativo_id']) ? (new AtivoService())->buscar((int)$_GET['ativo_id']) : null,
             'proximoNumero' => NumeroControleService::previewProximo(Database::connection(), 'chamados', 'aberto_em', 'CI'),
         ]);
     }

@@ -518,6 +518,11 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                         </tbody>
                     </table>
                 <?php endif; ?>
+                <div class="p-3 pt-0">
+                    <a href="<?= url('/chamados/atendimentos/novo?ativo_id=' . (int)$ativo['id']) ?>" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-plus-lg"></i> Abrir chamado interno sobre este ativo
+                    </a>
+                </div>
             </div>
         </div>
         <?php endif; ?>

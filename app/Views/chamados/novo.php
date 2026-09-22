@@ -70,8 +70,9 @@ $urlVoltarChamados = url(PermissionService::temAcesso('chamados_atendimentos') ?
 
             <div class="mb-3 position-relative">
                 <label class="form-label">Ativo relacionado <span class="text-muted fw-normal">(opcional -- se o chamado for sobre um equipamento)</span></label>
-                <input type="hidden" name="ativo_id" id="campoAtivoId">
-                <input type="text" id="campoAtivoBusca" class="form-control" autocomplete="off" placeholder="Busque por código, nome ou nº de série...">
+                <input type="hidden" name="ativo_id" id="campoAtivoId" value="<?= $ativoPreSelecionado ? (int)$ativoPreSelecionado['id'] : '' ?>">
+                <input type="text" id="campoAtivoBusca" class="form-control" autocomplete="off" placeholder="Busque por código, nome ou nº de série..."
+                       value="<?= $ativoPreSelecionado ? htmlspecialchars($ativoPreSelecionado['codigo_patrimonio'] . ' - ' . $ativoPreSelecionado['nome']) : '' ?>">
                 <div id="listaAtivosSugeridos" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:10; max-height:220px; overflow-y:auto"></div>
             </div>
 
