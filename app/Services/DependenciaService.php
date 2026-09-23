@@ -57,7 +57,15 @@ class DependenciaService
         $dados = json_decode($ultimaLinha, true);
 
         if (is_array($dados)) {
-            $dados['saida_completa'] = $resultado['output'];
+            // Log sem a linha do JSON -- quando o pacote ja estava em cache
+            // (ou a instalacao e rapida o bastante), o apt nao imprime nada
+            // alem do JSON, e nesse caso nao ha log nenhum pra mostrar (a
+            // mensagem do proprio $dados['message'] ja cobre o resultado).
+            $log = trim(implode("\n", array_slice($linhas, 0, -1)));
+            if ($log !== '') {
+                $dados['saida_completa'] = $log;
+            }
+
             return $dados;
         }
 

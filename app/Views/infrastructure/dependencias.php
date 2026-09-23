@@ -81,7 +81,11 @@ $faltandoObrigatorio = count(array_filter($itens, fn($i) => $i['instalado'] === 
                 <h5 class="modal-title">Instalando</h5>
             </div>
             <div class="modal-body" id="modalInstalarCorpo">
-                <div class="text-center text-muted py-3"><i class="bi bi-hourglass-split"></i> Instalando, pode levar até um minuto...</div>
+                <div class="text-center text-muted py-4">
+                    <div class="spinner-border text-primary mb-3" role="status"></div>
+                    <div>Instalando...</div>
+                    <small class="d-block mt-1">Pode levar até um minuto. Tempo decorrido: <span id="modalInstalarContador">0s</span></small>
+                </div>
             </div>
             <div class="modal-footer" id="modalInstalarRodape" style="display:none">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
@@ -101,10 +105,24 @@ $faltandoObrigatorio = count(array_filter($itens, fn($i) => $i['instalado'] === 
             const corpo = document.getElementById('modalInstalarCorpo');
             const rodape = document.getElementById('modalInstalarRodape');
 
-            corpo.innerHTML = '<div class="text-center text-muted py-3"><i class="bi bi-hourglass-split"></i> Instalando ' + chave + ', pode levar até um minuto...</div>';
+            corpo.innerHTML = '<div class="text-center text-muted py-4">' +
+                '<div class="spinner-border text-primary mb-3" role="status"></div>' +
+                '<div>Instalando <strong>' + chave + '</strong>...</div>' +
+                '<small class="d-block mt-1">Pode levar até um minuto. Tempo decorrido: <span id="modalInstalarContador">0s</span></small>' +
+                '</div>';
             rodape.style.display = 'none';
             modal.show();
             botao.disabled = true;
+
+            // Contador visível de segundos -- só pra deixar claro que o
+            // processo está rodando (instalação real pode levar quase um
+            // minuto sem nenhum retorno do servidor nesse meio-tempo).
+            let segundos = 0;
+            const contadorEl = document.getElementById('modalInstalarContador');
+            const intervalo = setInterval(function () {
+                segundos += 1;
+                if (contadorEl) contadorEl.textContent = segundos + 's';
+            }, 1000);
 
             try {
                 const res = await fetch(INSTALAR_URL, {
@@ -116,10 +134,13 @@ $faltandoObrigatorio = count(array_filter($itens, fn($i) => $i['instalado'] === 
 
                 const cor = dados.success ? 'success' : 'danger';
                 const icone = dados.success ? 'check-circle' : 'x-circle';
-                let html = '<div class="alert alert-' + cor + '"><i class="bi bi-' + icone + '"></i> ' + dados.message + '</div>';
+                let html = '<div class="alert alert-' + cor + ' mb-0"><i class="bi bi-' + icone + '"></i> ' + dados.message + '</div>';
                 if (dados.saida_completa) {
-                    html += '<pre class="bg-dark text-light p-3 rounded mb-0" style="max-height:300px; overflow:auto; font-size:12px;">' +
-                        dados.saida_completa.replace(/</g, '&lt;') + '</pre>';
+                    html += '<details class="mt-3"' + (dados.success ? '' : ' open') + '>' +
+                        '<summary class="text-muted small" style="cursor:pointer">Ver log da instalação</summary>' +
+                        '<pre class="bg-dark text-light p-3 rounded mt-2 mb-0" style="max-height:300px; overflow:auto; font-size:12px;">' +
+                        dados.saida_completa.replace(/</g, '&lt;') + '</pre>' +
+                        '</details>';
                 }
                 corpo.innerHTML = html;
                 rodape.style.display = '';
@@ -135,6 +156,7 @@ $faltandoObrigatorio = count(array_filter($itens, fn($i) => $i['instalado'] === 
                 corpo.innerHTML = '<div class="alert alert-danger mb-0">Erro ao comunicar com o servidor.</div>';
                 rodape.style.display = '';
             } finally {
+                clearInterval(intervalo);
                 botao.disabled = false;
             }
         });
