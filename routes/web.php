@@ -91,6 +91,7 @@ use App\Controllers\VpnIkev2SaidaController;
 use App\Controllers\AtualizacaoController;
 use App\Controllers\AntivirusController;
 use App\Controllers\SegurancaAuditoriaController;
+use App\Controllers\CofreSenhaController;
 use App\Controllers\MapaRedeController;
 use App\Controllers\BackupController;
 use App\Controllers\AtivoController;
@@ -663,6 +664,15 @@ $router->post('/seguranca/auditoria-credenciais/credenciais-padrao', [SegurancaA
 $router->post('/seguranca/auditoria-credenciais/ssh/iniciar', [SegurancaAuditoriaController::class, 'sshIniciar']);
 $router->get('/seguranca/auditoria-credenciais/ssh/status', [SegurancaAuditoriaController::class, 'sshStatus']);
 $router->post('/seguranca/auditoria-credenciais/ssh/finalizar', [SegurancaAuditoriaController::class, 'sshFinalizar']);
+
+$router->get('/seguranca/cofre-senhas', [CofreSenhaController::class, 'index']);
+$router->get('/seguranca/cofre-senhas/novo', [CofreSenhaController::class, 'novoForm']);
+$router->post('/seguranca/cofre-senhas/novo', [CofreSenhaController::class, 'novo']);
+$router->get('/seguranca/cofre-senhas/editar', [CofreSenhaController::class, 'editarForm']);
+$router->post('/seguranca/cofre-senhas/editar', [CofreSenhaController::class, 'editar']);
+$router->get('/seguranca/cofre-senhas/excluir', [CofreSenhaController::class, 'excluirForm']);
+$router->post('/seguranca/cofre-senhas/excluir', [CofreSenhaController::class, 'excluir']);
+$router->post('/seguranca/cofre-senhas/revelar', [CofreSenhaController::class, 'revelar']);
 
 $router->get('/backup/configuracao', [BackupController::class, 'configuracao']);
 $router->post('/backup/configuracao/salvar', [BackupController::class, 'salvar']);

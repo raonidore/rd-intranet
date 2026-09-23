@@ -52,6 +52,7 @@ class ModuloCatalogo
         'auditoria' => ['label' => 'Auditoria', 'grupo' => 'Segurança'],
         'seguranca_antivirus' => ['label' => 'Antivírus', 'grupo' => 'Segurança'],
         'seguranca_auditoria_credenciais' => ['label' => 'Auditoria de Credenciais', 'grupo' => 'Segurança'],
+        'seguranca_cofre_senhas' => ['label' => 'Cofre de Senhas', 'grupo' => 'Segurança'],
         'ativos_dashboard' => ['label' => 'Ativos - Dashboard', 'grupo' => 'Ativos'],
         'ativos_lista' => ['label' => 'Ativos - Lista', 'grupo' => 'Ativos'],
         'ativos_novo' => ['label' => 'Ativos - Novo/Editar', 'grupo' => 'Ativos'],
@@ -170,7 +171,7 @@ class ModuloCatalogo
      * explícita pela tela de Usuários, mesmo pra quem já é admin. Reservado
      * pra ferramentas sensíveis (hoje só a auditoria de credenciais).
      */
-    public const MODULOS_RESTRITOS = ['seguranca_auditoria_credenciais'];
+    public const MODULOS_RESTRITOS = ['seguranca_auditoria_credenciais', 'seguranca_cofre_senhas'];
 
     public static function ehRestrito(string $modulo): bool
     {
