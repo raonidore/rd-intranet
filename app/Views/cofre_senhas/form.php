@@ -74,15 +74,25 @@ $acao = $editando ? url('/seguranca/cofre-senhas/editar') : url('/seguranca/cofr
                        <?= $editando ? '' : 'required' ?>>
             </div>
 
-            <div class="form-check mb-3">
-                <input type="checkbox" name="privado" value="1" class="form-check-input" id="checkPrivado"
-                       <?= (!$editando || (int)($segredo['privado'] ?? 1) === 1) ? 'checked' : '' ?>>
-                <label class="form-check-label" for="checkPrivado">
-                    Privado -- só eu posso ver esta senha
-                </label>
-                <small class="text-muted d-block">
-                    Desmarcado, qualquer pessoa com acesso ao Cofre de Senhas poderá ver (mas só você pode editar/excluir).
-                </small>
+            <div class="mb-3">
+                <label class="form-label">Onde salvar</label>
+                <?php if ($editando): ?>
+                    <input type="text" class="form-control" disabled
+                           value="<?= $cofreAtual ? htmlspecialchars($cofreAtual['nome']) : 'Pessoal (só eu)' ?>">
+                    <small class="text-muted d-block">
+                        Não é possível mover um segredo de cofre depois de criado -- exclua e recrie no cofre certo, se precisar.
+                    </small>
+                <?php else: ?>
+                    <select name="cofre_id" class="form-select">
+                        <option value="">Pessoal (só eu)</option>
+                        <?php foreach ($cofresDisponiveis as $cofre): ?>
+                            <option value="<?= (int)$cofre['id'] ?>"><?= htmlspecialchars($cofre['nome']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <small class="text-muted d-block">
+                        Salvando num cofre de equipe, todo mundo com permissão nesse cofre vai poder ver este segredo.
+                    </small>
+                <?php endif; ?>
             </div>
 
             <div class="d-flex justify-content-between mt-3">

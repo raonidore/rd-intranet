@@ -5,7 +5,9 @@ namespace App\Controllers;
 use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
 use App\Services\AuditService;
+use App\Services\CofrePermissaoService;
 use App\Services\CofreSenhaService;
+use App\Services\CofreService;
 use App\Services\NotificationService;
 
 class CofreSenhaController extends Controller
@@ -26,9 +28,16 @@ class CofreSenhaController extends Controller
     {
         AuthMiddleware::checkModuloRestrito('seguranca_cofre_senhas');
 
+        $usuarioId = $this->usuarioId();
+        $dados = $this->service->listar($usuarioId);
+        $cofresQueEdita = array_flip((new CofrePermissaoService())->cofresQueUsuarioPodeEditar($usuarioId));
+
         $this->view('cofre_senhas/lista', [
-            'segredos' => $this->service->listar($this->usuarioId()),
-            'usuarioIdAtual' => $this->usuarioId(),
+            'pessoal' => $dados['pessoal'],
+            'cofres' => $dados['cofres'],
+            'itensPorCofre' => $dados['itensPorCofre'],
+            'cofresQueEdita' => $cofresQueEdita,
+            'usuarioIdAtual' => $usuarioId,
         ]);
     }
 
@@ -36,7 +45,12 @@ class CofreSenhaController extends Controller
     {
         AuthMiddleware::checkModuloRestrito('seguranca_cofre_senhas');
 
-        $this->view('cofre_senhas/form', ['segredo' => null]);
+        $cofresIds = (new CofrePermissaoService())->cofresQueUsuarioPodeEditar($this->usuarioId());
+
+        $this->view('cofre_senhas/form', [
+            'segredo' => null,
+            'cofresDisponiveis' => (new CofreService())->buscarVarios($cofresIds),
+        ]);
     }
 
     public function novo(): void
@@ -66,7 +80,9 @@ class CofreSenhaController extends Controller
             exit;
         }
 
-        $this->view('cofre_senhas/form', ['segredo' => $segredo]);
+        $cofreAtual = $segredo['cofre_id'] !== null ? (new CofreService())->buscar((int)$segredo['cofre_id']) : null;
+
+        $this->view('cofre_senhas/form', ['segredo' => $segredo, 'cofreAtual' => $cofreAtual]);
     }
 
     public function editar(): void

@@ -92,6 +92,7 @@ use App\Controllers\AtualizacaoController;
 use App\Controllers\AntivirusController;
 use App\Controllers\SegurancaAuditoriaController;
 use App\Controllers\CofreSenhaController;
+use App\Controllers\CofreController;
 use App\Controllers\MapaRedeController;
 use App\Controllers\BackupController;
 use App\Controllers\AtivoController;
@@ -673,6 +674,12 @@ $router->post('/seguranca/cofre-senhas/editar', [CofreSenhaController::class, 'e
 $router->get('/seguranca/cofre-senhas/excluir', [CofreSenhaController::class, 'excluirForm']);
 $router->post('/seguranca/cofre-senhas/excluir', [CofreSenhaController::class, 'excluir']);
 $router->post('/seguranca/cofre-senhas/revelar', [CofreSenhaController::class, 'revelar']);
+
+$router->get('/seguranca/cofres', [CofreController::class, 'index']);
+$router->post('/seguranca/cofres/criar', [CofreController::class, 'criar']);
+$router->post('/seguranca/cofres/atualizar', [CofreController::class, 'atualizar']);
+$router->post('/seguranca/cofres/excluir', [CofreController::class, 'excluir']);
+$router->post('/seguranca/cofres/permissoes', [CofreController::class, 'salvarPermissoes']);
 
 $router->get('/backup/configuracao', [BackupController::class, 'configuracao']);
 $router->post('/backup/configuracao/salvar', [BackupController::class, 'salvar']);

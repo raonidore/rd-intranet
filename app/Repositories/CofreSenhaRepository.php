@@ -14,22 +14,38 @@ class CofreSenhaRepository
         $this->pdo = Database::connection();
     }
 
-    /**
-     * Lista visível para o usuário: segredos compartilhados (privado = 0)
-     * + os privados dos quais ele próprio é dono. Nunca traz
-     * senha_cifrada -- decriptação só acontece em CofreSenhaService::revelar().
-     */
-    public function listarVisiveis(int $usuarioId): array
+    /** Itens pessoais do usuário (cofre_id IS NULL, ele é o dono). Nunca traz senha_cifrada. */
+    public function listarPessoais(int $usuarioId): array
     {
         $stmt = $this->pdo->prepare("
-            SELECT c.id, c.nome, c.categoria, c.usuario_login, c.url_host, c.observacoes,
-                   c.usuario_id_dono, c.privado, c.criado_em, c.atualizado_em, u.nome AS dono_nome
+            SELECT c.id, c.nome, c.categoria, c.cofre_id, c.usuario_login, c.url_host, c.observacoes,
+                   c.usuario_id_dono, c.criado_em, c.atualizado_em
             FROM cofre_senhas c
-            LEFT JOIN usuarios u ON u.id = c.usuario_id_dono
-            WHERE c.privado = 0 OR c.usuario_id_dono = ?
+            WHERE c.cofre_id IS NULL AND c.usuario_id_dono = ?
             ORDER BY c.categoria, c.nome
         ");
         $stmt->execute([$usuarioId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Itens de um conjunto de cofres de equipe (ids já filtrados por CofrePermissaoService::cofresVisiveis()). */
+    public function listarDeCofres(array $cofreIds): array
+    {
+        if (empty($cofreIds)) {
+            return [];
+        }
+
+        $marcadores = implode(',', array_fill(0, count($cofreIds), '?'));
+        $stmt = $this->pdo->prepare("
+            SELECT c.id, c.nome, c.categoria, c.cofre_id, c.usuario_login, c.url_host, c.observacoes,
+                   c.usuario_id_dono, c.criado_em, c.atualizado_em, u.nome AS dono_nome
+            FROM cofre_senhas c
+            LEFT JOIN usuarios u ON u.id = c.usuario_id_dono
+            WHERE c.cofre_id IN ({$marcadores})
+            ORDER BY c.cofre_id, c.categoria, c.nome
+        ");
+        $stmt->execute(array_values(array_map('intval', $cofreIds)));
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
@@ -48,30 +64,30 @@ class CofreSenhaRepository
     {
         $stmt = $this->pdo->prepare("
             INSERT INTO cofre_senhas
-                (nome, categoria, usuario_login, senha_cifrada, url_host, observacoes, usuario_id_dono, privado)
+                (nome, categoria, cofre_id, usuario_login, senha_cifrada, url_host, observacoes, usuario_id_dono)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ");
 
         $stmt->execute([
             $dados['nome'],
             $dados['categoria'],
+            $dados['cofre_id'],
             $dados['usuario_login'] ?: null,
             $dados['senha_cifrada'],
             $dados['url_host'] ?: null,
             $dados['observacoes'] ?: null,
             $dados['usuario_id_dono'],
-            $dados['privado'] ? 1 : 0,
         ]);
 
         return (int)$this->pdo->lastInsertId();
     }
 
-    /** Não toca senha_cifrada -- ver atualizarSenha() para isso. */
+    /** Não toca senha_cifrada nem cofre_id (mover de cofre fica fora de escopo -- só na criação) -- ver atualizarSenha() pra senha. */
     public function atualizar(int $id, array $dados): bool
     {
         $stmt = $this->pdo->prepare("
             UPDATE cofre_senhas
-               SET nome = ?, categoria = ?, usuario_login = ?, url_host = ?, observacoes = ?, privado = ?
+               SET nome = ?, categoria = ?, usuario_login = ?, url_host = ?, observacoes = ?
              WHERE id = ?
         ");
 
@@ -81,7 +97,6 @@ class CofreSenhaRepository
             $dados['usuario_login'] ?: null,
             $dados['url_host'] ?: null,
             $dados['observacoes'] ?: null,
-            $dados['privado'] ? 1 : 0,
             $id,
         ]);
     }

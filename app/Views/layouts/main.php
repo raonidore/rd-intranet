@@ -777,7 +777,8 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
     <?php
     $temSeguranca = PermissionService::temAcesso('seguranca_antivirus')
         || PermissionService::temAcessoRestrito('seguranca_auditoria_credenciais')
-        || PermissionService::temAcessoRestrito('seguranca_cofre_senhas');
+        || PermissionService::temAcessoRestrito('seguranca_cofre_senhas')
+        || PermissionService::temAcessoRestrito('seguranca_cofre_senhas_gerenciar');
     ?>
     <?php if ($temSeguranca): ?>
     <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuSeguranca"
@@ -799,6 +800,11 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         <?php if (PermissionService::temAcessoRestrito('seguranca_cofre_senhas')): ?>
         <a href="<?= url('/seguranca/cofre-senhas') ?>" class="<?= str_starts_with($uriAtual, '/seguranca/cofre-senhas') ? 'active' : '' ?>">
             <i class="bi bi-key-fill me-2"></i> Cofre de Senhas
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcessoRestrito('seguranca_cofre_senhas_gerenciar')): ?>
+        <a href="<?= url('/seguranca/cofres') ?>" class="<?= str_starts_with($uriAtual, '/seguranca/cofres') ? 'active' : '' ?>">
+            <i class="bi bi-shield-lock-fill me-2"></i> Gerenciar Cofres
         </a>
         <?php endif; ?>
     </div>
