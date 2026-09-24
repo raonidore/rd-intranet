@@ -85,7 +85,9 @@ ob_start();
                         <div class="pop-step-title"><i class="bi bi-router"></i> Credenciais Padrão</div>
                         <div class="pop-step-text">
                             Pra dispositivo de rede (roteador, câmera, NAS, DVR/NVR) -- informe o <strong>IP</strong> e o
-                            <strong>serviço</strong> (SSH, FTP ou Telnet) e a ferramenta testa uma lista curta de credenciais
+                            <strong>serviço</strong> (a maioria expõe a senha de fábrica no próprio painel web, então
+                            <strong>HTTP</strong>/<strong>HTTPS</strong> é o ponto de partida certo pra esses casos; SSH/FTP/Telnet
+                            cobrem servidor e equipamento mais antigo) e a ferramenta testa uma lista curta de credenciais
                             de fábrica conhecidas (<code>admin/admin</code>, <code>root/root</code> etc). Bom ponto de partida
                             pra qualquer coisa que o IP Scanner acabou de descobrir na rede.
                         </div>
@@ -156,6 +158,8 @@ ob_start();
                     </div>
                     <div class="mb-2">
                         <select name="servico" class="form-select form-select-sm">
+                            <option value="http">HTTP (painel web, porta 80)</option>
+                            <option value="https">HTTPS (painel web, porta 443)</option>
                             <option value="ssh">SSH</option>
                             <option value="ftp">FTP</option>
                             <option value="telnet">Telnet</option>

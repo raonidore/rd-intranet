@@ -65,7 +65,7 @@ class SegurancaAuditoriaService
             return ['success' => false, 'message' => 'Só é permitido testar hosts em faixa de rede privada (RFC1918) ou link-local.'];
         }
 
-        if (!in_array($servico, ['ssh', 'ftp', 'telnet'], true)) {
+        if (!in_array($servico, ['ssh', 'ftp', 'telnet', 'http', 'https'], true)) {
             return ['success' => false, 'message' => 'Serviço não suportado.'];
         }
 

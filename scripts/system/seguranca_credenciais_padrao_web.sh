@@ -38,8 +38,8 @@ if [ "$PRIVADO" -ne 1 ]; then
   exit 1
 fi
 
-if [ "$SERVICO" != "ssh" ] && [ "$SERVICO" != "ftp" ] && [ "$SERVICO" != "telnet" ]; then
-  echo '{"success":false,"message":"Serviço não suportado (use ssh, ftp ou telnet)."}'
+if [ "$SERVICO" != "ssh" ] && [ "$SERVICO" != "ftp" ] && [ "$SERVICO" != "telnet" ] && [ "$SERVICO" != "http" ] && [ "$SERVICO" != "https" ]; then
+  echo '{"success":false,"message":"Serviço não suportado (use ssh, ftp, telnet, http ou https)."}'
   exit 1
 fi
 
@@ -48,7 +48,20 @@ command -v hydra >/dev/null 2>&1 || { echo '{"success":false,"message":"hydra n�
 WORDLIST="/var/www/rd.intranet/resources/wordlists/credenciais_padrao.txt"
 [ -f "$WORDLIST" ] || { echo '{"success":false,"message":"Lista de credenciais padrão não encontrada no servidor."}'; exit 1; }
 
-SAIDA=$(timeout 60 hydra -C "$WORDLIST" -t 4 -f "$IP" "$SERVICO" 2>&1)
+# roteador/DVR/NVR/camera de fabrica normalmente expoe a senha padrao no
+# proprio painel web (auth basic na porta 80/443), nao em ssh/ftp/telnet --
+# "http"/"https" aqui mapeiam pro modulo http-get/https-get do hydra
+# (testa auth basic na raiz "/"; nao cobre painel com formulario de login
+# em vez de auth basic, isso exigiria path e campos especificos por
+# fabricante, fora do escopo desta lista curta e generica).
+MODULO_HYDRA="$SERVICO"
+if [ "$SERVICO" = "http" ]; then
+  MODULO_HYDRA="http-get"
+elif [ "$SERVICO" = "https" ]; then
+  MODULO_HYDRA="https-get"
+fi
+
+SAIDA=$(timeout 60 hydra -C "$WORDLIST" -t 4 -f "$IP" "$MODULO_HYDRA" 2>&1)
 
 # Linha de sucesso do hydra: "[porta][servico] host: <ip>   login: <usuario>   password: <senha>"
 if echo "$SAIDA" | grep -q 'login:'; then
