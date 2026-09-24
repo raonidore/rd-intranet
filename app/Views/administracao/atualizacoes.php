@@ -253,7 +253,11 @@ $blocoPasso = function (array $p): string {
                 <h5 class="modal-title" id="modalAcaoTitulo">Processando</h5>
             </div>
             <div class="modal-body" id="modalAcaoCorpo">
-                <div class="text-center text-muted py-3"><i class="bi bi-hourglass-split"></i> Aguarde, pode levar até alguns minutos...</div>
+                <div class="text-center text-muted py-4">
+                    <div class="spinner-border text-primary mb-3" role="status"></div>
+                    <div id="modalAcaoTexto">Processando...</div>
+                    <small class="d-block mt-1">Pode levar até alguns minutos. Tempo decorrido: <span id="modalAcaoContador">0s</span></small>
+                </div>
             </div>
             <div class="modal-footer" id="modalAcaoRodape" style="display:none">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="location.reload()">Fechar</button>
@@ -277,9 +281,23 @@ $blocoPasso = function (array $p): string {
         const rodape = document.getElementById('modalAcaoRodape');
 
         document.getElementById('modalAcaoTitulo').textContent = titulo;
-        corpo.innerHTML = '<div class="text-center text-muted py-3"><i class="bi bi-hourglass-split"></i> Aguarde, pode levar até alguns minutos...</div>';
+        corpo.innerHTML = '<div class="text-center text-muted py-4">' +
+            '<div class="spinner-border text-primary mb-3" role="status"></div>' +
+            '<div>' + titulo + '...</div>' +
+            '<small class="d-block mt-1">Pode levar até alguns minutos. Tempo decorrido: <span id="modalAcaoContador">0s</span></small>' +
+            '</div>';
         rodape.style.display = 'none';
         modal.show();
+
+        // Contador visível de segundos -- só pra deixar claro que o
+        // processo está rodando (git pull + composer + migrations pode
+        // demorar bastante sem nenhum retorno do servidor nesse meio-tempo).
+        let segundos = 0;
+        const contadorEl = document.getElementById('modalAcaoContador');
+        const intervalo = setInterval(function () {
+            segundos += 1;
+            if (contadorEl) contadorEl.textContent = segundos + 's';
+        }, 1000);
 
         try {
             const res = await fetch(url, { method: 'POST' });
@@ -287,11 +305,12 @@ $blocoPasso = function (array $p): string {
 
             const cor = dados.success ? 'success' : 'danger';
             const icone = dados.success ? 'check-circle' : 'x-circle';
-            corpo.innerHTML = '<div class="alert alert-' + cor + '"><i class="bi bi-' + icone + '"></i> ' +
+            corpo.innerHTML = '<div class="alert alert-' + cor + ' mb-0"><i class="bi bi-' + icone + '"></i> ' +
                 String(dados.message || '').replace(/</g, '&lt;') + '</div>';
         } catch (e) {
             corpo.innerHTML = '<div class="alert alert-danger mb-0">Erro ao comunicar com o servidor.</div>';
         } finally {
+            clearInterval(intervalo);
             rodape.style.display = '';
         }
     }
