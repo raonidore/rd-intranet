@@ -6,8 +6,10 @@ use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
 use App\Services\EntraService;
 use App\Services\AtivoService;
+use App\Services\AtivoTipoService;
 use App\Services\AuditService;
 use App\Services\NotificationService;
+use App\Repositories\AtivoRepository;
 
 class EntraController extends Controller
 {
@@ -81,17 +83,81 @@ class EntraController extends Controller
         $configurado = $this->service->configurado();
         $usuarios = [];
         $skus = [];
+        $soPorUsuarioId = [];
 
         if ($configurado) {
             $usuarios = $this->service->listarUsuarios();
             $skus = $this->service->listarSkus();
+            $soPorUsuarioId = $this->cruzarComMaquinas($usuarios);
         }
 
         $this->view('entra/usuarios', [
             'configurado' => $configurado,
             'usuarios' => $usuarios,
             'skus' => $skus,
+            'soPorUsuarioId' => $soPorUsuarioId,
         ]);
+    }
+
+    /**
+     * Cruza os usuários do Entra com os ativos tipo computador pelo campo
+     * usuario_logado (coletado via WMI -- Win32_ComputerSystem.UserName --
+     * vem "AzureAD\<algo>" numa máquina Entra-joined). O Windows não
+     * documenta o que é exatamente esse "<algo>" (prefixo do UPN?
+     * displayName sem espaço?), então normaliza os dois lados (minúsculo,
+     * sem acento, só letras/números) e tenta casar contra o prefixo do
+     * UPN e depois o displayName -- o primeiro que bater vence. Uma query
+     * só pra todos os ativos tipo computador, sem N+1 por usuário do Entra.
+     *
+     * @return array<string,string> id do usuário do Entra -> sistema operacional
+     */
+    private function cruzarComMaquinas(array $usuarios): array
+    {
+        $tipoComputador = (new AtivoTipoService())->buscarPorSlug('computador');
+        if (!$tipoComputador) {
+            return [];
+        }
+
+        $maquinasPorChave = [];
+        foreach ((new AtivoRepository())->detalhesPorTipo((int)$tipoComputador['id']) as $linha) {
+            $detalhes = json_decode($linha['detalhes'] ?? '', true) ?: [];
+            $usuarioLogado = trim((string)($detalhes['usuario_logado'] ?? ''));
+            $so = trim((string)($detalhes['sistema_operacional'] ?? ''));
+            if ($usuarioLogado === '' || $so === '') {
+                continue;
+            }
+
+            $partes = explode('\\', $usuarioLogado);
+            $chave = self::normalizarChaveUsuario(end($partes));
+            if ($chave !== '' && !isset($maquinasPorChave[$chave])) {
+                $maquinasPorChave[$chave] = $so;
+            }
+        }
+
+        $resultado = [];
+        foreach ($usuarios as $u) {
+            $prefixoUpn = explode('@', $u['userPrincipalName'] ?? '')[0] ?? '';
+            foreach ([$prefixoUpn, $u['displayName'] ?? ''] as $candidato) {
+                $chave = self::normalizarChaveUsuario($candidato);
+                if ($chave !== '' && isset($maquinasPorChave[$chave])) {
+                    $resultado[$u['id']] = $maquinasPorChave[$chave];
+                    break;
+                }
+            }
+        }
+
+        return $resultado;
+    }
+
+    private static function normalizarChaveUsuario(string $texto): string
+    {
+        $texto = mb_strtolower(trim($texto), 'UTF-8');
+        $transliterado = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $texto);
+        if ($transliterado !== false && $transliterado !== '') {
+            $texto = $transliterado;
+        }
+
+        return preg_replace('/[^a-z0-9]/', '', $texto) ?? '';
     }
 
     public function usuarioNovo(): void

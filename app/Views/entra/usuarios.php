@@ -48,6 +48,7 @@ foreach ($skus as $sku) {
                                 <th>UPN</th>
                                 <th>Status</th>
                                 <th>Licenças</th>
+                                <th>Máquina (S.O.)</th>
                                 <th class="text-end">Ações</th>
                             </tr>
                         </thead>
@@ -71,6 +72,13 @@ foreach ($skus as $sku) {
                                             <?php foreach ($licencasDoUsuario as $skuId): ?>
                                                 <span class="badge text-bg-info me-1"><?= htmlspecialchars($skusPorId[$skuId] ?? $skuId) ?></span>
                                             <?php endforeach; ?>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="small">
+                                        <?php if (!empty($soPorUsuarioId[$userId])): ?>
+                                            <?= htmlspecialchars($soPorUsuarioId[$userId]) ?>
+                                        <?php else: ?>
+                                            <span class="text-muted">—</span>
                                         <?php endif; ?>
                                     </td>
                                     <td class="text-end">
