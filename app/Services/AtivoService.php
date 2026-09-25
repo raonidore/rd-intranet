@@ -226,46 +226,93 @@ class AtivoService
     }
 
     /**
-     * Troca o código de patrimônio pro valor DIGITADO (diferente de
-     * regenerarCodigo(), que sempre pega o próximo número da sequência) --
-     * usado pela tela "Ajustar Código" em Ativos. A coluna
-     * codigo_patrimonio já tem UNIQUE KEY no banco, então a checagem de
-     * duplicidade aqui é só pra dar um erro amigável antes do UPDATE, em
-     * vez de estourar a exceção do PDO sem explicação (mesmo raciocínio
-     * já usado pra machine_guid em editar()).
+     * Troca o código de patrimônio, deixando o usuário escolher só o
+     * NÚMERO sequencial -- sigla da empresa, da unidade e do tipo sempre
+     * vêm do cadastro real do ativo (unidade_id/tipo_id), nunca digitadas
+     * livres, pra impedir montar um código com sigla de unidade/tipo que
+     * não existe no sistema. Usado pela tela "Ajustar Código" e pelo
+     * modal do botão de regenerar (quando o usuário edita o número
+     * sugerido em vez de aceitar o padrão).
      */
-    public function ajustarCodigoManual(int $id, string $novoCodigo): array
+    public function ajustarNumeroCodigo(int $id, int $numero): array
     {
         $ativo = $this->buscar($id);
         if (!$ativo) {
             return ['success' => false, 'message' => 'Ativo não encontrado.'];
         }
 
-        $novoCodigo = strtoupper(trim($novoCodigo));
-        if ($novoCodigo === '') {
-            return ['success' => false, 'message' => 'Informe o novo código.'];
-        }
-        if (!preg_match('/^[A-Z0-9\-]+$/', $novoCodigo)) {
-            return ['success' => false, 'message' => 'Use só letras, números e hífen (ex: EP-AV-PC-0002).'];
-        }
-        if (strlen($novoCodigo) > 48) {
-            return ['success' => false, 'message' => 'Código muito longo (máximo 48 caracteres).'];
+        if ($numero < 1) {
+            return ['success' => false, 'message' => 'Informe um número válido (maior que zero).'];
         }
 
+        $tipo = (new AtivoTipoService())->buscar((int)$ativo['tipo_id']);
+        $unidade = (new UnidadeService())->buscar((int)$ativo['unidade_id']);
+        if (!$tipo || !$unidade) {
+            return ['success' => false, 'message' => 'Tipo ou unidade do ativo inválidos.'];
+        }
+
+        return $this->ajustarCodigoManual($ativo, $unidade, $this->formatarCodigo($tipo, $unidade, $numero));
+    }
+
+    /**
+     * Espia o próximo número da sequência do tipo+unidade ATUAL do
+     * ativo, sem consumir (diferente de proximoCodigo(), que incrementa
+     * de vez) -- usado só pra sugerir um valor inicial no campo de número
+     * antes do usuário confirmar (em ajustarNumeroCodigo() ou
+     * regenerarCodigo()). Pode ficar levemente desatualizado se dois
+     * administradores previrem ao mesmo tempo; não é uma reserva.
+     */
+    public function previsaoProximoCodigo(int $id): array
+    {
+        $ativo = $this->buscar($id);
+        if (!$ativo) {
+            return ['success' => false, 'message' => 'Ativo não encontrado.'];
+        }
+
+        $tipo = (new AtivoTipoService())->buscar((int)$ativo['tipo_id']);
+        $unidade = (new UnidadeService())->buscar((int)$ativo['unidade_id']);
+        if (!$tipo || !$unidade) {
+            return ['success' => false, 'message' => 'Tipo ou unidade do ativo inválidos.'];
+        }
+
+        $numero = $this->repository->espiarProximoNumeroContador((int)$tipo['id'], (int)$unidade['id']);
+
+        return [
+            'success' => true,
+            'codigo' => $this->formatarCodigo($tipo, $unidade, $numero),
+            'numero' => $numero,
+            'numero_atual' => $this->numeroDoCodigo($ativo['codigo_patrimonio']),
+        ];
+    }
+
+    /** Extrai o número sequencial do final de um código já existente (ex: "EP-AV-PC-000015" -> 15), pra sugerir como ponto de partida ao ajustar. Sem grupo numérico no final, devolve null. */
+    private function numeroDoCodigo(string $codigo): ?int
+    {
+        return preg_match('/-(\d+)$/', $codigo, $m) ? (int)$m[1] : null;
+    }
+
+    /**
+     * Grava um código já MONTADO (string completa, composta só a partir
+     * de formatarCodigo() -- nunca texto livre do usuário). A coluna
+     * codigo_patrimonio já tem UNIQUE KEY no banco, então a checagem de
+     * duplicidade aqui é só pra dar um erro amigável antes do UPDATE, em
+     * vez de estourar a exceção do PDO sem explicação (mesmo raciocínio
+     * já usado pra machine_guid em editar()).
+     */
+    private function ajustarCodigoManual(array $ativo, array $unidade, string $novoCodigo): array
+    {
         $codigoAntigo = $ativo['codigo_patrimonio'];
         if ($novoCodigo === $codigoAntigo) {
             return ['success' => false, 'message' => 'Esse já é o código atual.'];
         }
 
         $conflito = $this->repository->buscarPorCodigoPatrimonio($novoCodigo);
-        if ($conflito && (int)$conflito['id'] !== $id) {
+        if ($conflito && (int)$conflito['id'] !== (int)$ativo['id']) {
             return ['success' => false, 'message' => "Esse código já pertence ao ativo \"{$conflito['nome']}\" -- não dá pra usar o mesmo em dois ativos."];
         }
 
-        $unidade = (new UnidadeService())->buscar((int)$ativo['unidade_id']);
-
         try {
-            $this->repository->atualizarCodigoPatrimonio($id, $novoCodigo);
+            $this->repository->atualizarCodigoPatrimonio((int)$ativo['id'], $novoCodigo);
         } catch (\PDOException $e) {
             // rede de seguranca contra corrida (dois ajustes simultaneos pro
             // mesmo codigo) -- a checagem acima ja cobre o caso normal
@@ -742,8 +789,12 @@ class AtivoService
     /** @param array $tipo linha de ativos_tipos; @param array $unidade linha de unidades */
     private function proximoCodigo(array $tipo, array $unidade): string
     {
-        $numero = $this->repository->proximoNumeroContador((int)$tipo['id'], (int)$unidade['id']);
+        return $this->formatarCodigo($tipo, $unidade, $this->repository->proximoNumeroContador((int)$tipo['id'], (int)$unidade['id']));
+    }
 
+    /** Monta a string do código a partir dos dados REAIS do ativo (sigla da empresa + sigla da unidade + sigla do tipo, sempre do cadastro) e de um número já escolhido -- nunca aceita sigla digitada livre. */
+    private function formatarCodigo(array $tipo, array $unidade, int $numero): string
+    {
         return sprintf(
             '%s-%s-%s-%0' . $this->codigoDigitos() . 'd',
             $this->siglaEmpresa(),

@@ -203,6 +203,36 @@ $idsTiposComSnmp = array_column(array_filter($tipos, fn (array $t) => (bool)$t['
     <a href="<?= url('/ativos/lista') ?>" class="btn btn-secondary">Cancelar</a>
 </form>
 
+<div class="modal fade" id="modalRegenerarCodigo" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-arrow-repeat"></i> Gerar novo código</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="regenerarCodigoAlerta"></div>
+                <p class="small text-muted mb-3">Código atual: <span class="font-monospace" id="regenerarCodigoAtual"></span></p>
+                <label class="form-label">Novo número</label>
+                <input type="number" min="1" class="form-control" id="regenerarCodigoNumero">
+                <small class="text-muted d-block mt-1">Sugestão automática já preenchida (próximo da sequência) -- edite se quiser um número específico. A sigla da empresa/unidade/tipo continua vindo do cadastro do ativo.</small>
+                <div class="mt-2">
+                    <small class="text-muted">Novo código ficará: <strong class="font-monospace" id="regenerarCodigoPrevia">--</strong></small>
+                </div>
+                <div class="alert alert-warning small mt-3 mb-0">
+                    Se o equipamento já tem etiqueta impressa, ela precisa ser reimpressa e trocada -- o código antigo deixa de existir.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="botaoConfirmarRegenerarCodigo">
+                    <i class="bi bi-check-lg"></i> Confirmar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 (function () {
     const campoTipo = document.getElementById('campoTipo');
@@ -303,21 +333,90 @@ $idsTiposComSnmp = array_column(array_filter($tipos, fn (array $t) => (bool)$t['
     const botao = document.getElementById('botaoAtualizarCodigo');
     if (!botao) return;
 
+    const modalEl = document.getElementById('modalRegenerarCodigo');
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    const campoAtual = document.getElementById('regenerarCodigoAtual');
+    const campoNumero = document.getElementById('regenerarCodigoNumero');
+    const previa = document.getElementById('regenerarCodigoPrevia');
+    const alerta = document.getElementById('regenerarCodigoAlerta');
+    const botaoConfirmar = document.getElementById('botaoConfirmarRegenerarCodigo');
+
+    let prefixo = '';
+    let digitos = 4;
+    let numeroSugerido = 0;
+
+    function atualizarPrevia() {
+        const numero = parseInt(campoNumero.value, 10);
+        previa.textContent = (prefixo && numero > 0) ? (prefixo + String(numero).padStart(digitos, '0')) : '--';
+    }
+    campoNumero.addEventListener('input', atualizarPrevia);
+
     botao.addEventListener('click', async function () {
-        if (!confirm('Gerar um código novo de patrimônio pra unidade atual deste ativo? O código antigo deixa de existir.\n\nSe você mudou a Unidade agora e ainda não salvou, salve primeiro -- o código novo usa a unidade que já está gravada.\n\nSe o equipamento já tem etiqueta impressa, ela precisa ser reimpressa e trocada -- o código nela vai ficar desatualizado.')) return;
+        botao.disabled = true;
+        alerta.innerHTML = '';
+
+        try {
+            const res = await fetch(<?= json_encode(url('/ativos/proximo-codigo')) ?> + '?id=' + botao.dataset.id);
+            const previsao = await res.json();
+            botao.disabled = false;
+
+            if (!previsao.success) {
+                alert(previsao.message || 'Não foi possível calcular o próximo código.\n\nSe você mudou a Unidade agora e ainda não salvou, salve primeiro -- o código novo usa a unidade que já está gravada.');
+                return;
+            }
+
+            const ultimoTraco = previsao.codigo.lastIndexOf('-');
+            prefixo = previsao.codigo.substring(0, ultimoTraco + 1);
+            digitos = previsao.codigo.length - ultimoTraco - 1;
+            numeroSugerido = previsao.numero;
+
+            campoAtual.textContent = document.getElementById('campoCodigoAtivo').value;
+            campoNumero.value = numeroSugerido;
+            atualizarPrevia();
+            modal.show();
+        } catch (e) {
+            botao.disabled = false;
+            alert('Erro ao comunicar com o servidor.');
+        }
+    });
+
+    botaoConfirmar.addEventListener('click', async function () {
+        const numero = parseInt(campoNumero.value, 10);
+        if (!numero || numero < 1) {
+            alerta.innerHTML = '<div class="alert alert-danger small mb-3">Informe um número válido.</div>';
+            return;
+        }
+
+        botaoConfirmar.disabled = true;
+        alerta.innerHTML = '';
 
         const dados = new URLSearchParams();
         dados.set('id', botao.dataset.id);
 
+        let endpoint;
+        if (numero === numeroSugerido) {
+            endpoint = <?= json_encode(url('/ativos/atualizar-codigo')) ?>;
+        } else {
+            endpoint = <?= json_encode(url('/ativos/ajustar-codigo')) ?>;
+            dados.set('numero', numero);
+        }
+
         try {
-            const res = await fetch(<?= json_encode(url('/ativos/atualizar-codigo')) ?>, { method: 'POST', body: dados });
+            const res = await fetch(endpoint, { method: 'POST', body: dados });
             const resultado = await res.json();
-            if (resultado.success) {
-                document.getElementById('campoCodigoAtivo').value = resultado.codigo;
+
+            if (!resultado.success) {
+                alerta.innerHTML = '<div class="alert alert-danger small mb-0">' + (resultado.message || 'Falha ao atualizar o código.') + '</div>';
+                botaoConfirmar.disabled = false;
+                return;
             }
-            alert(resultado.success ? ('Código atualizado para "' + resultado.codigo + '".') : (resultado.message || 'Falha ao atualizar o código.'));
+
+            document.getElementById('campoCodigoAtivo').value = resultado.codigo;
+            alerta.innerHTML = '<div class="alert alert-success small mb-0">Código atualizado para "' + resultado.codigo + '".</div>';
+            setTimeout(function () { modal.hide(); }, 900);
         } catch (e) {
-            alert('Erro ao comunicar com o servidor.');
+            alerta.innerHTML = '<div class="alert alert-danger small mb-0">Erro ao comunicar com o servidor.</div>';
+            botaoConfirmar.disabled = false;
         }
     });
 })();

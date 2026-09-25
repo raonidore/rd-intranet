@@ -952,6 +952,16 @@ class AtivoRepository
         return (int)$this->pdo->lastInsertId();
     }
 
+    /** Só lê o contador atual pro par tipo+unidade, sem incrementar -- pra sugerir um próximo número sem consumir da sequência de verdade. */
+    public function espiarProximoNumeroContador(int $tipoId, int $unidadeId): int
+    {
+        $stmt = $this->pdo->prepare("SELECT ultimo_numero FROM ativos_contadores WHERE tipo_id = ? AND unidade_id = ?");
+        $stmt->execute([$tipoId, $unidadeId]);
+        $atual = $stmt->fetchColumn();
+
+        return ($atual !== false ? (int)$atual : 0) + 1;
+    }
+
     public function contarPorTipo(): array
     {
         $stmt = $this->pdo->query("SELECT tipo_id, COUNT(*) AS total FROM ativos GROUP BY tipo_id");

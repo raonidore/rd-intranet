@@ -1006,6 +1006,7 @@ $router->post('/ativos/atualizar-codigo', [AtivoController::class, 'atualizarCod
 $router->get('/ativos/ajustar-codigo', [AtivoController::class, 'ajustarCodigoForm']);
 $router->get('/ativos/buscar', [AtivoController::class, 'buscarApi']);
 $router->post('/ativos/ajustar-codigo', [AtivoController::class, 'ajustarCodigo']);
+$router->get('/ativos/proximo-codigo', [AtivoController::class, 'previsaoProximoCodigo']);
 $router->get('/ativos/excluir', [AtivoController::class, 'excluirForm']);
 $router->post('/ativos/excluir', [AtivoController::class, 'excluir']);
 $router->get('/ativos/etiqueta', [AtivoController::class, 'etiqueta']);

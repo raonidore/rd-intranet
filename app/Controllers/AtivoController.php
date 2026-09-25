@@ -252,9 +252,20 @@ class AtivoController extends Controller
         header('Content-Type: application/json');
 
         $id = (int)($_POST['id'] ?? 0);
-        $novoCodigo = trim($_POST['codigo'] ?? '');
+        $numero = (int)($_POST['numero'] ?? 0);
 
-        echo json_encode($this->service->ajustarCodigoManual($id, $novoCodigo));
+        echo json_encode($this->service->ajustarNumeroCodigo($id, $numero));
+    }
+
+    /** Sugestão de próximo número (sem consumir a sequência) pra pré-preencher o campo antes do usuário confirmar. */
+    public function previsaoProximoCodigo(): void
+    {
+        AuthMiddleware::checkModulo('ativos_novo');
+        header('Content-Type: application/json');
+
+        $id = (int)($_GET['id'] ?? 0);
+
+        echo json_encode($this->service->previsaoProximoCodigo($id));
     }
 
     public function excluirForm(): void
