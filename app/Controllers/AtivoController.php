@@ -213,6 +213,50 @@ class AtivoController extends Controller
         echo json_encode($this->service->regenerarCodigo($id));
     }
 
+    public function ajustarCodigoForm(): void
+    {
+        AuthMiddleware::checkModulo('ativos_novo');
+
+        $this->view('ativos/ajustar_codigo', []);
+    }
+
+    /** Autocomplete de ativo (nome/código/nº de série) pra tela "Ajustar Código". */
+    public function buscarApi(): void
+    {
+        AuthMiddleware::checkModulo('ativos_novo');
+        header('Content-Type: application/json');
+
+        $termo = trim($_GET['q'] ?? '');
+        if (strlen($termo) < 2) {
+            echo json_encode(['success' => true, 'ativos' => []]);
+            return;
+        }
+
+        $ativos = array_slice($this->service->listar(['busca' => $termo]), 0, 10);
+
+        echo json_encode([
+            'success' => true,
+            'ativos' => array_map(fn (array $a) => [
+                'id' => (int)$a['id'],
+                'codigo' => $a['codigo_patrimonio'],
+                'nome' => $a['nome'],
+                'unidade' => $a['unidade_nome'] ?? '',
+                'tipo' => $a['tipo_nome'] ?? '',
+            ], $ativos),
+        ]);
+    }
+
+    public function ajustarCodigo(): void
+    {
+        AuthMiddleware::checkModulo('ativos_novo');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $novoCodigo = trim($_POST['codigo'] ?? '');
+
+        echo json_encode($this->service->ajustarCodigoManual($id, $novoCodigo));
+    }
+
     public function excluirForm(): void
     {
         AuthMiddleware::checkModulo('ativos_novo');

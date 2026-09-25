@@ -261,6 +261,12 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         </a>
         <?php endif; ?>
 
+        <?php if (PermissionService::temAcesso('ativos_novo')): ?>
+        <a href="<?= url('/ativos/ajustar-codigo') ?>" class="<?= str_starts_with($uriAtual, '/ativos/ajustar-codigo') ? 'active' : '' ?>">
+            <i class="bi bi-upc-scan me-2"></i> Ajustar Código
+        </a>
+        <?php endif; ?>
+
         <?php if (PermissionService::temAcesso('ativos_cadastros')): ?>
         <a href="<?= url('/ativos/cadastros') ?>" class="<?= str_starts_with($uriAtual, '/ativos/cadastros') ? 'active' : '' ?>">
             <i class="bi bi-tags me-2"></i> Cadastros

@@ -226,6 +226,60 @@ class AtivoService
     }
 
     /**
+     * Troca o código de patrimônio pro valor DIGITADO (diferente de
+     * regenerarCodigo(), que sempre pega o próximo número da sequência) --
+     * usado pela tela "Ajustar Código" em Ativos. A coluna
+     * codigo_patrimonio já tem UNIQUE KEY no banco, então a checagem de
+     * duplicidade aqui é só pra dar um erro amigável antes do UPDATE, em
+     * vez de estourar a exceção do PDO sem explicação (mesmo raciocínio
+     * já usado pra machine_guid em editar()).
+     */
+    public function ajustarCodigoManual(int $id, string $novoCodigo): array
+    {
+        $ativo = $this->buscar($id);
+        if (!$ativo) {
+            return ['success' => false, 'message' => 'Ativo não encontrado.'];
+        }
+
+        $novoCodigo = strtoupper(trim($novoCodigo));
+        if ($novoCodigo === '') {
+            return ['success' => false, 'message' => 'Informe o novo código.'];
+        }
+        if (!preg_match('/^[A-Z0-9\-]+$/', $novoCodigo)) {
+            return ['success' => false, 'message' => 'Use só letras, números e hífen (ex: EP-AV-PC-0002).'];
+        }
+        if (strlen($novoCodigo) > 48) {
+            return ['success' => false, 'message' => 'Código muito longo (máximo 48 caracteres).'];
+        }
+
+        $codigoAntigo = $ativo['codigo_patrimonio'];
+        if ($novoCodigo === $codigoAntigo) {
+            return ['success' => false, 'message' => 'Esse já é o código atual.'];
+        }
+
+        $conflito = $this->repository->buscarPorCodigoPatrimonio($novoCodigo);
+        if ($conflito && (int)$conflito['id'] !== $id) {
+            return ['success' => false, 'message' => "Esse código já pertence ao ativo \"{$conflito['nome']}\" -- não dá pra usar o mesmo em dois ativos."];
+        }
+
+        $unidade = (new UnidadeService())->buscar((int)$ativo['unidade_id']);
+
+        try {
+            $this->repository->atualizarCodigoPatrimonio($id, $novoCodigo);
+        } catch (\PDOException $e) {
+            // rede de seguranca contra corrida (dois ajustes simultaneos pro
+            // mesmo codigo) -- a checagem acima ja cobre o caso normal
+            return ['success' => false, 'message' => 'Esse código acabou de ser usado por outro ativo. Tente outro.'];
+        }
+
+        AuditService::registrar('Ativos', 'Ajustar Código', "Código do ativo \"{$ativo['nome']}\" ajustado manualmente de \"{$codigoAntigo}\" para \"{$novoCodigo}\".");
+
+        $this->registrarChamadoTrocaCodigo($ativo, $codigoAntigo, $novoCodigo, $unidade['nome'] ?? '');
+
+        return ['success' => true, 'codigo' => $novoCodigo];
+    }
+
+    /**
      * Abre e já fecha um chamado automático (robô, mesmo padrão dos
      * chamados de alerta de DVR/NVR -- ver abrirChamadoCanalDvrSemSinal())
      * registrando a troca de código no histórico do ativo, com o nome de

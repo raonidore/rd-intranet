@@ -365,6 +365,16 @@ class AtivoRepository
         return $item ?: null;
     }
 
+    public function buscarPorCodigoPatrimonio(string $codigo): ?array
+    {
+        $stmt = $this->pdo->prepare("SELECT * FROM ativos WHERE codigo_patrimonio = ? LIMIT 1");
+        $stmt->execute([$codigo]);
+
+        $item = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $item ?: null;
+    }
+
     public function criarViaAgente(array $dados): int
     {
         $stmt = $this->pdo->prepare("
