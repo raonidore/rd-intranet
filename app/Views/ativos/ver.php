@@ -4317,7 +4317,6 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
     if (!botao) return;
 
     const modalEl = document.getElementById('modalRegenerarCodigo');
-    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
     const campoAtual = document.getElementById('regenerarCodigoAtual');
     const campoNumero = document.getElementById('regenerarCodigoNumero');
     const previa = document.getElementById('regenerarCodigoPrevia');
@@ -4356,7 +4355,7 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
             campoAtual.textContent = <?= json_encode($ativo['codigo_patrimonio']) ?>;
             campoNumero.value = numeroSugerido;
             atualizarPrevia();
-            modal.show();
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
         } catch (e) {
             botao.disabled = false;
             alert('Erro ao comunicar com o servidor.');

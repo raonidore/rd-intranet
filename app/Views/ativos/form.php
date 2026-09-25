@@ -334,7 +334,6 @@ $idsTiposComSnmp = array_column(array_filter($tipos, fn (array $t) => (bool)$t['
     if (!botao) return;
 
     const modalEl = document.getElementById('modalRegenerarCodigo');
-    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
     const campoAtual = document.getElementById('regenerarCodigoAtual');
     const campoNumero = document.getElementById('regenerarCodigoNumero');
     const previa = document.getElementById('regenerarCodigoPrevia');
@@ -373,7 +372,7 @@ $idsTiposComSnmp = array_column(array_filter($tipos, fn (array $t) => (bool)$t['
             campoAtual.textContent = document.getElementById('campoCodigoAtivo').value;
             campoNumero.value = numeroSugerido;
             atualizarPrevia();
-            modal.show();
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
         } catch (e) {
             botao.disabled = false;
             alert('Erro ao comunicar com o servidor.');
@@ -413,7 +412,7 @@ $idsTiposComSnmp = array_column(array_filter($tipos, fn (array $t) => (bool)$t['
 
             document.getElementById('campoCodigoAtivo').value = resultado.codigo;
             alerta.innerHTML = '<div class="alert alert-success small mb-0">Código atualizado para "' + resultado.codigo + '".</div>';
-            setTimeout(function () { modal.hide(); }, 900);
+            setTimeout(function () { bootstrap.Modal.getOrCreateInstance(modalEl).hide(); }, 900);
         } catch (e) {
             alerta.innerHTML = '<div class="alert alert-danger small mb-0">Erro ao comunicar com o servidor.</div>';
             botaoConfirmar.disabled = false;
