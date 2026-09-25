@@ -2,6 +2,7 @@
 ob_start();
 
 use App\Components\Alert;
+use App\Services\EntraService;
 ?>
 
 <?= Alert::flash() ?>
@@ -77,6 +78,9 @@ use App\Components\Alert;
                                     <label class="form-check-label small" for="ativo-<?= (int)$c['id'] ?>">
                                         <?= htmlspecialchars($c['nome']) ?>
                                         <span class="text-muted font-monospace">(<?= htmlspecialchars($c['codigo_patrimonio']) ?>)</span>
+                                        <?php if (!empty($c['usuario_logado_atual'])): ?>
+                                            <br><span class="text-muted">Logado agora: <span class="font-monospace"><?= htmlspecialchars($c['usuario_logado_atual']) ?></span></span>
+                                        <?php endif; ?>
                                     </label>
                                 </div>
                             <?php endforeach; ?>
@@ -93,6 +97,36 @@ use App\Components\Alert;
             <button type="submit" formaction="<?= url('/entra/acesso-maquinas/remover') ?>" formnovalidate class="btn btn-outline-secondary" id="botaoRemoverRestricao">
                 <i class="bi bi-shield-slash"></i> Remover restrição (liberar login pra todos de novo)
             </button>
+        </div>
+
+        <div class="card border-0 shadow-sm mt-4">
+            <div class="card-header bg-white">
+                <strong>Desativar contas locais antigas</strong>
+                <span class="text-muted small d-block">
+                    Passo complementar -- o Windows não apaga contas locais sozinho quando a máquina entra no Entra.
+                    Use <code>Disable-LocalUser</code>/<code>Enable-LocalUser</code> (nunca exclui a conta, sempre reversível).
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-warning small mb-3">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    Confira acima quem está <strong>logado agora</strong> em cada máquina selecionada antes de desativar --
+                    desativar a conta que está em uso ali impede login de novo com ela (a sessão atual não cai na hora,
+                    mas ninguém consegue entrar de novo com essa conta depois). Contas protegidas do Windows
+                    (<?= htmlspecialchars(implode(', ', EntraService::CONTAS_LOCAIS_PROTEGIDAS)) ?>)
+                    nunca são desativadas, mesmo se digitadas.
+                </div>
+                <label class="form-label small">Nome(s) da conta local (uma por linha, ou separadas por vírgula)</label>
+                <textarea class="form-control form-control-sm font-monospace" name="contas" rows="3" placeholder="Aluno&#10;Admin&#10;User"></textarea>
+                <div class="mt-2">
+                    <button type="submit" formaction="<?= url('/entra/acesso-maquinas/desativar-contas') ?>" formnovalidate class="btn btn-outline-danger btn-sm" id="botaoDesativarContas">
+                        <i class="bi bi-person-x"></i> Desativar nas máquinas selecionadas
+                    </button>
+                    <button type="submit" formaction="<?= url('/entra/acesso-maquinas/reativar-contas') ?>" formnovalidate class="btn btn-outline-secondary btn-sm" id="botaoReativarContas">
+                        <i class="bi bi-person-check"></i> Reativar nas máquinas selecionadas
+                    </button>
+                </div>
+            </div>
         </div>
     </form>
 
@@ -125,6 +159,32 @@ use App\Components\Alert;
             return;
         }
         if (!confirm('Remover a restrição de login das máquinas selecionadas? Volta a liberar o login local pra qualquer usuário/administrador local dessas máquinas.')) {
+            e.preventDefault();
+        }
+    });
+
+    function contasPreenchidas() {
+        return document.querySelector('textarea[name="contas"]').value.trim() !== '';
+    }
+
+    document.getElementById('botaoDesativarContas').addEventListener('click', function (e) {
+        if (!contasPreenchidas() || !algumMarcado('.campo-ativo-restricao')) {
+            e.preventDefault();
+            alert('Informe ao menos uma conta local e selecione ao menos uma máquina.');
+            return;
+        }
+        if (!confirm('Desativar essa(s) conta local(is) nas máquinas selecionadas? Confira acima quem está logado agora em cada uma -- desativar a conta em uso impede login de novo com ela. Ação reversível pelo botão "Reativar".')) {
+            e.preventDefault();
+        }
+    });
+
+    document.getElementById('botaoReativarContas').addEventListener('click', function (e) {
+        if (!contasPreenchidas() || !algumMarcado('.campo-ativo-restricao')) {
+            e.preventDefault();
+            alert('Informe ao menos uma conta local e selecione ao menos uma máquina.');
+            return;
+        }
+        if (!confirm('Reativar essa(s) conta local(is) nas máquinas selecionadas?')) {
             e.preventDefault();
         }
     });

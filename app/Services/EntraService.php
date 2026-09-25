@@ -500,6 +500,103 @@ PS;
 
     /*
      |---------------------------------------------------------
+     | Desativar contas LOCAIS antigas do Windows -- passo complementar
+     | à restrição de login acima ("trava final", já que o Windows não
+     | apaga contas locais sozinho quando a máquina entra no Entra).
+     | Mesmo canal de comando remoto (executar_powershell, elevado).
+     |
+     | Não temos hoje (2026-09) coleta de "quais contas locais existem
+     | em cada máquina" -- só usuario_logado (quem está logado agora,
+     | via WMI). Por isso o admin digita o(s) nome(s) manualmente, e a
+     | tela mostra quem está logado em cada máquina selecionada, pra não
+     | desativar por engano a conta que está sendo usada ali agora.
+     |
+     | Rede de segurança: contas embutidas do Windows (Administrator,
+     | Guest, DefaultAccount, WDAGUtilityAccount, e as versões em
+     | português) nunca entram na lista, mesmo que digitadas -- some
+     | silenciosamente da lista antes de montar o script, pra nunca
+     | deixar a máquina sem NENHUMA conta administrativa local. Usa
+     | Disable-LocalUser (nunca Remove-LocalUser) -- sempre reversível
+     | com Enable-LocalUser, sem perder o perfil/dados da conta.
+     |---------------------------------------------------------
+     */
+
+    public const CONTAS_LOCAIS_PROTEGIDAS = ['Administrator', 'Administrador', 'DefaultAccount', 'Guest', 'Convidado', 'WDAGUtilityAccount'];
+
+    /** Filtra nomes vazios, contas protegidas, e qualquer caractere que o Windows não aceita em nome de conta local -- devolve só o que é seguro mandar pro script. */
+    public static function validarNomesContaLocal(array $nomes): array
+    {
+        $validos = [];
+        foreach ($nomes as $nome) {
+            $nome = trim((string)$nome);
+            if ($nome === '' || in_array($nome, self::CONTAS_LOCAIS_PROTEGIDAS, true)) {
+                continue;
+            }
+            if (!preg_match('/^[A-Za-z0-9 ._\-]{1,64}$/', $nome)) {
+                continue;
+            }
+            $validos[] = $nome;
+        }
+
+        return array_values(array_unique($validos));
+    }
+
+    /** Script que desativa (Disable-LocalUser) cada nome informado -- melhor esforço, uma conta inexistente não trava as demais. */
+    public static function gerarScriptDesativarContasLocais(array $nomes): string
+    {
+        return self::scriptContasLocais(self::validarNomesContaLocal($nomes), 'Disable-LocalUser', 'desativada(s)');
+    }
+
+    /** Script que reverte (Enable-LocalUser) -- mesma lista, mesma validação. */
+    public static function gerarScriptReativarContasLocais(array $nomes): string
+    {
+        return self::scriptContasLocais(self::validarNomesContaLocal($nomes), 'Enable-LocalUser', 'reativada(s)');
+    }
+
+    private static function scriptContasLocais(array $nomes, string $cmdlet, string $participio): string
+    {
+        if (empty($nomes)) {
+            return "Write-Output 'Nenhuma conta local válida informada (vazia ou protegida).'";
+        }
+
+        // Nomes já validados só com [A-Za-z0-9 ._-] -- json_encode não produz
+        // aspas simples nem barra invertida com esse conjunto de caracteres,
+        // seguro embutir direto numa string PowerShell de aspas simples.
+        $nomesJson = json_encode(array_values($nomes), JSON_UNESCAPED_UNICODE);
+
+        $template = <<<'PS'
+$nomes = '__NOMES_JSON__' | ConvertFrom-Json
+$ok = @()
+$falhou = @()
+
+foreach ($nome in $nomes) {
+    try {
+        __CMDLET__ -Name $nome -ErrorAction Stop
+        $ok += $nome
+    } catch {
+        $falhou += "$nome ($($_.Exception.Message))"
+    }
+}
+
+if ($ok.Count -gt 0) {
+    Write-Output ("Contas __PARTICIPIO__: " + ($ok -join ', '))
+} else {
+    Write-Output "Nenhuma conta foi __PARTICIPIO_SINGULAR__ (verifique se os nomes existem na maquina)."
+}
+if ($falhou.Count -gt 0) {
+    Write-Output ("Falhas: " + ($falhou -join ' | '))
+}
+PS;
+
+        return str_replace(
+            ['__NOMES_JSON__', '__CMDLET__', '__PARTICIPIO__', '__PARTICIPIO_SINGULAR__'],
+            [$nomesJson, $cmdlet, $participio, str_replace('(s)', '', $participio)],
+            $template
+        );
+    }
+
+    /*
+     |---------------------------------------------------------
      | Dispositivos gerenciados pelo Intune (Graph API) -- a licença do
      | tenant (SPE_F1 / Microsoft 365 F3) inclui Intune Plan 1, então dá
      | pra consultar/agir sobre as máquinas inscritas, não só usuários.

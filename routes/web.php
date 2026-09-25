@@ -908,6 +908,8 @@ $router->post('/entra/usuarios/excluir', [EntraController::class, 'usuarioExclui
 $router->get('/entra/acesso-maquinas', [EntraController::class, 'acessoMaquinas']);
 $router->post('/entra/acesso-maquinas/aplicar', [EntraController::class, 'acessoMaquinasAplicar']);
 $router->post('/entra/acesso-maquinas/remover', [EntraController::class, 'acessoMaquinasRemover']);
+$router->post('/entra/acesso-maquinas/desativar-contas', [EntraController::class, 'acessoMaquinasDesativarContas']);
+$router->post('/entra/acesso-maquinas/reativar-contas', [EntraController::class, 'acessoMaquinasReativarContas']);
 $router->get('/entra/dispositivos', [EntraController::class, 'dispositivos']);
 $router->post('/entra/dispositivos/sincronizar', [EntraController::class, 'dispositivoSincronizar']);
 $router->post('/entra/dispositivos/reiniciar', [EntraController::class, 'dispositivoReiniciar']);

@@ -262,6 +262,15 @@ class EntraController extends Controller
             fn($a) => $a['origem'] === 'agente' && ($a['agente_versao'] ?? '') !== 'ps1'
         ));
 
+        // Mostrado ao lado de cada máquina na tela, pra quem for desativar
+        // conta local ver de cara quem está logado ali agora antes de
+        // decidir -- evita desativar por engano a conta em uso na hora.
+        foreach ($computadores as &$c) {
+            $detalhes = json_decode($c['detalhes'] ?? '', true) ?: [];
+            $c['usuario_logado_atual'] = trim((string)($detalhes['usuario_logado'] ?? ''));
+        }
+        unset($c);
+
         $this->view('entra/acesso_maquinas', [
             'configurado' => $configurado,
             'usuarios' => $usuarios,
@@ -306,6 +315,63 @@ class EntraController extends Controller
 
         header('Location: ' . url('/entra/acesso-maquinas'));
         exit;
+    }
+
+    public function acessoMaquinasDesativarContas(): void
+    {
+        $this->aplicarAcaoContasLocais(true);
+    }
+
+    public function acessoMaquinasReativarContas(): void
+    {
+        $this->aplicarAcaoContasLocais(false);
+    }
+
+    /**
+     * "Trava final" complementar à restrição de login: desativa (ou
+     * reverte) contas LOCAIS antigas do Windows -- o Entra Join não
+     * apaga contas locais sozinho. Mesmo canal de comando remoto e
+     * mesma proteção de contas embutidas (EntraService::validarNomesContaLocal()).
+     */
+    private function aplicarAcaoContasLocais(bool $desativar): void
+    {
+        AuthMiddleware::checkModulo('entra_usuarios');
+        AuthMiddleware::checkModulo('ativos_novo');
+
+        $nomesDigitados = $this->extrairNomesContas($_POST['contas'] ?? '');
+        $nomesValidos = EntraService::validarNomesContaLocal($nomesDigitados);
+        $ativoIds = array_map('intval', $_POST['ativos'] ?? []);
+        $ignorados = array_values(array_diff($nomesDigitados, $nomesValidos));
+
+        if (empty($nomesValidos) || empty($ativoIds)) {
+            $mensagem = 'Informe ao menos uma conta local válida e selecione ao menos uma máquina.';
+            if (!empty($ignorados)) {
+                $mensagem .= ' Ignorada(s) por serem protegidas ou com caractere inválido: ' . implode(', ', $ignorados) . '.';
+            }
+            NotificationService::error($mensagem);
+            header('Location: ' . url('/entra/acesso-maquinas'));
+            exit;
+        }
+
+        $script = $desativar
+            ? EntraService::gerarScriptDesativarContasLocais($nomesValidos)
+            : EntraService::gerarScriptReativarContasLocais($nomesValidos);
+
+        $rotulo = $desativar ? 'Desativar contas locais' : 'Reativar contas locais';
+        $detalhe = implode(', ', $nomesValidos) . (!empty($ignorados) ? ' (ignoradas: ' . implode(', ', $ignorados) . ')' : '');
+
+        $this->enviarScriptParaAtivos($script, $ativoIds, $rotulo, $detalhe);
+
+        header('Location: ' . url('/entra/acesso-maquinas'));
+        exit;
+    }
+
+    /** Uma conta por linha ou separada por vírgula -- aceita os dois formatos pra não travar em quem cola de qualquer jeito. */
+    private function extrairNomesContas(string $bruto): array
+    {
+        $partes = preg_split('/[\r\n,]+/', $bruto) ?: [];
+
+        return array_values(array_filter(array_map('trim', $partes), fn($n) => $n !== ''));
     }
 
     /*
