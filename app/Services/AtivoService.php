@@ -3570,6 +3570,15 @@ class AtivoService
         // entregues agora, junto com a resposta deste checkin. O agente
         // é quem decide como/quando executar (com aviso pro usuário,
         // quando aplicável).
+        // Agente preso numa versão cujo script de troca quebra com acento
+        // no nome do usuário -- o servidor faz a troca por fora. Antes de
+        // buscar os pendentes, pra o envio do .exe já sair nesta resposta.
+        (new AgenteAtualizacaoAssistidaService($this))->verificar(
+            $id,
+            $camposBase['agente_versao'],
+            (string)($payload['usuario_logado'] ?? '')
+        );
+
         $pendentes = $this->repository->comandosPendentes($id);
         if (!empty($pendentes)) {
             $this->repository->marcarComandosEntregues(array_column($pendentes, 'id'));
