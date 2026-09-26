@@ -392,4 +392,40 @@ public class RespostaCheckin
 
     [JsonPropertyName("chave_api_atual")]
     public string? ChaveApiAtual { get; set; }
+
+    [JsonPropertyName("modulo_seguranca")]
+    public ModuloSeguranca? ModuloSeguranca { get; set; }
+}
+
+/// <summary>
+/// Bloco "modulo_seguranca" da resposta do checkin (SegurancaModuloService::
+/// paraAgente no servidor) -- já vem resolvido (override da máquina &gt;
+/// padrão global). Tudo desligado por padrão: o agente só liga um detector
+/// quando o portal manda ligar.
+/// </summary>
+public class ModuloSeguranca
+{
+    [JsonPropertyName("canary")]
+    public bool Canary { get; set; }
+
+    [JsonPropertyName("shadow_copy")]
+    public bool ShadowCopy { get; set; }
+
+    [JsonPropertyName("fim")]
+    public bool Fim { get; set; }
+
+    [JsonPropertyName("isolamento_modo")]
+    public string IsolamentoModo { get; set; } = "alerta";
+
+    [JsonPropertyName("fim_limiar_critico")]
+    public int FimLimiarCritico { get; set; } = 50;
+
+    [JsonPropertyName("fim_limiar_aviso")]
+    public int FimLimiarAviso { get; set; } = 20;
+
+    [JsonPropertyName("fim_janela_segundos")]
+    public int FimJanelaSegundos { get; set; } = 30;
+
+    [JsonPropertyName("isolado")]
+    public bool Isolado { get; set; }
 }

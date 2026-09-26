@@ -5,6 +5,7 @@ using System.IO;
 using System.Reflection;
 using System.ServiceProcess;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Win32;
@@ -20,6 +21,9 @@ public class TrayApplicationContext : ApplicationContext
     private Config _config;
     private readonly AppState _estado;
     private readonly PrintListener _printListener;
+    private readonly SegurancaService _seguranca;
+    private readonly MainForm _janelaPrincipal;
+    private readonly SynchronizationContext? _contextoUi;
     private readonly ToolStripMenuItem _itemServico;
     // Não é "readonly" -- ver RecalcularMachineGuid(), chamado quando o
     // admin preenche o "Identificador da máquina" na tela de
@@ -27,11 +31,18 @@ public class TrayApplicationContext : ApplicationContext
     private string? _machineGuid;
     private bool _coletando;
     private bool _enviandoHeartbeat;
+    private DateTime _ultimoLogFalhaHeartbeatEm = DateTime.MinValue;
 
     public TrayApplicationContext()
     {
         _config = Config.Carregar();
         _estado = AppState.Carregar();
+        // O splash (Application.Run anterior) pode ter desinstalado o
+        // contexto de UI ao terminar -- sem um, o balão de aviso dos
+        // detectores sairia da thread do timer. Criado aqui, na thread de
+        // UI, ele sempre marshala de volta pra ela.
+        _contextoUi = SynchronizationContext.Current as WindowsFormsSynchronizationContext
+            ?? new WindowsFormsSynchronizationContext();
 
         // Calculado uma vez só (BIOS/registro não mudam em tempo de
         // execução) -- reaproveitado em todo heartbeat, que roda a cada
@@ -39,13 +50,17 @@ public class TrayApplicationContext : ApplicationContext
         // cada tick.
         RecalcularMachineGuid();
 
+        _seguranca = new SegurancaService(() => _config, () => _machineGuid);
+        _seguranca.Detectado += AoDetectarEventoSeguranca;
+        _seguranca.Aplicar(_estado.UltimoModuloSeguranca);
+
         // Escuta local pra imprimir etiqueta sob demanda (sem esperar o
         // proximo checkin) -- sempre tenta iniciar; so imprime de verdade
         // se uma impressora estiver configurada (menu Configuracoes).
         _printListener = new PrintListener(() => _config);
         _printListener.Iniciar();
 
-        var menu = new ContextMenuStrip();
+        var menu = new ContextMenuStrip { Renderer = new RenderizadorMenuEscuro() };
         menu.Items.Add("Coletar agora", null, async (s, e) => await ColetarEEnviarAsync(manual: true));
         menu.Items.Add("Atualizar agora", null, async (s, e) => await AtualizarAgoraManualAsync());
         menu.Items.Add("Configurações...", null, (s, e) => AbrirConfiguracoes());
@@ -67,7 +82,18 @@ public class TrayApplicationContext : ApplicationContext
             ContextMenuStrip = menu
         };
 
-        _icone.DoubleClick += async (s, e) => await ColetarEEnviarAsync(manual: true);
+        _janelaPrincipal = new MainForm(
+            _estado,
+            _seguranca,
+            () => _config.HeartbeatSegundos,
+            () => ColetarEEnviarAsync(manual: true),
+            () => AtualizarAgoraManualAsync(),
+            AbrirConfiguracoes,
+            AlternarServicoAsync);
+        _icone.MouseClick += (s, e) =>
+        {
+            if (e.Button == MouseButtons.Left) _janelaPrincipal.Abrir();
+        };
 
         RegistrarInicioAutomatico();
         AtualizarTooltip();
@@ -146,6 +172,14 @@ public class TrayApplicationContext : ApplicationContext
         try
         {
             var resultado = await new HeartbeatClient(_config).EnviarAsync(_machineGuid);
+            _estado.UltimoHeartbeatEm = DateTime.Now;
+            _estado.UltimoHeartbeatSucesso = resultado.Sucesso;
+
+            if (!resultado.Sucesso && DateTime.Now - _ultimoLogFalhaHeartbeatEm >= TimeSpan.FromSeconds(30))
+            {
+                _ultimoLogFalhaHeartbeatEm = DateTime.Now;
+                LogAtividade.Registrar(NivelAtividade.Aviso, "HEARTBEAT", "Falha ao enviar heartbeat ao servidor.");
+            }
 
             if (resultado.Sucesso)
             {
@@ -331,7 +365,14 @@ public class TrayApplicationContext : ApplicationContext
             {
                 _estado.MarcaEventos = DateTime.Now;
                 AplicarNovaChaveApiSeNecessario(resultado.ChaveApiAtual);
+                _estado.UltimoModuloSeguranca = resultado.ModuloSeguranca;
+                _seguranca.Aplicar(resultado.ModuloSeguranca);
             }
+
+            LogAtividade.Registrar(
+                resultado.Sucesso ? NivelAtividade.Sucesso : NivelAtividade.Erro,
+                "CHECKIN",
+                resultado.Sucesso ? "Checkin concluído com sucesso." : $"Checkin falhou: {resultado.Mensagem}");
 
             _estado.Salvar();
 
@@ -366,6 +407,7 @@ public class TrayApplicationContext : ApplicationContext
             _estado.UltimoCheckinSucesso = false;
             _estado.UltimaMensagem = ex.Message;
             _estado.Salvar();
+            LogAtividade.Registrar(NivelAtividade.Erro, "CHECKIN", $"Falha no checkin: {ex.Message}");
 
             if (manual)
             {
@@ -960,6 +1002,7 @@ del ""%~f0""
         {
             try
             {
+                LogAtividade.Registrar(NivelAtividade.Info, "COMANDO", $"Executando comando remoto: {comando.Comando}.");
                 switch (comando.Comando)
                 {
                     case "desligar":
@@ -1020,10 +1063,11 @@ del ""%~f0""
                         break;
                 }
             }
-            catch
+            catch (Exception ex)
             {
                 // se o comando falhar (ex: sem permissão, KB já removido),
                 // não derruba o resto do checkin -- só não executa esse item
+                LogAtividade.Registrar(NivelAtividade.Erro, "COMANDO", $"Falha em {comando.Comando}: {ex.Message}");
             }
         }
     }
@@ -1064,10 +1108,35 @@ del ""%~f0""
 
     private void Encerrar()
     {
+        _seguranca.Detectado -= AoDetectarEventoSeguranca;
+        _seguranca.Dispose();
+        _janelaPrincipal.Dispose();
         _icone.Visible = false;
+        _icone.Dispose();
         _timer.Stop();
         _heartbeatTimer.Stop();
         _printListener.Dispose();
         Application.Exit();
+    }
+
+    private void AoDetectarEventoSeguranca(EventoSeguranca evento)
+    {
+        var texto = string.IsNullOrWhiteSpace(evento.Resumo) ? "Uma detecção de segurança foi registrada." : evento.Resumo;
+        if (texto.Length > 220) texto = texto[..220];
+
+        void ExibirAviso() => _icone.ShowBalloonTip(5000, "RD Intranet - Segurança", texto, ToolTipIcon.Warning);
+
+        if (_contextoUi != null)
+        {
+            _contextoUi.Post(_ => ExibirAviso(), null);
+        }
+        else if (_janelaPrincipal.IsHandleCreated && _janelaPrincipal.InvokeRequired)
+        {
+            try { _janelaPrincipal.BeginInvoke((Action)ExibirAviso); } catch { }
+        }
+        else
+        {
+            ExibirAviso();
+        }
     }
 }

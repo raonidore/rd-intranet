@@ -47,12 +47,26 @@ public class ConfigForm : Form
         _localizacaoIdAnterior = configAtual.LocalizacaoId;
 
         Text = "RD Intranet - Configuração do Agente";
-        Width = 460;
-        Height = 510;
+        Width = 480;
+        Height = 570 + 5 * EspacoSecao;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
+        BackColor = Tema.Fundo;
+        ForeColor = Tema.Texto;
+        Font = Tema.Fonte(9F);
+        Tema.BarraTituloEscura(this);
+
+        // Cada seção começa no Top original do seu primeiro campo; o laço
+        // depois do AddRange abre EspacoSecao px pra cada título, empurrando
+        // tudo que vem abaixo (antes os títulos ficavam por cima dos campos).
+        var secaoConexao = CriarTituloSecao("CONEXÃO", 15);
+        var secaoLocalizacao = CriarTituloSecao("LOCALIZAÇÃO DO ATIVO", 163);
+        var secaoColeta = CriarTituloSecao("COLETA", 280);
+        var secaoEtiquetas = CriarTituloSecao("ETIQUETAS", 335);
+        var secaoAvancado = CriarTituloSecao("AVANÇADO", 408);
+        var secoes = new[] { secaoConexao, secaoLocalizacao, secaoColeta, secaoEtiquetas, secaoAvancado };
 
         var rotuloServidor = new Label { Text = "Endereço do servidor (ex: https://rd.intranet)", Left = 15, Top = 15, Width = 420 };
         _campoServidor = new TextBox { Left = 15, Top = 38, Width = 420, Text = configAtual.ServerUrl };
@@ -61,7 +75,7 @@ public class ConfigForm : Form
         _campoChave = new TextBox { Left = 15, Top = 93, Width = 420, Text = configAtual.ApiKey };
 
         _botaoVerificar = new Button { Text = "Verificar / Buscar unidades", Left = 15, Top = 125, Width = 190, Height = 26 };
-        _rotuloStatusVerificacao = new Label { Left = 215, Top = 130, Width = 220, Height = 34, ForeColor = Color.Gray, Font = new Font("Segoe UI", 8F) };
+        _rotuloStatusVerificacao = new Label { Left = 215, Top = 130, Width = 220, Height = 32, ForeColor = Color.Gray, Font = new Font("Segoe UI", 8F) };
 
         var rotuloUnidade = new Label { Text = "Unidade (obrigatório na primeira configuração)", Left = 15, Top = 163, Width = 420 };
         _campoUnidade = new ComboBox { Left = 15, Top = 186, Width = 420, DropDownStyle = ComboBoxStyle.DropDownList };
@@ -122,18 +136,18 @@ public class ConfigForm : Form
         {
             Text = "Identificador da máquina (avançado -- só preencha ao restaurar uma máquina reformatada; deixe em branco no dia a dia)",
             Left = 15,
-            Top = 388,
+            Top = 408,
             Width = 420,
             Height = 30
         };
-        _campoMachineGuidOverride = new TextBox { Left = 15, Top = 420, Width = 420, Text = configAtual.MachineGuidOverride };
+        _campoMachineGuidOverride = new TextBox { Left = 15, Top = 440, Width = 420, Text = configAtual.MachineGuidOverride };
 
         var rotuloVersao = new Label
         {
             Text = "Versão do agente: v" + ObterVersao(),
             Left = 15,
-            Top = 426 + 25,
-            Width = 220,
+            Top = 488,
+            Width = 115,
             ForeColor = Color.Gray,
             Font = new Font("Segoe UI", 8F)
         };
@@ -142,15 +156,15 @@ public class ConfigForm : Form
         var rotuloServico = new Label
         {
             Text = textoServico,
-            Left = 245,
-            Top = 426 + 25,
-            Width = 195,
+            Left = 135,
+            Top = 488,
+            Width = 145,
             ForeColor = corServico,
             Font = new Font("Segoe UI", 8F, FontStyle.Bold)
         };
 
-        var botaoSalvar = new Button { Text = "Salvar", Left = 260, Top = 420 + 25, Width = 80, DialogResult = DialogResult.OK };
-        var botaoCancelar = new Button { Text = "Cancelar", Left = 350, Top = 420 + 25, Width = 80, DialogResult = DialogResult.Cancel };
+        var botaoSalvar = new BotaoTema("Salvar", BotaoTema.Variante.Primario) { Left = 285, Top = 485, Width = 80, DialogResult = DialogResult.OK };
+        var botaoCancelar = new BotaoTema("Cancelar") { Left = 375, Top = 485, Width = 80, DialogResult = DialogResult.Cancel };
 
         _botaoVerificar.Click += async (s, e) => await VerificarEBuscarCadastrosAsync();
 
@@ -196,6 +210,7 @@ public class ConfigForm : Form
 
         Controls.AddRange(new Control[]
         {
+            secaoConexao, secaoLocalizacao, secaoColeta, secaoEtiquetas, secaoAvancado,
             rotuloServidor, _campoServidor,
             rotuloChave, _campoChave,
             _botaoVerificar, _rotuloStatusVerificacao,
@@ -210,6 +225,22 @@ public class ConfigForm : Form
             botaoSalvar, botaoCancelar
         });
 
+        var iniciosSecao = secoes.Select(sec => sec.Top).ToArray();
+        foreach (Control controle in Controls)
+        {
+            var indice = Array.IndexOf(secoes, controle);
+            if (indice >= 0)
+            {
+                controle.Top = iniciosSecao[indice] + indice * EspacoSecao;
+            }
+            else
+            {
+                controle.Top += EspacoSecao * iniciosSecao.Count(inicio => inicio <= controle.Top);
+            }
+
+            AplicarTema(controle);
+        }
+
         AcceptButton = null; // Enter não deve disparar Salvar sem passar pela validação de unidade
         CancelButton = botaoCancelar;
 
@@ -218,6 +249,41 @@ public class ConfigForm : Form
         if (_eraConfiguradoAoAbrir)
         {
             Load += async (s, e) => await VerificarEBuscarCadastrosAsync();
+        }
+    }
+
+    private const int EspacoSecao = 20;
+
+    private static Label CriarTituloSecao(string texto, int top) => new()
+    {
+        Text = texto,
+        Left = 15,
+        Top = top,
+        Width = 420,
+        Height = 16,
+        ForeColor = Tema.Ciano,
+        BackColor = Tema.Fundo,
+        Font = Tema.FonteSemibold(7.5F)
+    };
+
+    private static void AplicarTema(Control controle)
+    {
+        if (controle is Label label)
+        {
+            if (label.ForeColor == SystemColors.ControlText) label.ForeColor = Tema.Texto;
+            label.BackColor = Tema.Fundo;
+            if (label.Font == SystemFonts.DefaultFont) label.Font = Tema.Fonte(9F);
+        }
+        else if (controle is TextBox or ComboBox or NumericUpDown)
+        {
+            Tema.EstilizarCampo(controle);
+        }
+        else if (controle is Button button)
+        {
+            button.BackColor = Tema.SuperficieElevada;
+            button.ForeColor = Tema.Texto;
+            button.FlatStyle = FlatStyle.Flat;
+            button.FlatAppearance.BorderColor = Tema.Borda;
         }
     }
 
