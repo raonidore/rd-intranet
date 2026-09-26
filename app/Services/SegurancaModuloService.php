@@ -52,6 +52,7 @@ class SegurancaModuloService
         $padrao['fim_janela_segundos'] = max(5, min(300, (int)ConfigService::get(self::PREFIXO . 'fim_janela_segundos', '30')));
         $padrao['alerta_emails'] = ConfigService::get(self::PREFIXO . 'alerta_emails', '') ?? '';
         $padrao['alerta_whatsapp'] = ConfigService::get(self::PREFIXO . 'alerta_whatsapp', '') ?? '';
+        $padrao['isolamento_liberados'] = ConfigService::get(self::PREFIXO . 'isolamento_liberados', '') ?? '';
 
         return $padrao;
     }
@@ -74,6 +75,55 @@ class SegurancaModuloService
 
         ConfigService::set(self::PREFIXO . 'alerta_emails', trim((string)($dados['alerta_emails'] ?? '')));
         ConfigService::set(self::PREFIXO . 'alerta_whatsapp', trim((string)($dados['alerta_whatsapp'] ?? '')));
+        ConfigService::set(self::PREFIXO . 'isolamento_liberados', implode("
+", self::normalizarLiberados((string)($dados['isolamento_liberados'] ?? ''))));
+    }
+
+    /**
+     * Programas extras que continuam com rede durante o isolamento, além do
+     * agente e do MeshAgent (sempre liberados). Uma linha por item: caminho
+     * de um .exe ou nome de um serviço do Windows. Cada item liberado é uma
+     * porta aberta numa máquina possivelmente comprometida -- ferramentas de
+     * acesso remoto de terceiros (AnyDesk, TeamViewer) são usadas por
+     * atacantes, por isso não entram por padrão.
+     *
+     * @return list<string>
+     */
+    public static function normalizarLiberados(string $texto): array
+    {
+        $itens = [];
+        foreach (preg_split('/
+||
+/', $texto) as $linha) {
+            $linha = trim($linha, " 	\"'");
+            if ($linha !== '' && mb_strlen($linha) <= 260 && !preg_match('/[`$;|&<>]/', $linha)) {
+                $itens[] = $linha;
+            }
+        }
+
+        return array_values(array_unique(array_slice($itens, 0, 20)));
+    }
+
+    /** Máquinas com isolamento de rede ativo agora -- Central de Segurança e menu lateral. */
+    public function listarIsoladas(): array
+    {
+        return $this->pdo->query(
+            "SELECT m.ativo_id, m.isolado_em, a.codigo_patrimonio, a.nome, a.ultimo_heartbeat
+             FROM ativos_seguranca_modulos m
+             JOIN ativos a ON a.id = m.ativo_id
+             WHERE m.isolado_em IS NOT NULL
+             ORDER BY m.isolado_em DESC"
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Barato o suficiente pra rodar em toda página (badge do menu). Tabela ausente (servidor sem migração) = 0. */
+    public function contarIsoladas(): int
+    {
+        try {
+            return (int)$this->pdo->query('SELECT COUNT(*) FROM ativos_seguranca_modulos WHERE isolado_em IS NOT NULL')->fetchColumn();
+        } catch (\Throwable) {
+            return 0;
+        }
     }
 
     /** Linha crua da máquina (NULL = segue o padrão), ou tudo NULL se nunca foi sobrescrita. */

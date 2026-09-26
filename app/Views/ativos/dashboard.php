@@ -564,9 +564,9 @@ $statusCores = [
                                 <label class="form-label small fw-semibold mb-1">Detecções ligadas por padrão</label>
                                 <?php
                                     $descricoesModulos = [
-                                        'canary' => 'Cria arquivos-isca em Área de Trabalho/Documentos/Downloads e raiz dos outros discos. Qualquer toque neles = alerta crítico. Custo desprezível.',
-                                        'shadow_copy' => 'Vigia comandos como "vssadmin delete shadows" e encerra o processo na hora. Acompanha cada processo novo da máquina -- teste antes em servidores com muita automação.',
-                                        'fim' => 'Conta alterações de arquivo nas pastas do usuário; dispara quando passa do limiar abaixo. Pode gerar aviso em sincronização grande (OneDrive, backup).',
+                                        'canary' => 'Cria 2 arquivos-isca ocultos em Documentos, Área de Trabalho e Documentos Públicos. Alterar, apagar ou renomear um deles = alerta crítico. Custo desprezível.',
+                                        'shadow_copy' => 'Conta as shadow copies (pontos de restauração) a cada minuto. Sumir 2 ou mais de uma vez = crítico (agente 1.0.31+; a 1.0.30 também dispara quando a única cópia some, o que ferramentas como o Dell SupportAssist fazem sozinhas). Não identifica o processo nem bloqueia nada.',
+                                        'fim' => 'Conta alterações de arquivo nas pastas do usuário; dispara quando passa do limiar abaixo. Arquivo novo não conta. Pode gerar aviso em sincronização grande (OneDrive, backup).',
                                     ];
                                 ?>
                                 <?php foreach (\App\Services\SegurancaModuloService::MODULOS as $chave => $rotulo): ?>
@@ -601,7 +601,16 @@ $statusCores = [
                                 <label class="form-label small fw-semibold mb-1" for="padrao_alerta_emails">Avisar por e-mail</label>
                                 <input type="text" name="alerta_emails" id="padrao_alerta_emails" class="form-control form-control-sm mb-2" placeholder="ti@empresa.com.br, outro@empresa.com.br" value="<?= htmlspecialchars($padraoSeguranca['alerta_emails']) ?>">
                                 <label class="form-label small fw-semibold mb-1" for="padrao_alerta_whatsapp">Avisar por WhatsApp</label>
-                                <input type="text" name="alerta_whatsapp" id="padrao_alerta_whatsapp" class="form-control form-control-sm" placeholder="5581999999999, 5581988888888" value="<?= htmlspecialchars($padraoSeguranca['alerta_whatsapp']) ?>">
+                                <input type="text" name="alerta_whatsapp" id="padrao_alerta_whatsapp" class="form-control form-control-sm mb-3" placeholder="5581999999999, 5581988888888" value="<?= htmlspecialchars($padraoSeguranca['alerta_whatsapp']) ?>">
+
+                                <label class="form-label small fw-semibold mb-1" for="padrao_isolamento_liberados">Continuam com rede durante o isolamento</label>
+                                <textarea name="isolamento_liberados" id="padrao_isolamento_liberados" class="form-control form-control-sm font-monospace" rows="3"
+                                          placeholder="C:\Program Files\Sistema\cliente.exe&#10;NomeDoServico"><?= htmlspecialchars($padraoSeguranca['isolamento_liberados'] ?? '') ?></textarea>
+                                <div class="form-text small">
+                                    O agente RD Intranet e o MeshAgent (MeshCentral) sempre ficam liberados, pra dar acesso remoto à máquina isolada.
+                                    Aqui vão extras: um caminho de .exe ou nome de serviço do Windows por linha. Cada item liberado continua acessando a rede
+                                    numa máquina possivelmente comprometida -- evite AnyDesk/TeamViewer, que atacantes também usam.
+                                </div>
                             </div>
                         </div>
                         <div class="mt-3">

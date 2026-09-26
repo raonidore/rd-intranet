@@ -396,6 +396,36 @@ class AtivoController extends Controller
         echo json_encode($resultado);
     }
 
+    /**
+     * Central de Segurança: máquinas isoladas, isolamentos pendentes e
+     * eventos de todas as máquinas numa tela só -- antes era preciso abrir
+     * ativo por ativo pra descobrir qual tinha sido isolado.
+     */
+    public function seguranca(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+
+        $filtros = [
+            'dias' => (int)($_GET['dias'] ?? 7),
+            'severidade' => (string)($_GET['severidade'] ?? ''),
+            'tipo' => (string)($_GET['tipo'] ?? ''),
+            'abertos' => !empty($_GET['abertos']),
+        ];
+
+        $eventos = new SegurancaEventoService();
+        $modulos = new SegurancaModuloService();
+
+        $this->view('ativos/seguranca', [
+            'filtros' => $filtros,
+            'resumo' => $eventos->resumoGeral(),
+            'isoladas' => $modulos->listarIsoladas(),
+            'pendentes' => $eventos->listarTodos(['dias' => 365, 'abertos' => true], 100),
+            'eventos' => $eventos->listarTodos($filtros),
+            'padraoSeguranca' => $modulos->padrao(),
+            'podeEditarAtivo' => PermissionService::temAcesso('ativos_novo'),
+        ]);
+    }
+
     public function salvarPadraoSeguranca(): void
     {
         AuthMiddleware::checkModulo('ativos_dashboard');

@@ -15,7 +15,7 @@ class SegurancaEventoService
 {
     public const TIPOS_AGENTE = [
         'CANARY_TRIGGERED' => 'Arquivo-isca modificado',
-        'SHADOW_COPY_DELETE_ATTEMPT' => 'Tentativa de apagar shadow copies',
+        'SHADOW_COPY_DELETE_ATTEMPT' => 'Shadow copies apagadas',
         'BACKUP_DELETE_ATTEMPT' => 'Tentativa de apagar backups/recuperação',
         'MASS_FILE_CHANGE' => 'Mudança em massa de arquivos',
     ];
@@ -101,10 +101,105 @@ class SegurancaEventoService
         );
         $stmt->execute([$ativoId]);
 
-        return array_map(function (array $e) {
+        return $this->anexarSaidas(array_map(function (array $e) {
             $e['detalhes'] = json_decode((string)$e['detalhes'], true) ?: [];
             return $e;
-        }, $stmt->fetchAll(PDO::FETCH_ASSOC));
+        }, $stmt->fetchAll(PDO::FETCH_ASSOC)));
+    }
+
+    /**
+     * Eventos de todas as máquinas -- Central de Segurança.
+     * Filtros: dias (1-365), severidade, tipo, abertos (só críticos/avisos sem resolução).
+     */
+    public function listarTodos(array $filtros, int $limite = 300): array
+    {
+        $where = ['e.recebido_em >= (NOW() - INTERVAL ? DAY)'];
+        $params = [max(1, min(365, (int)($filtros['dias'] ?? 7)))];
+
+        if (in_array($filtros['severidade'] ?? '', ['CRITICAL', 'WARNING', 'INFO'], true)) {
+            $where[] = 'e.severidade = ?';
+            $params[] = $filtros['severidade'];
+        }
+        if (isset(self::TIPOS_AGENTE[$filtros['tipo'] ?? '']) || isset(self::TIPOS_SERVIDOR[$filtros['tipo'] ?? ''])) {
+            $where[] = 'e.tipo = ?';
+            $params[] = $filtros['tipo'];
+        }
+        if (!empty($filtros['abertos'])) {
+            $where[] = "e.resolvido_em IS NULL AND e.severidade <> 'INFO'";
+        }
+        if (!empty($filtros['ativo_id'])) {
+            $where[] = 'e.ativo_id = ?';
+            $params[] = (int)$filtros['ativo_id'];
+        }
+
+        $stmt = $this->pdo->prepare(
+            'SELECT e.*, a.codigo_patrimonio, a.nome AS ativo_nome
+             FROM ativos_eventos_seguranca e
+             JOIN ativos a ON a.id = e.ativo_id
+             WHERE ' . implode(' AND ', $where) . '
+             ORDER BY e.recebido_em DESC, e.id DESC LIMIT ' . max(1, $limite)
+        );
+        $stmt->execute($params);
+
+        return $this->anexarSaidas(array_map(function (array $e) {
+            $e['detalhes'] = json_decode((string)$e['detalhes'], true) ?: [];
+            return $e;
+        }, $stmt->fetchAll(PDO::FETCH_ASSOC)));
+    }
+
+    /** Números do topo da Central de Segurança. */
+    public function resumoGeral(): array
+    {
+        return $this->pdo->query(
+            "SELECT
+                SUM(severidade = 'CRITICAL' AND resolvido_em IS NULL) AS criticos_abertos,
+                SUM(severidade = 'WARNING' AND resolvido_em IS NULL) AS avisos_abertos,
+                SUM(isolamento_pendente_ate IS NOT NULL AND resolvido_em IS NULL) AS isolamentos_pendentes,
+                SUM(severidade <> 'INFO' AND recebido_em >= (NOW() - INTERVAL 7 DAY)) AS deteccoes_7d,
+                COUNT(DISTINCT CASE WHEN severidade <> 'INFO' AND recebido_em >= (NOW() - INTERVAL 7 DAY) THEN ativo_id END) AS maquinas_7d
+             FROM ativos_eventos_seguranca"
+        )->fetch(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    /**
+     * Eventos de isolamento guardam o id da solicitação de PowerShell que
+     * aplicou/removeu o firewall -- anexa a saída dela, pra ver no histórico
+     * o que de fato rodou na máquina (e se deu erro).
+     */
+    public function anexarSaidas(array $eventos): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map(fn ($e) => (int)($e['detalhes']['solicitacao_id'] ?? 0), $eventos))));
+        if (!$ids) {
+            return $eventos;
+        }
+
+        $stmt = $this->pdo->prepare(
+            'SELECT id, status, respondido_em, resultado FROM ativos_solicitacoes WHERE id IN (' . implode(',', array_fill(0, count($ids), '?')) . ')'
+        );
+        $stmt->execute($ids);
+
+        $saidas = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $linha) {
+            $resultado = json_decode((string)$linha['resultado'], true);
+            $erro = is_array($resultado) ? trim((string)($resultado['erro'] ?? '')) : '';
+            // PowerShell manda barra de progresso como CLIXML no stderr -- não é erro de verdade.
+            if (str_starts_with($erro, '#< CLIXML')) {
+                $erro = '';
+            }
+            $saidas[(int)$linha['id']] = [
+                'status' => $linha['status'],
+                'respondido_em' => $linha['respondido_em'],
+                'saida' => is_array($resultado) ? trim((string)($resultado['saida'] ?? '')) : '',
+                'erro' => $erro,
+            ];
+        }
+
+        foreach ($eventos as &$evento) {
+            $sid = (int)($evento['detalhes']['solicitacao_id'] ?? 0);
+            $evento['execucao'] = $saidas[$sid] ?? null;
+        }
+
+        return $eventos;
     }
 
     public function buscar(int $id): ?array
@@ -180,7 +275,13 @@ class SegurancaEventoService
 
         return match ($tipo) {
             'CANARY_TRIGGERED' => 'Arquivo-isca ' . ($d['mudanca'] ?? 'alterado') . ': ' . ($d['caminho'] ?? '?') . $processo,
-            'SHADOW_COPY_DELETE_ATTEMPT', 'BACKUP_DELETE_ATTEMPT' => 'Comando detectado: ' . mb_substr((string)($d['linha_comando'] ?? '?'), 0, 150) . $processo,
+            // Agente 1.0.30+ não vê comando nenhum -- só conta as shadow
+            // copies a cada minuto. Dizer "comando detectado" aqui levou a
+            // procurar um comando que nunca existiu (Maurílio, 2026-09-26).
+            'SHADOW_COPY_DELETE_ATTEMPT' => isset($d['contagem_anterior'])
+                ? sprintf('Shadow copies caíram de %d para %d em menos de 1 minuto (detectado pela contagem -- o agente não identifica quem apagou)', (int)$d['contagem_anterior'], (int)($d['contagem_atual'] ?? 0))
+                : 'Comando detectado: ' . mb_substr((string)($d['linha_comando'] ?? '?'), 0, 150) . $processo,
+            'BACKUP_DELETE_ATTEMPT' => 'Comando detectado: ' . mb_substr((string)($d['linha_comando'] ?? '?'), 0, 150) . $processo,
             'MASS_FILE_CHANGE' => (int)($d['eventos'] ?? 0) . ' arquivos alterados em ' . (int)($d['janela_segundos'] ?? 0) . 's em ' . ($d['pasta'] ?? '?')
                 . (!empty($d['extensoes_novas']) ? ' -- extensões novas: ' . implode(', ', array_slice((array)$d['extensoes_novas'], 0, 5)) : ''),
             default => self::rotuloTipo($tipo),

@@ -89,7 +89,8 @@ class SegurancaIsolamentoService
             return ['success' => false, 'message' => 'A máquina já está isolada.'];
         }
 
-        $resultado = (new AtivoService())->solicitarListagem($ativoId, 'executar_powershell', self::scriptIsolar(), $usuario ?? self::SOLICITANTE, true);
+        $liberados = SegurancaModuloService::normalizarLiberados((string)($this->modulos->padrao()['isolamento_liberados'] ?? ''));
+        $resultado = (new AtivoService())->solicitarListagem($ativoId, 'executar_powershell', self::scriptIsolar($liberados), $usuario ?? self::SOLICITANTE, true);
         if (!$resultado['success']) {
             return ['success' => false, 'message' => $resultado['message'] ?? 'Não foi possível enfileirar o isolamento.'];
         }
@@ -150,10 +151,18 @@ class SegurancaIsolamentoService
      * do bloqueio padrão -- exceto as de Rede Principal (Core Networking,
      * grupo @FirewallAPI.dll,-25000, igual em qualquer idioma do Windows).
      * Idempotente: rodar duas vezes não sobrescreve o estado original salvo.
+     *
+     * O MeshAgent (MeshCentral) é sempre liberado junto com o agente --
+     * sem ele, uma máquina isolada fica sem acesso remoto pra ser limpa
+     * (aconteceu no Maurílio em 2026-09-26). $liberados vem do padrão
+     * global: caminhos de .exe ou nomes de serviço extras.
+     *
+     * @param list<string> $liberados
      */
-    public static function scriptIsolar(): string
+    public static function scriptIsolar(array $liberados = []): string
     {
         $grupo = self::GRUPO_REGRAS;
+        $listaPs = implode(', ', array_map(fn (string $i) => "'" . str_replace("'", "''", $i) . "'", $liberados));
 
         return <<<PS
 \$ErrorActionPreference = 'Stop'
@@ -170,12 +179,29 @@ if (-not (Test-Path \$arq)) {
 \$estado = Get-Content -Path \$arq -Raw | ConvertFrom-Json
 Get-NetFirewallRule -Group '{$grupo}' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
 New-NetFirewallRule -DisplayName '{$grupo} (agente)' -Group '{$grupo}' -Direction Outbound -Action Allow -Program \$agente -Profile Any | Out-Null
+function Get-ExeDoServico(\$servico) {
+    \$caminho = [string]\$servico.PathName
+    if (\$caminho -match '^\s*"([^"]+)"') { return \$Matches[1] }
+    if (\$caminho -match '^\s*(.+?\.exe)') { return \$Matches[1] }
+    return \$null
+}
+\$servicos = @(Get-CimInstance Win32_Service -ErrorAction SilentlyContinue)
+\$programas = New-Object System.Collections.Generic.List[string]
+\$servicos | Where-Object { \$_.PathName -match 'MeshAgent\.exe' } | ForEach-Object { \$programas.Add((Get-ExeDoServico \$_)) }
+foreach (\$item in @({$listaPs})) {
+    if (\$item -match '\.exe\$') { \$programas.Add(\$item); continue }
+    \$servicos | Where-Object { \$_.Name -eq \$item -or \$_.DisplayName -eq \$item } | ForEach-Object { \$programas.Add((Get-ExeDoServico \$_)) }
+}
+\$liberados = @(\$programas | Where-Object { \$_ -and (Test-Path -LiteralPath \$_) } | Sort-Object -Unique)
+foreach (\$programa in \$liberados) {
+    New-NetFirewallRule -DisplayName ('{$grupo} (' + [IO.Path]::GetFileName(\$programa) + ')') -Group '{$grupo}' -Direction Outbound -Action Allow -Program \$programa -Profile Any | Out-Null
+}
 New-NetFirewallRule -DisplayName '{$grupo} (DNS)' -Group '{$grupo}' -Direction Outbound -Action Allow -Protocol UDP -RemotePort 53 -Profile Any | Out-Null
 New-NetFirewallRule -DisplayName '{$grupo} (DHCP)' -Group '{$grupo}' -Direction Outbound -Action Allow -Protocol UDP -LocalPort 68 -RemotePort 67 -Profile Any | Out-Null
 \$regras = @(\$estado.regras_desativadas | Where-Object { \$_ })
 if (\$regras.Count -gt 0) { Disable-NetFirewallRule -Name \$regras -ErrorAction SilentlyContinue }
 Set-NetFirewallProfile -All -Enabled True -DefaultInboundAction Block -DefaultOutboundAction Block -AllowInboundRules False
-"Rede isolada. Liberado apenas o agente (\$agente), DNS e DHCP. Regras de saida desativadas: " + @(\$estado.regras_desativadas).Count
+"Rede isolada. Liberados: agente (\$agente), DNS, DHCP" + ((\$liberados | ForEach-Object { ', ' + \$_ }) -join '') + ". Regras de saida desativadas: " + @(\$estado.regras_desativadas).Count
 PS;
     }
 

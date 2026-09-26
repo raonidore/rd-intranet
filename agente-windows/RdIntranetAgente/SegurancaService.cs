@@ -614,10 +614,15 @@ public sealed class SegurancaService : IDisposable
             return;
         }
 
+        // Sumir UMA só é rotina, mesmo quando era a única (1 → 0): o
+        // Windows descarta a mais antiga quando o espaço enche, e
+        // ferramentas como o Dell SupportAssist criam e apagam a própria
+        // cópia temporária -- foi exatamente isso que isolou uma máquina
+        // à toa no Maurílio (2026-09-26). Só 2 ou mais de uma vez é crítico.
         var removidas = antes - contagem;
-        if (removidas == 1 && contagem > 0)
+        if (removidas < 2)
         {
-            LogAtividade.Registrar(NivelAtividade.Info, "SEGURANÇA", $"Uma shadow copy saiu ({antes} → {contagem}) -- rotação normal do Windows.");
+            LogAtividade.Registrar(NivelAtividade.Info, "SEGURANÇA", $"Uma shadow copy saiu ({antes} → {contagem}) -- rotina do Windows ou de ferramenta de backup.");
             return;
         }
 

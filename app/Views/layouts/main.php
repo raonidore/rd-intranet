@@ -255,6 +255,16 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         </a>
         <?php endif; ?>
 
+        <?php if (PermissionService::temAcesso('ativos_lista')): ?>
+        <?php $maquinasIsoladasMenu = (new \App\Services\SegurancaModuloService())->contarIsoladas(); ?>
+        <a href="<?= url('/ativos/seguranca') ?>" class="<?= str_starts_with($uriAtual, '/ativos/seguranca') ? 'active' : '' ?>">
+            <i class="bi bi-shield-lock me-2"></i> Central de Segurança
+            <?php if ($maquinasIsoladasMenu > 0): ?>
+                <span class="badge text-bg-danger ms-1" title="Máquinas isoladas da rede agora"><?= $maquinasIsoladasMenu ?></span>
+            <?php endif; ?>
+        </a>
+        <?php endif; ?>
+
         <?php if (PermissionService::temAcesso('ativos_novo')): ?>
         <a href="<?= url('/ativos/novo') ?>" class="<?= str_starts_with($uriAtual, '/ativos/novo') || str_starts_with($uriAtual, '/ativos/editar') ? 'active' : '' ?>">
             <i class="bi bi-plus-lg me-2"></i> Novo Ativo

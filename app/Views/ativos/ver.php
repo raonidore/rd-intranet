@@ -2049,7 +2049,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                             </div>
                             <?php if ($podeEditarAtivo): ?>
                                 <div class="col-12 d-flex flex-wrap justify-content-between align-items-center gap-2">
-                                    <small class="text-muted">Aplicado no próximo check-in (agente 1.0.30 ou mais novo). O padrão global fica em Ativos &rsaquo; Configurações &rsaquo; Anti-ransomware.</small>
+                                    <small class="text-muted">Aplicado no próximo check-in (agente 1.0.30 ou mais novo). O padrão global fica em Ativos &rsaquo; Configurações &rsaquo; Anti-ransomware. Visão de todas as máquinas em <a href="<?= url('/ativos/seguranca') ?>">Central de Segurança</a>.</small>
                                     <button class="btn btn-sm btn-primary">Salvar</button>
                                 </div>
                             <?php endif; ?>
@@ -2062,56 +2062,12 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                 <div class="card border-0 shadow-sm">
                     <div class="card-header bg-white"><strong><i class="bi bi-exclamation-octagon"></i> Eventos de segurança</strong></div>
                     <div class="card-body p-0">
-                        <?php if (empty($eventosSeguranca)): ?>
-                            <p class="text-muted small p-3 mb-0">Nenhum evento registrado.</p>
-                        <?php else: ?>
-                            <div class="table-responsive">
-                                <table class="table table-sm mb-0 align-middle">
-                                    <thead><tr><th>Quando</th><th>Evento</th><th>Detalhe</th><th>Resposta</th><th></th></tr></thead>
-                                    <tbody>
-                                        <?php foreach ($eventosSeguranca as $ev): ?>
-                                            <?php
-                                                $corSeveridade = ['CRITICAL' => 'danger', 'WARNING' => 'warning', 'INFO' => 'secondary'][$ev['severidade']] ?? 'secondary';
-                                                $rotulosAcao = [
-                                                    'nenhuma' => '—',
-                                                    'processo_encerrado' => 'Processo encerrado',
-                                                    'rede_isolada' => 'Rede isolada',
-                                                    'isolamento_pendente' => 'Isolamento pendente',
-                                                    'isolamento_cancelado' => 'Isolamento cancelado',
-                                                ];
-                                                $pendente = !empty($ev['isolamento_pendente_ate']) && $ev['resolvido_em'] === null;
-                                            ?>
-                                            <tr class="<?= $ev['resolvido_em'] ? 'text-muted' : '' ?>">
-                                                <td class="small text-nowrap"><?= htmlspecialchars(data_br($ev['ocorrido_em'] ?? $ev['recebido_em'], 'd/m H:i:s')) ?></td>
-                                                <td class="small">
-                                                    <?= Badge::make($ev['severidade'], $corSeveridade) ?>
-                                                    <?= htmlspecialchars(\App\Services\SegurancaEventoService::rotuloTipo($ev['tipo'])) ?>
-                                                </td>
-                                                <td class="small" style="max-width:420px; word-break:break-word"><?= htmlspecialchars($ev['resumo']) ?></td>
-                                                <td class="small text-nowrap">
-                                                    <?php if ($pendente): ?>
-                                                        <span class="text-danger">Isola às <?= htmlspecialchars(data_br($ev['isolamento_pendente_ate'], 'H:i')) ?></span>
-                                                    <?php else: ?>
-                                                        <?= htmlspecialchars($rotulosAcao[$ev['acao_automatica']] ?? $ev['acao_automatica']) ?>
-                                                    <?php endif; ?>
-                                                </td>
-                                                <td class="text-end text-nowrap">
-                                                    <?php if ($podeEditarAtivo && $pendente): ?>
-                                                        <button type="button" class="btn btn-sm btn-outline-danger js-seguranca-acao" data-acao="cancelar-isolamento" data-evento="<?= (int)$ev['id'] ?>"
-                                                                data-confirmar="Cancelar o isolamento automático deste evento? Use só se tiver certeza de que é falso positivo.">Cancelar isolamento</button>
-                                                    <?php endif; ?>
-                                                    <?php if ($podeEditarAtivo && $ev['severidade'] !== 'INFO' && $ev['resolvido_em'] === null): ?>
-                                                        <button type="button" class="btn btn-sm btn-outline-secondary js-seguranca-acao" data-acao="resolver-evento" data-evento="<?= (int)$ev['id'] ?>">Marcar resolvido</button>
-                                                    <?php elseif ($ev['resolvido_em']): ?>
-                                                        <span class="small">Resolvido por <?= htmlspecialchars($ev['resolvido_por'] ?? '?') ?></span>
-                                                    <?php endif; ?>
-                                                </td>
-                                            </tr>
-                                        <?php endforeach; ?>
-                                    </tbody>
-                                </table>
-                            </div>
-                        <?php endif; ?>
+                        <?php
+                            $eventosTabela = $eventosSeguranca;
+                            $mostrarMaquina = false;
+                            $podeEditarTabela = $podeEditarAtivo;
+                            require __DIR__ . '/_eventos_seguranca.php';
+                        ?>
                     </div>
                 </div>
             </div>
@@ -6051,7 +6007,7 @@ window.addEventListener('load', function () {
                 return;
             }
 
-            const corpo = new URLSearchParams({ id: ativoId });
+            const corpo = new URLSearchParams({ id: botao.dataset.ativo || ativoId });
             if (botao.dataset.evento) {
                 corpo.append('evento_id', botao.dataset.evento);
             }

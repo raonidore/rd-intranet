@@ -1016,6 +1016,7 @@ $router->get('/ativos/etiqueta/zpl', [AtivoController::class, 'etiquetaZpl']);
 $router->get('/ativos/etiquetas/lote', [AtivoController::class, 'etiquetasLote']);
 $router->post('/ativos/coletar-snmp', [AtivoController::class, 'coletarSnmp']);
 $router->post('/ativos/snmp/config', [AtivoController::class, 'salvarConfigSnmp']);
+$router->get('/ativos/seguranca', [AtivoController::class, 'seguranca']);
 $router->post('/ativos/seguranca/padrao', [AtivoController::class, 'salvarPadraoSeguranca']);
 $router->post('/ativos/seguranca/modulos', [AtivoController::class, 'salvarModulosSeguranca']);
 $router->post('/ativos/seguranca/isolar', [AtivoController::class, 'isolarRede']);
