@@ -1,6 +1,8 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Linq;
 using System.Security.Principal;
+using System.ServiceProcess;
 using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
@@ -10,22 +12,67 @@ namespace RdIntranetAgente;
 internal static class Program
 {
     [STAThread]
-    private static void Main()
+    private static void Main(string[] args)
     {
-        if (!EstaElevado())
+        // Disparado pelo Service Control Manager (ver AgenteServico) --
+        // nunca por alguém abrindo o .exe na mão. Roda como SYSTEM, nunca
+        // passa por elevação/UAC nem abre janela nenhuma: o trabalho dele
+        // é só lançar ESTE MESMO .exe (sem --servico) dentro da sessão de
+        // quem loga na máquina, já elevado. ServiceBase.Run bloqueia até
+        // o SCM mandar parar.
+        if (args.Contains("--servico", StringComparer.OrdinalIgnoreCase))
         {
-            RelancarComoAdministrador();
+            ServiceBase.Run(new AgenteServico());
             return;
         }
 
+        // Lançado pelo AgenteServico (SessaoUsuario.LancarProcessoNaSessao)
+        // -- já chega com o token certo (elevado, se o usuário for admin),
+        // então NÃO deve tentar se relançar com "runas" de novo. Só muda
+        // o comportamento do aviso de "já está rodando" logo abaixo (não
+        // faz sentido incomodar ninguém com um MessageBox por causa de um
+        // lançamento automático que apenas encontrou o agente já aberto).
+        var modoAutomatico = args.Contains("--auto", StringComparer.OrdinalIgnoreCase);
+
+        if (!EstaElevado())
+        {
+            if (modoAutomatico)
+            {
+                // Veio do AgenteServico, mas só conseguiu o token NORMAL do
+                // usuário (SessaoUsuario não achou um "linked token" pra
+                // essa sessão -- ou seja, esse usuário não é administrador
+                // local). Não adianta chamar RelancarComoAdministrador()
+                // aqui: isso mostraria de novo o mesmo prompt de UAC que o
+                // serviço existe justamente pra evitar (e nessa conta
+                // específica, provavelmente pediria uma senha de admin que
+                // ninguém tem como digitar). Segue rodando sem elevação --
+                // coleta básica funciona igual, só "comandos com elevação"
+                // remotos ficam indisponíveis nessa máquina (mesma limitação
+                // que já existia pra usuário não-admin antes desse recurso).
+                AgenteServico.RegistrarEvento(
+                    "Agente iniciado SEM elevação (usuário logado não é administrador local) -- " +
+                    "coleta normal funciona, mas comandos remotos com elevação não vão funcionar nesta máquina.",
+                    EventLogEntryType.Information);
+            }
+            else
+            {
+                RelancarComoAdministrador();
+                return;
+            }
+        }
+
         GarantirLinkedConnections();
+        ConfiancaCertificado.GarantirConfianca();
 
         using var mutex = new Mutex(true, "RdIntranetAgente_SingleInstance", out bool criadoAgora);
 
         if (!criadoAgora)
         {
-            MessageBox.Show("O Agente RD Intranet já está em execução (veja o ícone na bandeja, perto do relógio).",
-                "RD Intranet", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            if (!modoAutomatico)
+            {
+                MessageBox.Show("O Agente RD Intranet já está em execução (veja o ícone na bandeja, perto do relógio).",
+                    "RD Intranet", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
             return;
         }
 

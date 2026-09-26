@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.Drawing.Printing;
 using System.Reflection;
+using System.ServiceProcess;
 using System.Windows.Forms;
 
 namespace RdIntranetAgente;
@@ -137,6 +138,17 @@ public class ConfigForm : Form
             Font = new Font("Segoe UI", 8F)
         };
 
+        var (textoServico, corServico) = StatusServico();
+        var rotuloServico = new Label
+        {
+            Text = textoServico,
+            Left = 245,
+            Top = 426 + 25,
+            Width = 195,
+            ForeColor = corServico,
+            Font = new Font("Segoe UI", 8F, FontStyle.Bold)
+        };
+
         var botaoSalvar = new Button { Text = "Salvar", Left = 260, Top = 420 + 25, Width = 80, DialogResult = DialogResult.OK };
         var botaoCancelar = new Button { Text = "Cancelar", Left = 350, Top = 420 + 25, Width = 80, DialogResult = DialogResult.Cancel };
 
@@ -194,7 +206,7 @@ public class ConfigForm : Form
             rotuloHeartbeat, _campoHeartbeat,
             rotuloImpressora, _campoImpressora,
             rotuloOverride, _campoMachineGuidOverride,
-            rotuloVersao,
+            rotuloVersao, rotuloServico,
             botaoSalvar, botaoCancelar
         });
 
@@ -255,5 +267,27 @@ public class ConfigForm : Form
     {
         var versao = Assembly.GetExecutingAssembly().GetName().Version;
         return versao == null ? "?" : $"{versao.Major}.{versao.Minor}.{versao.Build}";
+    }
+
+    /// <summary>
+    /// Mostrado aqui (a "tela principal" do agente) pra quem instala/dá
+    /// suporte remoto conseguir confirmar visualmente que o Serviço do
+    /// Windows (ver AgenteServico/TrayApplicationContext.AlternarServicoAsync)
+    /// realmente ficou instalado e rodando, sem precisar abrir
+    /// services.msc na máquina do cliente.
+    /// </summary>
+    private static (string texto, Color cor) StatusServico()
+    {
+        try
+        {
+            using var controlador = new ServiceController(AgenteServico.NomeServico);
+            return controlador.Status == ServiceControllerStatus.Running
+                ? ("Serviço do Windows: rodando", Color.SeaGreen)
+                : ($"Serviço do Windows: instalado ({controlador.Status})", Color.DarkOrange);
+        }
+        catch (InvalidOperationException)
+        {
+            return ("Serviço do Windows: não instalado", Color.Gray);
+        }
     }
 }

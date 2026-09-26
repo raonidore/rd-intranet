@@ -2,3 +2,6 @@ bin/
 obj/
 *.user
 .vs/
+# Chave privada de assinatura de codigo e a senha do .pfx -- NUNCA vao pro git.
+# O .cer publico (sem chave privada) fica em dist/, esse sim versionado.
+certificado/

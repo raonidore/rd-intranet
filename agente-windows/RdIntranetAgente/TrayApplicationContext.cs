@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Reflection;
+using System.ServiceProcess;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -19,6 +20,7 @@ public class TrayApplicationContext : ApplicationContext
     private Config _config;
     private readonly AppState _estado;
     private readonly PrintListener _printListener;
+    private readonly ToolStripMenuItem _itemServico;
     // Não é "readonly" -- ver RecalcularMachineGuid(), chamado quando o
     // admin preenche o "Identificador da máquina" na tela de
     // Configurações, pra valer na hora, sem precisar reiniciar o agente.
@@ -49,7 +51,13 @@ public class TrayApplicationContext : ApplicationContext
         menu.Items.Add("Configurações...", null, (s, e) => AbrirConfiguracoes());
         menu.Items.Add("Abrir pasta de logs", null, (s, e) => AbrirPastaDados());
         menu.Items.Add(new ToolStripSeparator());
+        _itemServico = new ToolStripMenuItem("Instalar serviço do Windows");
+        _itemServico.Click += async (s, e) => await AlternarServicoAsync();
+        menu.Items.Add(_itemServico);
+        menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Sair", null, (s, e) => Encerrar());
+
+        menu.Opening += (s, e) => AtualizarItemServico();
 
         _icone = new NotifyIcon
         {
@@ -534,6 +542,145 @@ public class TrayApplicationContext : ApplicationContext
     private async Task AtualizarAgoraManualAsync()
     {
         await VerificarAtualizacaoAsync(forcar: true, interativo: true);
+    }
+
+    /// <summary>
+    /// null = não instalado. Consultar o ServiceController é a forma
+    /// suportada de checar -- ele lança InvalidOperationException quando
+    /// o nome não existe no SCM, então esse catch É o "não instalado".
+    /// </summary>
+    private static ServiceControllerStatus? ObterStatusServico()
+    {
+        try
+        {
+            using var controlador = new ServiceController(AgenteServico.NomeServico);
+            return controlador.Status;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    private void AtualizarItemServico()
+    {
+        var status = ObterStatusServico();
+        _itemServico.Text = status switch
+        {
+            null => "Instalar serviço do Windows...",
+            ServiceControllerStatus.Running => "Remover serviço do Windows (rodando)",
+            _ => $"Remover serviço do Windows ({status})"
+        };
+    }
+
+    /// <summary>
+    /// Handler do item de menu "Instalar/Remover serviço do Windows" --
+    /// ver AgenteServico pro porquê do serviço existir (garantir que o
+    /// agente abra sem UAC mesmo pra usuário não-administrador). Como o
+    /// processo atual já está elevado (precondição pra chegar até aqui,
+    /// ver Program.cs), chamar sc.exe não pede confirmação nenhuma --
+    /// só o instalador do serviço em si é interativo (essa confirmação
+    /// aqui), a partir daí ele nunca mais aparece.
+    /// </summary>
+    private async Task AlternarServicoAsync()
+    {
+        var status = ObterStatusServico();
+
+        if (status == null)
+        {
+            var resposta = MessageBox.Show(
+                "Isso instala um Serviço do Windows (roda como SYSTEM, inicia sozinho no boot, antes mesmo de alguém logar) " +
+                "que garante o agente abrir na bandeja de QUALQUER usuário que logar -- inclusive contas sem permissão de " +
+                "administrador local -- sem nunca mostrar o prompt do Controle de Conta de Usuário.\n\n" +
+                "Não desliga a forma atual (tarefa agendada); os dois convivem.\n\nInstalar agora?",
+                "RD Intranet", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+
+            if (resposta != DialogResult.Yes) return;
+
+            var (ok, mensagem) = await InstalarServicoAsync();
+            MessageBox.Show(
+                ok ? "Serviço instalado e iniciado com sucesso." : $"Falha ao instalar o serviço: {mensagem}",
+                "RD Intranet", MessageBoxButtons.OK, ok ? MessageBoxIcon.Information : MessageBoxIcon.Error);
+        }
+        else
+        {
+            var resposta = MessageBox.Show(
+                "Remover o Serviço do Windows do agente? O ícone na bandeja continua funcionando normalmente " +
+                "pela tarefa agendada (só volta a depender de o usuário logado ser administrador local pra abrir sem UAC).",
+                "RD Intranet", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+
+            if (resposta != DialogResult.Yes) return;
+
+            var (ok, mensagem) = await RemoverServicoAsync();
+            MessageBox.Show(
+                ok ? "Serviço removido." : $"Falha ao remover o serviço: {mensagem}",
+                "RD Intranet", MessageBoxButtons.OK, ok ? MessageBoxIcon.Information : MessageBoxIcon.Error);
+        }
+    }
+
+    private static async Task<(bool ok, string mensagem)> InstalarServicoAsync()
+    {
+        var caminhoExe = Application.ExecutablePath;
+
+        var (codigoCreate, _, erroCreate) = await ExecutarScAsync(
+            "create", AgenteServico.NomeServico,
+            "binPath=", $"\"{caminhoExe}\" --servico",
+            "start=", "auto",
+            "obj=", "LocalSystem",
+            "DisplayName=", AgenteServico.NomeExibicao);
+
+        if (codigoCreate != 0)
+        {
+            return (false, erroCreate.Trim() is { Length: > 0 } detalhe ? detalhe : $"sc create retornou código {codigoCreate}.");
+        }
+
+        await ExecutarScAsync("description", AgenteServico.NomeServico,
+            "Mantem o Agente RD Intranet aberto na bandeja de qualquer usuario que logar, mesmo sem permissao de administrador local, sem pedir confirmacao do UAC.");
+
+        var (codigoStart, _, erroStart) = await ExecutarScAsync("start", AgenteServico.NomeServico);
+        if (codigoStart != 0)
+        {
+            return (false, $"Serviço criado, mas falhou ao iniciar: {erroStart.Trim()}");
+        }
+
+        return (true, "");
+    }
+
+    private static async Task<(bool ok, string mensagem)> RemoverServicoAsync()
+    {
+        await ExecutarScAsync("stop", AgenteServico.NomeServico);
+        var (codigo, _, erro) = await ExecutarScAsync("delete", AgenteServico.NomeServico);
+        return codigo == 0 ? (true, "") : (false, erro.Trim());
+    }
+
+    private static Task<(int codigo, string saida, string erro)> ExecutarScAsync(params string[] argumentos)
+    {
+        return Task.Run(() =>
+        {
+            using var processo = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "sc.exe",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                }
+            };
+
+            foreach (var argumento in argumentos)
+            {
+                processo.StartInfo.ArgumentList.Add(argumento);
+            }
+
+            processo.Start();
+            var saida = processo.StandardOutput.ReadToEnd();
+            var erro = processo.StandardError.ReadToEnd();
+            processo.WaitForExit(15000);
+
+            return (processo.ExitCode, saida, erro);
+        });
     }
 
     /// <summary>

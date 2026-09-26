@@ -9,7 +9,7 @@
     <AssemblyName>RdIntranetAgente</AssemblyName>
     <RootNamespace>RdIntranetAgente</RootNamespace>
     <Product>RD Intranet - Agente</Product>
-    <Version>1.0.28</Version>
+    <Version>1.0.29</Version>
     <InvariantGlobalization>true</InvariantGlobalization>
     <ApplicationIcon>assets/icone.ico</ApplicationIcon>
 
@@ -22,6 +22,7 @@
   <ItemGroup>
     <PackageReference Include="System.Management" Version="8.0.0" />
     <PackageReference Include="System.Diagnostics.EventLog" Version="8.0.0" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>
