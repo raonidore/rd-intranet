@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.ServiceProcess;
 using System.Threading;
@@ -77,6 +78,7 @@ internal static class Program
         }
 
         ApplicationConfiguration.Initialize();
+        LiberarAvisoDeBandeja();
 
         using (var splash = new SplashForm())
         {
@@ -137,6 +139,31 @@ internal static class Program
         {
             // melhor esforco -- se falhar (permissao, chave bloqueada por
             // GPO, etc.) o agente segue normalmente, so sem esse ajuste
+        }
+    }
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern uint RegisterWindowMessage(string lpString);
+
+    [DllImport("user32.dll")]
+    private static extern bool ChangeWindowMessageFilter(uint message, uint dwFlag);
+
+    /// <summary>
+    /// O Explorer avisa "TaskbarCreated" a todos quando a bandeja é
+    /// recriada, e o NotifyIcon recoloca o ícone ao receber. Como o agente
+    /// roda elevado e o Explorer não, o Windows (UIPI) barra essa
+    /// mensagem por padrão -- aqui ela é liberada pro processo inteiro.
+    /// </summary>
+    private static void LiberarAvisoDeBandeja()
+    {
+        try
+        {
+            const uint MSGFLT_ADD = 1;
+            ChangeWindowMessageFilter(RegisterWindowMessage("TaskbarCreated"), MSGFLT_ADD);
+        }
+        catch
+        {
+            // sem a liberação, o timer da bandeja (TrayApplicationContext) ainda recoloca o ícone
         }
     }
 

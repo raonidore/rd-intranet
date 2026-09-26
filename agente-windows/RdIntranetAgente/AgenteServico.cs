@@ -90,6 +90,36 @@ public class AgenteServico : ServiceBase
             }
         }
 
+        // No login, o serviço é avisado antes de o Explorer montar a
+        // barra de tarefas -- abrir o agente nesse instante fazia o ícone
+        // nascer sem bandeja. Espera o Explorer da sessão (até 2 min) em
+        // segundo plano, sem travar o serviço.
+        _ = Task.Run(() =>
+        {
+            var limite = DateTime.Now.AddMinutes(2);
+            while (DateTime.Now < limite && !ExplorerRodandoNaSessao(sessionId))
+            {
+                Thread.Sleep(2000);
+            }
+            Thread.Sleep(3000); // Explorer de pé ainda leva uns segundos pra criar a bandeja
+            AbrirAgenteNaSessao(sessionId);
+        });
+    }
+
+    private static bool ExplorerRodandoNaSessao(int sessionId)
+    {
+        try
+        {
+            return Process.GetProcessesByName("explorer").Any(p => p.SessionId == sessionId);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static void AbrirAgenteNaSessao(int sessionId)
+    {
         try
         {
             var caminhoExe = Environment.ProcessPath;

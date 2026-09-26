@@ -18,6 +18,9 @@ public class TrayApplicationContext : ApplicationContext
     private readonly NotifyIcon _icone;
     private readonly System.Windows.Forms.Timer _timer;
     private readonly System.Windows.Forms.Timer _heartbeatTimer;
+    private readonly System.Windows.Forms.Timer _timerBandeja;
+    private IntPtr _bandejaConhecida;
+    private int _reforcosIcone;
     private Config _config;
     private readonly AppState _estado;
     private readonly PrintListener _printListener;
@@ -100,6 +103,19 @@ public class TrayApplicationContext : ApplicationContext
 
         _timer = new System.Windows.Forms.Timer { Interval = IntervaloEmMs() };
         _timer.Tick += async (s, e) => await ColetarEEnviarAsync(manual: false);
+
+        // Ícone perdido quando a bandeja é (re)criada DEPOIS do agente --
+        // login com o agente aberto pelo serviço antes do Explorer, ou
+        // Explorer reiniciado. O Windows avisa com "TaskbarCreated", mas
+        // esse aviso vem de um processo comum e o agente roda elevado:
+        // sem liberar a mensagem (Program.LiberarAvisoDeBandeja) ela é
+        // barrada, e o agente seguia rodando sem ícone (Maurílio,
+        // 2026-09-26). Conferir a janela da bandeja cobre os dois casos
+        // mesmo se o aviso não chegar.
+        _bandejaConhecida = JanelaDaBandeja();
+        _timerBandeja = new System.Windows.Forms.Timer { Interval = 5000 };
+        _timerBandeja.Tick += (s, e) => GarantirIconeNaBandeja();
+        _timerBandeja.Start();
 
         _heartbeatTimer = new System.Windows.Forms.Timer { Interval = HeartbeatIntervaloEmMs() };
         _heartbeatTimer.Tick += async (s, e) => await EnviarHeartbeatAsync();
@@ -782,7 +798,14 @@ public class TrayApplicationContext : ApplicationContext
     /// cai pro "start" antigo como último recurso -- reabrir com risco de
     /// prompt ainda é melhor que não reabrir nada.
     /// </summary>
+    // "chcp 65001" logo no começo: o cmd aberto pelo agente lê o .bat na
+    // página de código do DOS (850 no Windows em português), mas o arquivo
+    // é gravado em UTF-8 -- num perfil como "Recepção AV - 1" o caminho do
+    // %TEMP% virava lixo, o script falhava na primeira linha e a máquina
+    // nunca se atualizava sozinha (EP-PC-0002, 2026-09-26). Reproduzido e
+    // validado com uma pasta acentuada sob "chcp 850".
     private static string ConteudoScriptAtualizacao(string origem, string destino, string log) => $@"@echo off
+chcp 65001 >nul
 setlocal
 set ""ORIGEM={origem}""
 set ""DESTINO={destino}""
@@ -1106,8 +1129,37 @@ del ""%~f0""
         });
     }
 
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern IntPtr FindWindow(string lpClassName, string? lpWindowName);
+
+    private static IntPtr JanelaDaBandeja() => FindWindow("Shell_TrayWnd", null);
+
+    private void GarantirIconeNaBandeja()
+    {
+        var atual = JanelaDaBandeja();
+        if (atual != IntPtr.Zero && atual != _bandejaConhecida)
+        {
+            // Bandeja nova (Explorer subiu depois do agente, ou reiniciou).
+            // A janela da barra aparece antes de a área de notificação
+            // aceitar ícones -- registra agora e reforça nos 2 ticks seguintes.
+            _bandejaConhecida = atual;
+            _reforcosIcone = 3;
+            LogAtividade.Registrar(NivelAtividade.Info, "BANDEJA", "Bandeja do Windows recriada -- registrando o ícone de novo.");
+        }
+
+        if (_reforcosIcone <= 0)
+        {
+            return;
+        }
+
+        _reforcosIcone--;
+        _icone.Visible = false;
+        _icone.Visible = true;
+    }
+
     private void Encerrar()
     {
+        _timerBandeja.Stop();
         _seguranca.Detectado -= AoDetectarEventoSeguranca;
         _seguranca.Dispose();
         _janelaPrincipal.Dispose();
