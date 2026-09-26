@@ -15,7 +15,7 @@ public class ConfigForm : Form
 {
     private readonly TextBox _campoServidor;
     private readonly TextBox _campoChave;
-    private readonly Button _botaoVerificar;
+    private readonly BotaoTema _botaoVerificar;
     private readonly Label _rotuloStatusVerificacao;
     private readonly ComboBox _campoUnidade;
     private readonly ComboBox _campoSetor;
@@ -74,7 +74,13 @@ public class ConfigForm : Form
         var rotuloChave = new Label { Text = "Chave de API do agente (Ativos > Dashboard, no RD Intranet)", Left = 15, Top = 70, Width = 420 };
         _campoChave = new TextBox { Left = 15, Top = 93, Width = 420, Text = configAtual.ApiKey };
 
-        _botaoVerificar = new Button { Text = "Verificar / Buscar unidades", Left = 15, Top = 125, Width = 190, Height = 26 };
+        _botaoVerificar = new BotaoTema("Verificar unidades")
+        {
+            Left = 15,
+            Top = 125,
+            Width = 190,
+            Height = 32
+        };
         _rotuloStatusVerificacao = new Label { Left = 215, Top = 130, Width = 220, Height = 32, ForeColor = Color.Gray, Font = new Font("Segoe UI", 8F) };
 
         var rotuloUnidade = new Label { Text = "Unidade (obrigatório na primeira configuração)", Left = 15, Top = 163, Width = 420 };
@@ -144,23 +150,27 @@ public class ConfigForm : Form
 
         var rotuloVersao = new Label
         {
-            Text = "Versão do agente: v" + ObterVersao(),
+            Text = "VERSÃO  " + ObterVersao(),
             Left = 15,
             Top = 488,
             Width = 115,
-            ForeColor = Color.Gray,
-            Font = new Font("Segoe UI", 8F)
+            Height = 24,
+            ForeColor = Tema.TextoSecundario,
+            Font = Tema.FonteSemibold(8F),
+            TextAlign = ContentAlignment.MiddleLeft
         };
 
         var (textoServico, corServico) = StatusServico();
         var rotuloServico = new Label
         {
             Text = textoServico,
-            Left = 135,
+            Left = 150,
             Top = 488,
-            Width = 145,
+            Width = 125,
+            Height = 24,
             ForeColor = corServico,
-            Font = new Font("Segoe UI", 8F, FontStyle.Bold)
+            Font = Tema.FonteSemibold(8F),
+            TextAlign = ContentAlignment.MiddleLeft
         };
 
         var botaoSalvar = new BotaoTema("Salvar", BotaoTema.Variante.Primario) { Left = 285, Top = 485, Width = 80, DialogResult = DialogResult.OK };
@@ -254,16 +264,12 @@ public class ConfigForm : Form
 
     private const int EspacoSecao = 20;
 
-    private static Label CriarTituloSecao(string texto, int top) => new()
+    private static TituloSecaoConfig CriarTituloSecao(string texto, int top) => new(texto)
     {
-        Text = texto,
         Left = 15,
         Top = top,
         Width = 420,
-        Height = 16,
-        ForeColor = Tema.Ciano,
-        BackColor = Tema.Fundo,
-        Font = Tema.FonteSemibold(7.5F)
+        Height = 18
     };
 
     private static void AplicarTema(Control controle)
@@ -278,12 +284,37 @@ public class ConfigForm : Form
         {
             Tema.EstilizarCampo(controle);
         }
-        else if (controle is Button button)
+        else if (controle is Button button && button is not BotaoTema)
         {
             button.BackColor = Tema.SuperficieElevada;
             button.ForeColor = Tema.Texto;
             button.FlatStyle = FlatStyle.Flat;
             button.FlatAppearance.BorderColor = Tema.Borda;
+        }
+    }
+
+    private sealed class TituloSecaoConfig : Control
+    {
+        public TituloSecaoConfig(string texto)
+        {
+            Text = texto;
+            BackColor = Tema.Fundo;
+            ForeColor = Tema.Ciano;
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer, true);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var meio = Height / 2;
+            using var fonte = Tema.FonteSemibold(8.25F);
+            using var acento = new Pen(Tema.Acento, 2F);
+            using var divisor = new Pen(Tema.BordaSuave);
+            e.Graphics.DrawLine(acento, 0, meio - 4, 0, meio + 4);
+            var larguraTexto = TextRenderer.MeasureText(e.Graphics, Text, fonte, Size, TextFormatFlags.NoPadding).Width;
+            TextRenderer.DrawText(e.Graphics, Text, fonte, new Rectangle(10, 0, larguraTexto + 4, Height), Tema.TextoSecundario,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+            var inicioDivisor = Math.Min(Width - 1, larguraTexto + 22);
+            e.Graphics.DrawLine(divisor, inicioDivisor, meio, Width - 1, meio);
         }
     }
 
@@ -348,12 +379,12 @@ public class ConfigForm : Form
         {
             using var controlador = new ServiceController(AgenteServico.NomeServico);
             return controlador.Status == ServiceControllerStatus.Running
-                ? ("Serviço do Windows: rodando", Color.SeaGreen)
-                : ($"Serviço do Windows: instalado ({controlador.Status})", Color.DarkOrange);
+                ? ("SERVIÇO ATIVO", Tema.Sucesso)
+                : ($"SERVIÇO {controlador.Status.ToString().ToUpperInvariant()}", Tema.Alerta);
         }
         catch (InvalidOperationException)
         {
-            return ("Serviço do Windows: não instalado", Color.Gray);
+            return ("SERVIÇO AUSENTE", Tema.TextoSecundario);
         }
     }
 }
