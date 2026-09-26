@@ -888,6 +888,44 @@ class AtivoRepository
         }
     }
 
+    /** Snapshot de processos -- substitui a cada checkin (não acumula histórico), mesmo padrão de substituirPortasRede(). */
+    public function substituirProcessos(int $ativoId, array $processos): void
+    {
+        $this->pdo->prepare("DELETE FROM ativos_processos WHERE ativo_id = ?")->execute([$ativoId]);
+
+        if (empty($processos)) {
+            return;
+        }
+
+        $stmt = $this->pdo->prepare("
+            INSERT INTO ativos_processos (ativo_id, pid, nome, memoria_mb, iniciado_em)
+            VALUES (?, ?, ?, ?, ?)
+        ");
+
+        foreach ($processos as $p) {
+            $nome = trim((string)($p['nome'] ?? ''));
+            if ($nome === '') {
+                continue;
+            }
+
+            $stmt->execute([
+                $ativoId,
+                (int)($p['pid'] ?? 0),
+                $nome,
+                (int)($p['memoria_mb'] ?? 0),
+                !empty($p['iniciado_em']) ? $p['iniciado_em'] : null,
+            ]);
+        }
+    }
+
+    public function listarProcessosColetados(int $ativoId): array
+    {
+        $stmt = $this->pdo->prepare("SELECT * FROM ativos_processos WHERE ativo_id = ? ORDER BY memoria_mb DESC");
+        $stmt->execute([$ativoId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function listarPortasRede(int $ativoId): array
     {
         $stmt = $this->pdo->prepare("SELECT * FROM ativos_portas_rede WHERE ativo_id = ? ORDER BY protocolo, porta_local");

@@ -117,6 +117,7 @@ class AtivoController extends Controller
             'controladoras' => $this->service->listarControladoras($id),
             'bateria' => $this->service->listarBateria($id),
             'atualizacoesWindows' => $this->service->listarAtualizacoesWindows($id),
+            'processosColetados' => $this->service->listarProcessosColetados($id),
             'estaLigada' => AtivoService::estaLigada($ativo),
             'uptime' => AtivoService::uptimeTexto($ativo),
             'minutosDesdeCheckin' => AtivoService::minutosDesdeUltimoCheckin($ativo),

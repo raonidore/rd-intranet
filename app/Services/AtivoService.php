@@ -69,6 +69,12 @@ class AtivoService
             'ligado_desde' => 'Ligado desde',
             'snmp_sys_descr' => 'Descrição (SNMP)',
             'snmp_uptime' => 'Uptime (SNMP)',
+            'firewall_dominio' => 'Firewall (Domínio)',
+            'firewall_privado' => 'Firewall (Privado)',
+            'firewall_publico' => 'Firewall (Público)',
+            'defender_ativo' => 'Windows Defender',
+            'defender_tempo_real' => 'Defender - Proteção em tempo real',
+            'defender_assinatura_data' => 'Defender - Assinatura atualizada em',
         ],
         'servidor' => [
             'sistema_operacional' => 'Sistema operacional',
@@ -89,6 +95,12 @@ class AtivoService
             'ligado_desde' => 'Ligado desde',
             'snmp_sys_descr' => 'Descrição (SNMP)',
             'snmp_uptime' => 'Uptime (SNMP)',
+            'firewall_dominio' => 'Firewall (Domínio)',
+            'firewall_privado' => 'Firewall (Privado)',
+            'firewall_publico' => 'Firewall (Público)',
+            'defender_ativo' => 'Windows Defender',
+            'defender_tempo_real' => 'Defender - Proteção em tempo real',
+            'defender_assinatura_data' => 'Defender - Assinatura atualizada em',
         ],
         'monitor' => [
             'tamanho_polegadas' => 'Tamanho (polegadas)',
@@ -784,6 +796,12 @@ class AtivoService
     public function listarPortasRede(int $ativoId): array
     {
         return $this->repository->listarPortasRede($ativoId);
+    }
+
+    /** Snapshot de processos da última coleta periódica (Fase 1 de detecção de ameaças) -- diferente do Explorador de Processos, que é sob demanda/ao vivo. */
+    public function listarProcessosColetados(int $ativoId): array
+    {
+        return $this->repository->listarProcessosColetados($ativoId);
     }
 
     /** @param array $tipo linha de ativos_tipos; @param array $unidade linha de unidades */
@@ -3528,6 +3546,7 @@ class AtivoService
         $this->repository->substituirPortasRede($id, array_slice($payload['portas_rede'] ?? [], 0, 300));
         $this->repository->substituirMemoria($id, array_slice($payload['memoria_modulos'] ?? [], 0, 32));
         $this->repository->substituirAtualizacoesWindows($id, array_slice($payload['atualizacoes_windows'] ?? [], 0, 500));
+        $this->repository->substituirProcessos($id, array_slice($payload['processos'] ?? [], 0, 300));
         $this->repository->substituirPlacasVideo($id, array_slice($payload['placas_video'] ?? [], 0, 8));
         $this->repository->substituirControladoras($id, array_slice($payload['controladoras'] ?? [], 0, 60));
         $this->repository->substituirBateria($id, array_slice($payload['bateria'] ?? [], 0, 4));

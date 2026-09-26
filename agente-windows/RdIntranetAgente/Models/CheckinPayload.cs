@@ -102,6 +102,41 @@ public class CheckinPayload
     [JsonPropertyName("ligado_desde")]
     public string? LigadoDesde { get; set; }
 
+    /// <summary>
+    /// Fase 1 do plano de deteccao de ameacas -- status do Firewall do
+    /// Windows por perfil e do Windows Defender, coletados via WMI
+    /// (ver CollectorService.ObterFirewallStatus()/ObterDefenderStatus()).
+    /// "Sim"/"Nao" como texto, mesmo padrao de WindowsAtivado/RdpHabilitado
+    /// acima -- vai direto pra coluna detalhes (JSON), sem tabela propria.
+    /// </summary>
+    [JsonPropertyName("firewall_dominio")]
+    public string? FirewallDominio { get; set; }
+
+    [JsonPropertyName("firewall_privado")]
+    public string? FirewallPrivado { get; set; }
+
+    [JsonPropertyName("firewall_publico")]
+    public string? FirewallPublico { get; set; }
+
+    [JsonPropertyName("defender_ativo")]
+    public string? DefenderAtivo { get; set; }
+
+    [JsonPropertyName("defender_tempo_real")]
+    public string? DefenderTempoReal { get; set; }
+
+    [JsonPropertyName("defender_assinatura_data")]
+    public string? DefenderAssinaturaData { get; set; }
+
+    /// <summary>
+    /// Snapshot dos processos em execucao no momento do checkin -- mesmo
+    /// dado de ExploradorService.ListarProcessos() (sob demanda), mas
+    /// coletado periodicamente e persistido, pra ficar disponivel sem
+    /// precisar abrir a tela na hora. Servidor SUBSTITUI a cada checkin
+    /// (nao acumula historico), igual portas_rede/programas.
+    /// </summary>
+    [JsonPropertyName("processos")]
+    public List<ProcessoItem> Processos { get; set; } = new();
+
     [JsonPropertyName("redes")]
     public List<RedeItem> Redes { get; set; } = new();
 
@@ -134,6 +169,21 @@ public class CheckinPayload
 
     [JsonPropertyName("alertas")]
     public List<AlertaItem> Alertas { get; set; } = new();
+}
+
+public class ProcessoItem
+{
+    [JsonPropertyName("pid")]
+    public int Pid { get; set; }
+
+    [JsonPropertyName("nome")]
+    public string Nome { get; set; } = "";
+
+    [JsonPropertyName("memoria_mb")]
+    public long MemoriaMb { get; set; }
+
+    [JsonPropertyName("iniciado_em")]
+    public string? IniciadoEm { get; set; }
 }
 
 public class ProgramaItem

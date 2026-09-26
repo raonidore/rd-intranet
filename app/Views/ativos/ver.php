@@ -323,6 +323,24 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     <li class="nav-item" role="presentation">
         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaAtualizacoes" type="button">Atualizações do Windows <?= !empty($atualizacoesWindows) ? '<span class="badge text-bg-secondary ms-1">' . count($atualizacoesWindows) . '</span>' : '' ?></button>
     </li>
+    <?php
+        // Badge vermelho se algum perfil de firewall ou o Defender estiver
+        // desligado -- mesmo raciocínio do badge de alerta já usado na aba
+        // de Segurança do DVR (linhas ~376-386), só que pra estação Windows.
+        $alertaSeguranca = in_array('Nao', [
+            $detalhes['firewall_dominio'] ?? null,
+            $detalhes['firewall_privado'] ?? null,
+            $detalhes['firewall_publico'] ?? null,
+            $detalhes['defender_ativo'] ?? null,
+            $detalhes['defender_tempo_real'] ?? null,
+        ], true);
+    ?>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaSeguranca" type="button">
+            <i class="bi bi-shield-lock"></i> Segurança
+            <?= $alertaSeguranca ? '<span class="badge text-bg-danger ms-1">!</span>' : '' ?>
+        </button>
+    </li>
     <?php endif; ?>
     <?php if ($ativo['origem'] === 'agente'): ?>
     <li class="nav-item" role="presentation">
@@ -1959,6 +1977,97 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                     </table>
                     <p class="text-muted small p-2 mb-0">Algumas atualizações não podem mais ser removidas depois de "substituídas" por atualizações cumulativas mais novas -- isso é uma limitação do próprio Windows, não do agente.</p>
                 <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
+    <!-- Segurança (Fase 1 -- deteção de ameaças) -->
+    <div class="tab-pane fade" id="abaSeguranca">
+        <div class="row g-3">
+            <div class="col-md-6">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-white"><i class="bi bi-shield-check"></i> <strong>Firewall do Windows</strong></div>
+                    <div class="card-body">
+                        <?php
+                            $perfisFirewall = [
+                                'Domínio' => $detalhes['firewall_dominio'] ?? null,
+                                'Privado' => $detalhes['firewall_privado'] ?? null,
+                                'Público' => $detalhes['firewall_publico'] ?? null,
+                            ];
+                            $temAlgumFirewall = array_filter($perfisFirewall, fn($v) => $v !== null);
+                        ?>
+                        <?php if (empty($temAlgumFirewall)): ?>
+                            <p class="text-muted small mb-0">Nenhum status coletado ainda. Preenchido automaticamente pelo agente Windows a partir da versão 1.0.25.</p>
+                        <?php else: ?>
+                            <?php foreach ($perfisFirewall as $nomePerfil => $valor): ?>
+                                <div class="d-flex justify-content-between align-items-center py-1">
+                                    <span class="small"><?= htmlspecialchars($nomePerfil) ?></span>
+                                    <?php if ($valor === null): ?>
+                                        <span class="text-muted small">—</span>
+                                    <?php else: ?>
+                                        <?= Badge::make($valor === 'Sim' ? 'Ativo' : 'Desativado', $valor === 'Sim' ? 'success' : 'danger') ?>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-white"><i class="bi bi-virus"></i> <strong>Windows Defender</strong></div>
+                    <div class="card-body">
+                        <?php if (empty($detalhes['defender_ativo'] ?? null)): ?>
+                            <p class="text-muted small mb-0">Nenhum status coletado ainda -- ou o Defender foi substituído por outro antivírus na máquina (nesse caso, não há como checar por aqui). Preenchido automaticamente pelo agente Windows a partir da versão 1.0.25.</p>
+                        <?php else: ?>
+                            <div class="d-flex justify-content-between align-items-center py-1">
+                                <span class="small">Antivírus ativo</span>
+                                <?= Badge::make($detalhes['defender_ativo'] === 'Sim' ? 'Ativo' : 'Desativado', $detalhes['defender_ativo'] === 'Sim' ? 'success' : 'danger') ?>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center py-1">
+                                <span class="small">Proteção em tempo real</span>
+                                <?= Badge::make($detalhes['defender_tempo_real'] === 'Sim' ? 'Ativa' : 'Desativada', $detalhes['defender_tempo_real'] === 'Sim' ? 'success' : 'danger') ?>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center py-1">
+                                <span class="small">Assinatura atualizada em</span>
+                                <span class="text-muted small"><?= !empty($detalhes['defender_assinatura_data']) ? htmlspecialchars($detalhes['defender_assinatura_data']) : '—' ?></span>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                        <strong><i class="bi bi-list-ul"></i> Processos (última coleta)</strong>
+                        <span class="text-muted small">Snapshot periódico -- pra ver ao vivo, use a aba "Processos"</span>
+                    </div>
+                    <div class="card-body p-0">
+                        <?php if (empty($processosColetados)): ?>
+                            <p class="text-muted small p-3 mb-0">Nenhum processo coletado ainda. Preenchido automaticamente pelo agente Windows a partir da versão 1.0.25.</p>
+                        <?php else: ?>
+                            <table class="table table-sm mb-0" style="max-height:340px; display:block; overflow-y:auto">
+                                <thead><tr><th>PID</th><th>Processo</th><th>Memória</th><th>Iniciado em</th></tr></thead>
+                                <tbody>
+                                    <?php foreach ($processosColetados as $p): ?>
+                                        <tr>
+                                            <td class="font-monospace small text-muted"><?= (int)$p['pid'] ?></td>
+                                            <td class="small"><?= htmlspecialchars($p['nome']) ?></td>
+                                            <td class="small"><?= (int)$p['memoria_mb'] ?> MB</td>
+                                            <td class="text-muted small"><?= !empty($p['iniciado_em']) ? htmlspecialchars(data_br($p['iniciado_em'], 'd/m/Y H:i')) : '—' ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <small class="text-muted">Eventos de segurança do Windows (logon falho, uso de privilégio etc.) já aparecem junto com os demais alertas na aba <button type="button" class="btn btn-link btn-sm p-0 align-baseline" data-bs-toggle="modal" data-bs-target="#modalAlertas">Alertas</button>.</small>
             </div>
         </div>
     </div>

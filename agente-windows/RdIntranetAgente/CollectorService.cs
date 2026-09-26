@@ -272,7 +272,13 @@ public static class CollectorService
         payload.Bateria = ObterBateria();
         payload.Programas = ObterProgramasInstalados();
         payload.AtualizacoesWindows = ObterAtualizacoesWindows();
-        payload.Alertas = ObterAlertas(eventosDesde ?? DateTime.Now.AddHours(-24));
+
+        var desde = eventosDesde ?? DateTime.Now.AddHours(-24);
+        payload.Alertas = ObterAlertas(desde).Concat(ObterAlertasSeguranca(desde)).ToList();
+
+        (payload.FirewallDominio, payload.FirewallPrivado, payload.FirewallPublico) = ObterFirewallStatus();
+        (payload.DefenderAtivo, payload.DefenderTempoReal, payload.DefenderAssinaturaData) = ObterDefenderStatus();
+        payload.Processos = ObterProcessos();
 
         return payload;
     }
@@ -1035,5 +1041,169 @@ public static class CollectorService
         }
 
         return alertas;
+    }
+
+    /// <summary>
+    /// Mesmo raciocinio de ObterAlertas(), mas pro log "Security" --
+    /// precisa de metodo separado porque esse log nao usa
+    /// Error/Warning/Information, e sim SuccessAudit/FailureAudit (logon
+    /// bem-sucedido/falho, uso de privilegio, etc). Sem filtro por Event
+    /// ID especifico de proposito -- mesmo "melhor esforco" simples do
+    /// resto da coleta, deixa a mensagem falar por si; FailureAudit conta
+    /// como "aviso" (algo falhou, vale atencao), SuccessAudit como
+    /// "informacao" (rotina, ainda util pra trilha de auditoria).
+    /// </summary>
+    private static List<AlertaItem> ObterAlertasSeguranca(DateTime desde)
+    {
+        var alertas = new List<AlertaItem>();
+
+        try
+        {
+            using var log = new System.Diagnostics.EventLog("Security");
+            var entradas = log.Entries;
+
+            for (int i = entradas.Count - 1; i >= 0 && alertas.Count < 50; i--)
+            {
+                var entrada = entradas[i];
+
+                if (entrada.TimeGenerated <= desde) break;
+
+                if (entrada.EntryType != System.Diagnostics.EventLogEntryType.SuccessAudit
+                    && entrada.EntryType != System.Diagnostics.EventLogEntryType.FailureAudit)
+                {
+                    continue;
+                }
+
+                alertas.Add(new AlertaItem
+                {
+                    Nivel = entrada.EntryType == System.Diagnostics.EventLogEntryType.FailureAudit ? "aviso" : "informacao",
+                    OrigemEvento = entrada.Source,
+                    Mensagem = (entrada.Message ?? "").Split('\n')[0],
+                    OcorridoEm = entrada.TimeGenerated.ToString("yyyy-MM-dd HH:mm:ss")
+                });
+            }
+        }
+        catch
+        {
+            // log Security inacessivel (permissao, mesmo o agente rodando
+            // elevado) -- ignora, o resto da coleta segue normal
+        }
+
+        return alertas;
+    }
+
+    /// <summary>
+    /// Status do Firewall do Windows por perfil, via WMI (mesmo padrao de
+    /// ManagementScope custom + try/catch de ObterTiposDiscoPorIndice()) --
+    /// devolve "Sim"/"Nao"/null (null = nao deu pra checar, ex: namespace
+    /// ausente ou servico do firewall desativado).
+    /// </summary>
+    private static (string? dominio, string? privado, string? publico) ObterFirewallStatus()
+    {
+        string? dominio = null, privadoValor = null, publicoValor = null;
+
+        try
+        {
+            var escopo = new ManagementScope(@"root\StandardCimv2");
+            using var busca = new ManagementObjectSearcher(escopo, new ObjectQuery("SELECT Name, Enabled FROM MSFT_NetFirewallProfile"));
+
+            foreach (ManagementObject perfil in busca.Get())
+            {
+                var nome = perfil["Name"]?.ToString();
+                var ativo = Convert.ToBoolean(perfil["Enabled"]) ? "Sim" : "Nao";
+
+                switch (nome)
+                {
+                    case "Domain": dominio = ativo; break;
+                    case "Private": privadoValor = ativo; break;
+                    case "Public": publicoValor = ativo; break;
+                }
+            }
+        }
+        catch
+        {
+            // WMI recusou ou servico MpsSvc parado -- segue sem status de firewall
+        }
+
+        return (dominio, privadoValor, publicoValor);
+    }
+
+    /// <summary>
+    /// Status do Windows Defender, via WMI (namespace so existe se o
+    /// Defender estiver instalado/ativo -- maquina com antivirus terceiro
+    /// que desligou o Defender por completo cai direto no catch, mesmo
+    /// raciocinio do namespace de storage acima).
+    /// </summary>
+    private static (string? ativo, string? tempoReal, string? assinaturaData) ObterDefenderStatus()
+    {
+        string? ativo = null, tempoReal = null, assinaturaData = null;
+
+        try
+        {
+            var escopo = new ManagementScope(@"root\Microsoft\Windows\Defender");
+            using var busca = new ManagementObjectSearcher(escopo, new ObjectQuery("SELECT AntivirusEnabled, RealTimeProtectionEnabled, AntivirusSignatureLastUpdated FROM MSFT_MpComputerStatus"));
+
+            foreach (ManagementObject status in busca.Get())
+            {
+                ativo = Convert.ToBoolean(status["AntivirusEnabled"]) ? "Sim" : "Nao";
+                tempoReal = Convert.ToBoolean(status["RealTimeProtectionEnabled"]) ? "Sim" : "Nao";
+
+                try
+                {
+                    var data = ManagementDateTimeConverter.ToDateTime(status["AntivirusSignatureLastUpdated"]?.ToString());
+                    assinaturaData = data.ToString("yyyy-MM-dd HH:mm");
+                }
+                catch { /* formato inesperado -- so nao preenche a data */ }
+
+                break; // classe singleton, so vem uma linha
+            }
+        }
+        catch
+        {
+            // Defender desligado/substituido por outro AV, ou namespace ausente
+        }
+
+        return (ativo, tempoReal, assinaturaData);
+    }
+
+    /// <summary>
+    /// Snapshot dos processos em execucao no momento do checkin -- mesma
+    /// logica de ExploradorService.ListarProcessos() (sob demanda), so
+    /// que rodando periodicamente e limitada aos 300 que mais consomem
+    /// memoria, pra manter o payload num tamanho razoavel.
+    /// </summary>
+    private static List<ProcessoItem> ObterProcessos()
+    {
+        var itens = new List<ProcessoItem>();
+
+        foreach (var processo in Process.GetProcesses())
+        {
+            try
+            {
+                string? iniciadoEm = null;
+                try { iniciadoEm = processo.StartTime.ToString("yyyy-MM-dd HH:mm:ss"); } catch { /* processos do sistema costumam negar acesso a isso */ }
+
+                long memoriaMb = 0;
+                try { memoriaMb = processo.WorkingSet64 / 1024 / 1024; } catch { /* idem */ }
+
+                itens.Add(new ProcessoItem
+                {
+                    Pid = processo.Id,
+                    Nome = processo.ProcessName,
+                    MemoriaMb = memoriaMb,
+                    IniciadoEm = iniciadoEm
+                });
+            }
+            catch
+            {
+                // processo pode ja ter encerrado entre o GetProcesses() e aqui -- pula
+            }
+            finally
+            {
+                processo.Dispose();
+            }
+        }
+
+        return itens.OrderByDescending(i => i.MemoriaMb).Take(300).ToList();
     }
 }
