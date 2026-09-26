@@ -247,6 +247,10 @@ public class TrayApplicationContext : ApplicationContext
     }
 
     private const long TamanhoMaximoDownload = 200L * 1024 * 1024; // mesmo teto configurado no PHP (upload_max_filesize)
+    // Compartilhado entre RegistrarInicioAutomatico() (cria/atualiza a tarefa) e
+    // ConteudoScriptAtualizacao() (reusa a mesma tarefa pra reabrir com elevacao
+    // silenciosa apos a troca do .exe -- ver comentario em ConteudoScriptAtualizacao).
+    private const string NomeTarefaAutoStart = "RDIntranetAgenteAutoStart";
 
     private async Task ProcessarBaixarArquivoAsync(SolicitacaoClient cliente, SolicitacaoItem solicitacao)
     {
@@ -511,6 +515,20 @@ public class TrayApplicationContext : ApplicationContext
     /// Sempre reabre algum .exe no fim (o novo se a troca deu certo, o
     /// antigo intacto se não deu) -- nunca deixa o agente sumir da
     /// bandeja só porque a troca falhou.
+    ///
+    /// Reabre via "schtasks /run" na MESMA tarefa agendada usada pro início
+    /// automático (RegistrarInicioAutomatico(), RunLevel HighestAvailable),
+    /// em vez de "start" direto -- confirmado em campo (prints do usuário,
+    /// 2026-09-25) que "start" nessa janela as vezes reabre sem token
+    /// elevado e cai no runas manual de Program.cs, mostrando um prompt de
+    /// UAC que ninguém está ali pra clicar (máquina desatendida) -- o
+    /// agente nunca volta a rodar nesse caso. Disparar pela tarefa
+    /// agendada é o MESMO caminho que já funciona silenciosamente (sem
+    /// prompt algum) a cada logon, então elimina essa dependência frágil
+    /// do token herdado do cmd.exe/"start". Se o "schtasks /run" falhar
+    /// por algum motivo (tarefa removida manualmente, GPO bloqueando),
+    /// cai pro "start" antigo como último recurso -- reabrir com risco de
+    /// prompt ainda é melhor que não reabrir nada.
     /// </summary>
     private static string ConteudoScriptAtualizacao(string origem, string destino, string log) => $@"@echo off
 setlocal
@@ -526,13 +544,15 @@ if exist ""%ORIGEM%"" (
     set /a contador+=1
     echo [%date% %time%] Tentativa %contador% -- arquivo ainda em uso >>""%LOG%""
     if %contador% lss 90 goto tentar
-    echo [%date% %time%] Desisti apos 90 tentativas -- reabrindo versao anterior >>""%LOG%""
-    start """" ""%DESTINO%""
+    echo [%date% %time%] Desisti apos 90 tentativas -- reabrindo versao anterior via tarefa agendada >>""%LOG%""
+    schtasks /run /tn ""{NomeTarefaAutoStart}"" >>""%LOG%"" 2>&1
+    if errorlevel 1 start """" ""%DESTINO%""
     del ""%~f0""
     exit /b 1
 )
-echo [%date% %time%] Troca concluida, reabrindo versao nova >>""%LOG%""
-start """" ""%DESTINO%""
+echo [%date% %time%] Troca concluida, reabrindo versao nova via tarefa agendada >>""%LOG%""
+schtasks /run /tn ""{NomeTarefaAutoStart}"" >>""%LOG%"" 2>&1
+if errorlevel 1 start """" ""%DESTINO%""
 del ""%~f0""
 ";
 
@@ -581,7 +601,7 @@ del ""%~f0""
 
         try
         {
-            const string nomeTarefa = "RDIntranetAgenteAutoStart";
+            const string nomeTarefa = NomeTarefaAutoStart;
             var caminhoXml = Path.Combine(Path.GetTempPath(), $"{nomeTarefa}.xml");
             var xml =
                 "<?xml version=\"1.0\" encoding=\"UTF-16\"?>\r\n" +
