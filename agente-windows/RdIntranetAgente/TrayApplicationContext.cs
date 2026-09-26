@@ -432,6 +432,8 @@ public class TrayApplicationContext : ApplicationContext
             Directory.CreateDirectory(pastaAtualizacao);
             var novoExe = Path.Combine(pastaAtualizacao, "RdIntranetAgente.new.exe");
 
+            GarantirExclusaoDefender(pastaAtualizacao);
+
             if (!await cliente.BaixarNovaVersaoAsync(novoExe))
             {
                 return;
@@ -440,6 +442,12 @@ public class TrayApplicationContext : ApplicationContext
             _icone.ShowBalloonTip(4000, "RD Intranet", $"Atualizando para a versão {versaoServidor}...", ToolTipIcon.Info);
 
             var exeAtual = Application.ExecutablePath;
+            var pastaInstalacao = Path.GetDirectoryName(exeAtual);
+            if (!string.IsNullOrEmpty(pastaInstalacao))
+            {
+                GarantirExclusaoDefender(pastaInstalacao);
+            }
+
             var scriptPath = Path.Combine(pastaAtualizacao, "atualizar.bat");
             var logPath = Path.Combine(pastaAtualizacao, "atualizar.log");
             File.WriteAllText(scriptPath, ConteudoScriptAtualizacao(novoExe, exeAtual, logPath));
@@ -458,6 +466,37 @@ public class TrayApplicationContext : ApplicationContext
         catch
         {
             // atualizacao automatica e best-effort -- nao deve interromper o funcionamento normal
+        }
+    }
+
+    /// <summary>
+    /// Evita que o Windows Defender segure o lock no .exe recém-baixado
+    /// tempo suficiente pra estourar o retry do script de troca -- .exe
+    /// single-file não assinado é gatilho clássico de scan (ou até
+    /// quarentena por falso positivo) assim que é gravado em disco.
+    /// O agente já roda sempre elevado (ver Program.cs), então
+    /// Add-MpPreference funciona sem prompt extra. Best-effort de
+    /// propósito: se o Defender estiver gerenciado por GPO/Intune (nega
+    /// a alteração), se for outro antivírus, ou se o cmdlet não existir
+    /// nessa edição do Windows, a troca de versão segue dependendo só do
+    /// retry do .bat -- nunca trava o agente por causa disso.
+    /// </summary>
+    private static void GarantirExclusaoDefender(string pasta)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                Arguments = $"-NoProfile -WindowStyle Hidden -Command \"Add-MpPreference -ExclusionPath '{pasta}' -ErrorAction SilentlyContinue\"",
+                WindowStyle = ProcessWindowStyle.Hidden,
+                CreateNoWindow = true,
+                UseShellExecute = false
+            })?.WaitForExit(5000);
+        }
+        catch
+        {
+            // best-effort -- ver comentario acima
         }
     }
 
@@ -486,8 +525,8 @@ move /y ""%ORIGEM%"" ""%DESTINO%"" >>""%LOG%"" 2>&1
 if exist ""%ORIGEM%"" (
     set /a contador+=1
     echo [%date% %time%] Tentativa %contador% -- arquivo ainda em uso >>""%LOG%""
-    if %contador% lss 30 goto tentar
-    echo [%date% %time%] Desisti apos 30 tentativas -- reabrindo versao anterior >>""%LOG%""
+    if %contador% lss 90 goto tentar
+    echo [%date% %time%] Desisti apos 90 tentativas -- reabrindo versao anterior >>""%LOG%""
     start """" ""%DESTINO%""
     del ""%~f0""
     exit /b 1
