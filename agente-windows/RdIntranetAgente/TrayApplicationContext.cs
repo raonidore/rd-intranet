@@ -45,6 +45,7 @@ public class TrayApplicationContext : ApplicationContext
 
         var menu = new ContextMenuStrip();
         menu.Items.Add("Coletar agora", null, async (s, e) => await ColetarEEnviarAsync(manual: true));
+        menu.Items.Add("Atualizar agora", null, async (s, e) => await AtualizarAgoraManualAsync());
         menu.Items.Add("Configurações...", null, (s, e) => AbrirConfiguracoes());
         menu.Items.Add("Abrir pasta de logs", null, (s, e) => AbrirPastaDados());
         menu.Items.Add(new ToolStripSeparator());
@@ -401,18 +402,28 @@ public class TrayApplicationContext : ApplicationContext
     /// Checa se há uma versão nova do .exe publicada no RD Intranet --
     /// no máximo 1x a cada 12h só no ciclo periódico automático (timer),
     /// mas na hora quando é um pedido explícito de alguém -- clique manual
-    /// ("Coletar agora"/duplo clique no ícone) OU "Forçar coleta agora"
-    /// vindo do portal -- pra dar um jeito de confirmar a atualização sem
-    /// esperar até 12h ao testar/diagnosticar. Se
-    /// houver versão nova, baixa pra uma pasta temporária e entrega a
+    /// ("Coletar agora"/duplo clique no ícone/"Atualizar agora") OU
+    /// "Forçar coleta agora" vindo do portal -- pra dar um jeito de
+    /// confirmar a atualização sem esperar até 12h ao testar/diagnosticar.
+    /// Se houver versão nova, baixa pra uma pasta temporária e entrega a
     /// troca do arquivo pra um script auxiliar, porque um processo
     /// Windows não consegue sobrescrever o próprio .exe em execução -- o
     /// script espera este processo encerrar (Application.Exit logo em
-    /// seguida), move o novo arquivo por cima do antigo e reabre. Tudo
-    /// best-effort: qualquer falha aqui só significa "tenta de novo no
-    /// próximo gatilho", nunca derruba o agente.
+    /// seguida), move o novo arquivo por cima do antigo e reabre.
+    ///
+    /// <paramref name="interativo"/> é usado só pelo item de menu
+    /// "Atualizar agora" (ver AtualizarAgoraManualAsync()): troca o
+    /// silêncio do modo automático por MessageBox em cada etapa que hoje
+    /// falha sem avisar ninguém -- pensado pra alguém sentado na máquina
+    /// conseguir ver o que está acontecendo e, principalmente, estar ali
+    /// pra clicar "Sim" se aparecer um prompt de UAC (é exatamente isso
+    /// que trava em máquina desatendida: o ciclo automático não tem
+    /// ninguém pra responder o prompt). Fora esse detalhe, o modo
+    /// automático (interativo=false) continua 100% best-effort: qualquer
+    /// falha só significa "tenta de novo no próximo gatilho", nunca
+    /// derruba o agente nem interrompe o funcionamento normal.
     /// </summary>
-    private async Task VerificarAtualizacaoAsync(bool forcar = false)
+    private async Task VerificarAtualizacaoAsync(bool forcar = false, bool interativo = false)
     {
         if (!forcar && _estado.UltimaVerificacaoAtualizacao.HasValue &&
             (DateTime.Now - _estado.UltimaVerificacaoAtualizacao.Value) < TimeSpan.FromHours(12))
@@ -427,19 +438,57 @@ public class TrayApplicationContext : ApplicationContext
         {
             var cliente = new AtualizacaoClient(_config);
             var versaoServidor = await cliente.ObterVersaoDisponivelAsync();
-            if (versaoServidor == null) return;
-
             var versaoAtual = Assembly.GetExecutingAssembly().GetName().Version ?? new Version(0, 0, 0, 0);
-            if (versaoServidor <= versaoAtual) return;
+            var versaoAtualTexto = $"{versaoAtual.Major}.{versaoAtual.Minor}.{versaoAtual.Build}";
+
+            if (versaoServidor == null)
+            {
+                if (interativo)
+                {
+                    MessageBox.Show(
+                        "Não consegui consultar a versão mais recente no servidor (confira a conexão com o RD Intranet e tente de novo).",
+                        "RD Intranet", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+                return;
+            }
+
+            if (versaoServidor <= versaoAtual)
+            {
+                if (interativo)
+                {
+                    MessageBox.Show($"Você já está na versão mais recente (v{versaoAtualTexto}).",
+                        "RD Intranet", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                return;
+            }
+
+            if (interativo)
+            {
+                var resposta = MessageBox.Show(
+                    $"Versão {versaoServidor} disponível (você está na v{versaoAtualTexto}).\n\n" +
+                    "O agente vai fechar e reabrir sozinho durante a troca -- alguns segundos sem ícone na bandeja é normal. " +
+                    "Se aparecer uma janela do Controle de Conta de Usuário pedindo permissão, clique em \"Sim\".\n\n" +
+                    "Atualizar agora?",
+                    "RD Intranet - Atualização disponível", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+
+                if (resposta != DialogResult.Yes) return;
+            }
 
             var pastaAtualizacao = Path.Combine(Path.GetTempPath(), "RDIntranetAgenteUpdate");
             Directory.CreateDirectory(pastaAtualizacao);
             var novoExe = Path.Combine(pastaAtualizacao, "RdIntranetAgente.new.exe");
+            var logPath = Path.Combine(pastaAtualizacao, "atualizar.log");
 
             GarantirExclusaoDefender(pastaAtualizacao);
 
             if (!await cliente.BaixarNovaVersaoAsync(novoExe))
             {
+                if (interativo)
+                {
+                    MessageBox.Show(
+                        "Não consegui baixar o novo executável do servidor. Confira a conexão e tente de novo em alguns minutos.",
+                        "RD Intranet", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
                 return;
             }
 
@@ -453,7 +502,6 @@ public class TrayApplicationContext : ApplicationContext
             }
 
             var scriptPath = Path.Combine(pastaAtualizacao, "atualizar.bat");
-            var logPath = Path.Combine(pastaAtualizacao, "atualizar.log");
             File.WriteAllText(scriptPath, ConteudoScriptAtualizacao(novoExe, exeAtual, logPath));
 
             Process.Start(new ProcessStartInfo
@@ -467,10 +515,25 @@ public class TrayApplicationContext : ApplicationContext
 
             Encerrar();
         }
-        catch
+        catch (Exception ex)
         {
-            // atualizacao automatica e best-effort -- nao deve interromper o funcionamento normal
+            if (interativo)
+            {
+                MessageBox.Show($"Erro ao tentar atualizar: {ex.Message}",
+                    "RD Intranet", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            // fora do modo interativo: atualizacao automatica e best-effort --
+            // nao deve interromper o funcionamento normal
         }
+    }
+
+    /// <summary>
+    /// Handler do item de menu "Atualizar agora" -- ver o porquê do modo
+    /// interativo no comentário de VerificarAtualizacaoAsync().
+    /// </summary>
+    private async Task AtualizarAgoraManualAsync()
+    {
+        await VerificarAtualizacaoAsync(forcar: true, interativo: true);
     }
 
     /// <summary>
