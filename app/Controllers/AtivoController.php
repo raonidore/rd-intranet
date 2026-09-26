@@ -15,6 +15,9 @@ use App\Services\EtiquetaService;
 use App\Services\NotificationService;
 use App\Services\PermissionService;
 use App\Services\PoliticaService;
+use App\Services\SegurancaEventoService;
+use App\Services\SegurancaIsolamentoService;
+use App\Services\SegurancaModuloService;
 use App\Services\UnidadeService;
 
 class AtivoController extends Controller
@@ -51,6 +54,7 @@ class AtivoController extends Controller
             'agenteExeDisponivel' => $this->service->agenteExeDisponivel(),
             'dotnetRuntimeDisponivel' => $this->service->dotnetRuntimeDisponivel(),
             'dotnetRuntimeLabel' => $this->service->dotnetRuntimeLabel(),
+            'padraoSeguranca' => (new SegurancaModuloService())->padrao(),
         ]));
     }
 
@@ -118,6 +122,11 @@ class AtivoController extends Controller
             'bateria' => $this->service->listarBateria($id),
             'atualizacoesWindows' => $this->service->listarAtualizacoesWindows($id),
             'processosColetados' => $this->service->listarProcessosColetados($id),
+            'segurancaEfetivo' => (new SegurancaModuloService())->efetivo($id),
+            'segurancaOverrides' => (new SegurancaModuloService())->overrides($id),
+            'eventosSeguranca' => (new SegurancaEventoService())->listarDoAtivo($id),
+            'eventosSegurancaAbertos' => (new SegurancaEventoService())->contarAbertosCriticos($id),
+            'podeEditarAtivo' => PermissionService::temAcesso('ativos_novo'),
             'estaLigada' => AtivoService::estaLigada($ativo),
             'uptime' => AtivoService::uptimeTexto($ativo),
             'minutosDesdeCheckin' => AtivoService::minutosDesdeUltimoCheckin($ativo),
@@ -385,6 +394,102 @@ class AtivoController extends Controller
         $resultado = $this->service->coletarSnmp($id);
 
         echo json_encode($resultado);
+    }
+
+    public function salvarPadraoSeguranca(): void
+    {
+        AuthMiddleware::checkModulo('ativos_dashboard');
+
+        (new SegurancaModuloService())->salvarPadrao($_POST);
+
+        AuditService::registrar('Segurança', 'Anti-ransomware', 'Padrão global do módulo anti-ransomware atualizado.');
+        NotificationService::success('Padrão do módulo anti-ransomware salvo. As máquinas aplicam no próximo check-in.');
+
+        header('Location: ' . url('/ativos'));
+        exit;
+    }
+
+    public function salvarModulosSeguranca(): void
+    {
+        AuthMiddleware::checkModulo('ativos_novo');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $ativo = $this->service->buscar($id);
+        if (!$ativo) {
+            header('Location: ' . url('/ativos'));
+            exit;
+        }
+
+        (new SegurancaModuloService())->salvarOverrides($id, $_POST);
+
+        AuditService::registrar('Segurança', 'Anti-ransomware', "Módulos anti-ransomware ajustados em {$ativo['codigo_patrimonio']} ({$ativo['nome']}).");
+        NotificationService::success('Configuração salva. A máquina aplica no próximo check-in (use "Forçar coleta agora" para aplicar já).');
+
+        header('Location: ' . url('/ativos/ver?id=' . $id . '#abaSeguranca'));
+        exit;
+    }
+
+    public function isolarRede(): void
+    {
+        AuthMiddleware::checkModulo('ativos_novo');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $usuario = $_SESSION['usuario']['nome'] ?? 'portal';
+        $resultado = (new SegurancaIsolamentoService())->isolar($id, "manual por {$usuario}", null, $usuario);
+
+        if ($resultado['success']) {
+            AuditService::registrar('Segurança', 'Isolar rede', "Isolamento de rede manual no ativo #{$id}.");
+        }
+
+        echo json_encode($resultado);
+    }
+
+    public function removerIsolamento(): void
+    {
+        AuthMiddleware::checkModulo('ativos_novo');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $resultado = (new SegurancaIsolamentoService())->removerIsolamento($id, $_SESSION['usuario']['nome'] ?? 'portal');
+
+        if ($resultado['success']) {
+            AuditService::registrar('Segurança', 'Remover isolamento', "Isolamento de rede removido do ativo #{$id}.");
+        }
+
+        echo json_encode($resultado);
+    }
+
+    public function cancelarIsolamento(): void
+    {
+        AuthMiddleware::checkModulo('ativos_novo');
+        header('Content-Type: application/json');
+
+        $resultado = (new SegurancaIsolamentoService())->cancelarPendente(
+            (int)($_POST['evento_id'] ?? 0),
+            (int)($_POST['id'] ?? 0),
+            $_SESSION['usuario']['nome'] ?? 'portal'
+        );
+
+        echo json_encode($resultado);
+    }
+
+    public function resolverEventoSeguranca(): void
+    {
+        AuthMiddleware::checkModulo('ativos_novo');
+        header('Content-Type: application/json');
+
+        $eventoId = (int)($_POST['evento_id'] ?? 0);
+        $eventos = new SegurancaEventoService();
+        $evento = $eventos->buscar($eventoId);
+
+        if (!$evento || (int)$evento['ativo_id'] !== (int)($_POST['id'] ?? 0)) {
+            echo json_encode(['success' => false, 'message' => 'Evento não encontrado.']);
+            return;
+        }
+
+        $eventos->marcarResolvido($eventoId, $_SESSION['usuario']['nome'] ?? 'portal');
+        echo json_encode(['success' => true]);
     }
 
     public function salvarConfigSnmp(): void

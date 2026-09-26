@@ -334,11 +334,18 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             $detalhes['defender_ativo'] ?? null,
             $detalhes['defender_tempo_real'] ?? null,
         ], true);
+        $maquinaIsolada = !empty($segurancaEfetivo['isolado_em']);
     ?>
     <li class="nav-item" role="presentation">
         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaSeguranca" type="button">
             <i class="bi bi-shield-lock"></i> Segurança
-            <?= $alertaSeguranca ? '<span class="badge text-bg-danger ms-1">!</span>' : '' ?>
+            <?php if ($maquinaIsolada): ?>
+                <span class="badge text-bg-danger ms-1">ISOLADA</span>
+            <?php elseif ($eventosSegurancaAbertos > 0): ?>
+                <span class="badge text-bg-danger ms-1"><?= (int)$eventosSegurancaAbertos ?></span>
+            <?php elseif ($alertaSeguranca): ?>
+                <span class="badge text-bg-danger ms-1">!</span>
+            <?php endif; ?>
         </button>
     </li>
     <?php endif; ?>
@@ -1984,6 +1991,131 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     <!-- Segurança (Fase 1 -- deteção de ameaças) -->
     <div class="tab-pane fade" id="abaSeguranca">
         <div class="row g-3">
+            <?php if ($maquinaIsolada): ?>
+                <div class="col-12">
+                    <div class="alert alert-danger d-flex flex-wrap justify-content-between align-items-center gap-2 mb-0">
+                        <div>
+                            <strong><i class="bi bi-ethernet"></i> Máquina isolada da rede</strong> desde <?= htmlspecialchars(data_br($segurancaEfetivo['isolado_em'], 'd/m/Y H:i')) ?>.
+                            Só o agente continua falando com o portal. Remova o isolamento depois de limpar a máquina.
+                        </div>
+                        <?php if ($podeEditarAtivo): ?>
+                            <button type="button" class="btn btn-sm btn-light js-seguranca-acao" data-acao="remover-isolamento"
+                                    data-confirmar="Remover o isolamento e devolver a rede desta máquina ao normal?">Remover isolamento</button>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <div class="col-12">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <strong><i class="bi bi-shield-lock"></i> Módulo anti-ransomware</strong>
+                        <?php if ($podeEditarAtivo && !$maquinaIsolada): ?>
+                            <button type="button" class="btn btn-sm btn-outline-danger js-seguranca-acao" data-acao="isolar"
+                                    data-confirmar="Isolar esta máquina da rede AGORA? Só o agente continuará se comunicando com o portal.">
+                                <i class="bi bi-ethernet"></i> Isolar rede agora
+                            </button>
+                        <?php endif; ?>
+                    </div>
+                    <div class="card-body">
+                        <?php
+                            $rotuloPadrao = fn (bool $ligado) => 'Seguir padrão (' . ($ligado ? 'ligado' : 'desligado') . ')';
+                            $padraoGlobal = (new \App\Services\SegurancaModuloService())->padrao();
+                        ?>
+                        <form method="post" action="<?= url('/ativos/seguranca/modulos') ?>" class="row g-3 align-items-end">
+                            <input type="hidden" name="id" value="<?= (int)$ativo['id'] ?>">
+                            <?php foreach (\App\Services\SegurancaModuloService::MODULOS as $chave => $rotulo): ?>
+                                <?php $override = $segurancaOverrides[$chave]; ?>
+                                <div class="col-md-3">
+                                    <label class="form-label small mb-1" for="mod_<?= $chave ?>">
+                                        <?= htmlspecialchars($rotulo) ?>
+                                        <?= Badge::make($segurancaEfetivo[$chave] ? 'Ativo' : 'Desligado', $segurancaEfetivo[$chave] ? 'success' : 'secondary') ?>
+                                    </label>
+                                    <select name="<?= $chave ?>" id="mod_<?= $chave ?>" class="form-select form-select-sm" <?= $podeEditarAtivo ? '' : 'disabled' ?>>
+                                        <option value="padrao" <?= $override === null ? 'selected' : '' ?>><?= $rotuloPadrao((bool)$padraoGlobal[$chave]) ?></option>
+                                        <option value="1" <?= $override === true ? 'selected' : '' ?>>Ligado nesta máquina</option>
+                                        <option value="0" <?= $override === false ? 'selected' : '' ?>>Desligado nesta máquina</option>
+                                    </select>
+                                </div>
+                            <?php endforeach; ?>
+                            <div class="col-md-3">
+                                <label class="form-label small mb-1" for="mod_isolamento_modo">Resposta a evento crítico</label>
+                                <select name="isolamento_modo" id="mod_isolamento_modo" class="form-select form-select-sm" <?= $podeEditarAtivo ? '' : 'disabled' ?>>
+                                    <option value="padrao" <?= $segurancaOverrides['isolamento_modo'] === null ? 'selected' : '' ?>>Seguir padrão (<?= htmlspecialchars(strtok(\App\Services\SegurancaModuloService::MODOS_ISOLAMENTO[$padraoGlobal['isolamento_modo']], ' ')) ?>)</option>
+                                    <?php foreach (\App\Services\SegurancaModuloService::MODOS_ISOLAMENTO as $modo => $rotulo): ?>
+                                        <option value="<?= $modo ?>" <?= $segurancaOverrides['isolamento_modo'] === $modo ? 'selected' : '' ?>><?= htmlspecialchars($rotulo) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <?php if ($podeEditarAtivo): ?>
+                                <div class="col-12 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                                    <small class="text-muted">Aplicado no próximo check-in (agente 1.0.30 ou mais novo). O padrão global fica em Ativos &rsaquo; Configurações &rsaquo; Anti-ransomware.</small>
+                                    <button class="btn btn-sm btn-primary">Salvar</button>
+                                </div>
+                            <?php endif; ?>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-white"><strong><i class="bi bi-exclamation-octagon"></i> Eventos de segurança</strong></div>
+                    <div class="card-body p-0">
+                        <?php if (empty($eventosSeguranca)): ?>
+                            <p class="text-muted small p-3 mb-0">Nenhum evento registrado.</p>
+                        <?php else: ?>
+                            <div class="table-responsive">
+                                <table class="table table-sm mb-0 align-middle">
+                                    <thead><tr><th>Quando</th><th>Evento</th><th>Detalhe</th><th>Resposta</th><th></th></tr></thead>
+                                    <tbody>
+                                        <?php foreach ($eventosSeguranca as $ev): ?>
+                                            <?php
+                                                $corSeveridade = ['CRITICAL' => 'danger', 'WARNING' => 'warning', 'INFO' => 'secondary'][$ev['severidade']] ?? 'secondary';
+                                                $rotulosAcao = [
+                                                    'nenhuma' => '—',
+                                                    'processo_encerrado' => 'Processo encerrado',
+                                                    'rede_isolada' => 'Rede isolada',
+                                                    'isolamento_pendente' => 'Isolamento pendente',
+                                                    'isolamento_cancelado' => 'Isolamento cancelado',
+                                                ];
+                                                $pendente = !empty($ev['isolamento_pendente_ate']) && $ev['resolvido_em'] === null;
+                                            ?>
+                                            <tr class="<?= $ev['resolvido_em'] ? 'text-muted' : '' ?>">
+                                                <td class="small text-nowrap"><?= htmlspecialchars(data_br($ev['ocorrido_em'] ?? $ev['recebido_em'], 'd/m H:i:s')) ?></td>
+                                                <td class="small">
+                                                    <?= Badge::make($ev['severidade'], $corSeveridade) ?>
+                                                    <?= htmlspecialchars(\App\Services\SegurancaEventoService::rotuloTipo($ev['tipo'])) ?>
+                                                </td>
+                                                <td class="small" style="max-width:420px; word-break:break-word"><?= htmlspecialchars($ev['resumo']) ?></td>
+                                                <td class="small text-nowrap">
+                                                    <?php if ($pendente): ?>
+                                                        <span class="text-danger">Isola às <?= htmlspecialchars(data_br($ev['isolamento_pendente_ate'], 'H:i')) ?></span>
+                                                    <?php else: ?>
+                                                        <?= htmlspecialchars($rotulosAcao[$ev['acao_automatica']] ?? $ev['acao_automatica']) ?>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td class="text-end text-nowrap">
+                                                    <?php if ($podeEditarAtivo && $pendente): ?>
+                                                        <button type="button" class="btn btn-sm btn-outline-danger js-seguranca-acao" data-acao="cancelar-isolamento" data-evento="<?= (int)$ev['id'] ?>"
+                                                                data-confirmar="Cancelar o isolamento automático deste evento? Use só se tiver certeza de que é falso positivo.">Cancelar isolamento</button>
+                                                    <?php endif; ?>
+                                                    <?php if ($podeEditarAtivo && $ev['severidade'] !== 'INFO' && $ev['resolvido_em'] === null): ?>
+                                                        <button type="button" class="btn btn-sm btn-outline-secondary js-seguranca-acao" data-acao="resolver-evento" data-evento="<?= (int)$ev['id'] ?>">Marcar resolvido</button>
+                                                    <?php elseif ($ev['resolvido_em']): ?>
+                                                        <span class="small">Resolvido por <?= htmlspecialchars($ev['resolvido_por'] ?? '?') ?></span>
+                                                    <?php endif; ?>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+
             <div class="col-md-6">
                 <div class="card border-0 shadow-sm h-100">
                     <div class="card-header bg-white"><i class="bi bi-shield-check"></i> <strong>Firewall do Windows</strong></div>
@@ -5901,6 +6033,59 @@ window.addEventListener('load', function () {
         contador.textContent = termo ? visiveis + ' de ' + linhas.length + ' alertas' : '';
     });
 });
+</script>
+
+<script>
+(function () {
+    const rotas = {
+        'isolar': <?= json_encode(url('/ativos/seguranca/isolar')) ?>,
+        'remover-isolamento': <?= json_encode(url('/ativos/seguranca/remover-isolamento')) ?>,
+        'cancelar-isolamento': <?= json_encode(url('/ativos/seguranca/cancelar-isolamento')) ?>,
+        'resolver-evento': <?= json_encode(url('/ativos/seguranca/resolver-evento')) ?>,
+    };
+    const ativoId = <?= (int)$ativo['id'] ?>;
+
+    document.querySelectorAll('.js-seguranca-acao').forEach(function (botao) {
+        botao.addEventListener('click', async function () {
+            if (botao.dataset.confirmar && !confirm(botao.dataset.confirmar)) {
+                return;
+            }
+
+            const corpo = new URLSearchParams({ id: ativoId });
+            if (botao.dataset.evento) {
+                corpo.append('evento_id', botao.dataset.evento);
+            }
+
+            botao.disabled = true;
+            try {
+                const res = await fetch(rotas[botao.dataset.acao], { method: 'POST', body: corpo });
+                const dados = await res.json();
+                if (!dados.success) {
+                    alert(dados.message || 'Não foi possível concluir a ação.');
+                    botao.disabled = false;
+                    return;
+                }
+                if (dados.message) {
+                    alert(dados.message);
+                }
+                location.hash = 'abaSeguranca';
+                location.reload();
+            } catch (e) {
+                alert('Falha de comunicação com o servidor.');
+                botao.disabled = false;
+            }
+        });
+    });
+
+    // Bootstrap só carrega depois do conteúdo da página (layouts/main.php),
+    // então a aba só pode ser aberta depois do load.
+    window.addEventListener('load', function () {
+        const aba = document.querySelector('.nav-link[data-bs-target="#abaSeguranca"]');
+        if (location.hash === '#abaSeguranca' && aba && window.bootstrap) {
+            bootstrap.Tab.getOrCreateInstance(aba).show();
+        }
+    });
+})();
 </script>
 
 <?php

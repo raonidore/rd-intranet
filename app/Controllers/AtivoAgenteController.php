@@ -6,6 +6,7 @@ use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
 use App\Services\AtivoService;
 use App\Services\NotificationService;
+use App\Services\SegurancaEventoService;
 
 /**
  * Endpoints usados pelo agente Windows -- NÃO passam por sessão/login,
@@ -76,6 +77,35 @@ class AtivoAgenteController extends Controller
         }
 
         echo json_encode($this->service->registrarHeartbeat($machineGuid, $chaveEnviada));
+    }
+
+    /**
+     * Evento do módulo anti-ransomware, enviado pelo agente no instante da
+     * detecção (não espera o próximo checkin). Mesma autenticação por chave
+     * dos demais endpoints do agente.
+     */
+    public function eventoSeguranca(): void
+    {
+        header('Content-Type: application/json');
+
+        $chaveEnviada = $_SERVER['HTTP_X_RD_AGENTE_CHAVE'] ?? '';
+
+        if (!$this->service->chaveValida($chaveEnviada)) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'message' => 'Chave de API inválida.']);
+            return;
+        }
+
+        $payload = json_decode(file_get_contents('php://input'), true);
+        $ativoId = is_array($payload) ? $this->service->idPorMachineGuid(trim((string)($payload['machine_guid'] ?? ''))) : null;
+
+        if ($ativoId === null) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Ativo não encontrado para este machine_guid.']);
+            return;
+        }
+
+        echo json_encode((new SegurancaEventoService())->registrarDoAgente($ativoId, $payload));
     }
 
     /** Agente devolve o resultado de uma solicitação (listar arquivos/processos) recebida no heartbeat. */

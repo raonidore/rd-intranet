@@ -226,6 +226,11 @@ $statusCores = [
                     <i class="bi bi-broadcast"></i> Comunicação
                 </button>
             </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabAntiRansomware" type="button" role="tab">
+                    <i class="bi bi-shield-lock"></i> Anti-ransomware
+                </button>
+            </li>
         </ul>
 
         <div class="card border-0 shadow-sm">
@@ -543,6 +548,64 @@ $statusCores = [
                         </div>
                         <div class="col-auto">
                             <button class="btn btn-sm btn-outline-secondary">Salvar</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="tab-pane fade" id="tabAntiRansomware" role="tabpanel">
+                    <p class="text-muted small mb-3">
+                        <strong>Padrão para todas as máquinas com agente Windows</strong> (1.0.30 ou mais novo). Cada máquina pode
+                        sobrescrever isso na aba <em>Segurança</em> da própria ficha -- ex: deixar um servidor de produção só em
+                        alerta, sem isolamento automático. As máquinas aplicam a mudança no próximo check-in, sem reinstalar nada.
+                    </p>
+                    <form method="post" action="<?= url('/ativos/seguranca/padrao') ?>">
+                        <div class="row g-3">
+                            <div class="col-lg-6">
+                                <label class="form-label small fw-semibold mb-1">Detecções ligadas por padrão</label>
+                                <?php
+                                    $descricoesModulos = [
+                                        'canary' => 'Cria arquivos-isca em Área de Trabalho/Documentos/Downloads e raiz dos outros discos. Qualquer toque neles = alerta crítico. Custo desprezível.',
+                                        'shadow_copy' => 'Vigia comandos como "vssadmin delete shadows" e encerra o processo na hora. Acompanha cada processo novo da máquina -- teste antes em servidores com muita automação.',
+                                        'fim' => 'Conta alterações de arquivo nas pastas do usuário; dispara quando passa do limiar abaixo. Pode gerar aviso em sincronização grande (OneDrive, backup).',
+                                    ];
+                                ?>
+                                <?php foreach (\App\Services\SegurancaModuloService::MODULOS as $chave => $rotulo): ?>
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" name="<?= $chave ?>" value="1" id="padrao_<?= $chave ?>" <?= !empty($padraoSeguranca[$chave]) ? 'checked' : '' ?>>
+                                        <label class="form-check-label small" for="padrao_<?= $chave ?>">
+                                            <strong><?= htmlspecialchars($rotulo) ?></strong><br>
+                                            <span class="text-muted"><?= htmlspecialchars($descricoesModulos[$chave]) ?></span>
+                                        </label>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                            <div class="col-lg-6">
+                                <label class="form-label small fw-semibold mb-1" for="padrao_isolamento_modo">Resposta a evento crítico</label>
+                                <select name="isolamento_modo" id="padrao_isolamento_modo" class="form-select form-select-sm mb-2">
+                                    <?php foreach (\App\Services\SegurancaModuloService::MODOS_ISOLAMENTO as $modo => $rotulo): ?>
+                                        <option value="<?= $modo ?>" <?= $padraoSeguranca['isolamento_modo'] === $modo ? 'selected' : '' ?>><?= htmlspecialchars($rotulo) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <div class="d-flex align-items-center gap-2 mb-3">
+                                    <label class="small text-muted mb-0" for="padrao_confirmacao_minutos">Prazo do modo confirmação (min)</label>
+                                    <input type="number" name="confirmacao_minutos" id="padrao_confirmacao_minutos" class="form-control form-control-sm" style="width:80px" min="1" max="60" value="<?= (int)$padraoSeguranca['confirmacao_minutos'] ?>">
+                                </div>
+
+                                <label class="form-label small fw-semibold mb-1">Limiar do FIM</label>
+                                <div class="d-flex flex-wrap align-items-center gap-2 mb-3 small">
+                                    <input type="number" name="fim_limiar_critico" aria-label="Arquivos para crítico" class="form-control form-control-sm" style="width:80px" min="5" value="<?= (int)$padraoSeguranca['fim_limiar_critico'] ?>"> arquivos = crítico,
+                                    <input type="number" name="fim_limiar_aviso" aria-label="Arquivos para aviso" class="form-control form-control-sm" style="width:80px" min="1" value="<?= (int)$padraoSeguranca['fim_limiar_aviso'] ?>"> = aviso, em
+                                    <input type="number" name="fim_janela_segundos" aria-label="Janela em segundos" class="form-control form-control-sm" style="width:80px" min="5" max="300" value="<?= (int)$padraoSeguranca['fim_janela_segundos'] ?>"> segundos
+                                </div>
+
+                                <label class="form-label small fw-semibold mb-1" for="padrao_alerta_emails">Avisar por e-mail</label>
+                                <input type="text" name="alerta_emails" id="padrao_alerta_emails" class="form-control form-control-sm mb-2" placeholder="ti@empresa.com.br, outro@empresa.com.br" value="<?= htmlspecialchars($padraoSeguranca['alerta_emails']) ?>">
+                                <label class="form-label small fw-semibold mb-1" for="padrao_alerta_whatsapp">Avisar por WhatsApp</label>
+                                <input type="text" name="alerta_whatsapp" id="padrao_alerta_whatsapp" class="form-control form-control-sm" placeholder="5581999999999, 5581988888888" value="<?= htmlspecialchars($padraoSeguranca['alerta_whatsapp']) ?>">
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <button class="btn btn-sm btn-primary">Salvar padrão</button>
                         </div>
                     </form>
                 </div>

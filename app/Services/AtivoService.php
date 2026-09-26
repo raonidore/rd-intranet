@@ -3052,6 +3052,13 @@ class AtivoService
         return $this->regenerarChaveAgente('Sistema', false);
     }
 
+    public function idPorMachineGuid(string $machineGuid): ?int
+    {
+        $ativo = $machineGuid !== '' ? $this->repository->buscarPorMachineGuid($machineGuid) : null;
+
+        return $ativo ? (int)$ativo['id'] : null;
+    }
+
     public function chaveValida(string $chaveEnviada): bool
     {
         if ($chaveEnviada === '') {
@@ -3578,6 +3585,7 @@ class AtivoService
                 'alvo' => $c['alvo'],
                 'alvo_label' => $c['alvo_label'],
             ], $pendentes),
+            'modulo_seguranca' => (new SegurancaModuloService())->paraAgente($id),
         ];
 
         // Só manda a chave nova se essa solicitação já não veio autenticada
@@ -3826,6 +3834,10 @@ class AtivoService
         if ($chaveUsada !== '') {
             $this->repository->atualizarChaveUsada($ativoId, $chaveUsada);
         }
+
+        // Isolamento em modo "confirmação" cujo prazo venceu -- enfileira
+        // antes de montar a lista abaixo, pra já sair neste mesmo heartbeat.
+        (new SegurancaIsolamentoService())->processarPendentes($ativoId);
 
         $solicitacoes = $this->repository->solicitacoesPendentes($ativoId);
 
