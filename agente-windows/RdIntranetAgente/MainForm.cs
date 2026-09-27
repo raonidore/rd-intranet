@@ -368,6 +368,7 @@ public sealed class MainForm : Form
         _conteudo.Controls.AddRange(new Control[] { _paginaVisao, _paginaSeguranca, _paginaAtividade, _paginaNetwork, _paginaConfig });
         MostrarPagina(_paginaVisao, botaoVisao);
         ResumeLayout(false);
+        Tema.AplicarRolagemEscura(this);
         PerformLayout();
 
         _timer = new System.Windows.Forms.Timer { Interval = 1500 };

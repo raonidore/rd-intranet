@@ -120,6 +120,30 @@ public static class Tema
         c.HandleCreated += (s, e) => Aplicar();
     }
 
+    /// <summary>
+    /// Barra de rolagem escura em toda área rolável da janela (painéis com
+    /// rolagem e caixas de texto de várias linhas), inclusive nas adicionadas
+    /// depois. Listas (ListView) ficam de fora: com tema nativo o Windows
+    /// desenha uma grade vertical entre as colunas.
+    /// </summary>
+    public static void AplicarRolagemEscura(Control raiz)
+    {
+        if (raiz is ScrollableControl { AutoScroll: true } or TextBoxBase { Multiline: true })
+        {
+            TemaEscuroNativo(raiz);
+        }
+
+        foreach (Control filho in raiz.Controls)
+        {
+            AplicarRolagemEscura(filho);
+        }
+
+        raiz.ControlAdded += (s, e) =>
+        {
+            if (e.Control != null) AplicarRolagemEscura(e.Control);
+        };
+    }
+
     public static void EstilizarCampo(Control c)
     {
         c.BackColor = Campo;
