@@ -18,6 +18,8 @@ class SegurancaIsolamentoService
 {
     private const GRUPO_REGRAS = 'RD Intranet - Isolamento';
     private const SOLICITANTE = 'Anti-ransomware';
+    /** Primeira versão do agente que desconta as exclusões feitas pelo próprio Windows (Volsnap 33). */
+    private const VERSAO_SHADOW_CONFIAVEL = '1.0.34';
 
     private PDO $pdo;
     private SegurancaModuloService $modulos;
@@ -37,6 +39,19 @@ class SegurancaIsolamentoService
 
         if (!empty($efetivo['isolado_em'])) {
             return 'a máquina já estava isolada da rede.';
+        }
+
+        // Agentes anteriores à 1.0.34 contam as shadow copies sem saber
+        // quais o próprio Windows apagou por falta de espaço (Volsnap 33) --
+        // isolaram máquinas à toa no Maurílio (26 e 27/09). Pra eles, esse
+        // tipo de evento nunca isola sozinho: vira só alerta.
+        $evento = $this->eventos->buscar($eventoId);
+        if (($evento['tipo'] ?? '') === 'SHADOW_COPY_DELETE_ATTEMPT' && in_array($efetivo['isolamento_modo'], ['automatico', 'confirmacao'], true)) {
+            $versao = (string)((new AtivoService())->buscar($ativoId)['agente_versao'] ?? '');
+            if ($versao === '' || version_compare($versao, self::VERSAO_SHADOW_CONFIAVEL, '<')) {
+                return 'somente alerta -- agente anterior à ' . self::VERSAO_SHADOW_CONFIAVEL
+                    . ' não distingue a limpeza automática de shadow copies do Windows, então este tipo de evento não isola sozinho.';
+            }
         }
 
         switch ($efetivo['isolamento_modo']) {

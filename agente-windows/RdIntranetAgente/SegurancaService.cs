@@ -577,10 +577,12 @@ public sealed class SegurancaService : IDisposable
     private void VerificarShadowCopies()
     {
         int? anterior;
+        DateTime? verificadoAntes;
         lock (_trava)
         {
             if (_atual?.ShadowCopy != true) return;
             anterior = _shadowContagem;
+            verificadoAntes = _shadowVerificadoEm;
         }
 
         int contagem;
@@ -626,6 +628,20 @@ public sealed class SegurancaService : IDisposable
             return;
         }
 
+        // O próprio Windows registra no log Sistema quando apaga cópias por
+        // falta de espaço: Volsnap 33 = uma cópia a mais antiga; 25 e 36 =
+        // todas. Escrita pesada (Instalador de Módulos do Windows) fez o
+        // Windows apagar 2 de uma vez e isolou a IMUNOQUIMICA à toa
+        // (Maurílio, 2026-09-27). Só conta o que o Windows não explica.
+        var (apagadasPeloWindows, windowsDescartouTodas) = ExclusoesFeitasPeloWindows(verificadoAntes);
+        var semExplicacao = windowsDescartouTodas ? 0 : Math.Max(0, removidas - apagadasPeloWindows);
+        if (semExplicacao < 2)
+        {
+            LogAtividade.Registrar(NivelAtividade.Info, "SEGURANÇA",
+                $"{removidas} shadow copies saíram ({antes} → {contagem}) -- o próprio Windows registrou a limpeza por falta de espaço (Volsnap).");
+            return;
+        }
+
         Registrar(new EventoSeguranca
         {
             Tipo = "SHADOW_COPY_DELETE_ATTEMPT",
@@ -635,9 +651,51 @@ public sealed class SegurancaService : IDisposable
             {
                 ["linha_comando"] = $"Contagem de shadow copies caiu de {antes} para {contagem} em menos de 1 minuto",
                 ["contagem_anterior"] = antes,
-                ["contagem_atual"] = contagem
+                ["contagem_atual"] = contagem,
+                ["apagadas_pelo_windows"] = apagadasPeloWindows,
+                ["sem_explicacao"] = semExplicacao
             }
         });
+    }
+
+    /// <summary>
+    /// Conta, no log Sistema, as exclusões de shadow copy que o próprio
+    /// Windows fez desde a leitura anterior (com folga). Sem acesso ao log,
+    /// devolve zero -- o comportamento volta a ser o da 1.0.33.
+    /// </summary>
+    private static (int umaAUma, bool todas) ExclusoesFeitasPeloWindows(DateTime? desde)
+    {
+        try
+        {
+            var janelaMs = (long)Math.Clamp(((DateTime.Now - (desde ?? DateTime.Now.AddMinutes(-2))).TotalMilliseconds) + 30000, 60000, 600000);
+            var consulta = new System.Diagnostics.Eventing.Reader.EventLogQuery(
+                "System",
+                System.Diagnostics.Eventing.Reader.PathType.LogName,
+                $"*[System[(EventID=25 or EventID=33 or EventID=36) and TimeCreated[timediff(@SystemTime) <= {janelaMs}]]]");
+
+            var umaAUma = 0;
+            var todas = false;
+            using var leitor = new System.Diagnostics.Eventing.Reader.EventLogReader(consulta);
+            for (var registro = leitor.ReadEvent(); registro != null; registro = leitor.ReadEvent())
+            {
+                using (registro)
+                {
+                    if (!string.Equals(registro.ProviderName, "volsnap", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    if (registro.Id == 33) umaAUma++;
+                    else todas = true;
+                }
+            }
+
+            return (umaAUma, todas);
+        }
+        catch
+        {
+            return (0, false);
+        }
     }
 
     // ------------------------------------------------------------------
