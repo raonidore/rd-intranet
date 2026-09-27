@@ -39,6 +39,15 @@ $rotulosDetalhe = [
     'por' => 'Por',
     'evento_origem' => 'Evento de origem',
     'solicitacao_id' => 'Comando nº',
+    'apagadas_pelo_windows' => 'Apagadas pelo próprio Windows (Volsnap)',
+    'sem_explicacao' => 'Sem explicação',
+    'temporarias' => 'Temporárias (criadas há menos de 2h)',
+    'expiradas' => 'Expiradas (mais de 55 dias)',
+    'extensao_suspeita' => 'Com extensão suspeita',
+    'conteudo_invalido' => 'Conteúdo inválido na amostra',
+    'amostrados' => 'Arquivos amostrados',
+    'extensao_ransomware' => 'Com extensão conhecida de ransomware',
+    'nota_resgate' => 'Nota de resgate',
 ];
 
 $formatarValor = static function ($valor): string {
@@ -101,7 +110,8 @@ $formatarValor = static function ($valor): string {
                                         <dd class="col-sm-8 mb-1"><?= htmlspecialchars(data_br($ev['recebido_em'], 'd/m/Y H:i:s')) ?></dd>
                                         <?php if ($ev['resolvido_em']): ?>
                                             <dt class="col-sm-4 fw-normal text-muted">Resolvido</dt>
-                                            <dd class="col-sm-8 mb-1"><?= htmlspecialchars(data_br($ev['resolvido_em'], 'd/m/Y H:i')) ?> por <?= htmlspecialchars($ev['resolvido_por'] ?? '?') ?></dd>
+                                            <dd class="col-sm-8 mb-1"><?= htmlspecialchars(data_br($ev['resolvido_em'], 'd/m/Y H:i')) ?> por <?= htmlspecialchars($ev['resolvido_por'] ?? '?') ?>
+                                                <?= !empty($ev['resolucao']) ? '(' . htmlspecialchars(SegurancaEventoService::RESOLUCOES[$ev['resolucao']] ?? $ev['resolucao']) . ')' : '' ?></dd>
                                         <?php endif; ?>
                                     </dl>
                                     <?php if ($execucao): ?>
@@ -133,10 +143,26 @@ $formatarValor = static function ($valor): string {
                                         data-confirmar="Cancelar o isolamento automático deste evento? Use só se tiver certeza de que é falso positivo.">Cancelar isolamento</button>
                             <?php endif; ?>
                             <?php if ($podeEditarTabela && $ev['severidade'] !== 'INFO' && $ev['resolvido_em'] === null): ?>
-                                <button type="button" class="btn btn-sm btn-outline-secondary js-seguranca-acao" data-acao="resolver-evento"
-                                        data-ativo="<?= (int)$ev['ativo_id'] ?>" data-evento="<?= (int)$ev['id'] ?>">Marcar resolvido</button>
+                                <div class="btn-group btn-group-sm" role="group" aria-label="Resolver evento">
+                                    <button type="button" class="btn btn-outline-warning js-seguranca-acao" data-acao="resolver-evento" data-resolucao="falso_positivo"
+                                            data-ativo="<?= (int)$ev['ativo_id'] ?>" data-evento="<?= (int)$ev['id'] ?>"
+                                            data-pedir-nota="O que causou este falso positivo? (ex.: backup noturno, sincronização do OneDrive) -- ajuda a criar a exceção certa."
+                                            title="Não foi ataque -- entra na aba Exceções e falsos positivos">Falso positivo</button>
+                                    <button type="button" class="btn btn-outline-secondary js-seguranca-acao" data-acao="resolver-evento" data-resolucao="resolvido"
+                                            data-ativo="<?= (int)$ev['ativo_id'] ?>" data-evento="<?= (int)$ev['id'] ?>">Resolvido</button>
+                                </div>
                             <?php elseif ($ev['resolvido_em']): ?>
-                                <span class="small">Resolvido por <?= htmlspecialchars($ev['resolvido_por'] ?? '?') ?></span>
+                                <?php
+                                    $resolucao = $ev['resolucao'] ?? null;
+                                    $corResolucao = ['falso_positivo' => 'warning', 'ataque_confirmado' => 'danger'][$resolucao] ?? 'secondary';
+                                ?>
+                                <?php if ($resolucao && $resolucao !== 'resolvido'): ?>
+                                    <?= Badge::make(SegurancaEventoService::RESOLUCOES[$resolucao] ?? $resolucao, $corResolucao) ?>
+                                <?php endif; ?>
+                                <span class="small">por <?= htmlspecialchars($ev['resolvido_por'] ?? '?') ?></span>
+                                <?php if (!empty($ev['resolucao_nota'])): ?>
+                                    <div class="small text-muted text-wrap" style="max-width:220px"><?= htmlspecialchars($ev['resolucao_nota']) ?></div>
+                                <?php endif; ?>
                             <?php endif; ?>
                         </td>
                     </tr>

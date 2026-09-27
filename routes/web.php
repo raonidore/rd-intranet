@@ -1017,6 +1017,10 @@ $router->get('/ativos/etiquetas/lote', [AtivoController::class, 'etiquetasLote']
 $router->post('/ativos/coletar-snmp', [AtivoController::class, 'coletarSnmp']);
 $router->post('/ativos/snmp/config', [AtivoController::class, 'salvarConfigSnmp']);
 $router->get('/ativos/seguranca', [AtivoController::class, 'seguranca']);
+$router->get('/ativos/seguranca/excecoes', [AtivoController::class, 'segurancaExcecoes']);
+$router->get('/ativos/seguranca/configuracao', [AtivoController::class, 'segurancaConfiguracao']);
+$router->post('/ativos/seguranca/excecoes', [AtivoController::class, 'salvarExcecoesSeguranca']);
+$router->post('/ativos/seguranca/assinaturas', [AtivoController::class, 'configurarAssinaturasSeguranca']);
 $router->post('/ativos/seguranca/padrao', [AtivoController::class, 'salvarPadraoSeguranca']);
 $router->post('/ativos/seguranca/modulos', [AtivoController::class, 'salvarModulosSeguranca']);
 $router->post('/ativos/seguranca/isolar', [AtivoController::class, 'isolarRede']);
@@ -1089,6 +1093,7 @@ $router->post('/ativos/agente/dotnet/upload', [AtivoAgenteController::class, 'up
 $router->post('/api/ativos/checkin', [AtivoAgenteController::class, 'checkin']);
 $router->post('/api/ativos/heartbeat', [AtivoAgenteController::class, 'heartbeat']);
 $router->post('/api/ativos/seguranca/evento', [AtivoAgenteController::class, 'eventoSeguranca']);
+$router->get('/api/ativos/seguranca/assinaturas', [AtivoAgenteController::class, 'assinaturasSeguranca']);
 $router->post('/api/ativos/solicitacoes/resultado', [AtivoAgenteController::class, 'responderSolicitacao']);
 $router->post('/api/ativos/solicitacoes/arquivo', [AtivoAgenteController::class, 'responderSolicitacaoArquivo']);
 $router->get('/api/ativos/comandos/anexo', [AtivoAgenteController::class, 'baixarAnexoComando']);

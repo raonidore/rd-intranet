@@ -53,6 +53,10 @@ class SegurancaModuloService
         $padrao['alerta_emails'] = ConfigService::get(self::PREFIXO . 'alerta_emails', '') ?? '';
         $padrao['alerta_whatsapp'] = ConfigService::get(self::PREFIXO . 'alerta_whatsapp', '') ?? '';
         $padrao['isolamento_liberados'] = ConfigService::get(self::PREFIXO . 'isolamento_liberados', '') ?? '';
+        $padrao['fim_pastas_ignoradas'] = ConfigService::get(self::PREFIXO . 'fim_pastas_ignoradas', '') ?? '';
+        $padrao['fim_extensoes_ignoradas'] = ConfigService::get(self::PREFIXO . 'fim_extensoes_ignoradas', '') ?? '';
+        $padrao['janela_inicio'] = ConfigService::get(self::PREFIXO . 'janela_inicio', '') ?? '';
+        $padrao['janela_fim'] = ConfigService::get(self::PREFIXO . 'janela_fim', '') ?? '';
 
         return $padrao;
     }
@@ -93,7 +97,8 @@ class SegurancaModuloService
     {
         $itens = [];
         foreach (preg_split('/
-||
+|
+|
 /', $texto) as $linha) {
             $linha = trim($linha, " 	\"'");
             if ($linha !== '' && mb_strlen($linha) <= 260 && !preg_match('/[`$;|&<>]/', $linha)) {
@@ -102,6 +107,70 @@ class SegurancaModuloService
         }
 
         return array_values(array_unique(array_slice($itens, 0, 20)));
+    }
+
+    /**
+     * Exceções da aba "Exceções e falsos positivos" -- salvas à parte do
+     * padrão global pra que salvar um formulário não apague o outro.
+     */
+    public function salvarExcecoes(array $dados): void
+    {
+        $pastas = self::linhas((string)($dados['fim_pastas_ignoradas'] ?? ''), 260, 50);
+        $extensoes = array_map(
+            fn (string $e) => '.' . ltrim(mb_strtolower($e), '.*'),
+            self::linhas((string)($dados['fim_extensoes_ignoradas'] ?? ''), 20, 100)
+        );
+
+        ConfigService::set(self::PREFIXO . 'fim_pastas_ignoradas', implode("
+", $pastas));
+        ConfigService::set(self::PREFIXO . 'fim_extensoes_ignoradas', implode("
+", array_values(array_unique($extensoes))));
+
+        $hora = static fn ($v) => preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', (string)$v) ? (string)$v : '';
+        ConfigService::set(self::PREFIXO . 'janela_inicio', $hora($dados['janela_inicio'] ?? ''));
+        ConfigService::set(self::PREFIXO . 'janela_fim', $hora($dados['janela_fim'] ?? ''));
+    }
+
+    /** @return list<string> */
+    public static function linhas(string $texto, int $tamanhoMaximo, int $limite): array
+    {
+        $itens = [];
+        foreach (preg_split('/
+
+|
+|
+/', $texto) as $linha) {
+            $linha = trim($linha, " 	\"'");
+            if ($linha !== '' && mb_strlen($linha) <= $tamanhoMaximo) {
+                $itens[] = $linha;
+            }
+        }
+
+        return array_values(array_unique(array_slice($itens, 0, $limite)));
+    }
+
+    /**
+     * Janela de manutenção (ex.: backup noturno): dentro dela, eventos de
+     * shadow copy e mudança em massa só alertam, não isolam. Arquivo-isca
+     * continua isolando -- backup e antivírus não alteram o conteúdo dela.
+     * Aceita janela que vira a meia-noite (22:00 → 05:00).
+     */
+    public function dentroDaJanelaManutencao(?\DateTimeInterface $agora = null): bool
+    {
+        $padrao = $this->padrao();
+        if ($padrao['janela_inicio'] === '' || $padrao['janela_fim'] === '' || $padrao['janela_inicio'] === $padrao['janela_fim']) {
+            return false;
+        }
+
+        // Relógio do MySQL, o mesmo dos prazos de isolamento -- o fuso do PHP
+        // pode estar diferente nesses servidores.
+        $hora = $agora !== null
+            ? $agora->format('H:i')
+            : (string)$this->pdo->query("SELECT DATE_FORMAT(NOW(), '%H:%i')")->fetchColumn();
+
+        return $padrao['janela_inicio'] < $padrao['janela_fim']
+            ? $hora >= $padrao['janela_inicio'] && $hora < $padrao['janela_fim']
+            : $hora >= $padrao['janela_inicio'] || $hora < $padrao['janela_fim'];
     }
 
     /** Máquinas com isolamento de rede ativo agora -- Central de Segurança e menu lateral. */
@@ -210,6 +279,11 @@ class SegurancaModuloService
             'fim_limiar_aviso' => $efetivo['fim_limiar_aviso'],
             'fim_janela_segundos' => $efetivo['fim_janela_segundos'],
             'isolado' => !empty($efetivo['isolado_em']),
+            // Agente 1.0.35+: exceções configuradas na Central de Segurança.
+            'fim_pastas_ignoradas' => self::linhas((string)$efetivo['fim_pastas_ignoradas'], 260, 50),
+            'fim_extensoes_ignoradas' => self::linhas((string)$efetivo['fim_extensoes_ignoradas'], 20, 100),
+            // Lista pública de ransomware (opcional). null = desligada: o agente descarta a que tiver.
+            'assinaturas_versao' => (new SegurancaAssinaturaService())->versaoParaAgente(),
         ];
     }
 

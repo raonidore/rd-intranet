@@ -426,6 +426,75 @@ class AtivoController extends Controller
         ]);
     }
 
+    /**
+     * Aba "Exceções e falsos positivos" da Central: onde os detectores
+     * erraram (eventos marcados como falso positivo) e as exceções que o
+     * agente aplica (pastas/extensões ignoradas, janela de manutenção).
+     */
+    public function segurancaExcecoes(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+
+        $eventos = new SegurancaEventoService();
+
+        $this->view('ativos/seguranca_excecoes', [
+            'padraoSeguranca' => (new SegurancaModuloService())->padrao(),
+            'resumoFalsosPositivos' => $eventos->resumoFalsosPositivos(90),
+            'totaisResolucao' => $eventos->totaisPorResolucao(90),
+            'falsosPositivos' => $eventos->listarTodos(['dias' => 90, 'resolucao' => 'falso_positivo'], 50),
+            'podeEditar' => PermissionService::temAcesso('ativos_dashboard'),
+            'assinaturas' => (new \App\Services\SegurancaAssinaturaService())->status(),
+        ]);
+    }
+
+    public function configurarAssinaturasSeguranca(): void
+    {
+        AuthMiddleware::checkModulo('ativos_dashboard');
+
+        $assinaturas = new \App\Services\SegurancaAssinaturaService();
+        $acao = (string)($_POST['acao'] ?? '');
+
+        if ($acao === 'atualizar') {
+            $resultado = $assinaturas->atualizar();
+            $resultado['success']
+                ? NotificationService::success($resultado['message'])
+                : NotificationService::error('Lista pública de ransomware', $resultado['message']);
+        } else {
+            $ligar = $acao === 'ligar';
+            $assinaturas->definirAtivo($ligar);
+            AuditService::registrar('Segurança', 'Anti-ransomware', 'Lista pública de extensões de ransomware ' . ($ligar ? 'ligada' : 'desligada') . '.');
+            NotificationService::success($ligar
+                ? 'Lista pública ligada. As máquinas recebem no próximo check-in (agente 1.0.35 ou mais novo).'
+                : 'Lista pública desligada. As máquinas descartam a lista no próximo check-in.');
+        }
+
+        header('Location: ' . url('/ativos/seguranca/excecoes'));
+        exit;
+    }
+
+    public function salvarExcecoesSeguranca(): void
+    {
+        AuthMiddleware::checkModulo('ativos_dashboard');
+
+        (new SegurancaModuloService())->salvarExcecoes($_POST);
+
+        AuditService::registrar('Segurança', 'Anti-ransomware', 'Exceções do módulo anti-ransomware atualizadas (pastas/extensões ignoradas, janela de manutenção).');
+        NotificationService::success('Exceções salvas. As máquinas aplicam no próximo check-in (agente 1.0.35 ou mais novo).');
+
+        header('Location: ' . url('/ativos/seguranca/excecoes'));
+        exit;
+    }
+
+    /** Aba "Configuração" da Central: padrão global do anti-ransomware (antes ficava no dashboard de Ativos). */
+    public function segurancaConfiguracao(): void
+    {
+        AuthMiddleware::checkModulo('ativos_dashboard');
+
+        $this->view('ativos/seguranca_configuracao', [
+            'padraoSeguranca' => (new SegurancaModuloService())->padrao(),
+        ]);
+    }
+
     public function salvarPadraoSeguranca(): void
     {
         AuthMiddleware::checkModulo('ativos_dashboard');
@@ -435,7 +504,7 @@ class AtivoController extends Controller
         AuditService::registrar('Segurança', 'Anti-ransomware', 'Padrão global do módulo anti-ransomware atualizado.');
         NotificationService::success('Padrão do módulo anti-ransomware salvo. As máquinas aplicam no próximo check-in.');
 
-        header('Location: ' . url('/ativos'));
+        header('Location: ' . url('/ativos/seguranca/configuracao'));
         exit;
     }
 
@@ -518,7 +587,18 @@ class AtivoController extends Controller
             return;
         }
 
-        $eventos->marcarResolvido($eventoId, $_SESSION['usuario']['nome'] ?? 'portal');
+        $resolucao = (string)($_POST['resolucao'] ?? 'resolvido');
+        $eventos->marcarResolvido($eventoId, $_SESSION['usuario']['nome'] ?? 'portal', $resolucao, $_POST['nota'] ?? null);
+
+        if ($resolucao !== 'resolvido') {
+            AuditService::registrar('Segurança', 'Evento anti-ransomware', sprintf(
+                'Evento #%d marcado como %s%s.',
+                $eventoId,
+                SegurancaEventoService::RESOLUCOES[$resolucao] ?? $resolucao,
+                !empty($_POST['nota']) ? ': ' . mb_substr((string)$_POST['nota'], 0, 200) : ''
+            ));
+        }
+
         echo json_encode(['success' => true]);
     }
 

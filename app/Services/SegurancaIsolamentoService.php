@@ -54,6 +54,14 @@ class SegurancaIsolamentoService
             }
         }
 
+        // Janela de manutenção (backup noturno, atualização em massa): shadow
+        // copy e mudança em massa só alertam. Arquivo-isca segue a regra normal.
+        if (in_array($evento['tipo'] ?? '', ['SHADOW_COPY_DELETE_ATTEMPT', 'MASS_FILE_CHANGE'], true)
+            && in_array($efetivo['isolamento_modo'], ['automatico', 'confirmacao'], true)
+            && $this->modulos->dentroDaJanelaManutencao()) {
+            return 'somente alerta -- evento dentro da janela de manutenção configurada na Central de Segurança.';
+        }
+
         switch ($efetivo['isolamento_modo']) {
             case 'automatico':
                 $resultado = $this->isolar($ativoId, "automático (evento #{$eventoId})", $eventoId);

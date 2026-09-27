@@ -428,4 +428,15 @@ public class ModuloSeguranca
 
     [JsonPropertyName("isolado")]
     public bool Isolado { get; set; }
+
+    /// <summary>Exceções da Central de Segurança (servidor com a aba "Exceções e falsos positivos").</summary>
+    [JsonPropertyName("fim_pastas_ignoradas")]
+    public List<string> FimPastasIgnoradas { get; set; } = new();
+
+    [JsonPropertyName("fim_extensoes_ignoradas")]
+    public List<string> FimExtensoesIgnoradas { get; set; } = new();
+
+    /// <summary>Versão da lista pública de ransomware; null = opção desligada no servidor.</summary>
+    [JsonPropertyName("assinaturas_versao")]
+    public string? AssinaturasVersao { get; set; }
 }

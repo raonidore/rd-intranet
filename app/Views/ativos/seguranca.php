@@ -33,10 +33,16 @@ $numero = static fn ($v) => (int)($v ?? 0);
                 : 'nenhum' ?>
         </div>
         <?php if (\App\Services\PermissionService::temAcesso('ativos_dashboard')): ?>
-            <a href="<?= url('/ativos') ?>#tabAntiRansomware" class="small">Alterar padrão</a>
+            <a href="<?= url('/ativos/seguranca/configuracao') ?>" class="small">Alterar padrão</a>
         <?php endif; ?>
     </div>
 </div>
+
+<ul class="nav nav-pills mb-4">
+    <li class="nav-item"><a class="nav-link active" href="<?= url('/ativos/seguranca') ?>"><i class="bi bi-speedometer2"></i> Visão geral</a></li>
+    <li class="nav-item"><a class="nav-link" href="<?= url('/ativos/seguranca/excecoes') ?>"><i class="bi bi-funnel"></i> Exceções e falsos positivos</a></li>
+    <li class="nav-item"><a class="nav-link" href="<?= url('/ativos/seguranca/configuracao') ?>"><i class="bi bi-gear"></i> Configuração</a></li>
+</ul>
 
 <div class="row g-3 mb-4">
     <?php
@@ -172,6 +178,16 @@ $numero = static fn ($v) => (int)($v ?? 0);
             const corpo = new URLSearchParams({ id: botao.dataset.ativo });
             if (botao.dataset.evento) {
                 corpo.append('evento_id', botao.dataset.evento);
+            }
+            if (botao.dataset.resolucao) {
+                corpo.append('resolucao', botao.dataset.resolucao);
+            }
+            if (botao.dataset.pedirNota) {
+                const nota = prompt(botao.dataset.pedirNota, '');
+                if (nota === null) {
+                    return;
+                }
+                corpo.append('nota', nota);
             }
 
             botao.disabled = true;

@@ -33,6 +33,44 @@ public class SegurancaEventoClient
         _config = config;
     }
 
+    /// <summary>Lista pública de ransomware já filtrada pelo servidor; null se desligada ou fora do ar.</summary>
+    public async Task<(string versao, List<string> extensoes, List<string> notas)?> BaixarAssinaturasAsync()
+    {
+        if (!_config.EstaConfigurado)
+        {
+            return null;
+        }
+
+        var handler = new HttpClientHandler
+        {
+            ServerCertificateCustomValidationCallback = (msg, cert, chain, erros) => true
+        };
+
+        using var cliente = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
+        cliente.DefaultRequestHeaders.Add("X-RD-Agente-Chave", _config.ApiKey);
+
+        try
+        {
+            var resposta = await cliente.GetAsync(_config.ServerUrl.TrimEnd('/') + "/api/ativos/seguranca/assinaturas");
+            if (!resposta.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            using var json = JsonDocument.Parse(await resposta.Content.ReadAsStringAsync());
+            var raiz = json.RootElement;
+            var lista = (string nome) => raiz.TryGetProperty(nome, out var e) && e.ValueKind == JsonValueKind.Array
+                ? e.EnumerateArray().Select(x => x.GetString() ?? "").Where(x => x != "").ToList()
+                : new List<string>();
+
+            return (raiz.GetProperty("versao").GetString() ?? "", lista("extensoes"), lista("notas"));
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     public async Task<bool> EnviarAsync(string machineGuid, EventoSeguranca evento)
     {
         if (!_config.EstaConfigurado || string.IsNullOrEmpty(machineGuid))

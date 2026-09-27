@@ -18,6 +18,7 @@ class SegurancaEventoService
         'SHADOW_COPY_DELETE_ATTEMPT' => 'Shadow copies apagadas',
         'BACKUP_DELETE_ATTEMPT' => 'Tentativa de apagar backups/recuperação',
         'MASS_FILE_CHANGE' => 'Mudança em massa de arquivos',
+        'RANSOM_NOTE_CREATED' => 'Nota de resgate criada',
     ];
 
     public const TIPOS_SERVIDOR = [
@@ -127,6 +128,10 @@ class SegurancaEventoService
         if (!empty($filtros['abertos'])) {
             $where[] = "e.resolvido_em IS NULL AND e.severidade <> 'INFO'";
         }
+        if (isset(self::RESOLUCOES[$filtros['resolucao'] ?? ''])) {
+            $where[] = 'e.resolucao = ?';
+            $params[] = $filtros['resolucao'];
+        }
         if (!empty($filtros['ativo_id'])) {
             $where[] = 'e.ativo_id = ?';
             $params[] = (int)$filtros['ativo_id'];
@@ -211,13 +216,57 @@ class SegurancaEventoService
         return $evento ?: null;
     }
 
-    public function marcarResolvido(int $id, string $usuario): void
+    public const RESOLUCOES = [
+        'resolvido' => 'Resolvido',
+        'falso_positivo' => 'Falso positivo',
+        'ataque_confirmado' => 'Ataque confirmado',
+    ];
+
+    public function marcarResolvido(int $id, string $usuario, string $resolucao = 'resolvido', ?string $nota = null): void
     {
+        $resolucao = isset(self::RESOLUCOES[$resolucao]) ? $resolucao : 'resolvido';
+        $nota = $nota !== null ? mb_substr(trim($nota), 0, 255) : null;
+
         $stmt = $this->pdo->prepare(
-            'UPDATE ativos_eventos_seguranca SET resolvido_em = NOW(), resolvido_por = ?, isolamento_pendente_ate = NULL
+            'UPDATE ativos_eventos_seguranca
+             SET resolvido_em = NOW(), resolvido_por = ?, resolucao = ?, resolucao_nota = ?, isolamento_pendente_ate = NULL
              WHERE id = ? AND resolvido_em IS NULL'
         );
-        $stmt->execute([$usuario, $id]);
+        $stmt->execute([$usuario, $resolucao, $nota ?: null, $id]);
+    }
+
+    /**
+     * Falsos positivos agrupados (tipo e máquina) nos últimos $dias -- aba
+     * "Exceções e falsos positivos" da Central, pra ver onde ajustar.
+     */
+    public function resumoFalsosPositivos(int $dias = 90): array
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT e.tipo, e.ativo_id, a.codigo_patrimonio, a.nome AS ativo_nome,
+                    COUNT(*) AS total, MAX(e.recebido_em) AS ultimo
+             FROM ativos_eventos_seguranca e
+             JOIN ativos a ON a.id = e.ativo_id
+             WHERE e.resolucao = 'falso_positivo' AND e.recebido_em >= (NOW() - INTERVAL ? DAY)
+             GROUP BY e.tipo, e.ativo_id, a.codigo_patrimonio, a.nome
+             ORDER BY total DESC, ultimo DESC"
+        );
+        $stmt->execute([max(1, $dias)]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Totais por resolução nos últimos $dias (inclui abertos). */
+    public function totaisPorResolucao(int $dias = 90): array
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT COALESCE(resolucao, IF(resolvido_em IS NULL, 'aberto', 'resolvido')) AS resolucao, COUNT(*) AS total
+             FROM ativos_eventos_seguranca
+             WHERE severidade <> 'INFO' AND recebido_em >= (NOW() - INTERVAL ? DAY)
+             GROUP BY 1"
+        );
+        $stmt->execute([max(1, $dias)]);
+
+        return array_column($stmt->fetchAll(PDO::FETCH_ASSOC), 'total', 'resolucao');
     }
 
     /** Prazo calculado pelo MySQL (NOW()), o mesmo relógio usado em processarPendentes() -- PHP e MySQL podem estar em fusos diferentes. */
@@ -283,7 +332,9 @@ class SegurancaEventoService
                 : 'Comando detectado: ' . mb_substr((string)($d['linha_comando'] ?? '?'), 0, 150) . $processo,
             'BACKUP_DELETE_ATTEMPT' => 'Comando detectado: ' . mb_substr((string)($d['linha_comando'] ?? '?'), 0, 150) . $processo,
             'MASS_FILE_CHANGE' => (int)($d['eventos'] ?? 0) . ' arquivos alterados em ' . (int)($d['janela_segundos'] ?? 0) . 's em ' . ($d['pasta'] ?? '?')
+                . (!empty($d['motivo']) ? ' -- ' . $d['motivo'] : '')
                 . (!empty($d['extensoes_novas']) ? ' -- extensões novas: ' . implode(', ', array_slice((array)$d['extensoes_novas'], 0, 5)) : ''),
+            'RANSOM_NOTE_CREATED' => 'Nota de resgate conhecida "' . ($d['nota_resgate'] ?? '?') . '" criada em várias pastas (' . ($d['pasta'] ?? '?') . ')',
             default => self::rotuloTipo($tipo),
         };
     }

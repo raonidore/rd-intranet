@@ -2049,7 +2049,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                             </div>
                             <?php if ($podeEditarAtivo): ?>
                                 <div class="col-12 d-flex flex-wrap justify-content-between align-items-center gap-2">
-                                    <small class="text-muted">Aplicado no próximo check-in (agente 1.0.30 ou mais novo). O padrão global fica em Ativos &rsaquo; Configurações &rsaquo; Anti-ransomware. Visão de todas as máquinas em <a href="<?= url('/ativos/seguranca') ?>">Central de Segurança</a>.</small>
+                                    <small class="text-muted">Aplicado no próximo check-in (agente 1.0.30 ou mais novo). O padrão global fica em <a href="<?= url('/ativos/seguranca/configuracao') ?>">Central de Segurança &rsaquo; Configuração</a>.</small>
                                     <button class="btn btn-sm btn-primary">Salvar</button>
                                 </div>
                             <?php endif; ?>
@@ -6010,6 +6010,16 @@ window.addEventListener('load', function () {
             const corpo = new URLSearchParams({ id: botao.dataset.ativo || ativoId });
             if (botao.dataset.evento) {
                 corpo.append('evento_id', botao.dataset.evento);
+            }
+            if (botao.dataset.resolucao) {
+                corpo.append('resolucao', botao.dataset.resolucao);
+            }
+            if (botao.dataset.pedirNota) {
+                const nota = prompt(botao.dataset.pedirNota, '');
+                if (nota === null) {
+                    return;
+                }
+                corpo.append('nota', nota);
             }
 
             botao.disabled = true;

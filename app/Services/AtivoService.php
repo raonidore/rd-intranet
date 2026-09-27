@@ -3573,6 +3573,9 @@ class AtivoService
         // Agente preso numa versão cujo script de troca quebra com acento
         // no nome do usuário -- o servidor faz a troca por fora. Antes de
         // buscar os pendentes, pra o envio do .exe já sair nesta resposta.
+        // Lista pública de ransomware: renova no máximo 1x/dia, só se ligada.
+        (new SegurancaAssinaturaService())->atualizarSeNecessario();
+
         (new AgenteAtualizacaoAssistidaService($this))->verificar(
             $id,
             $camposBase['agente_versao'],

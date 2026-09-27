@@ -108,6 +108,32 @@ class AtivoAgenteController extends Controller
         echo json_encode((new SegurancaEventoService())->registrarDoAgente($ativoId, $payload));
     }
 
+    /**
+     * Lista pública de extensões/notas de ransomware já filtrada (agente
+     * 1.0.35+ baixa quando a versão no checkin muda). 404 quando a opção
+     * está desligada na Central de Segurança.
+     */
+    public function assinaturasSeguranca(): void
+    {
+        header('Content-Type: application/json');
+
+        if (!$this->service->chaveValida($_SERVER['HTTP_X_RD_AGENTE_CHAVE'] ?? '')) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'message' => 'Chave de API inválida.']);
+            return;
+        }
+
+        $assinaturas = new \App\Services\SegurancaAssinaturaService();
+        $dados = $assinaturas->ativo() ? $assinaturas->dados() : null;
+        if ($dados === null) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'message' => 'Lista desligada ou ainda não baixada.']);
+            return;
+        }
+
+        echo json_encode(['success' => true, 'versao' => $dados['versao'], 'extensoes' => $dados['extensoes'], 'notas' => $dados['notas']]);
+    }
+
     /** Agente devolve o resultado de uma solicitação (listar arquivos/processos) recebida no heartbeat. */
     public function responderSolicitacao(): void
     {

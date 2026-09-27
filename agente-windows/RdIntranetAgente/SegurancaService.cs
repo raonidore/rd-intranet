@@ -52,7 +52,19 @@ public sealed class StatusSeguranca
 /// </summary>
 public sealed class SegurancaService : IDisposable
 {
+    // Nome da máquina no arquivo: com Documentos/Área de Trabalho
+    // sincronizados pelo OneDrive em mais de um computador, a isca de uma
+    // máquina aparece na outra -- cada uma só vigia as próprias.
+    private static readonly string SufixoMaquina = new string(Environment.MachineName.Where(char.IsLetterOrDigit).ToArray());
+
     private static readonly string[] NomesCanary =
+    {
+        $"!!!_RD_NAO_ALTERAR_{SufixoMaquina}.docx",
+        $"zzz_RD_NAO_ALTERAR_{SufixoMaquina}.xlsx"
+    };
+
+    /// <summary>Nomes usados até a 1.0.34 -- removidos ao religar as iscas.</summary>
+    private static readonly string[] NomesCanaryAntigos =
     {
         "!!!_RD_NAO_ALTERAR.docx",
         "zzz_RD_NAO_ALTERAR.xlsx"
@@ -60,12 +72,32 @@ public sealed class SegurancaService : IDisposable
 
     private static readonly string[] ExtensoesIgnoradasFim =
     {
-        ".tmp", ".temp", ".crdownload", ".part", ".partial", ".download", ".lnk", ".ini", ".db", ".lock", ".log", ".etl"
+        ".tmp", ".temp", ".crdownload", ".opdownload", ".part", ".partial", ".download", ".!ut", ".!qb", ".lnk", ".ini",
+        ".db", ".lock", ".lck", ".log", ".etl", ".swp", ".swo", ".~tmp", ".bak", ".cache", ".pyc", ".tlog", ".pdb", ".obj"
     };
 
     private static readonly string[] TrechosIgnoradosFim =
     {
-        @"\.git\", @"\node_modules\", @"\.vs\", @"\AppData\", @"\$RECYCLE.BIN\"
+        @"\.git\", @"\node_modules\", @"\.vs\", @"\.vscode\", @"\.idea\", @"\AppData\", @"\$RECYCLE.BIN\",
+        @"\bin\Debug\", @"\bin\Release\", @"\obj\", @"\__pycache__\", @"\.venv\", @"\venv\", @"\.gradle\",
+        @"\.dropbox.cache\", @"\.tmp.drivedownload\", @"\.tmp.driveupload\", @"\.sync\"
+    };
+
+    /// <summary>
+    /// Extensões de destino comuns: renomear PRA uma delas não é sinal de
+    /// criptografia (Office .tmp->.docx, download .crdownload->.pdf,
+    /// .jpeg->.jpg). Ransomware renomeia pra extensão própria (.locked,
+    /// .lockbit, .xyz123).
+    /// </summary>
+    private static readonly HashSet<string> ExtensoesComuns = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".doc", ".docx", ".docm", ".dot", ".dotx", ".xls", ".xlsx", ".xlsm", ".xlsb", ".csv", ".ppt", ".pptx", ".pptm",
+        ".pdf", ".txt", ".rtf", ".odt", ".ods", ".odp", ".xml", ".json", ".html", ".htm", ".md", ".msg", ".eml",
+        ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".heic", ".svg", ".ico", ".raw", ".psd",
+        ".mp3", ".wav", ".mp4", ".mov", ".avi", ".mkv", ".wmv", ".m4a", ".zip", ".rar", ".7z", ".gz", ".tar",
+        ".exe", ".msi", ".dll", ".iso", ".lnk", ".url", ".ini", ".cfg", ".log", ".bak", ".old", ".sql", ".db",
+        ".dwg", ".dxf", ".ai", ".eps", ".cdr", ".ofx", ".xps", ".oxps", ".epub", ".pst", ".ost", ".vcf", ".ics",
+        ".js", ".ts", ".css", ".php", ".py", ".cs", ".java", ".c", ".h", ".cpp", ".ps1", ".bat", ".cmd", ".sh"
     };
 
     private readonly Func<Config> _config;
@@ -86,8 +118,16 @@ public sealed class SegurancaService : IDisposable
     private readonly Dictionary<string, DateTime> _criadosRecentemente = new(StringComparer.OrdinalIgnoreCase);
     private DateTime _fimSilenciadoAte = DateTime.MinValue;
     private bool _fimEstouro;
+    private readonly Dictionary<string, Dictionary<string, DateTime>> _notasVistas = new(StringComparer.OrdinalIgnoreCase);
+
+    // Lista pública de ransomware (opcional, ligada na Central de Segurança)
+    private HashSet<string> _assinaturasExtensoes = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> _assinaturasNotas = new(StringComparer.OrdinalIgnoreCase);
+    private string? _assinaturasVersao;
+    private bool _baixandoAssinaturas;
 
     // Shadow copies
+    private Dictionary<string, DateTime>? _shadowIds;
     private int? _shadowContagem;
     private DateTime? _shadowVerificadoEm;
     private string? _shadowErro;
@@ -134,6 +174,7 @@ public sealed class SegurancaService : IDisposable
             if (shadow != (anterior?.ShadowCopy == true))
             {
                 _shadowContagem = null;
+                _shadowIds = null;
                 _shadowErro = null;
                 _shadowVerificadoEm = null;
                 LogAtividade.Registrar(NivelAtividade.Seguranca, "SEGURANÇA", $"Monitor de shadow copies {(shadow ? "ativado" : "desativado")} pelo servidor.");
@@ -147,6 +188,20 @@ public sealed class SegurancaService : IDisposable
             else if (modulo?.Isolado != true && anterior?.Isolado == true)
             {
                 LogAtividade.Registrar(NivelAtividade.Sucesso, "SEGURANÇA", "Isolamento de rede removido pela TI.");
+            }
+
+            var versaoAssinaturas = modulo?.AssinaturasVersao;
+            if (versaoAssinaturas == null && _assinaturasVersao != null)
+            {
+                _assinaturasExtensoes = new(StringComparer.OrdinalIgnoreCase);
+                _assinaturasNotas = new(StringComparer.OrdinalIgnoreCase);
+                _assinaturasVersao = null;
+                LogAtividade.Registrar(NivelAtividade.Seguranca, "SEGURANÇA", "Lista pública de ransomware desligada pelo servidor.");
+            }
+            else if (versaoAssinaturas != null && versaoAssinaturas != _assinaturasVersao && !_baixandoAssinaturas)
+            {
+                _baixandoAssinaturas = true;
+                _ = BaixarAssinaturasAsync();
             }
         }
     }
@@ -209,6 +264,23 @@ public sealed class SegurancaService : IDisposable
         {
             try
             {
+                foreach (var antigo in NomesCanaryAntigos)
+                {
+                    var caminhoAntigo = Path.Combine(pasta, antigo);
+                    try
+                    {
+                        if (File.Exists(caminhoAntigo))
+                        {
+                            File.SetAttributes(caminhoAntigo, FileAttributes.Normal);
+                            File.Delete(caminhoAntigo);
+                        }
+                    }
+                    catch
+                    {
+                        // preso/sem permissão -- inofensivo, ninguém mais vigia esse nome
+                    }
+                }
+
                 foreach (var nome in NomesCanary)
                 {
                     PlantarCanary(Path.Combine(pasta, nome));
@@ -375,15 +447,10 @@ public sealed class SegurancaService : IDisposable
                     InternalBufferSize = 64 * 1024,
                     NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.Size
                 };
-                watcher.Created += (s, e) => RegistrarFim(e.FullPath, 'C', null);
-                watcher.Changed += (s, e) => RegistrarFim(e.FullPath, 'M', null);
-                watcher.Deleted += (s, e) => RegistrarFim(e.FullPath, 'D', null);
-                watcher.Renamed += (s, e) =>
-                {
-                    var extAntiga = Path.GetExtension(e.OldFullPath);
-                    var extNova = Path.GetExtension(e.FullPath);
-                    RegistrarFim(e.FullPath, 'R', string.Equals(extAntiga, extNova, StringComparison.OrdinalIgnoreCase) ? null : extNova);
-                };
+                watcher.Created += (s, e) => RegistrarFim(e.FullPath, 'C', null, null);
+                watcher.Changed += (s, e) => RegistrarFim(e.FullPath, 'M', null, null);
+                watcher.Deleted += (s, e) => RegistrarFim(e.FullPath, 'D', null, null);
+                watcher.Renamed += (s, e) => RegistrarFim(e.FullPath, 'R', Path.GetExtension(e.OldFullPath), Path.GetExtension(e.FullPath));
                 watcher.Error += (s, e) =>
                 {
                     lock (_trava) { _fimEstouro = true; }
@@ -408,9 +475,15 @@ public sealed class SegurancaService : IDisposable
         _watchersFim.Clear();
         _janelaFim.Clear();
         _criadosRecentemente.Clear();
+        _notasVistas.Clear();
     }
 
-    private void RegistrarFim(string caminho, char tipo, string? extNova)
+    /// <summary>
+    /// Tipos guardados na janela: M = arquivo existente alterado, D =
+    /// excluído, R = renomeado pra extensão incomum, K = renomeado pra
+    /// extensão conhecida de ransomware (lista pública, se ligada).
+    /// </summary>
+    private void RegistrarFim(string caminho, char tipo, string? extAntiga, string? extNova)
     {
         if (DeveIgnorarFim(caminho))
         {
@@ -424,6 +497,7 @@ public sealed class SegurancaService : IDisposable
             if (tipo == 'C')
             {
                 _criadosRecentemente[caminho] = agora;
+                RegistrarNotaDeResgate(caminho, agora);
                 return;
             }
 
@@ -434,27 +508,65 @@ public sealed class SegurancaService : IDisposable
                 return;
             }
 
-            // Renomear sem trocar extensão (organizar arquivos) não conta.
-            if (tipo == 'R' && extNova == null)
+            string? extSuspeita = null;
+            if (tipo == 'R')
             {
-                return;
+                var novaNormalizada = (extNova ?? "").ToLowerInvariant();
+                if (string.Equals(extAntiga, extNova, StringComparison.OrdinalIgnoreCase))
+                {
+                    return; // renomear mantendo a extensão (organizar arquivos) não conta
+                }
+
+                if (_assinaturasExtensoes.Contains(novaNormalizada))
+                {
+                    tipo = 'K';
+                }
+                else if (novaNormalizada == "" || ExtensoesComuns.Contains(novaNormalizada))
+                {
+                    // Office salva em .tmp e renomeia pra .docx; navegador
+                    // termina download de .crdownload pra .pdf -- extensão
+                    // de destino comum não é sinal de criptografia.
+                    return;
+                }
+
+                extSuspeita = novaNormalizada;
+                RegistrarNotaDeResgate(caminho, agora);
             }
 
-            _janelaFim.AddLast((agora, caminho, tipo, extNova));
+            _janelaFim.AddLast((agora, caminho, tipo, extSuspeita));
         }
     }
 
-    private static bool DeveIgnorarFim(string caminho)
+    /// <summary>A mesma nota de resgate (lista pública) aparecendo em 2+ pastas é crítico na hora.</summary>
+    private void RegistrarNotaDeResgate(string caminho, DateTime agora)
     {
-        var nome = Path.GetFileName(caminho);
-        if (nome.StartsWith("~$") || nome.StartsWith(".~")
-            || nome.Equals("desktop.ini", StringComparison.OrdinalIgnoreCase)
-            || nome.Equals("Thumbs.db", StringComparison.OrdinalIgnoreCase))
+        if (_assinaturasNotas.Count == 0)
         {
-            return true;
+            return;
         }
 
-        if (NomesCanary.Any(n => nome.Equals(n, StringComparison.OrdinalIgnoreCase)))
+        var nome = Path.GetFileName(caminho).ToLowerInvariant();
+        if (!_assinaturasNotas.Contains(nome))
+        {
+            return;
+        }
+
+        if (!_notasVistas.TryGetValue(nome, out var pastas))
+        {
+            pastas = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+            _notasVistas[nome] = pastas;
+        }
+        pastas[Path.GetDirectoryName(caminho) ?? "?"] = agora;
+    }
+
+    private bool DeveIgnorarFim(string caminho)
+    {
+        var nome = Path.GetFileName(caminho);
+        if (nome.StartsWith("~$") || nome.StartsWith(".~") || nome.StartsWith("~WRL", StringComparison.OrdinalIgnoreCase)
+            || nome.Equals("desktop.ini", StringComparison.OrdinalIgnoreCase)
+            || nome.Equals("Thumbs.db", StringComparison.OrdinalIgnoreCase)
+            || nome.Equals(".DS_Store", StringComparison.OrdinalIgnoreCase)
+            || nome.Contains("_RD_NAO_ALTERAR", StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
@@ -465,12 +577,36 @@ public sealed class SegurancaService : IDisposable
             return true;
         }
 
-        return TrechosIgnoradosFim.Any(t => caminho.Contains(t, StringComparison.OrdinalIgnoreCase));
+        if (TrechosIgnoradosFim.Any(t => caminho.Contains(t, StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        // Exceções da Central de Segurança (servidor).
+        var modulo = _atual;
+        if (modulo != null)
+        {
+            if (modulo.FimExtensoesIgnoradas.Any(x => ext.Equals(x, StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+            if (modulo.FimPastasIgnoradas.Any(t => t.Length > 2 && caminho.Contains(t, StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void AvaliarFim()
     {
-        EventoSeguranca evento;
+        List<string> amostrar;
+        int janela, critico, aviso, total, alterados, suspeitas, conhecidas, excluidos;
+        List<string> extensoesNovas, exemplos;
+        string pastaPrincipal;
+        bool estouro;
+        (string nome, int pastas)? nota = null;
 
         lock (_trava)
         {
@@ -480,7 +616,7 @@ public sealed class SegurancaService : IDisposable
             }
 
             var agora = DateTime.Now;
-            var janela = Math.Max(5, _atual.FimJanelaSegundos);
+            janela = Math.Max(5, _atual.FimJanelaSegundos);
             var corte = agora.AddSeconds(-janela);
 
             while (_janelaFim.First != null && _janelaFim.First.Value.quando < corte)
@@ -491,6 +627,17 @@ public sealed class SegurancaService : IDisposable
             foreach (var chave in _criadosRecentemente.Where(k => (agora - k.Value).TotalSeconds > 120).Select(k => k.Key).ToList())
             {
                 _criadosRecentemente.Remove(chave);
+            }
+
+            // Notas de resgate: esquece pastas vistas há mais de 10 minutos.
+            foreach (var (nome, pastas) in _notasVistas.ToList())
+            {
+                foreach (var pasta in pastas.Where(p => (agora - p.Value).TotalMinutes > 10).Select(p => p.Key).ToList())
+                {
+                    pastas.Remove(pasta);
+                }
+                if (pastas.Count == 0) _notasVistas.Remove(nome);
+                else if (pastas.Count >= 2 && nota == null) nota = (nome, pastas.Count);
             }
 
             if (agora < _fimSilenciadoAte)
@@ -505,69 +652,183 @@ public sealed class SegurancaService : IDisposable
                 .Select(g => g.Last())
                 .ToList();
 
-            var alterados = porArquivo.Count(e => e.tipo == 'M');
-            var extensaoTrocada = porArquivo.Count(e => e.tipo == 'R');
-            var excluidos = porArquivo.Count(e => e.tipo == 'D');
-            var total = porArquivo.Count;
+            alterados = porArquivo.Count(e => e.tipo == 'M');
+            suspeitas = porArquivo.Count(e => e.tipo == 'R');
+            conhecidas = porArquivo.Count(e => e.tipo == 'K');
+            excluidos = porArquivo.Count(e => e.tipo == 'D');
+            total = porArquivo.Count;
+            estouro = _fimEstouro;
 
-            var critico = Math.Max(5, _atual.FimLimiarCritico);
-            var aviso = Math.Max(1, Math.Min(critico - 1, _atual.FimLimiarAviso));
+            critico = Math.Max(5, _atual.FimLimiarCritico);
+            aviso = Math.Max(1, Math.Min(critico - 1, _atual.FimLimiarAviso));
 
-            string? severidade = null;
-            if (total >= critico && alterados + extensaoTrocada >= critico / 2)
-            {
-                severidade = "CRITICAL";
-            }
-            else if (total >= aviso || (_fimEstouro && total > 0))
-            {
-                severidade = "WARNING";
-            }
-
-            if (severidade == null)
+            var candidato = nota != null || conhecidas >= 5 || total >= aviso || (estouro && total > 0);
+            if (!candidato)
             {
                 return;
             }
 
-            var extensoesNovas = porArquivo
+            extensoesNovas = porArquivo
                 .Where(e => e.extNova != null)
-                .GroupBy(e => e.extNova!.ToLowerInvariant())
+                .GroupBy(e => e.extNova!)
                 .OrderByDescending(g => g.Count())
                 .Select(g => g.Key)
                 .Take(5)
                 .ToList();
 
-            var pastaPrincipal = porArquivo
-                .GroupBy(e => Path.GetDirectoryName(e.caminho) ?? "?", StringComparer.OrdinalIgnoreCase)
-                .OrderByDescending(g => g.Count())
-                .First().Key;
+            pastaPrincipal = porArquivo.Count > 0
+                ? porArquivo.GroupBy(e => Path.GetDirectoryName(e.caminho) ?? "?", StringComparer.OrdinalIgnoreCase)
+                    .OrderByDescending(g => g.Count()).First().Key
+                : "?";
 
-            evento = new EventoSeguranca
-            {
-                Tipo = "MASS_FILE_CHANGE",
-                Severidade = severidade,
-                Resumo = $"{total} arquivos alterados em {janela}s em {pastaPrincipal}",
-                Detalhes = new Dictionary<string, object?>
-                {
-                    ["eventos"] = total,
-                    ["janela_segundos"] = janela,
-                    ["pasta"] = pastaPrincipal,
-                    ["alterados"] = alterados,
-                    ["extensao_trocada"] = extensaoTrocada,
-                    ["excluidos"] = excluidos,
-                    ["extensoes_novas"] = extensoesNovas,
-                    ["estouro_buffer"] = _fimEstouro,
-                    ["exemplos"] = porArquivo.Take(10).Select(e => e.caminho).ToList()
-                }
-            };
+            exemplos = porArquivo.Take(10).Select(e => e.caminho).ToList();
+            amostrar = porArquivo.Where(e => e.tipo == 'M').Select(e => e.caminho).Take(12).ToList();
 
             // Não repete o mesmo surto a cada segundo -- silencia por duas
             // janelas e recomeça a contagem do zero.
             _janelaFim.Clear();
             _fimEstouro = false;
             _fimSilenciadoAte = agora.AddSeconds(janela * 2);
+            if (nota != null) _notasVistas.Remove(nota.Value.nome);
         }
 
-        Registrar(evento);
+        // Leitura de arquivo fora da trava: conteúdo ainda válido (cabeçalho
+        // certo, texto legível) = sincronização/backup/git, não criptografia.
+        var (amostrados, invalidos) = (0, 0);
+        if (total >= critico && alterados >= critico / 2)
+        {
+            foreach (var caminho in amostrar)
+            {
+                var invalido = ConteudoInvalido(caminho);
+                if (invalido == null) continue;
+                amostrados++;
+                if (invalido == true) invalidos++;
+            }
+        }
+
+        string? severidade = null;
+        string motivo;
+        if (nota != null)
+        {
+            severidade = "CRITICAL";
+            motivo = $"nota de resgate conhecida \"{nota.Value.nome}\" criada em {nota.Value.pastas} pastas";
+        }
+        else if (conhecidas >= 5)
+        {
+            severidade = "CRITICAL";
+            motivo = $"{conhecidas} arquivos renomeados pra extensão conhecida de ransomware";
+        }
+        else if (total >= critico && suspeitas + conhecidas >= critico / 2)
+        {
+            severidade = "CRITICAL";
+            motivo = "maioria renomeada pra extensão incomum";
+        }
+        else if (total >= critico && amostrados >= 4 && invalidos * 2 >= amostrados)
+        {
+            severidade = "CRITICAL";
+            motivo = $"{invalidos} de {amostrados} arquivos da amostra com conteúdo inválido";
+        }
+        else
+        {
+            severidade = "WARNING";
+            motivo = amostrados > 0
+                ? $"volume alto, mas {amostrados - invalidos} de {amostrados} arquivos da amostra continuam válidos (sincronização/backup?)"
+                : "volume alto de alterações";
+        }
+
+        Registrar(new EventoSeguranca
+        {
+            Tipo = nota != null ? "RANSOM_NOTE_CREATED" : "MASS_FILE_CHANGE",
+            Severidade = severidade,
+            Resumo = nota != null
+                ? $"Nota de resgate \"{nota.Value.nome}\" criada em {nota.Value.pastas} pastas"
+                : $"{total} arquivos alterados em {janela}s em {pastaPrincipal} -- {motivo}",
+            Detalhes = new Dictionary<string, object?>
+            {
+                ["eventos"] = total,
+                ["janela_segundos"] = janela,
+                ["pasta"] = pastaPrincipal,
+                ["alterados"] = alterados,
+                ["extensao_suspeita"] = suspeitas,
+                ["extensao_ransomware"] = conhecidas,
+                ["excluidos"] = excluidos,
+                ["extensoes_novas"] = extensoesNovas,
+                ["amostrados"] = amostrados,
+                ["conteudo_invalido"] = invalidos,
+                ["nota_resgate"] = nota?.nome,
+                ["motivo"] = motivo,
+                ["estouro_buffer"] = estouro,
+                ["exemplos"] = exemplos
+            }
+        });
+    }
+
+    /// <summary>
+    /// true = conteúdo não bate com o tipo do arquivo (cabeçalho trocado ou
+    /// texto com cara de dado aleatório); false = válido; null = tipo que
+    /// não dá pra conferir, arquivo vazio ou inacessível.
+    /// </summary>
+    private static bool? ConteudoInvalido(string caminho)
+    {
+        var ext = Path.GetExtension(caminho).ToLowerInvariant();
+        byte[] inicio;
+        try
+        {
+            using var fluxo = new FileStream(caminho, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            inicio = new byte[4096];
+            var lidos = fluxo.Read(inicio, 0, inicio.Length);
+            if (lidos < 8) return null;
+            Array.Resize(ref inicio, lidos);
+        }
+        catch
+        {
+            return null;
+        }
+
+        bool Comeca(params byte[] assinatura) => inicio.Length >= assinatura.Length && inicio.Take(assinatura.Length).SequenceEqual(assinatura);
+
+        switch (ext)
+        {
+            case ".docx": case ".xlsx": case ".pptx": case ".zip": case ".odt": case ".ods": case ".odp": case ".jar":
+                return !Comeca(0x50, 0x4B, 0x03, 0x04) && !Comeca(0x50, 0x4B, 0x05, 0x06);
+            case ".pdf":
+                return Encoding.ASCII.GetString(inicio, 0, Math.Min(1024, inicio.Length)).IndexOf("%PDF", StringComparison.Ordinal) < 0;
+            case ".png":
+                return !Comeca(0x89, 0x50, 0x4E, 0x47);
+            case ".jpg": case ".jpeg":
+                return !Comeca(0xFF, 0xD8, 0xFF);
+            case ".gif":
+                return !Comeca(0x47, 0x49, 0x46, 0x38);
+            case ".bmp":
+                return !Comeca(0x42, 0x4D);
+            case ".doc": case ".xls": case ".ppt": case ".msg":
+                return !Comeca(0xD0, 0xCF, 0x11, 0xE0);
+            case ".rtf":
+                return !Comeca(0x7B, 0x5C, 0x72, 0x74, 0x66);
+            case ".7z":
+                return !Comeca(0x37, 0x7A, 0xBC, 0xAF);
+            case ".rar":
+                return !Comeca(0x52, 0x61, 0x72, 0x21);
+            case ".txt": case ".csv": case ".xml": case ".html": case ".htm": case ".json": case ".sql": case ".md": case ".cs": case ".php": case ".js":
+                // Texto fica bem abaixo de 6 bits/byte; dado criptografado passa de 7,5.
+                return Entropia(inicio) > 7.2;
+            default:
+                return null;
+        }
+    }
+
+    private static double Entropia(byte[] dados)
+    {
+        var contagem = new int[256];
+        foreach (var b in dados) contagem[b]++;
+        double entropia = 0;
+        foreach (var c in contagem)
+        {
+            if (c == 0) continue;
+            var p = (double)c / dados.Length;
+            entropia -= p * Math.Log2(p);
+        }
+        return entropia;
     }
 
     // ------------------------------------------------------------------
@@ -576,21 +837,31 @@ public sealed class SegurancaService : IDisposable
 
     private void VerificarShadowCopies()
     {
-        int? anterior;
+        Dictionary<string, DateTime>? anteriores;
         DateTime? verificadoAntes;
         lock (_trava)
         {
             if (_atual?.ShadowCopy != true) return;
-            anterior = _shadowContagem;
+            anteriores = _shadowIds;
             verificadoAntes = _shadowVerificadoEm;
         }
 
-        int contagem;
+        var atuais = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
         try
         {
-            using var busca = new ManagementObjectSearcher(@"root\cimv2", "SELECT ID FROM Win32_ShadowCopy");
+            using var busca = new ManagementObjectSearcher(@"root\cimv2", "SELECT ID, InstallDate FROM Win32_ShadowCopy");
             using var resultados = busca.Get();
-            contagem = resultados.Count;
+            foreach (ManagementObject copia in resultados)
+            {
+                using (copia)
+                {
+                    var id = copia["ID"]?.ToString();
+                    if (string.IsNullOrEmpty(id)) continue;
+                    var criada = DateTime.MinValue;
+                    try { criada = ManagementDateTimeConverter.ToDateTime(copia["InstallDate"]?.ToString() ?? ""); } catch { }
+                    atuais[id] = criada;
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -606,39 +877,41 @@ public sealed class SegurancaService : IDisposable
 
         lock (_trava)
         {
-            _shadowContagem = contagem;
+            _shadowIds = atuais;
+            _shadowContagem = atuais.Count;
             _shadowErro = null;
             _shadowVerificadoEm = DateTime.Now;
         }
 
-        if (anterior is not int antes || contagem >= antes)
+        if (anteriores == null)
         {
             return;
         }
 
-        // Sumir UMA só é rotina, mesmo quando era a única (1 → 0): o
-        // Windows descarta a mais antiga quando o espaço enche, e
-        // ferramentas como o Dell SupportAssist criam e apagam a própria
-        // cópia temporária -- foi exatamente isso que isolou uma máquina
-        // à toa no Maurílio (2026-09-26). Só 2 ou mais de uma vez é crítico.
-        var removidas = antes - contagem;
-        if (removidas < 2)
+        var removidas = anteriores.Where(a => !atuais.ContainsKey(a.Key)).Select(a => a.Value).ToList();
+        if (removidas.Count == 0)
         {
-            LogAtividade.Registrar(NivelAtividade.Info, "SEGURANÇA", $"Uma shadow copy saiu ({antes} → {contagem}) -- rotina do Windows ou de ferramenta de backup.");
             return;
         }
 
-        // O próprio Windows registra no log Sistema quando apaga cópias por
-        // falta de espaço: Volsnap 33 = uma cópia a mais antiga; 25 e 36 =
-        // todas. Escrita pesada (Instalador de Módulos do Windows) fez o
-        // Windows apagar 2 de uma vez e isolou a IMUNOQUIMICA à toa
-        // (Maurílio, 2026-09-27). Só conta o que o Windows não explica.
+        // Explicações legítimas, levantadas em documentação da Microsoft,
+        // de fabricantes e nos incidentes do Maurílio (26 e 27/09):
+        //  - temporárias: backup e ferramentas de fabricante (Dell
+        //    SupportAssist) criam e apagam a própria cópia em minutos;
+        //  - expiradas: o Windows 11 24H2 apaga pontos com mais de 60 dias;
+        //  - Volsnap 33: o Windows apagou a mais antiga por limite de espaço;
+        //    Volsnap 25/32/35/36: descartou todas por falta de espaço/volume.
+        var agora = DateTime.Now;
+        var temporarias = removidas.Count(c => c != DateTime.MinValue && (agora - c).TotalHours < 2);
+        var expiradas = removidas.Count(c => c != DateTime.MinValue && (agora - c).TotalDays > 55);
+        var persistentes = removidas.Count - temporarias - expiradas;
         var (apagadasPeloWindows, windowsDescartouTodas) = ExclusoesFeitasPeloWindows(verificadoAntes);
-        var semExplicacao = windowsDescartouTodas ? 0 : Math.Max(0, removidas - apagadasPeloWindows);
+        var semExplicacao = windowsDescartouTodas ? 0 : Math.Max(0, persistentes - apagadasPeloWindows);
+
         if (semExplicacao < 2)
         {
             LogAtividade.Registrar(NivelAtividade.Info, "SEGURANÇA",
-                $"{removidas} shadow copies saíram ({antes} → {contagem}) -- o próprio Windows registrou a limpeza por falta de espaço (Volsnap).");
+                $"{removidas.Count} shadow copies saíram ({anteriores.Count} → {atuais.Count}) -- explicadas: {temporarias} temporárias, {expiradas} expiradas, {apagadasPeloWindows} pelo Windows{(windowsDescartouTodas ? " (descarte total por espaço)" : "")}.");
             return;
         }
 
@@ -646,12 +919,14 @@ public sealed class SegurancaService : IDisposable
         {
             Tipo = "SHADOW_COPY_DELETE_ATTEMPT",
             Severidade = "CRITICAL",
-            Resumo = $"{removidas} shadow copies removidas de uma vez ({antes} → {contagem})",
+            Resumo = $"{removidas.Count} shadow copies removidas de uma vez ({anteriores.Count} → {atuais.Count}), {semExplicacao} sem explicação",
             Detalhes = new Dictionary<string, object?>
             {
-                ["linha_comando"] = $"Contagem de shadow copies caiu de {antes} para {contagem} em menos de 1 minuto",
-                ["contagem_anterior"] = antes,
-                ["contagem_atual"] = contagem,
+                ["linha_comando"] = $"Contagem de shadow copies caiu de {anteriores.Count} para {atuais.Count} em menos de 1 minuto",
+                ["contagem_anterior"] = anteriores.Count,
+                ["contagem_atual"] = atuais.Count,
+                ["temporarias"] = temporarias,
+                ["expiradas"] = expiradas,
                 ["apagadas_pelo_windows"] = apagadasPeloWindows,
                 ["sem_explicacao"] = semExplicacao
             }
@@ -661,7 +936,7 @@ public sealed class SegurancaService : IDisposable
     /// <summary>
     /// Conta, no log Sistema, as exclusões de shadow copy que o próprio
     /// Windows fez desde a leitura anterior (com folga). Sem acesso ao log,
-    /// devolve zero -- o comportamento volta a ser o da 1.0.33.
+    /// devolve zero -- vale só a análise por idade das cópias.
     /// </summary>
     private static (int umaAUma, bool todas) ExclusoesFeitasPeloWindows(DateTime? desde)
     {
@@ -671,7 +946,7 @@ public sealed class SegurancaService : IDisposable
             var consulta = new System.Diagnostics.Eventing.Reader.EventLogQuery(
                 "System",
                 System.Diagnostics.Eventing.Reader.PathType.LogName,
-                $"*[System[(EventID=25 or EventID=33 or EventID=36) and TimeCreated[timediff(@SystemTime) <= {janelaMs}]]]");
+                $"*[System[(EventID=25 or EventID=32 or EventID=33 or EventID=35 or EventID=36) and TimeCreated[timediff(@SystemTime) <= {janelaMs}]]]");
 
             var umaAUma = 0;
             var todas = false;
@@ -695,6 +970,31 @@ public sealed class SegurancaService : IDisposable
         catch
         {
             return (0, false);
+        }
+    }
+
+    private async Task BaixarAssinaturasAsync()
+    {
+        try
+        {
+            var lista = await new SegurancaEventoClient(_config()).BaixarAssinaturasAsync();
+            if (lista is not { } l)
+            {
+                return; // tenta de novo no próximo checkin
+            }
+
+            lock (_trava)
+            {
+                _assinaturasExtensoes = new HashSet<string>(l.extensoes.Select(e => e.StartsWith('.') ? e : "." + e), StringComparer.OrdinalIgnoreCase);
+                _assinaturasNotas = new HashSet<string>(l.notas, StringComparer.OrdinalIgnoreCase);
+                _assinaturasVersao = l.versao;
+            }
+            LogAtividade.Registrar(NivelAtividade.Seguranca, "SEGURANÇA",
+                $"Lista pública de ransomware carregada: {l.extensoes.Count} extensões, {l.notas.Count} notas de resgate.");
+        }
+        finally
+        {
+            lock (_trava) { _baixandoAssinaturas = false; }
         }
     }
 

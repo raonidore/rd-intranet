@@ -64,6 +64,12 @@ public class TrayApplicationContext : ApplicationContext
         _printListener.Iniciar();
 
         var menu = new ContextMenuStrip { Renderer = new RenderizadorMenuEscuro() };
+        // Painel (Visão geral / Segurança / Atividade) -- antes só abria
+        // clicando no ícone, e ninguém sabia que existia.
+        var itemPainel = new ToolStripMenuItem("Abrir painel do agente") { Font = new Font(menu.Font, FontStyle.Bold) };
+        itemPainel.Click += (s, e) => _janelaPrincipal?.Abrir();
+        menu.Items.Add(itemPainel);
+        menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Coletar agora", null, async (s, e) => await ColetarEEnviarAsync(manual: true));
         menu.Items.Add("Atualizar agora", null, async (s, e) => await AtualizarAgoraManualAsync());
         menu.Items.Add("Configurações...", null, (s, e) => AbrirConfiguracoes());
