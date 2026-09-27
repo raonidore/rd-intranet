@@ -3977,7 +3977,7 @@ class AtivoService
 
     private const TIPOS_SOLICITACAO_VALIDOS = [
         'listar_arquivos', 'listar_processos', 'baixar_arquivo', 'executar_cmd', 'executar_powershell',
-        'network_list', 'network_apply', 'network_revert', 'network_ping', 'network_speedtest',
+        'network_list', 'network_apply', 'network_revert', 'network_ping', 'network_speedtest', 'network_traceroute',
     ];
 
     public function solicitarListagem(int $ativoId, string $tipo, ?string $parametro, ?string $solicitadoPor = null, bool $elevado = false): array
@@ -3986,7 +3986,7 @@ class AtivoService
             return ['success' => false, 'message' => 'Tipo de solicitação inválido.'];
         }
 
-        if (in_array($tipo, ['baixar_arquivo', 'executar_cmd', 'executar_powershell', 'network_apply', 'network_revert', 'network_ping'], true) && empty($parametro)) {
+        if (in_array($tipo, ['baixar_arquivo', 'executar_cmd', 'executar_powershell', 'network_apply', 'network_revert', 'network_ping', 'network_traceroute'], true) && empty($parametro)) {
             return ['success' => false, 'message' => 'Informe o caminho do arquivo/comando.'];
         }
 
@@ -4016,7 +4016,7 @@ class AtivoService
             }
         } elseif ($tipo === 'network_revert' && (!ctype_digit((string)$parametro) || (int)$parametro <= 0)) {
             return ['success' => false, 'message' => 'Adaptador inválido para reversão.'];
-        } elseif ($tipo === 'network_ping') {
+        } elseif (in_array($tipo, ['network_ping', 'network_traceroute'], true)) {
             $pedido = json_decode((string)$parametro, true);
             if (!is_array($pedido) || !filter_var($pedido['ip'] ?? '', FILTER_VALIDATE_IP)) {
                 return ['success' => false, 'message' => 'Digite um endereço IP válido. Nomes de host não são aceitos.'];

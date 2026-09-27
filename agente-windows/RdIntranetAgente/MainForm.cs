@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.ServiceProcess;
 using System.Text.Json;
 using System.Windows.Forms;
@@ -45,9 +46,11 @@ public sealed class MainForm : Form
     private readonly TextBox _redeGatewayLocal;
     private readonly TextBox _redeDnsLocal;
     private readonly TextBox _redePingLocal;
+    private readonly TextBox _redeTraceLocal;
     private readonly Label _redeStatusLocal;
-    private readonly Label _redePingResultado;
-    private readonly Label _redeSpeedResultado;
+    private readonly RichTextBox _redePingResultado;
+    private readonly RichTextBox _redeSpeedResultado;
+    private readonly RichTextBox _redeTraceResultado;
     private readonly Button _redeBotaoReverter;
     private string _assinaturaEventos = "";
 
@@ -70,8 +73,6 @@ public sealed class MainForm : Form
         _aplicarConfig = aplicarConfig;
         _alternarServico = alternarServico;
 
-        // Escala por DPI: medidas escritas pra 100% (96 DPI) crescem sozinhas
-        // em 125%/150%/200%; o layout empilhado acompanha o redimensionamento.
         SuspendLayout();
         AutoScaleDimensions = new SizeF(96F, 96F);
         AutoScaleMode = AutoScaleMode.Dpi;
@@ -220,62 +221,141 @@ public sealed class MainForm : Form
         Empilhar(_paginaAtividade, _listaAtividade, tituloAtividade, Espaco(8));
 
         _paginaNetwork = CriarPagina();
-        var tituloNetwork = CriarTitulo("Network", "Adaptadores, configuração TCP/IP e testes locais desta máquina.");
+        var tituloNetwork = CriarTitulo("Network", "Adaptadores, TCP/IP e diagnósticos desta máquina.");
+        var networkContent = new Panel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = Tema.Fundo };
+        var networkStack = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Location = Point.Empty,
+            Width = 720,
+            BackColor = Tema.Fundo,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty
+        };
+        networkContent.Controls.Add(networkStack);
+
         _redeStatusLocal = new Label
         {
             Text = "Selecione um adaptador para consultar os valores atuais.",
             ForeColor = Tema.TextoSecundario,
             Height = 28,
+            AutoEllipsis = true,
             TextAlign = ContentAlignment.MiddleLeft
         };
-        var acoesNetwork = new FlowLayoutPanel { AutoSize = true, WrapContents = true, BackColor = Tema.Fundo };
+        var acoesNetwork = new FlowLayoutPanel { AutoSize = true, WrapContents = true, BackColor = Tema.Fundo, Margin = new Padding(0, 0, 0, 8) };
         acoesNetwork.Controls.Add(CriarBotaoAcao("Atualizar adaptadores", BotaoTema.Variante.Secundario, async () => await AtualizarAdaptadoresRedeAsync()));
         _redeBotaoReverter = CriarBotaoAcao("Reverter última alteração", BotaoTema.Variante.Perigo, async () => await ReverterRedeLocalAsync());
         _redeBotaoReverter.Enabled = false;
         acoesNetwork.Controls.Add(_redeBotaoReverter);
 
-        _listaAdaptadoresRede = CriarLista(new[] { ("Adaptador", 180), ("Estado", 90), ("MAC", 145), ("IPv4", 130), ("Configuração", 100) });
+        _listaAdaptadoresRede = CriarLista(new[]
+        {
+            ("Adaptador", 145), ("Link", 58), ("Ativo", 54), ("MAC", 125), ("IPv4", 105), ("Modo", 68), ("Wi-Fi", 110)
+        });
+        _listaAdaptadoresRede.Height = 148;
+        _listaAdaptadoresRede.Margin = new Padding(0, 0, 0, 10);
         _listaAdaptadoresRede.MultiSelect = false;
         _listaAdaptadoresRede.SelectedIndexChanged += (s, e) => SelecionarAdaptadorRedeLocal();
+        _listaAdaptadoresRede.KeyDown += (s, e) =>
+        {
+            if (e.Control && e.KeyCode == Keys.C)
+            {
+                CopiarAdaptadorSelecionado();
+                e.Handled = true;
+            }
+        };
+        var menuAdaptador = new ContextMenuStrip { Renderer = new RenderizadorMenuEscuro() };
+        menuAdaptador.Items.Add("Copiar linha", null, (s, e) => CopiarAdaptadorSelecionado());
+        _listaAdaptadoresRede.ContextMenuStrip = menuAdaptador;
 
+        var cartaoConfiguracaoRede = new CartaoRedePanel { Height = 228, Margin = new Padding(0, 0, 0, 10) };
         var formularioRede = new TableLayoutPanel
         {
-            AutoSize = true,
-            ColumnCount = 4,
-            RowCount = 3,
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 4,
             BackColor = Tema.Superficie,
-            Padding = new Padding(12),
-            Margin = new Padding(0, 8, 0, 8)
+            Padding = new Padding(4)
         };
-        for (var coluna = 0; coluna < 4; coluna++) formularioRede.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
-        _redeDhcpLocal = new CheckBox { Text = "Usar DHCP", ForeColor = Tema.Texto, BackColor = Tema.Superficie, AutoSize = true };
+        formularioRede.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        formularioRede.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        formularioRede.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        formularioRede.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        formularioRede.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        formularioRede.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        _redeDhcpLocal = new CheckBox { Text = "Usar DHCP", ForeColor = Tema.Texto, BackColor = Tema.Superficie, AutoSize = true, Anchor = AnchorStyles.Left };
         _redeIpLocal = CriarCampoRede();
         _redeMascaraLocal = CriarCampoRede();
         _redeGatewayLocal = CriarCampoRede();
         _redeDnsLocal = CriarCampoRede();
         formularioRede.Controls.Add(_redeDhcpLocal, 0, 0);
-        formularioRede.SetColumnSpan(_redeDhcpLocal, 4);
+        formularioRede.SetColumnSpan(_redeDhcpLocal, 2);
         formularioRede.Controls.Add(CriarCampoComRotulo("Endereço IPv4", _redeIpLocal), 0, 1);
         formularioRede.Controls.Add(CriarCampoComRotulo("Máscara", _redeMascaraLocal), 1, 1);
-        formularioRede.Controls.Add(CriarCampoComRotulo("Gateway", _redeGatewayLocal), 2, 1);
-        formularioRede.Controls.Add(CriarCampoComRotulo("DNS (até 2, separados por vírgula)", _redeDnsLocal), 3, 1);
-        var botaoAplicarRede = CriarBotaoAcao("Salvar e aplicar", BotaoTema.Variante.Primario, async () => await AplicarRedeLocalAsync());
-        formularioRede.Controls.Add(botaoAplicarRede, 0, 2);
-        formularioRede.SetColumnSpan(botaoAplicarRede, 4);
+        formularioRede.Controls.Add(CriarCampoComRotulo("Gateway", _redeGatewayLocal), 0, 2);
+        formularioRede.Controls.Add(CriarCampoComRotulo("DNS (até 2, separados por vírgula)", _redeDnsLocal), 1, 2);
+        var botaoAplicarNetwork = CriarBotaoAcao("Salvar e aplicar", BotaoTema.Variante.Primario, async () => await AplicarRedeLocalAsync());
+        botaoAplicarNetwork.Dock = DockStyle.Left;
+        formularioRede.Controls.Add(botaoAplicarNetwork, 0, 3);
+        formularioRede.SetColumnSpan(botaoAplicarNetwork, 2);
+        cartaoConfiguracaoRede.Controls.Add(formularioRede);
         _redeDhcpLocal.CheckedChanged += (s, e) => AtualizarCamposRedeLocal();
 
-        var testesNetwork = new FlowLayoutPanel { AutoSize = true, WrapContents = true, BackColor = Tema.Fundo };
+        var cartoesDiagnostico = new TableLayoutPanel
+        {
+            ColumnCount = 2,
+            RowCount = 2,
+            Height = 430,
+            BackColor = Tema.Fundo,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty
+        };
+        cartoesDiagnostico.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        cartoesDiagnostico.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        cartoesDiagnostico.RowStyles.Add(new RowStyle(SizeType.Absolute, 186));
+        cartoesDiagnostico.RowStyles.Add(new RowStyle(SizeType.Absolute, 236));
         _redePingLocal = CriarCampoRede();
-        _redePingLocal.Width = 150;
         _redePingLocal.PlaceholderText = "192.168.0.1";
-        _redePingResultado = new Label { ForeColor = Tema.TextoSecundario, AutoSize = true, Padding = new Padding(8, 8, 8, 0) };
-        _redeSpeedResultado = new Label { ForeColor = Tema.TextoSecundario, AutoSize = true, Padding = new Padding(8, 8, 8, 0) };
-        testesNetwork.Controls.Add(_redePingLocal);
-        testesNetwork.Controls.Add(CriarBotaoAcao("Ping", BotaoTema.Variante.Secundario, async () => await TestarPingLocalAsync()));
-        testesNetwork.Controls.Add(_redePingResultado);
-        testesNetwork.Controls.Add(CriarBotaoAcao("Teste de velocidade", BotaoTema.Variante.Secundario, async () => await TestarVelocidadeLocalAsync()));
-        testesNetwork.Controls.Add(_redeSpeedResultado);
-        Empilhar(_paginaNetwork, _listaAdaptadoresRede, tituloNetwork, _redeStatusLocal, acoesNetwork, formularioRede, testesNetwork);
+        _redePingResultado = CriarResultadoRede(62);
+        var linhaPing = CriarLinhaDiagnostico(_redePingLocal, CriarBotaoAcao("Ping", BotaoTema.Variante.Secundario, async () => await TestarPingLocalAsync()));
+        cartoesDiagnostico.Controls.Add(CriarCartaoDiagnostico("Ping", "Quatro pacotes para um endereço IPv4.", linhaPing, _redePingResultado), 0, 0);
+
+        _redeSpeedResultado = CriarResultadoRede(62);
+        var botaoSpeed = CriarBotaoAcao("Testar velocidade", BotaoTema.Variante.Secundario, async () => await TestarVelocidadeLocalAsync());
+        botaoSpeed.Dock = DockStyle.Fill;
+        cartoesDiagnostico.Controls.Add(CriarCartaoDiagnostico("Velocidade", "Teste Cloudflare · transfere até 9 MB.", botaoSpeed, _redeSpeedResultado), 1, 0);
+
+        _redeTraceLocal = CriarCampoRede();
+        _redeTraceLocal.PlaceholderText = "203.0.113.1";
+        _redeTraceResultado = CriarResultadoRede(120);
+        var linhaTrace = CriarLinhaDiagnostico(_redeTraceLocal, CriarBotaoAcao("Trace route", BotaoTema.Variante.Secundario, async () => await TestarTraceRouteLocalAsync()));
+        var cartaoTrace = CriarCartaoDiagnostico("Trace route", "Mostra os saltos até o IP de destino (máximo 12).", linhaTrace, _redeTraceResultado);
+        cartoesDiagnostico.Controls.Add(cartaoTrace, 0, 1);
+        cartoesDiagnostico.SetColumnSpan(cartaoTrace, 2);
+
+        networkStack.Controls.Add(tituloNetwork);
+        networkStack.Controls.Add(_redeStatusLocal);
+        networkStack.Controls.Add(acoesNetwork);
+        networkStack.Controls.Add(cartaoConfiguracaoRede);
+        networkStack.Controls.Add(_listaAdaptadoresRede);
+        networkStack.Controls.Add(cartoesDiagnostico);
+        void AjustarLargurasNetwork()
+        {
+            var largura = Math.Max(360, networkContent.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 8);
+            networkStack.Width = largura;
+            tituloNetwork.Width = largura;
+            _redeStatusLocal.Width = largura;
+            acoesNetwork.Width = largura;
+            cartaoConfiguracaoRede.Width = largura;
+            _listaAdaptadoresRede.Width = largura;
+            cartoesDiagnostico.Width = largura;
+        }
+        networkContent.Resize += (s, e) => AjustarLargurasNetwork();
+        AjustarLargurasNetwork();
+        _paginaNetwork.Controls.Add(networkContent);
 
         // Configurações dentro do próprio painel (antes era uma janela à parte):
         // a mesma tela de sempre, embutida -- validação e busca de unidades iguais.
@@ -432,6 +512,109 @@ public sealed class MainForm : Form
         return painel;
     }
 
+    private static CartaoRedePanel CriarCartaoDiagnostico(string titulo, string descricao, Control linhaAcao, RichTextBox resultado)
+    {
+        var cartao = new CartaoRedePanel { Dock = DockStyle.Fill, Margin = new Padding(6), Padding = new Padding(10) };
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 4,
+            BackColor = Tema.Superficie,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 21));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.Controls.Add(new Label
+        {
+            Text = titulo,
+            Dock = DockStyle.Fill,
+            ForeColor = Tema.Texto,
+            BackColor = Tema.Superficie,
+            Font = Tema.FonteSemibold(9.5F),
+            TextAlign = ContentAlignment.MiddleLeft
+        }, 0, 0);
+        layout.Controls.Add(new Label
+        {
+            Text = descricao,
+            Dock = DockStyle.Fill,
+            ForeColor = Tema.TextoSecundario,
+            BackColor = Tema.Superficie,
+            Font = Tema.Fonte(8F),
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoEllipsis = true
+        }, 0, 1);
+        linhaAcao.Dock = DockStyle.Fill;
+        layout.Controls.Add(linhaAcao, 0, 2);
+        resultado.Dock = DockStyle.Fill;
+        resultado.Margin = new Padding(0, 5, 0, 0);
+        layout.Controls.Add(resultado, 0, 3);
+        cartao.Controls.Add(layout);
+        return cartao;
+    }
+
+    private static TableLayoutPanel CriarLinhaDiagnostico(Control? entrada, BotaoTema botao)
+    {
+        var linha = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            BackColor = Tema.Superficie,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty
+        };
+        linha.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        linha.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112));
+        linha.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        if (entrada != null)
+        {
+            entrada.Dock = DockStyle.Fill;
+            entrada.Margin = new Padding(0, 2, 6, 2);
+            linha.Controls.Add(entrada, 0, 0);
+        }
+        else
+        {
+            linha.Controls.Add(new Panel { BackColor = Tema.Superficie }, 0, 0);
+        }
+        botao.Dock = DockStyle.Fill;
+        botao.Margin = new Padding(0, 2, 0, 2);
+        linha.Controls.Add(botao, 1, 0);
+        return linha;
+    }
+
+    private static RichTextBox CriarResultadoRede(int alturaMinima) => new()
+    {
+        ReadOnly = true,
+        DetectUrls = false,
+        BorderStyle = BorderStyle.None,
+        ScrollBars = RichTextBoxScrollBars.Vertical,
+        BackColor = Tema.SuperficieElevada,
+        ForeColor = Tema.TextoSecundario,
+        Font = Tema.FonteMono(8.5F),
+        MinimumSize = new Size(0, alturaMinima),
+        Text = "Aguardando teste..."
+    };
+
+    private void CopiarAdaptadorSelecionado()
+    {
+        if (_listaAdaptadoresRede.SelectedItems.Count == 0) return;
+        try
+        {
+            var linha = _listaAdaptadoresRede.SelectedItems[0];
+            Clipboard.SetText(string.Join("\t", linha.SubItems.Cast<ListViewItem.ListViewSubItem>().Select(subitem => subitem.Text)));
+            _redeStatusLocal.Text = "Dados do adaptador copiados para a área de transferência.";
+        }
+        catch (Exception ex)
+        {
+            _redeStatusLocal.Text = $"Não foi possível copiar os dados: {ex.Message}";
+        }
+    }
+
     private async Task AtualizarAdaptadoresRedeAsync()
     {
         var idSelecionado = _listaAdaptadoresRede.SelectedItems.Count > 0
@@ -446,10 +629,17 @@ public sealed class MainForm : Form
             foreach (var adaptador in adaptadores)
             {
                 var item = new ListViewItem(adaptador.Nome) { Tag = adaptador };
-                item.SubItems.Add(adaptador.Status);
+                var linkDown = adaptador.Status.Equals("Down", StringComparison.OrdinalIgnoreCase);
+                var estado = adaptador.Ativo ? "UP" : linkDown ? "DOWN" : "DESCONHECIDO";
+                var corEstado = adaptador.Ativo ? Tema.Sucesso : linkDown ? Tema.Perigo : Tema.TextoSecundario;
+                var celulaEstado = item.SubItems.Add(estado);
+                celulaEstado.ForeColor = corEstado;
+                var celulaAtivo = item.SubItems.Add(adaptador.Ativo ? "Sim" : "Não");
+                celulaAtivo.ForeColor = corEstado;
                 item.SubItems.Add(adaptador.Mac);
                 item.SubItems.Add(adaptador.Ip ?? "—");
                 item.SubItems.Add(adaptador.Dhcp ? "DHCP" : "Manual");
+                item.SubItems.Add(adaptador.WifiSsid ?? "—");
                 _listaAdaptadoresRede.Items.Add(item);
             }
             _listaAdaptadoresRede.EndUpdate();
@@ -559,13 +749,16 @@ public sealed class MainForm : Form
             var json = JsonSerializer.Serialize(await Task.Run(() => NetworkService.PingAsync(parametro)));
             using var resultado = JsonDocument.Parse(json);
             var respostas = resultado.RootElement.GetProperty("respostas").EnumerateArray();
-            _redePingResultado.Text = string.Join("  ·  ", respostas.Select(r => r.GetProperty("sucesso").GetBoolean()
-                ? $"{r.GetProperty("tempo_ms").GetInt64()} ms"
-                : r.GetProperty("status").GetString()));
+            var linhas = respostas.Select((resposta, indice) => resposta.GetProperty("sucesso").GetBoolean()
+                ? $"Resposta {indice + 1}: {resposta.GetProperty("tempo_ms").GetInt64()} ms"
+                : $"Pacote {indice + 1}: {resposta.GetProperty("status").GetString()}");
+            _redePingResultado.Text = string.Join(Environment.NewLine, linhas);
+            _redePingResultado.ForeColor = _redePingResultado.Text.Contains("TimedOut", StringComparison.OrdinalIgnoreCase) ? Tema.Alerta : Tema.Texto;
         }
         catch (Exception ex)
         {
             _redePingResultado.Text = ex.Message;
+            _redePingResultado.ForeColor = Tema.Perigo;
         }
     }
 
@@ -578,10 +771,32 @@ public sealed class MainForm : Form
             using var resultado = JsonDocument.Parse(json);
             var dados = resultado.RootElement;
             _redeSpeedResultado.Text = $"↓ {dados.GetProperty("download_mbps").GetDouble():0.##} Mbps  ↑ {dados.GetProperty("upload_mbps").GetDouble():0.##} Mbps";
+            _redeSpeedResultado.ForeColor = Tema.Sucesso;
         }
         catch (Exception ex)
         {
             _redeSpeedResultado.Text = ex.Message;
+            _redeSpeedResultado.ForeColor = Tema.Perigo;
+        }
+    }
+
+    private async Task TestarTraceRouteLocalAsync()
+    {
+        try
+        {
+            _redeTraceResultado.Text = "Rastreando rota...";
+            _redeTraceResultado.ForeColor = Tema.TextoSecundario;
+            var parametro = JsonSerializer.Serialize(new { ip = _redeTraceLocal.Text.Trim() });
+            var json = JsonSerializer.Serialize(await Task.Run(() => NetworkService.TracerouteAsync(parametro)));
+            using var resultado = JsonDocument.Parse(json);
+            var dados = resultado.RootElement;
+            _redeTraceResultado.Text = dados.GetProperty("saida").GetString() ?? "Sem saída do Windows.";
+            _redeTraceResultado.ForeColor = dados.GetProperty("timeout").GetBoolean() ? Tema.Alerta : Tema.Texto;
+        }
+        catch (Exception ex)
+        {
+            _redeTraceResultado.Text = ex.Message;
+            _redeTraceResultado.ForeColor = Tema.Perigo;
         }
     }
 
@@ -650,7 +865,8 @@ public sealed class MainForm : Form
                 e.Graphics.FillRectangle(fundo, e.Bounds);
             }
             var area = new Rectangle(e.Bounds.X + 6, e.Bounds.Y, Math.Max(0, e.Bounds.Width - 10), e.Bounds.Height);
-            TextRenderer.DrawText(e.Graphics, e.SubItem.Text, lista.Font, area, e.Item.ForeColor,
+            var corTexto = e.SubItem.ForeColor.IsEmpty ? e.Item.ForeColor : e.SubItem.ForeColor;
+            TextRenderer.DrawText(e.Graphics, e.SubItem.Text, lista.Font, area, corTexto,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
         };
 
@@ -840,5 +1056,35 @@ public sealed class MainForm : Form
             indice++;
         }
         return $"{valor:0.#} {unidades[indice]}";
+    }
+
+    private sealed class CartaoRedePanel : Panel
+    {
+        public CartaoRedePanel()
+        {
+            BackColor = Tema.Superficie;
+            Padding = new Padding(12);
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        }
+
+        protected override void OnPaintBackground(PaintEventArgs e)
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            e.Graphics.Clear(Parent?.BackColor ?? Tema.Fundo);
+            if (Width < 2 || Height < 2) return;
+            using var caminho = Tema.Arredondado(new Rectangle(0, 0, Width - 1, Height - 1), 10);
+            using var pincel = new SolidBrush(BackColor);
+            e.Graphics.FillPath(pincel, caminho);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            if (Width < 2 || Height < 2) return;
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            using var caminho = Tema.Arredondado(new Rectangle(0, 0, Width - 1, Height - 1), 10);
+            using var borda = new Pen(Tema.BordaSuave);
+            e.Graphics.DrawPath(borda, caminho);
+        }
     }
 }

@@ -5,6 +5,8 @@ using System.Management;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -27,6 +29,12 @@ public sealed class AdaptadorRedeInfo
     [JsonPropertyName("status")]
     public string Status { get; init; } = "";
 
+    [JsonPropertyName("ativo")]
+    public bool Ativo { get; init; }
+
+    [JsonPropertyName("wifi_ssid")]
+    public string? WifiSsid { get; init; }
+
     [JsonPropertyName("dhcp")]
     public bool Dhcp { get; init; }
 
@@ -48,6 +56,69 @@ public sealed class AdaptadorRedeInfo
 
 public sealed class NetworkService
 {
+    private const int WlanOpcodeCurrentConnection = 7;
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct WlanInterfaceInfo
+    {
+        public Guid InterfaceGuid;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)] public string Description;
+        public uint State;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Dot11Ssid
+    {
+        public uint Length;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32, ArraySubType = UnmanagedType.U1)] public byte[] Bytes;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WlanAssociationAttributes
+    {
+        public Dot11Ssid Ssid;
+        public uint BssType;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 6, ArraySubType = UnmanagedType.U1)] public byte[] Bssid;
+        public uint PhyType;
+        public uint SignalQuality;
+        public uint RxRate;
+        public uint TxRate;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WlanSecurityAttributes
+    {
+        public int SecurityEnabled;
+        public int OneXEnabled;
+        public int AuthAlgorithm;
+        public int CipherAlgorithm;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct WlanConnectionAttributes
+    {
+        public uint State;
+        public uint ConnectionMode;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)] public string ProfileName;
+        public WlanAssociationAttributes Association;
+        public WlanSecurityAttributes Security;
+    }
+
+    [DllImport("wlanapi.dll")]
+    private static extern int WlanOpenHandle(uint clientVersion, IntPtr reserved, out uint negotiatedVersion, out IntPtr clientHandle);
+
+    [DllImport("wlanapi.dll")]
+    private static extern int WlanEnumInterfaces(IntPtr clientHandle, IntPtr reserved, out IntPtr interfaceList);
+
+    [DllImport("wlanapi.dll")]
+    private static extern int WlanQueryInterface(IntPtr clientHandle, ref Guid interfaceGuid, int opcode, IntPtr reserved, out int dataSize, out IntPtr data, out int valueType);
+
+    [DllImport("wlanapi.dll")]
+    private static extern void WlanFreeMemory(IntPtr memory);
+
+    [DllImport("wlanapi.dll")]
+    private static extern int WlanCloseHandle(IntPtr clientHandle, IntPtr reserved);
+
     private sealed class Snapshot
     {
         public int AdapterId { get; set; }
@@ -89,6 +160,18 @@ public sealed class NetworkService
         public int Quantidade { get; set; } = 4;
     }
 
+    private sealed class RespostaPing
+    {
+        [JsonPropertyName("sucesso")]
+        public bool Sucesso { get; init; }
+
+        [JsonPropertyName("status")]
+        public string Status { get; init; } = "";
+
+        [JsonPropertyName("tempo_ms")]
+        public long? TempoMs { get; init; }
+    }
+
     private static readonly string PastaDados = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RDIntranetAgent");
     private static readonly string CaminhoSnapshots = Path.Combine(PastaDados, "network-snapshots.json");
@@ -107,6 +190,7 @@ public sealed class NetworkService
                 var mac = LerTexto(adaptador, "MACAddress") ?? "";
                 var nic = NetworkInterface.GetAllNetworkInterfaces().FirstOrDefault(n =>
                 {
+                    if (Guid.TryParse(n.Id, out var guid) && guid == GetGuid(adaptador, "SettingID")) return true;
                     try { return n.GetIPProperties().GetIPv4Properties()?.Index == id; }
                     catch { return false; }
                 });
@@ -121,6 +205,9 @@ public sealed class NetworkService
                     Descricao = LerTexto(adaptador, "Description") ?? "",
                     Mac = mac,
                     Status = nic?.OperationalStatus.ToString() ?? "Desconhecido",
+                    Ativo = nic?.OperationalStatus == OperationalStatus.Up,
+                    WifiSsid = nic?.NetworkInterfaceType == NetworkInterfaceType.Wireless80211 && nic.OperationalStatus == OperationalStatus.Up &&
+                        Guid.TryParse(nic.Id, out var wifiGuid) ? ObterSsidWifi(wifiGuid) : null,
                     Dhcp = LerBooleano(adaptador, "DHCPEnabled"),
                     Ip = indiceIp >= 0 ? ips[indiceIp] : null,
                     Mascara = indiceIp >= 0 && indiceIp < mascaras.Length ? mascaras[indiceIp] : null,
@@ -185,49 +272,168 @@ public sealed class NetworkService
         if (!IPAddress.TryParse(pedido.Ip, out var endereco))
             throw new InvalidOperationException("Digite um endereço IP válido; nomes de host não são aceitos.");
         var quantidade = Math.Clamp(pedido.Quantidade, 1, 10);
-        var respostas = new List<object>();
+        var respostas = new List<RespostaPing>();
         using var ping = new Ping();
         for (var i = 0; i < quantidade; i++)
         {
             try
             {
                 var resposta = await ping.SendPingAsync(endereco, 2000);
-                respostas.Add(new { sucesso = resposta.Status == IPStatus.Success, status = resposta.Status.ToString(), tempo_ms = resposta.Status == IPStatus.Success ? resposta.RoundtripTime : (long?)null });
+                respostas.Add(new RespostaPing
+                {
+                    Sucesso = resposta.Status == IPStatus.Success,
+                    Status = resposta.Status.ToString(),
+                    TempoMs = resposta.Status == IPStatus.Success ? resposta.RoundtripTime : null
+                });
             }
             catch (Exception ex)
             {
-                respostas.Add(new { sucesso = false, status = ex.Message, tempo_ms = (long?)null });
+                respostas.Add(new RespostaPing { Sucesso = false, Status = ex.Message });
             }
         }
+        var exitosos = respostas.Count(r => r.Sucesso);
+        var tempos = respostas.Where(r => r.TempoMs.HasValue).Select(r => r.TempoMs!.Value).ToArray();
+        var resumo = $"{exitosos}/{quantidade} respostas" + (tempos.Length > 0 ? $", média {tempos.Average():0} ms" : ", sem resposta");
+        LogAtividade.Registrar(exitosos == quantidade ? NivelAtividade.Sucesso : NivelAtividade.Aviso, "PING", $"Ping em {endereco}: {resumo}.");
         return new { ip = endereco.ToString(), respostas };
+    }
+
+    public static async Task<object> TracerouteAsync(string? parametro)
+    {
+        var pedido = JsonSerializer.Deserialize<PingSolicitado>(parametro ?? "")
+            ?? throw new InvalidOperationException("Endereço IP inválido.");
+        if (!IPAddress.TryParse(pedido.Ip, out var endereco))
+            throw new InvalidOperationException("Digite um endereço IP válido; nomes de host não são aceitos.");
+
+        using var processo = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "tracert.exe",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            }
+        };
+        processo.StartInfo.ArgumentList.Add("-d");
+        processo.StartInfo.ArgumentList.Add("-h");
+        processo.StartInfo.ArgumentList.Add("12");
+        processo.StartInfo.ArgumentList.Add("-w");
+        processo.StartInfo.ArgumentList.Add("700");
+        processo.StartInfo.ArgumentList.Add(endereco.ToString());
+
+        processo.Start();
+        var saidaTask = processo.StandardOutput.ReadToEndAsync();
+        var erroTask = processo.StandardError.ReadToEndAsync();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(16));
+        var expirou = false;
+        try
+        {
+            await processo.WaitForExitAsync(timeout.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            expirou = true;
+            try { processo.Kill(entireProcessTree: true); } catch { }
+            await processo.WaitForExitAsync();
+        }
+
+        var texto = (await saidaTask).Trim();
+        var erro = (await erroTask).Trim();
+        if (texto.Length == 0) texto = erro;
+        var chegou = texto.Contains("Trace complete", StringComparison.OrdinalIgnoreCase)
+            || texto.Contains("Rastreamento concluído", StringComparison.OrdinalIgnoreCase)
+            || texto.Contains("Rastreamento completo", StringComparison.OrdinalIgnoreCase);
+        LogAtividade.Registrar(expirou ? NivelAtividade.Aviso : NivelAtividade.Info, "TRACE ROUTE",
+            expirou ? $"Traceroute para {endereco} atingiu o limite de 16 segundos." :
+            $"Traceroute para {endereco}: {(chegou ? "destino alcançado" : "concluído; confira os saltos abaixo") }.");
+        return new { ip = endereco.ToString(), timeout = expirou, destino_alcancado = chegou, saida = texto };
     }
 
     public static async Task<object> TestarVelocidadeAsync()
     {
-        using var cliente = new HttpClient { Timeout = TimeSpan.FromSeconds(45) };
-        cliente.DefaultRequestHeaders.CacheControl = new System.Net.Http.Headers.CacheControlHeaderValue { NoCache = true };
-        const int bytesDownload = 8 * 1024 * 1024;
-        const int bytesUpload = 1024 * 1024;
-
-        var relogio = Stopwatch.StartNew();
-        using var download = await cliente.GetAsync($"https://speed.cloudflare.com/__down?bytes={bytesDownload}", HttpCompletionOption.ResponseHeadersRead);
-        download.EnsureSuccessStatusCode();
-        await using (var stream = await download.Content.ReadAsStreamAsync())
+        try
         {
-            var buffer = new byte[64 * 1024];
-            while (await stream.ReadAsync(buffer) != 0) { }
+            using var cliente = new HttpClient { Timeout = TimeSpan.FromSeconds(45) };
+            cliente.DefaultRequestHeaders.CacheControl = new System.Net.Http.Headers.CacheControlHeaderValue { NoCache = true };
+            const int bytesDownload = 8 * 1024 * 1024;
+            const int bytesUpload = 1024 * 1024;
+
+            var relogio = Stopwatch.StartNew();
+            using var download = await cliente.GetAsync($"https://speed.cloudflare.com/__down?bytes={bytesDownload}", HttpCompletionOption.ResponseHeadersRead);
+            download.EnsureSuccessStatusCode();
+            await using (var stream = await download.Content.ReadAsStreamAsync())
+            {
+                var buffer = new byte[64 * 1024];
+                while (await stream.ReadAsync(buffer) != 0) { }
+            }
+            relogio.Stop();
+            var downloadMbps = bytesDownload * 8d / Math.Max(0.001, relogio.Elapsed.TotalSeconds) / 1_000_000d;
+            var corpoUpload = new ByteArrayContent(new byte[bytesUpload]);
+            corpoUpload.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+            relogio.Restart();
+            using var upload = await cliente.PostAsync("https://speed.cloudflare.com/__up", corpoUpload);
+            upload.EnsureSuccessStatusCode();
+            await upload.Content.ReadAsByteArrayAsync();
+            relogio.Stop();
+            var uploadMbps = bytesUpload * 8d / Math.Max(0.001, relogio.Elapsed.TotalSeconds) / 1_000_000d;
+            LogAtividade.Registrar(NivelAtividade.Sucesso, "VELOCIDADE", $"Teste Cloudflare: download {downloadMbps:0.##} Mbps, upload {uploadMbps:0.##} Mbps.");
+            return new { provedor = "Cloudflare speed.cloudflare.com", download_mbps = Math.Round(downloadMbps, 2), upload_mbps = Math.Round(uploadMbps, 2) };
         }
-        relogio.Stop();
-        var downloadMbps = bytesDownload * 8d / Math.Max(0.001, relogio.Elapsed.TotalSeconds) / 1_000_000d;
-        var corpoUpload = new ByteArrayContent(new byte[bytesUpload]);
-        corpoUpload.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
-        relogio.Restart();
-        using var upload = await cliente.PostAsync("https://speed.cloudflare.com/__up", corpoUpload);
-        upload.EnsureSuccessStatusCode();
-        await upload.Content.ReadAsByteArrayAsync();
-        relogio.Stop();
-        var uploadMbps = bytesUpload * 8d / Math.Max(0.001, relogio.Elapsed.TotalSeconds) / 1_000_000d;
-        return new { provedor = "Cloudflare speed.cloudflare.com", download_mbps = Math.Round(downloadMbps, 2), upload_mbps = Math.Round(uploadMbps, 2) };
+        catch (Exception ex)
+        {
+            LogAtividade.Registrar(NivelAtividade.Erro, "VELOCIDADE", $"Teste de velocidade falhou: {ex.Message}");
+            throw;
+        }
+    }
+
+    private static string? ObterSsidWifi(Guid interfaceGuid)
+    {
+        IntPtr cliente = IntPtr.Zero;
+        IntPtr lista = IntPtr.Zero;
+        try
+        {
+            if (WlanOpenHandle(2, IntPtr.Zero, out _, out cliente) != 0 ||
+                WlanEnumInterfaces(cliente, IntPtr.Zero, out lista) != 0)
+                return null;
+            var quantidade = Marshal.ReadInt32(lista);
+            var tamanhoItem = Marshal.SizeOf<WlanInterfaceInfo>();
+            for (var indice = 0; indice < quantidade; indice++)
+            {
+                var item = Marshal.PtrToStructure<WlanInterfaceInfo>(IntPtr.Add(lista, 8 + indice * tamanhoItem));
+                if (item.InterfaceGuid != interfaceGuid || item.State != 1) continue;
+                if (WlanQueryInterface(cliente, ref interfaceGuid, WlanOpcodeCurrentConnection, IntPtr.Zero,
+                    out _, out var dados, out _) != 0)
+                    return null;
+                try
+                {
+                    var conexao = Marshal.PtrToStructure<WlanConnectionAttributes>(dados);
+                    var ssid = conexao.Association.Ssid;
+                    if (ssid.Bytes == null || ssid.Length == 0 || ssid.Length > ssid.Bytes.Length) return null;
+                    return Encoding.UTF8.GetString(ssid.Bytes, 0, (int)ssid.Length).TrimEnd('\0');
+                }
+                finally
+                {
+                    WlanFreeMemory(dados);
+                }
+            }
+        }
+        catch
+        {
+            return null;
+        }
+        finally
+        {
+            if (lista != IntPtr.Zero) WlanFreeMemory(lista);
+            if (cliente != IntPtr.Zero) WlanCloseHandle(cliente, IntPtr.Zero);
+        }
+        return null;
+    }
+
+    private static Guid GetGuid(ManagementBaseObject item, string property)
+    {
+        return Guid.TryParse(LerTexto(item, property), out var guid) ? guid : Guid.Empty;
     }
 
     private static Snapshot ObterSnapshot(int adapterId)

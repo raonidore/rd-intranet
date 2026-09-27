@@ -156,6 +156,13 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
 .th-ordenavel { cursor: pointer; user-select: none; white-space: nowrap; }
 .th-ordenavel:hover { color: #0d6efd; }
 .th-ordenavel .icone-ordenar { font-size: .72rem; opacity: .4; margin-left: 2px; }
+.rede-diagnostico { border-color: #d7dce1 !important; min-width: 0; }
+.rede-resultado {
+    display: block; min-height: 82px; max-height: 120px; overflow: auto;
+    white-space: pre-wrap; overflow-wrap: anywhere; border-radius: .5rem;
+    background: #f4f6f8; padding: .65rem .75rem; line-height: 1.45;
+}
+.rede-resultado-trace { min-height: 180px; max-height: 240px; }
 .th-ordenavel.ordenado-asc .icone-ordenar, .th-ordenavel.ordenado-desc .icone-ordenar { opacity: 1; color: #0d6efd; }
 </style>
 
@@ -837,7 +844,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                     <div class="row g-2 mb-3" id="redeAoVivoAdaptadores"></div>
                     <div class="row g-3">
                         <?php if ($podeAlterarRedeRemota): ?>
-                            <div class="col-xl-7">
+                            <div class="col-12">
                                 <div class="border rounded p-3 h-100">
                                     <div class="d-flex justify-content-between align-items-center mb-3">
                                         <strong>Configuração IPv4</strong>
@@ -875,8 +882,10 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                 </div>
                             </div>
                         <?php endif; ?>
-                        <div class="col-xl-5">
-                            <div class="border rounded p-3 mb-3">
+                        <div class="col-12">
+                            <div class="row g-3">
+                            <div class="col-lg-6">
+                            <div class="border rounded-3 p-3 h-100 rede-diagnostico">
                                 <div class="d-flex justify-content-between align-items-center mb-2"><strong>Ping</strong><span class="small text-muted">somente endereço IP</span></div>
                                 <label class="form-label small mb-1" for="rede-ping-1">IP de destino</label>
                                 <div class="input-group input-group-sm rede-octetos mb-2" data-campo="ping">
@@ -886,11 +895,29 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                     <?php endfor; ?>
                                     <button type="button" class="btn btn-outline-primary" id="botaoTestarPing" title="Testar conectividade" aria-label="Testar conectividade"><i class="bi bi-broadcast-pin"></i></button>
                                 </div>
-                                <pre class="small mb-0 text-break" id="redePingResultado" aria-live="polite"></pre>
+                                <pre class="small mb-0 text-break rede-resultado" id="redePingResultado" aria-live="polite">Aguardando teste.</pre>
                             </div>
-                            <div class="border rounded p-3">
+                            </div>
+                            <div class="col-lg-6">
+                            <div class="border rounded-3 p-3 h-100 rede-diagnostico">
                                 <div class="d-flex justify-content-between align-items-center gap-2"><div><strong>Velocidade da internet</strong><div class="small text-muted">Teste Cloudflare · usa até 9 MB</div></div><button type="button" class="btn btn-sm btn-outline-primary text-nowrap" id="botaoTesteVelocidade"><i class="bi bi-speedometer2"></i> Testar</button></div>
-                                <div class="small mt-2" id="redeVelocidadeResultado" aria-live="polite"></div>
+                                <div class="small mt-2 rede-resultado d-flex align-items-center" id="redeVelocidadeResultado" aria-live="polite">Aguardando teste.</div>
+                            </div>
+                            </div>
+                            <div class="col-12">
+                                <div class="border rounded-3 p-3 rede-diagnostico">
+                                    <div class="d-flex justify-content-between align-items-center mb-2"><strong>Trace route</strong><span class="small text-muted">até 12 saltos · limite de 16 s</span></div>
+                                    <label class="form-label small mb-1" for="rede-trace-1">IP de destino</label>
+                                    <div class="input-group input-group-sm rede-octetos mb-2" data-campo="trace">
+                                        <?php for ($octeto = 1; $octeto <= 4; $octeto++): ?>
+                                            <?php if ($octeto > 1): ?><span class="input-group-text px-1">.</span><?php endif; ?>
+                                            <input class="form-control text-center font-monospace px-1" id="rede-trace-<?= $octeto ?>" inputmode="numeric" autocomplete="off" maxlength="3" aria-label="Trace route IP octeto <?= $octeto ?>" placeholder="<?= [1, 1, 1, 1][$octeto - 1] ?>">
+                                        <?php endfor; ?>
+                                        <button type="button" class="btn btn-outline-primary" id="botaoTestarTraceRoute" title="Rastrear rota" aria-label="Rastrear rota"><i class="bi bi-signpost-split"></i></button>
+                                    </div>
+                                    <pre class="small mb-0 text-break rede-resultado rede-resultado-trace" id="redeTraceResultado" aria-live="polite">Aguardando teste.</pre>
+                                </div>
+                            </div>
                             </div>
                         </div>
                     </div>
@@ -5159,6 +5186,7 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro, tempoLimiteMs
     const camposEstaticos = document.getElementById('redeCamposEstaticos');
     const botaoPing = document.getElementById('botaoTestarPing');
     const botaoVelocidade = document.getElementById('botaoTesteVelocidade');
+    const botaoTraceRoute = document.getElementById('botaoTestarTraceRoute');
     let adaptadores = [];
 
     function escapar(texto) {
@@ -5212,10 +5240,25 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro, tempoLimiteMs
         adaptadores.forEach((adaptador, indice) => {
             const ip = adaptador.ip || 'Sem IPv4';
             const gateway = adaptador.gateway || 'Sem gateway';
+            const estaAtivo = Boolean(adaptador.ativo);
+            const linkDown = String(adaptador.status).toLowerCase() === 'down';
+            const estadoLink = estaAtivo ? 'UP' : (linkDown ? 'DOWN' : 'DESCONHECIDO');
+            const classeEstado = estaAtivo ? 'text-bg-success' : (linkDown ? 'text-bg-danger' : 'text-bg-secondary');
             const cartao = document.createElement('div');
             cartao.className = 'col-md-6 col-xxl-4';
-            cartao.innerHTML = '<div class="border rounded p-3 h-100"><div class="d-flex justify-content-between gap-2"><strong class="text-break">' + escapar(adaptador.nome) + '</strong><span class="badge ' + (adaptador.status === 'Up' ? 'text-bg-success' : 'text-bg-secondary') + '">' + escapar(adaptador.status) + '</span></div><div class="small text-muted mt-2">' + escapar(adaptador.descricao) + '</div><div class="font-monospace small mt-2">' + escapar(ip) + '</div><div class="small text-muted">' + (adaptador.dhcp ? 'DHCP' : 'IP manual') + ' · ' + escapar(gateway) + '</div><button type="button" class="btn btn-sm btn-link px-0 mt-1">Selecionar para editar</button></div>';
-            cartao.querySelector('button').addEventListener('click', () => atualizarFormulario(adaptador));
+            cartao.innerHTML = '<div class="border rounded-3 p-3 h-100"><div class="d-flex justify-content-between gap-2"><strong class="text-break">' + escapar(adaptador.nome) + '</strong><span class="badge ' + classeEstado + '">' + escapar(estadoLink) + '</span></div><div class="small text-muted mt-2">' + escapar(adaptador.descricao) + '</div><div class="font-monospace small mt-2">' + escapar(ip) + '</div><div class="small text-muted">' + (estaAtivo ? 'Ativo' : 'Inativo') + ' · ' + (adaptador.dhcp ? 'DHCP' : 'IP manual') + ' · ' + escapar(gateway) + '</div>' + (adaptador.wifi_ssid ? '<div class="small mt-1"><i class="bi bi-wifi"></i> ' + escapar(adaptador.wifi_ssid) + '</div>' : '') + '<div class="d-flex gap-2 mt-1"><button type="button" class="btn btn-sm btn-link px-0" data-rede-editar>Selecionar para editar</button><button type="button" class="btn btn-sm btn-link px-0" data-rede-copiar>Copiar dados</button></div></div>';
+            cartao.querySelector('[data-rede-editar]').addEventListener('click', () => atualizarFormulario(adaptador));
+            cartao.querySelector('[data-rede-copiar]').addEventListener('click', async () => {
+                const dados = [adaptador.nome, estadoLink, estaAtivo ? 'Ativo' : 'Inativo', adaptador.mac, ip, adaptador.dhcp ? 'DHCP' : 'Manual', adaptador.wifi_ssid || ''].join('\t');
+                try {
+                    await navigator.clipboard.writeText(dados);
+                    status.textContent = 'Dados do adaptador copiados.';
+                    status.className = 'small text-success mb-2';
+                } catch (_) {
+                    status.textContent = 'O navegador não permitiu copiar os dados.';
+                    status.className = 'small text-danger mb-2';
+                }
+            });
             lista.append(cartao);
             if (seletor) seletor.add(new Option(adaptador.nome + ' · ' + ip, String(adaptador.adapter_id)));
         });
@@ -5318,6 +5361,25 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro, tempoLimiteMs
             resultado.textContent = 'Download ' + dados.download_mbps + ' Mbps · Upload ' + dados.upload_mbps + ' Mbps (' + dados.provedor + ')';
         } catch (erro) { resultado.textContent = erro.message; }
         finally { botaoVelocidade.disabled = false; }
+    });
+
+    botaoTraceRoute.addEventListener('click', async () => {
+        const ip = lerOctetos('rede-trace');
+        const resultado = document.getElementById('redeTraceResultado');
+        if (!ip) { resultado.textContent = 'Informe quatro octetos entre 0 e 255.'; return; }
+        botaoTraceRoute.disabled = true;
+        resultado.textContent = 'Rastreando rota até ' + ip + '...';
+        try {
+            const dados = await solicitar('network_traceroute', JSON.stringify({ ip }), 25000);
+            resultado.textContent = dados.saida || 'O Windows não retornou detalhes para este trace route.';
+            resultado.classList.toggle('text-warning', Boolean(dados.timeout));
+            resultado.classList.toggle('text-success', Boolean(dados.destino_alcancado));
+        } catch (erro) {
+            resultado.textContent = erro.message;
+            resultado.classList.add('text-danger');
+        } finally {
+            botaoTraceRoute.disabled = false;
+        }
     });
 
     configurarOctetos();
