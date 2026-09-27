@@ -217,7 +217,10 @@ public sealed class NetworkService
                 });
             }
         }
-        return resultado.OrderBy(a => a.Nome, StringComparer.OrdinalIgnoreCase).ToList();
+        return resultado
+            .OrderByDescending(a => a.Ativo)
+            .ThenBy(a => a.Nome, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     public static object Aplicar(string? parametro)
