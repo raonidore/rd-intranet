@@ -351,6 +351,11 @@ public class TrayApplicationContext : ApplicationContext
                     case "network_speedtest":
                         await cliente.ResponderAsync(_machineGuid!, solicitacao.Id, await NetworkService.TestarVelocidadeAsync());
                         break;
+
+                    case "mesh_install":
+                        var resultadoInstalacao = await new MeshAgentInstallerService(_config, _machineGuid!).InstalarAsync();
+                        await cliente.ResponderAsync(_machineGuid!, solicitacao.Id, resultadoInstalacao, TimeSpan.FromSeconds(150));
+                        break;
                 }
             }
             catch (Exception ex)

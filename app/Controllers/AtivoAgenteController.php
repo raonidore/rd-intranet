@@ -5,6 +5,7 @@ namespace App\Controllers;
 use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
 use App\Services\AtivoService;
+use App\Services\AcessoRemotoService;
 use App\Services\NotificationService;
 use App\Services\SegurancaEventoService;
 
@@ -158,6 +159,57 @@ class AtivoAgenteController extends Controller
             (string)($payload['usuario'] ?? ''),
             (string)($payload['mensagem'] ?? '')
         ));
+    }
+
+    /** Serves an existing MeshAgent binary only to a registered agent using an active API key. */
+    public function baixarInstaladorMeshAgent(): void
+    {
+        $chaveEnviada = $_SERVER['HTTP_X_RD_AGENTE_CHAVE'] ?? '';
+        if (!$this->service->chaveValida($chaveEnviada)) {
+            http_response_code(401);
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'message' => 'Chave de API inválida.']);
+            return;
+        }
+
+        $payload = json_decode(file_get_contents('php://input'), true);
+        $machineGuid = is_array($payload) ? trim((string)($payload['machine_guid'] ?? '')) : '';
+        $arquitetura = is_array($payload) ? trim((string)($payload['arquitetura'] ?? '')) : '';
+        if ($machineGuid === '' || $this->service->idPorMachineGuid($machineGuid) === null) {
+            http_response_code(400);
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'message' => 'Máquina não cadastrada para esta chave.']);
+            return;
+        }
+        if (!$this->service->temInstalacaoMeshPendente($machineGuid)) {
+            http_response_code(403);
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'message' => 'Não há solicitação de instalação MeshAgent pendente para este ativo.']);
+            return;
+        }
+        if (!in_array($arquitetura, ['x64', 'arm64'], true)) {
+            http_response_code(400);
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'message' => 'Arquitetura MeshAgent inválida.']);
+            return;
+        }
+
+        $caminho = (new AcessoRemotoService())->caminhoMeshAgentePublico($arquitetura);
+        $tamanho = $caminho !== null ? filesize($caminho) : false;
+        if ($caminho === null || $tamanho === false || $tamanho < 500000 || $tamanho > 40 * 1024 * 1024) {
+            http_response_code($caminho === null ? 404 : 422);
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'message' => $caminho === null
+                ? "Instalador MeshAgent {$arquitetura} não enviado em Ativos > Acesso Remoto."
+                : 'O instalador MeshAgent armazenado tem tamanho inválido.']);
+            return;
+        }
+
+        header('Content-Type: application/octet-stream');
+        header('Content-Length: ' . $tamanho);
+        header('X-MeshAgent-SHA256: ' . hash_file('sha256', $caminho));
+        header('Content-Disposition: attachment; filename="MeshAgent-' . $arquitetura . '.exe"');
+        readfile($caminho);
     }
 
     /** Agente devolve o resultado de uma solicitação (listar arquivos/processos) recebida no heartbeat. */

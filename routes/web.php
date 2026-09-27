@@ -438,6 +438,8 @@ $router->post('/chamados/setores/usuarios', [ChamadoSetorController::class, 'sal
 $router->get('/chamados/suporte-remoto', [\App\Controllers\SuporteRemotoController::class, 'index']);
 $router->post('/chamados/suporte-remoto/atender', [\App\Controllers\SuporteRemotoController::class, 'atender']);
 $router->post('/chamados/suporte-remoto/conectar', [\App\Controllers\SuporteRemotoController::class, 'conectarDispositivo']);
+$router->post('/chamados/suporte-remoto/instalar-meshagent', [\App\Controllers\SuporteRemotoController::class, 'instalarMeshAgent']);
+$router->get('/chamados/suporte-remoto/instalacao-meshagent/status', [\App\Controllers\SuporteRemotoController::class, 'statusInstalacaoMeshAgent']);
 $router->get('/chamados/fila', [ChamadoFilaController::class, 'index']);
 $router->get('/chamados/fila/contador', [ChamadoFilaController::class, 'contadorApi']);
 $router->post('/chamados/fila/assumir', [ChamadoFilaController::class, 'assumir']);
@@ -1099,6 +1101,7 @@ $router->post('/api/ativos/heartbeat', [AtivoAgenteController::class, 'heartbeat
 $router->post('/api/ativos/seguranca/evento', [AtivoAgenteController::class, 'eventoSeguranca']);
 $router->get('/api/ativos/seguranca/assinaturas', [AtivoAgenteController::class, 'assinaturasSeguranca']);
 $router->post('/api/ativos/suporte/pedido', [AtivoAgenteController::class, 'pedidoSuporte']);
+$router->post('/api/ativos/agente/meshagent', [AtivoAgenteController::class, 'baixarInstaladorMeshAgent']);
 $router->post('/api/ativos/solicitacoes/resultado', [AtivoAgenteController::class, 'responderSolicitacao']);
 $router->post('/api/ativos/solicitacoes/arquivo', [AtivoAgenteController::class, 'responderSolicitacaoArquivo']);
 $router->get('/api/ativos/comandos/anexo', [AtivoAgenteController::class, 'baixarAnexoComando']);

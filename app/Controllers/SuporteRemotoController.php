@@ -31,7 +31,30 @@ class SuporteRemotoController extends Controller
             'pedidos' => $this->service->listarAbertos(),
             'ativos' => $this->service->ativosComAcessoRemoto(),
             'semCadastro' => $this->service->dispositivosSemCadastro(),
+            'meshAgentDisponivel' => $this->service->meshAgentDisponivel(),
         ]);
+    }
+
+    public function instalarMeshAgent(): void
+    {
+        AuthMiddleware::checkModulo('ativos_acesso_remoto');
+        header('Content-Type: application/json');
+
+        echo json_encode($this->service->solicitarInstalacaoMesh(
+            (int)($_POST['pedido_id'] ?? 0),
+            $_SESSION['usuario']['nome'] ?? 'portal'
+        ));
+    }
+
+    public function statusInstalacaoMeshAgent(): void
+    {
+        AuthMiddleware::checkModulo('ativos_acesso_remoto');
+        header('Content-Type: application/json');
+
+        echo json_encode($this->service->statusInstalacaoMesh(
+            (int)($_GET['pedido_id'] ?? 0),
+            (int)($_GET['solicitacao_id'] ?? 0)
+        ));
     }
 
     public function atender(): void

@@ -1598,6 +1598,9 @@ class AtivoController extends Controller
         if (in_array($tipo, ['network_apply', 'network_revert'], true)) {
             AuthMiddleware::checkModulo('ativos_novo');
         }
+        if ($tipo === 'mesh_install') {
+            AuthMiddleware::checkModulo('ativos_acesso_remoto');
+        }
 
         echo json_encode($this->service->solicitarListagem($id, $tipo, $parametro, $usuario, $elevado));
     }

@@ -29,6 +29,7 @@ $esperaTexto = static function (int $minutos): string {
     .sr-maquina-icone { width: 40px; height: 40px; border-radius: 10px; background: #eff6ff; color: #2563eb; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
     .sr-btn-conectar { border-radius: 10px; font-weight: 600; }
     .sr-titulo-secao { font-size: 13px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: #6b7280; }
+    .sr-progresso-mesh { min-width: 100%; }
 </style>
 
 <div class="sr-cabecalho p-4 mb-4">
@@ -72,8 +73,16 @@ $esperaTexto = static function (int $minutos): string {
                             <button type="button" class="btn btn-primary btn-sm sr-btn-conectar js-conectar" data-ativo="<?= (int)$p['ativo_id'] ?>" data-nome="<?= htmlspecialchars($p['ativo_nome']) ?>">
                                 <i class="bi bi-display"></i> Conectar
                             </button>
+                        <?php elseif ($meshAgentDisponivel): ?>
+                            <button type="button" class="btn btn-outline-primary btn-sm sr-btn-conectar js-instalar-mesh" data-pedido="<?= (int)$p['id'] ?>">
+                                <i class="bi bi-cloud-download"></i> Instalar acesso remoto
+                            </button>
+                            <div class="sr-progresso-mesh d-none" data-mesh-progresso aria-live="polite">
+                                <div class="small text-muted mb-1" data-mesh-mensagem></div>
+                                <div class="progress" style="height:8px"><div class="progress-bar progress-bar-striped progress-bar-animated" data-mesh-barra style="width:4%"></div></div>
+                            </div>
                         <?php else: ?>
-                            <span class="small text-danger"><i class="bi bi-exclamation-circle"></i> Sem MeshCentral nesta máquina</span>
+                            <span class="small text-danger"><i class="bi bi-exclamation-circle"></i> Sem MeshCentral; instalador x64/ARM64 não configurado</span>
                         <?php endif; ?>
                         <a class="btn btn-outline-secondary btn-sm sr-btn-conectar" href="<?= url('/ativos/ver?id=' . (int)$p['ativo_id']) ?>"><i class="bi bi-pc-display"></i> Ficha</a>
                         <button type="button" class="btn btn-outline-success btn-sm sr-btn-conectar ms-auto js-atender" data-id="<?= (int)$p['id'] ?>"><i class="bi bi-check2"></i> Atendido</button>
@@ -158,6 +167,7 @@ $esperaTexto = static function (int $minutos): string {
     const carregando = '<div class="text-white-50"><i class="bi bi-hourglass-split"></i> Abrindo sessão remota via MeshCentral...</div>';
     const corpo = document.getElementById('corpoTelaRemota');
     const modalEl = document.getElementById('modalTelaRemota');
+    let instalacaoMeshEmAndamento = false;
 
     document.querySelectorAll('.js-conectar').forEach(function (botao) {
         botao.addEventListener('click', async function () {
@@ -194,6 +204,78 @@ $esperaTexto = static function (int $minutos): string {
         });
     });
 
+    document.querySelectorAll('.js-instalar-mesh').forEach(function (botao) {
+        botao.addEventListener('click', async function () {
+            if (!confirm('Instalar o MeshAgent de acesso remoto nesta máquina? O agente verificará a arquitetura, ignorará instalações existentes e tentará vincular o dispositivo pelo hostname se houver uma única correspondência.')) return;
+
+            const cartao = botao.closest('.sr-pedido');
+            const painel = cartao.querySelector('[data-mesh-progresso]');
+            const mensagem = painel.querySelector('[data-mesh-mensagem]');
+            const barra = painel.querySelector('[data-mesh-barra]');
+            botao.disabled = true;
+            painel.classList.remove('d-none');
+            instalacaoMeshEmAndamento = true;
+
+            function atualizar(texto, percentual, classe = 'bg-primary') {
+                mensagem.textContent = texto;
+                barra.style.width = percentual + '%';
+                barra.className = 'progress-bar' + (percentual < 100 ? ' progress-bar-striped progress-bar-animated' : '') + ' ' + classe;
+            }
+
+            try {
+                atualizar('Enviando solicitação ao agente...', 8);
+                const inicio = await fetch(<?= json_encode(url('/chamados/suporte-remoto/instalar-meshagent')) ?>, {
+                    method: 'POST',
+                    body: new URLSearchParams({ pedido_id: botao.dataset.pedido })
+                });
+                const pedido = await inicio.json();
+                if (!pedido.success) throw new Error(pedido.message || 'Não foi possível solicitar a instalação.');
+
+                atualizar('O agente está verificando a arquitetura e se o MeshAgent já existe...', 20);
+                const limite = Date.now() + 180000;
+                while (Date.now() < limite) {
+                    await new Promise(resolve => setTimeout(resolve, 3500));
+                    const url = <?= json_encode(url('/chamados/suporte-remoto/instalacao-meshagent/status')) ?>
+                        + '?pedido_id=' + encodeURIComponent(botao.dataset.pedido)
+                        + '&solicitacao_id=' + encodeURIComponent(pedido.solicitacao_id);
+                    const resposta = await fetch(url);
+                    const estado = await resposta.json();
+                    if (!estado.success) throw new Error(estado.message || 'Falha ao consultar o progresso.');
+
+                    if (estado.status === 'pendente') {
+                        const vinculando = estado.etapa === 'aguardando_meshcentral';
+                        atualizar(
+                            vinculando ? (estado.message || 'MeshAgent instalado; aguardando o MeshCentral...') : 'Instalando o serviço MeshAgent na máquina...',
+                            vinculando ? 88 : Math.min(78, 25 + Math.floor((Date.now() % 90000) / 6000)),
+                            vinculando ? 'bg-info' : 'bg-primary'
+                        );
+                        continue;
+                    }
+
+                    if (estado.status === 'erro') throw new Error(estado.mensagem || 'O agente não conseguiu instalar o MeshAgent.');
+                    const resultado = estado.resultado || {};
+                    const texto = resultado.mensagem || pedido.message || 'Instalação finalizada.';
+                    if (resultado.vinculado) {
+                        atualizar(texto, 100, 'bg-success');
+                        setTimeout(() => location.reload(), 1800);
+                    } else {
+                        atualizar(texto, 100, resultado.instalado || resultado.ja_instalado ? 'bg-warning' : 'bg-danger');
+                        botao.disabled = false;
+                    }
+                    return;
+                }
+
+                atualizar('A instalação continua no agente. Atualize a página em alguns instantes para verificar o vínculo.', 90, 'bg-warning');
+                botao.disabled = false;
+            } catch (erro) {
+                atualizar(erro.message, 100, 'bg-danger');
+                botao.disabled = false;
+            } finally {
+                instalacaoMeshEmAndamento = false;
+            }
+        });
+    });
+
     modalEl.addEventListener('hidden.bs.modal', function () { corpo.innerHTML = ''; });
 
     document.querySelectorAll('.js-atender').forEach(function (botao) {
@@ -221,7 +303,7 @@ $esperaTexto = static function (int $minutos): string {
 
     // Pedido novo aparece sozinho: recarrega a cada 60s se nenhuma tela remota estiver aberta.
     setInterval(function () {
-        if (!modalEl.classList.contains('show') && document.activeElement !== busca) location.reload();
+        if (!instalacaoMeshEmAndamento && !modalEl.classList.contains('show') && document.activeElement !== busca) location.reload();
     }, 60000);
 })();
 </script>

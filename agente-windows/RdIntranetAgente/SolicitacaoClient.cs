@@ -20,30 +20,30 @@ public class SolicitacaoClient
         _config = config;
     }
 
-    private HttpClient CriarCliente()
+    private HttpClient CriarCliente(TimeSpan? timeout = null)
     {
         var handler = new HttpClientHandler
         {
             ServerCertificateCustomValidationCallback = (msg, cert, chain, erros) => true
         };
 
-        var cliente = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
+        var cliente = new HttpClient(handler) { Timeout = timeout ?? TimeSpan.FromSeconds(30) };
         cliente.DefaultRequestHeaders.Add("X-RD-Agente-Chave", _config.ApiKey);
         return cliente;
     }
 
     /// <summary>resultado aceita qualquer coisa serializável -- lista (listar_arquivos/processos) ou objeto único (executar_cmd/powershell).</summary>
-    public async Task<bool> ResponderAsync(string machineGuid, int id, object resultado)
+    public async Task<bool> ResponderAsync(string machineGuid, int id, object resultado, TimeSpan? timeout = null)
     {
-        return await EnviarAsync(new { machine_guid = machineGuid, id, resultado });
+        return await EnviarAsync(new { machine_guid = machineGuid, id, resultado }, timeout);
     }
 
     public async Task<bool> ResponderErroAsync(string machineGuid, int id, string erro)
     {
-        return await EnviarAsync(new { machine_guid = machineGuid, id, erro });
+        return await EnviarAsync(new { machine_guid = machineGuid, id, erro }, null);
     }
 
-    private async Task<bool> EnviarAsync(object corpo)
+    private async Task<bool> EnviarAsync(object corpo, TimeSpan? timeout)
     {
         try
         {
@@ -51,7 +51,7 @@ public class SolicitacaoClient
             var conteudo = new ByteArrayContent(Encoding.UTF8.GetBytes(json));
             conteudo.Headers.ContentType = new MediaTypeHeaderValue("application/json") { CharSet = "utf-8" };
 
-            using var cliente = CriarCliente();
+            using var cliente = CriarCliente(timeout);
             var url = _config.ServerUrl.TrimEnd('/') + "/api/ativos/solicitacoes/resultado";
             var resposta = await cliente.PostAsync(url, conteudo);
 

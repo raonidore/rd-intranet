@@ -1219,6 +1219,13 @@ class AtivoRepository
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public function temSolicitacaoPendente(int $ativoId, string $tipo): bool
+    {
+        $stmt = $this->pdo->prepare("SELECT 1 FROM ativos_solicitacoes WHERE ativo_id = ? AND tipo = ? AND status = 'pendente' LIMIT 1");
+        $stmt->execute([$ativoId, $tipo]);
+        return $stmt->fetchColumn() !== false;
+    }
+
     public function marcarSolicitacaoConcluida(int $id, string $resultadoJson): void
     {
         $stmt = $this->pdo->prepare("

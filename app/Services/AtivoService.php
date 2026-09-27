@@ -3059,6 +3059,12 @@ class AtivoService
         return $ativo ? (int)$ativo['id'] : null;
     }
 
+    public function temInstalacaoMeshPendente(string $machineGuid): bool
+    {
+        $ativoId = $this->idPorMachineGuid($machineGuid);
+        return $ativoId !== null && $this->repository->temSolicitacaoPendente($ativoId, 'mesh_install');
+    }
+
     public function chaveValida(string $chaveEnviada): bool
     {
         if ($chaveEnviada === '') {
@@ -3977,7 +3983,7 @@ class AtivoService
 
     private const TIPOS_SOLICITACAO_VALIDOS = [
         'listar_arquivos', 'listar_processos', 'baixar_arquivo', 'executar_cmd', 'executar_powershell',
-        'network_list', 'network_apply', 'network_revert', 'network_ping', 'network_speedtest', 'network_traceroute',
+        'network_list', 'network_apply', 'network_revert', 'network_ping', 'network_speedtest', 'network_traceroute', 'mesh_install',
     ];
 
     public function solicitarListagem(int $ativoId, string $tipo, ?string $parametro, ?string $solicitadoPor = null, bool $elevado = false): array
@@ -4045,6 +4051,10 @@ class AtivoService
 
         if (in_array($tipo, ['network_apply', 'network_revert'], true)) {
             AuditService::registrar('Ativos', 'Configuração de rede', "Solicitação {$tipo} para {$ativo['codigo_patrimonio']} ({$ativo['nome']}).");
+        }
+
+        if ($tipo === 'mesh_install') {
+            AuditService::registrar('Chamados', 'Suporte remoto', "Instalação assistida do MeshAgent solicitada para {$ativo['codigo_patrimonio']} ({$ativo['nome']}).");
         }
 
         return ['success' => true, 'id' => $id];
