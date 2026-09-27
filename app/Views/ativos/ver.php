@@ -24,6 +24,7 @@ $camposTipo = AtivoService::CAMPOS_DETALHES[$ativo['tipo_slug'] ?? ''] ?? [];
 // processo residente) e nunca manda heartbeat, então nunca vai responder
 // a essas solicitações. Só oferece pra quem está no agente de bandeja (.exe).
 $agenteSuportaExplorador = $ativo['origem'] === 'agente' && ($ativo['agente_versao'] ?? '') !== 'ps1';
+$podeAlterarRedeRemota = PermissionService::temAcesso('ativos_novo');
 
 // Campos de "Componentes" ficam numa aba própria -- o resto dos
 // detalhes técnicos (SO, funcao, snmp, etc.) fica na Visão Geral.
@@ -824,6 +825,78 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
 
     <!-- Network -->
     <div class="tab-pane fade" id="abaNetwork">
+        <?php if ($agenteSuportaExplorador): ?>
+            <section class="card border-0 shadow-sm mb-3" id="painelRedeAoVivo" data-ativo-id="<?= (int)$ativo['id'] ?>">
+                <div class="card-header bg-white d-flex align-items-center justify-content-between gap-2">
+                    <div><strong><i class="bi bi-router"></i> Rede do computador</strong><div class="text-muted small">Consulta ao vivo pelo agente instalado neste ativo.</div></div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="botaoAtualizarAdaptadores"><i class="bi bi-arrow-clockwise"></i> Atualizar</button>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-warning small py-2"><i class="bi bi-exclamation-triangle-fill"></i> Alterar IP, gateway ou DNS pode interromper o acesso remoto. Confira os valores com o cliente antes de aplicar. A configuração anterior fica salva no agente para reversão.</div>
+                    <div class="small text-muted mb-2" id="redeAoVivoStatus" role="status">Carregue os adaptadores para começar.</div>
+                    <div class="row g-2 mb-3" id="redeAoVivoAdaptadores"></div>
+                    <div class="row g-3">
+                        <?php if ($podeAlterarRedeRemota): ?>
+                            <div class="col-xl-7">
+                                <div class="border rounded p-3 h-100">
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <strong>Configuração IPv4</strong>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" id="botaoReverterRede" disabled><i class="bi bi-arrow-counterclockwise"></i> Reverter última alteração</button>
+                                    </div>
+                                    <label class="form-label small" for="redeAdaptadorSelect">Adaptador</label>
+                                    <select class="form-select form-select-sm mb-3" id="redeAdaptadorSelect" disabled><option value="">Atualize os adaptadores</option></select>
+                                    <div class="form-check form-switch mb-3">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="redeDhcp" checked>
+                                        <label class="form-check-label small" for="redeDhcp">Obter endereço IP e DNS automaticamente (DHCP)</label>
+                                    </div>
+                                    <div id="redeCamposEstaticos" class="row g-2" style="display:none">
+                                        <?php foreach ([['ip', 'Endereço IP', '192.168.1.100'], ['mascara', 'Máscara', '255.255.255.0'], ['gateway', 'Gateway', '192.168.1.1']] as [$campo, $rotulo, $placeholder]): ?>
+                                            <div class="col-12 col-md-4">
+                                                <label class="form-label small mb-1" for="rede-<?= $campo ?>-1"><?= $rotulo ?></label>
+                                                <div class="input-group input-group-sm rede-octetos" data-campo="<?= $campo ?>">
+                                                    <?php for ($octeto = 1; $octeto <= 4; $octeto++): ?>
+                                                        <?php if ($octeto > 1): ?><span class="input-group-text px-1">.</span><?php endif; ?>
+                                                        <input class="form-control text-center font-monospace px-1" id="rede-<?= $campo ?>-<?= $octeto ?>" inputmode="numeric" autocomplete="off" maxlength="3" aria-label="<?= $rotulo ?> octeto <?= $octeto ?>" placeholder="<?= explode('.', $placeholder)[$octeto - 1] ?>" <?= $campo !== 'gateway' ? 'required' : '' ?>>
+                                                    <?php endfor; ?>
+                                                </div>
+                                            </div>
+                                        <?php endforeach; ?>
+                                        <div class="col-12 col-md-6">
+                                            <label class="form-label small mb-1" for="redeDns1">DNS preferencial</label>
+                                            <input type="text" class="form-control form-control-sm font-monospace" id="redeDns1" inputmode="decimal" placeholder="1.1.1.1">
+                                        </div>
+                                        <div class="col-12 col-md-6">
+                                            <label class="form-label small mb-1" for="redeDns2">DNS alternativo</label>
+                                            <input type="text" class="form-control form-control-sm font-monospace" id="redeDns2" inputmode="decimal" placeholder="8.8.8.8">
+                                        </div>
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-primary mt-3" id="botaoAplicarRede" disabled><i class="bi bi-check2-circle"></i> Salvar e aplicar</button>
+                                    <div class="form-text">O Windows pode levar alguns segundos para renovar a conexão.</div>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+                        <div class="col-xl-5">
+                            <div class="border rounded p-3 mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2"><strong>Ping</strong><span class="small text-muted">somente endereço IP</span></div>
+                                <label class="form-label small mb-1" for="rede-ping-1">IP de destino</label>
+                                <div class="input-group input-group-sm rede-octetos mb-2" data-campo="ping">
+                                    <?php for ($octeto = 1; $octeto <= 4; $octeto++): ?>
+                                        <?php if ($octeto > 1): ?><span class="input-group-text px-1">.</span><?php endif; ?>
+                                        <input class="form-control text-center font-monospace px-1" id="rede-ping-<?= $octeto ?>" inputmode="numeric" autocomplete="off" maxlength="3" aria-label="IP de destino octeto <?= $octeto ?>" placeholder="<?= [192, 168, 0, 1][$octeto - 1] ?>">
+                                    <?php endfor; ?>
+                                    <button type="button" class="btn btn-outline-primary" id="botaoTestarPing" title="Testar conectividade" aria-label="Testar conectividade"><i class="bi bi-broadcast-pin"></i></button>
+                                </div>
+                                <pre class="small mb-0 text-break" id="redePingResultado" aria-live="polite"></pre>
+                            </div>
+                            <div class="border rounded p-3">
+                                <div class="d-flex justify-content-between align-items-center gap-2"><div><strong>Velocidade da internet</strong><div class="small text-muted">Teste Cloudflare · usa até 9 MB</div></div><button type="button" class="btn btn-sm btn-outline-primary text-nowrap" id="botaoTesteVelocidade"><i class="bi bi-speedometer2"></i> Testar</button></div>
+                                <div class="small mt-2" id="redeVelocidadeResultado" aria-live="polite"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        <?php endif; ?>
         <div class="card border-0 shadow-sm">
             <div class="card-body p-0">
                 <?php if (empty($redes)): ?>
@@ -5040,7 +5113,7 @@ import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js'))
  * solicitarListagem()/resultadoSolicitacao(). Compartilhado pelo
  * explorador de arquivos e pelo gerenciador de processos abaixo.
  */
-async function pedirEAguardarSolicitacao(ativoId, tipo, parametro) {
+async function pedirEAguardarSolicitacao(ativoId, tipo, parametro, tempoLimiteMs = 20000) {
     const dadosSolicitar = new URLSearchParams();
     dadosSolicitar.set('id', ativoId);
     dadosSolicitar.set('tipo', tipo);
@@ -5056,7 +5129,7 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro) {
     const id = dadosResultado.id;
     const inicio = Date.now();
 
-    while (Date.now() - inicio < 20000) {
+    while (Date.now() - inicio < tempoLimiteMs) {
         await new Promise(function (resolve) { setTimeout(resolve, 700); });
 
         const resPoll = await fetch(<?= json_encode(url('/ativos/solicitacoes/resultado')) ?> + '?id=' + id + '&ativo_id=' + ativoId);
@@ -5068,8 +5141,188 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro) {
         // status "pendente" -- continua esperando
     }
 
-    throw new Error('Sem resposta do agente em 20s (a máquina está ligada e conectada?).');
+    throw new Error('Sem resposta do agente em ' + Math.ceil(tempoLimiteMs / 1000) + 's (a máquina está ligada e conectada?).');
 }
+
+(function () {
+    const painel = document.getElementById('painelRedeAoVivo');
+    if (!painel) return;
+
+    const ativoId = painel.dataset.ativoId;
+    const status = document.getElementById('redeAoVivoStatus');
+    const lista = document.getElementById('redeAoVivoAdaptadores');
+    const seletor = document.getElementById('redeAdaptadorSelect');
+    const botaoAtualizar = document.getElementById('botaoAtualizarAdaptadores');
+    const botaoAplicar = document.getElementById('botaoAplicarRede');
+    const botaoReverter = document.getElementById('botaoReverterRede');
+    const dhcp = document.getElementById('redeDhcp');
+    const camposEstaticos = document.getElementById('redeCamposEstaticos');
+    const botaoPing = document.getElementById('botaoTestarPing');
+    const botaoVelocidade = document.getElementById('botaoTesteVelocidade');
+    let adaptadores = [];
+
+    function escapar(texto) {
+        return String(texto ?? '').replace(/[&<>"']/g, caractere => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[caractere]);
+    }
+
+    function lerOctetos(prefixo, opcional = false) {
+        const valores = [1, 2, 3, 4].map(indice => document.getElementById(prefixo + '-' + indice)?.value.trim() ?? '');
+        if (opcional && valores.every(valor => valor === '')) return '';
+        if (valores.some(valor => !/^\d{1,3}$/.test(valor) || Number(valor) > 255)) return null;
+        return valores.map(Number).join('.');
+    }
+
+    function configurarOctetos() {
+        painel.querySelectorAll('.rede-octetos input').forEach((campo, indice, campos) => {
+            campo.addEventListener('input', () => {
+                campo.value = campo.value.replace(/\D/g, '').slice(0, 3);
+                if (campo.value.length === 3 && campos[indice + 1]) campos[indice + 1].focus();
+            });
+            campo.addEventListener('keydown', evento => {
+                if (evento.key === 'Backspace' && campo.value === '' && campos[indice - 1]) campos[indice - 1].focus();
+            });
+        });
+    }
+
+    function atualizarFormulario(adaptador) {
+        if (!adaptador || !seletor) return;
+        seletor.value = String(adaptador.adapter_id);
+        botaoAplicar.disabled = false;
+        botaoReverter.disabled = !adaptador.reversao_disponivel;
+        dhcp.checked = Boolean(adaptador.dhcp);
+        camposEstaticos.style.display = dhcp.checked ? 'none' : '';
+        const ipv4 = adaptador.ip || '...';
+        const mascara = adaptador.mascara || '...';
+        const gateway = adaptador.gateway || '...';
+        ['ip', 'mascara', 'gateway'].forEach((campo, indice) => {
+            const valor = [ipv4, mascara, gateway][indice].split('.');
+            [1, 2, 3, 4].forEach((octeto, posicao) => {
+                const input = document.getElementById('rede-' + campo + '-' + octeto);
+                if (input) input.value = valor[posicao] === '-' ? '' : (valor[posicao] || '');
+            });
+        });
+        document.getElementById('redeDns1').value = adaptador.dns?.[0] || '';
+        document.getElementById('redeDns2').value = adaptador.dns?.[1] || '';
+    }
+
+    function renderizarAdaptadores(dados, adapterIdAnterior = '') {
+        adaptadores = Array.isArray(dados) ? dados : [];
+        lista.replaceChildren();
+        seletor?.replaceChildren(new Option(adaptadores.length ? 'Selecione um adaptador' : 'Nenhum adaptador disponível', ''));
+        adaptadores.forEach((adaptador, indice) => {
+            const ip = adaptador.ip || 'Sem IPv4';
+            const gateway = adaptador.gateway || 'Sem gateway';
+            const cartao = document.createElement('div');
+            cartao.className = 'col-md-6 col-xxl-4';
+            cartao.innerHTML = '<div class="border rounded p-3 h-100"><div class="d-flex justify-content-between gap-2"><strong class="text-break">' + escapar(adaptador.nome) + '</strong><span class="badge ' + (adaptador.status === 'Up' ? 'text-bg-success' : 'text-bg-secondary') + '">' + escapar(adaptador.status) + '</span></div><div class="small text-muted mt-2">' + escapar(adaptador.descricao) + '</div><div class="font-monospace small mt-2">' + escapar(ip) + '</div><div class="small text-muted">' + (adaptador.dhcp ? 'DHCP' : 'IP manual') + ' · ' + escapar(gateway) + '</div><button type="button" class="btn btn-sm btn-link px-0 mt-1">Selecionar para editar</button></div>';
+            cartao.querySelector('button').addEventListener('click', () => atualizarFormulario(adaptador));
+            lista.append(cartao);
+            if (seletor) seletor.add(new Option(adaptador.nome + ' · ' + ip, String(adaptador.adapter_id)));
+        });
+        if (!adaptadores.length) {
+            lista.innerHTML = '<div class="col-12 text-muted small">O agente não retornou adaptadores TCP/IP.</div>';
+            if (seletor) seletor.disabled = true;
+            if (botaoAplicar) botaoAplicar.disabled = true;
+            if (botaoReverter) botaoReverter.disabled = true;
+        } else if (seletor) {
+            seletor.disabled = false;
+            const selecionado = adaptadores.find(a => String(a.adapter_id) === String(adapterIdAnterior)) || adaptadores[0];
+            atualizarFormulario(selecionado);
+        }
+    }
+
+    async function solicitar(tipo, parametro = null, timeout = 20000) {
+        return (await pedirEAguardarSolicitacao(ativoId, tipo, parametro, timeout)).resultado;
+    }
+
+    async function carregarAdaptadores() {
+        const adapterIdAnterior = seletor?.value || '';
+        botaoAtualizar.disabled = true;
+        status.textContent = 'Consultando adaptadores do agente...';
+        try {
+            renderizarAdaptadores(await solicitar('network_list'), adapterIdAnterior);
+            status.textContent = 'Leitura ao vivo concluída.';
+            status.className = 'small text-success mb-2';
+        } catch (erro) {
+            status.textContent = erro.message;
+            status.className = 'small text-danger mb-2';
+        } finally {
+            botaoAtualizar.disabled = false;
+        }
+    }
+
+    botaoAtualizar.addEventListener('click', carregarAdaptadores);
+    seletor?.addEventListener('change', () => atualizarFormulario(adaptadores.find(a => String(a.adapter_id) === seletor.value)));
+    dhcp?.addEventListener('change', () => { camposEstaticos.style.display = dhcp.checked ? 'none' : ''; });
+    botaoAplicar?.addEventListener('click', async () => {
+        if (!seletor.value) return;
+        const config = { adapter_id: Number(seletor.value), dhcp: dhcp.checked };
+        if (!config.dhcp) {
+            config.ip = lerOctetos('rede-ip');
+            config.mascara = lerOctetos('rede-mascara');
+            config.gateway = lerOctetos('rede-gateway', true);
+            config.dns = [document.getElementById('redeDns1').value.trim(), document.getElementById('redeDns2').value.trim()].filter(Boolean);
+            if (!config.ip || !config.mascara || config.gateway === null) {
+                status.textContent = 'Confira IP, máscara e gateway. Cada octeto deve ficar entre 0 e 255.';
+                status.className = 'small text-danger mb-2';
+                return;
+            }
+        }
+        if (!confirm('Aplicar esta configuração de rede? A conexão remota pode cair se os dados estiverem incorretos. O agente salvará os valores atuais antes da alteração.')) return;
+        botaoAplicar.disabled = true;
+        status.textContent = 'Aplicando configuração no Windows...';
+        try {
+            await solicitar('network_apply', JSON.stringify(config), 60000);
+            status.textContent = 'Configuração aplicada. O snapshot anterior está disponível para reversão.';
+            status.className = 'small text-success mb-2';
+            await carregarAdaptadores();
+        } catch (erro) {
+            status.textContent = erro.message;
+            status.className = 'small text-danger mb-2';
+            botaoAplicar.disabled = false;
+        }
+    });
+    botaoReverter?.addEventListener('click', async () => {
+        if (!seletor.value || !confirm('Reverter o último snapshot salvo deste adaptador?')) return;
+        botaoReverter.disabled = true;
+        status.textContent = 'Restaurando a configuração anterior...';
+        try {
+            await solicitar('network_revert', seletor.value, 60000);
+            status.textContent = 'Configuração anterior restaurada.';
+            status.className = 'small text-success mb-2';
+            await carregarAdaptadores();
+        } catch (erro) {
+            status.textContent = erro.message;
+            status.className = 'small text-danger mb-2';
+            botaoReverter.disabled = false;
+        }
+    });
+    botaoPing.addEventListener('click', async () => {
+        const ip = lerOctetos('rede-ping');
+        const resultado = document.getElementById('redePingResultado');
+        if (!ip) { resultado.textContent = 'Informe quatro octetos entre 0 e 255.'; return; }
+        botaoPing.disabled = true;
+        resultado.textContent = 'Enviando quatro pacotes...';
+        try {
+            const dados = await solicitar('network_ping', JSON.stringify({ ip, quantidade: 4 }), 25000);
+            resultado.textContent = dados.respostas.map((resposta, indice) => resposta.sucesso ? 'Resposta ' + (indice + 1) + ': ' + resposta.tempo_ms + ' ms' : 'Pacote ' + (indice + 1) + ': ' + resposta.status).join('\n');
+        } catch (erro) { resultado.textContent = erro.message; }
+        finally { botaoPing.disabled = false; }
+    });
+    botaoVelocidade.addEventListener('click', async () => {
+        const resultado = document.getElementById('redeVelocidadeResultado');
+        botaoVelocidade.disabled = true;
+        resultado.textContent = 'Testando download e upload via Cloudflare...';
+        try {
+            const dados = await solicitar('network_speedtest', null, 90000);
+            resultado.textContent = 'Download ' + dados.download_mbps + ' Mbps · Upload ' + dados.upload_mbps + ' Mbps (' + dados.provedor + ')';
+        } catch (erro) { resultado.textContent = erro.message; }
+        finally { botaoVelocidade.disabled = false; }
+    });
+
+    configurarOctetos();
+    document.querySelector('[data-bs-target="#abaNetwork"]')?.addEventListener('shown.bs.tab', carregarAdaptadores);
+})();
 
 (function () {
     const botoes = document.querySelectorAll('.botao-explorar-volume');

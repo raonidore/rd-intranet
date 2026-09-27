@@ -15,6 +15,9 @@ public class AppState
     public bool UltimoCheckinSucesso { get; set; }
     public DateTime? UltimoHeartbeatEm { get; set; }
     public bool UltimoHeartbeatSucesso { get; set; }
+    public string CodigoAtivo { get; set; } = "";
+    public string NomeAtivo { get; set; } = "";
+    public string IpAtivo { get; set; } = "";
     public string UltimaMensagem { get; set; } = "";
     public long TotalBytesEnviados { get; set; }
     public long TotalBytesRecebidos { get; set; }

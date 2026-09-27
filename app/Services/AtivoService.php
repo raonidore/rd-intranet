@@ -3856,6 +3856,11 @@ class AtivoService
         $resposta = [
             'success' => true,
             'forcar_checkin' => $resultado['forcar_checkin'],
+            'ativo' => [
+                'codigo' => $resultado['codigo_patrimonio'],
+                'nome' => $resultado['nome'],
+                'ip' => $resultado['ip'],
+            ],
             'solicitacoes' => array_map(function ($s) use ($ativoId) {
                 $item = [
                     'id' => (int)$s['id'],
@@ -3972,6 +3977,7 @@ class AtivoService
 
     private const TIPOS_SOLICITACAO_VALIDOS = [
         'listar_arquivos', 'listar_processos', 'baixar_arquivo', 'executar_cmd', 'executar_powershell',
+        'network_list', 'network_apply', 'network_revert', 'network_ping', 'network_speedtest',
     ];
 
     public function solicitarListagem(int $ativoId, string $tipo, ?string $parametro, ?string $solicitadoPor = null, bool $elevado = false): array
@@ -3980,8 +3986,41 @@ class AtivoService
             return ['success' => false, 'message' => 'Tipo de solicitação inválido.'];
         }
 
-        if (in_array($tipo, ['baixar_arquivo', 'executar_cmd', 'executar_powershell'], true) && empty($parametro)) {
+        if (in_array($tipo, ['baixar_arquivo', 'executar_cmd', 'executar_powershell', 'network_apply', 'network_revert', 'network_ping'], true) && empty($parametro)) {
             return ['success' => false, 'message' => 'Informe o caminho do arquivo/comando.'];
+        }
+
+        if ($tipo === 'network_apply') {
+            $config = json_decode((string)$parametro, true);
+            if (!is_array($config) || (int)($config['adapter_id'] ?? 0) <= 0) {
+                return ['success' => false, 'message' => 'Adaptador de rede inválido.'];
+            }
+            if (empty($config['dhcp'])) {
+                foreach (['ip' => 'IP', 'mascara' => 'Máscara'] as $campo => $nome) {
+                    if (!filter_var($config[$campo] ?? '', FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+                        return ['success' => false, 'message' => "{$nome} IPv4 inválido."];
+                    }
+                }
+                if (!empty($config['gateway']) && !filter_var($config['gateway'], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+                    return ['success' => false, 'message' => 'Gateway IPv4 inválido.'];
+                }
+                $dns = $config['dns'] ?? [];
+                if (!is_array($dns) || count($dns) > 2) {
+                    return ['success' => false, 'message' => 'Informe no máximo dois servidores DNS.'];
+                }
+                foreach ($dns as $servidorDns) {
+                    if (!filter_var($servidorDns, FILTER_VALIDATE_IP)) {
+                        return ['success' => false, 'message' => 'Endereço DNS inválido.'];
+                    }
+                }
+            }
+        } elseif ($tipo === 'network_revert' && (!ctype_digit((string)$parametro) || (int)$parametro <= 0)) {
+            return ['success' => false, 'message' => 'Adaptador inválido para reversão.'];
+        } elseif ($tipo === 'network_ping') {
+            $pedido = json_decode((string)$parametro, true);
+            if (!is_array($pedido) || !filter_var($pedido['ip'] ?? '', FILTER_VALIDATE_IP)) {
+                return ['success' => false, 'message' => 'Digite um endereço IP válido. Nomes de host não são aceitos.'];
+            }
         }
 
         $ativo = $this->repository->buscarPorId($ativoId);
@@ -4002,6 +4041,10 @@ class AtivoService
                 ($tipo === 'executar_cmd' ? 'CMD' : 'PowerShell') . ($elevado ? ' (elevado)' : '') . ' em '
                     . $ativo['codigo_patrimonio'] . ' (' . $ativo['nome'] . '): ' . $parametro
             );
+        }
+
+        if (in_array($tipo, ['network_apply', 'network_revert'], true)) {
+            AuditService::registrar('Ativos', 'Configuração de rede', "Solicitação {$tipo} para {$ativo['codigo_patrimonio']} ({$ativo['nome']}).");
         }
 
         return ['success' => true, 'id' => $id];

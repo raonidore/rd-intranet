@@ -15,6 +15,19 @@ public class ResultadoHeartbeat
 
     /// <summary>Só vem preenchida quando o servidor tem uma chave mais nova marcada pra rollout automático -- ver TrayApplicationContext.</summary>
     public string? ChaveApiAtual { get; set; }
+    public DadosAtivoHeartbeat? Ativo { get; set; }
+}
+
+public sealed class DadosAtivoHeartbeat
+{
+    [JsonPropertyName("codigo")]
+    public string Codigo { get; set; } = "";
+
+    [JsonPropertyName("nome")]
+    public string Nome { get; set; } = "";
+
+    [JsonPropertyName("ip")]
+    public string Ip { get; set; } = "";
 }
 
 /// <summary>Pedido de leitura pendente (explorador de arquivos/processos) entregue no heartbeat.</summary>
@@ -99,7 +112,8 @@ public class HeartbeatClient
                 Sucesso = corpo?.Success ?? false,
                 ForcarCheckin = corpo?.ForcarCheckin ?? false,
                 Solicitacoes = corpo?.Solicitacoes ?? new List<SolicitacaoItem>(),
-                ChaveApiAtual = corpo?.ChaveApiAtual
+                ChaveApiAtual = corpo?.ChaveApiAtual,
+                Ativo = corpo?.Ativo
             };
         }
         catch
@@ -122,5 +136,8 @@ public class HeartbeatClient
 
         [JsonPropertyName("chave_api_atual")]
         public string? ChaveApiAtual { get; set; }
+
+        [JsonPropertyName("ativo")]
+        public DadosAtivoHeartbeat? Ativo { get; set; }
     }
 }

@@ -1595,6 +1595,9 @@ class AtivoController extends Controller
         if (in_array($tipo, ['executar_cmd', 'executar_powershell'], true)) {
             AuthMiddleware::checkModulo('ativos_novo');
         }
+        if (in_array($tipo, ['network_apply', 'network_revert'], true)) {
+            AuthMiddleware::checkModulo('ativos_novo');
+        }
 
         echo json_encode($this->service->solicitarListagem($id, $tipo, $parametro, $usuario, $elevado));
     }

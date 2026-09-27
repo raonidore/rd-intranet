@@ -440,7 +440,7 @@ class AtivoRepository
      */
     public function registrarHeartbeat(string $machineGuid): ?array
     {
-        $stmt = $this->pdo->prepare("SELECT id, checkin_solicitado_em FROM ativos WHERE machine_guid = ? LIMIT 1");
+        $stmt = $this->pdo->prepare("SELECT id, checkin_solicitado_em, codigo_patrimonio, nome, ip FROM ativos WHERE machine_guid = ? LIMIT 1");
         $stmt->execute([$machineGuid]);
         $ativo = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -453,6 +453,9 @@ class AtivoRepository
         return [
             'id' => (int)$ativo['id'],
             'forcar_checkin' => $ativo['checkin_solicitado_em'] !== null,
+            'codigo_patrimonio' => $ativo['codigo_patrimonio'],
+            'nome' => $ativo['nome'],
+            'ip' => $ativo['ip'] ?? '',
         ];
     }
 

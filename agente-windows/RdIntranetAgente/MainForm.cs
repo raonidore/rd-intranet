@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.ServiceProcess;
+using System.Text.Json;
 using System.Windows.Forms;
 
 namespace RdIntranetAgente;
@@ -20,11 +21,13 @@ public sealed class MainForm : Form
     private readonly Panel _paginaVisao;
     private readonly Panel _paginaSeguranca;
     private readonly Panel _paginaAtividade;
+    private readonly Panel _paginaNetwork;
     private readonly Panel _paginaConfig;
     private readonly Panel _hostConfig;
     private readonly Button _botaoConfig;
     private ConfigForm? _formConfig;
     private readonly PilulaStatus _statusConexao;
+    private readonly CartaoInfo _cartaoAtivo;
     private readonly CartaoInfo _cartaoCheckin;
     private readonly CartaoInfo _cartaoHeartbeat;
     private readonly CartaoInfo _cartaoTrafego;
@@ -35,6 +38,17 @@ public sealed class MainForm : Form
     private readonly Label _statusShadow;
     private readonly ListView _listaEventos;
     private readonly ListView _listaAtividade;
+    private readonly ListView _listaAdaptadoresRede;
+    private readonly CheckBox _redeDhcpLocal;
+    private readonly TextBox _redeIpLocal;
+    private readonly TextBox _redeMascaraLocal;
+    private readonly TextBox _redeGatewayLocal;
+    private readonly TextBox _redeDnsLocal;
+    private readonly TextBox _redePingLocal;
+    private readonly Label _redeStatusLocal;
+    private readonly Label _redePingResultado;
+    private readonly Label _redeSpeedResultado;
+    private readonly Button _redeBotaoReverter;
     private string _assinaturaEventos = "";
 
     public MainForm(
@@ -89,11 +103,17 @@ public sealed class MainForm : Form
         var botaoSeguranca = CriarBotaoNavegacao("Segurança", 145);
         var botaoAtividade = CriarBotaoNavegacao("Atividade", 190);
         _botaoConfig = CriarBotaoNavegacao("Configurações", 235);
+        var botaoNetwork = CriarBotaoNavegacao("Network", 280);
         botaoVisao.Click += (s, e) => MostrarPagina(_paginaVisao!, botaoVisao);
         botaoSeguranca.Click += (s, e) => MostrarPagina(_paginaSeguranca!, botaoSeguranca);
         botaoAtividade.Click += (s, e) => MostrarPagina(_paginaAtividade!, botaoAtividade);
         _botaoConfig.Click += (s, e) => AbrirConfiguracoes();
-        _navegacao.Controls.AddRange(new Control[] { botaoVisao, botaoSeguranca, botaoAtividade, _botaoConfig });
+        botaoNetwork.Click += async (s, e) =>
+        {
+            MostrarPagina(_paginaNetwork!, botaoNetwork);
+            await AtualizarAdaptadoresRedeAsync();
+        };
+        _navegacao.Controls.AddRange(new Control[] { botaoVisao, botaoSeguranca, botaoAtividade, _botaoConfig, botaoNetwork });
 
         var versao = new Label
         {
@@ -114,6 +134,7 @@ public sealed class MainForm : Form
         _statusConexao = new PilulaStatus { Location = new Point(0, 6) };
         var linhaStatus = new Panel { Height = 44, BackColor = Tema.Fundo };
         linhaStatus.Controls.Add(_statusConexao);
+        _cartaoAtivo = new CartaoInfo { Height = 84 };
         var grade = new TableLayoutPanel
         {
             Location = new Point(0, 122),
@@ -151,7 +172,7 @@ public sealed class MainForm : Form
         acoes.Controls.Add(CriarBotaoAcao("Atualizar agora", BotaoTema.Variante.Secundario, async () => await _atualizar()));
         acoes.Controls.Add(CriarBotaoAcao("Configurações", BotaoTema.Variante.Secundario, () => AbrirConfiguracoes()));
         acoes.Controls.Add(CriarBotaoAcao("Serviço do Windows", BotaoTema.Variante.Secundario, async () => await _alternarServico()));
-        Empilhar(_paginaVisao, null, tituloVisao, linhaStatus, grade, Espaco(16), acoes);
+        Empilhar(_paginaVisao, null, tituloVisao, linhaStatus, _cartaoAtivo, Espaco(10), grade, Espaco(16), acoes);
 
         _paginaSeguranca = CriarPagina();
         var tituloSeguranca = CriarTitulo("Segurança", "Detectores locais e eventos reportados ao servidor.");
@@ -198,6 +219,64 @@ public sealed class MainForm : Form
         _listaAtividade.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
         Empilhar(_paginaAtividade, _listaAtividade, tituloAtividade, Espaco(8));
 
+        _paginaNetwork = CriarPagina();
+        var tituloNetwork = CriarTitulo("Network", "Adaptadores, configuração TCP/IP e testes locais desta máquina.");
+        _redeStatusLocal = new Label
+        {
+            Text = "Selecione um adaptador para consultar os valores atuais.",
+            ForeColor = Tema.TextoSecundario,
+            Height = 28,
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+        var acoesNetwork = new FlowLayoutPanel { AutoSize = true, WrapContents = true, BackColor = Tema.Fundo };
+        acoesNetwork.Controls.Add(CriarBotaoAcao("Atualizar adaptadores", BotaoTema.Variante.Secundario, async () => await AtualizarAdaptadoresRedeAsync()));
+        _redeBotaoReverter = CriarBotaoAcao("Reverter última alteração", BotaoTema.Variante.Perigo, async () => await ReverterRedeLocalAsync());
+        _redeBotaoReverter.Enabled = false;
+        acoesNetwork.Controls.Add(_redeBotaoReverter);
+
+        _listaAdaptadoresRede = CriarLista(new[] { ("Adaptador", 180), ("Estado", 90), ("MAC", 145), ("IPv4", 130), ("Configuração", 100) });
+        _listaAdaptadoresRede.MultiSelect = false;
+        _listaAdaptadoresRede.SelectedIndexChanged += (s, e) => SelecionarAdaptadorRedeLocal();
+
+        var formularioRede = new TableLayoutPanel
+        {
+            AutoSize = true,
+            ColumnCount = 4,
+            RowCount = 3,
+            BackColor = Tema.Superficie,
+            Padding = new Padding(12),
+            Margin = new Padding(0, 8, 0, 8)
+        };
+        for (var coluna = 0; coluna < 4; coluna++) formularioRede.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
+        _redeDhcpLocal = new CheckBox { Text = "Usar DHCP", ForeColor = Tema.Texto, BackColor = Tema.Superficie, AutoSize = true };
+        _redeIpLocal = CriarCampoRede();
+        _redeMascaraLocal = CriarCampoRede();
+        _redeGatewayLocal = CriarCampoRede();
+        _redeDnsLocal = CriarCampoRede();
+        formularioRede.Controls.Add(_redeDhcpLocal, 0, 0);
+        formularioRede.SetColumnSpan(_redeDhcpLocal, 4);
+        formularioRede.Controls.Add(CriarCampoComRotulo("Endereço IPv4", _redeIpLocal), 0, 1);
+        formularioRede.Controls.Add(CriarCampoComRotulo("Máscara", _redeMascaraLocal), 1, 1);
+        formularioRede.Controls.Add(CriarCampoComRotulo("Gateway", _redeGatewayLocal), 2, 1);
+        formularioRede.Controls.Add(CriarCampoComRotulo("DNS (até 2, separados por vírgula)", _redeDnsLocal), 3, 1);
+        var botaoAplicarRede = CriarBotaoAcao("Salvar e aplicar", BotaoTema.Variante.Primario, async () => await AplicarRedeLocalAsync());
+        formularioRede.Controls.Add(botaoAplicarRede, 0, 2);
+        formularioRede.SetColumnSpan(botaoAplicarRede, 4);
+        _redeDhcpLocal.CheckedChanged += (s, e) => AtualizarCamposRedeLocal();
+
+        var testesNetwork = new FlowLayoutPanel { AutoSize = true, WrapContents = true, BackColor = Tema.Fundo };
+        _redePingLocal = CriarCampoRede();
+        _redePingLocal.Width = 150;
+        _redePingLocal.PlaceholderText = "192.168.0.1";
+        _redePingResultado = new Label { ForeColor = Tema.TextoSecundario, AutoSize = true, Padding = new Padding(8, 8, 8, 0) };
+        _redeSpeedResultado = new Label { ForeColor = Tema.TextoSecundario, AutoSize = true, Padding = new Padding(8, 8, 8, 0) };
+        testesNetwork.Controls.Add(_redePingLocal);
+        testesNetwork.Controls.Add(CriarBotaoAcao("Ping", BotaoTema.Variante.Secundario, async () => await TestarPingLocalAsync()));
+        testesNetwork.Controls.Add(_redePingResultado);
+        testesNetwork.Controls.Add(CriarBotaoAcao("Teste de velocidade", BotaoTema.Variante.Secundario, async () => await TestarVelocidadeLocalAsync()));
+        testesNetwork.Controls.Add(_redeSpeedResultado);
+        Empilhar(_paginaNetwork, _listaAdaptadoresRede, tituloNetwork, _redeStatusLocal, acoesNetwork, formularioRede, testesNetwork);
+
         // Configurações dentro do próprio painel (antes era uma janela à parte):
         // a mesma tela de sempre, embutida -- validação e busca de unidades iguais.
         _paginaConfig = CriarPagina();
@@ -206,7 +285,7 @@ public sealed class MainForm : Form
         Tema.TemaEscuroNativo(_hostConfig);
         Empilhar(_paginaConfig, _hostConfig, tituloConfig);
 
-        _conteudo.Controls.AddRange(new Control[] { _paginaVisao, _paginaSeguranca, _paginaAtividade, _paginaConfig });
+        _conteudo.Controls.AddRange(new Control[] { _paginaVisao, _paginaSeguranca, _paginaAtividade, _paginaNetwork, _paginaConfig });
         MostrarPagina(_paginaVisao, botaoVisao);
         ResumeLayout(false);
         PerformLayout();
@@ -330,6 +409,185 @@ public sealed class MainForm : Form
         return botao;
     }
 
+    private static TextBox CriarCampoRede()
+    {
+        var campo = new TextBox { Dock = DockStyle.Fill, Margin = new Padding(3), MinimumSize = new Size(90, 28) };
+        Tema.EstilizarCampo(campo);
+        return campo;
+    }
+
+    private static Panel CriarCampoComRotulo(string texto, Control campo)
+    {
+        var painel = new Panel { Dock = DockStyle.Fill, Height = 56, BackColor = Tema.Superficie, Padding = new Padding(3) };
+        painel.Controls.Add(campo);
+        painel.Controls.Add(new Label
+        {
+            Text = texto,
+            Dock = DockStyle.Top,
+            Height = 20,
+            ForeColor = Tema.TextoSecundario,
+            BackColor = Tema.Superficie,
+            Font = Tema.Fonte(8F)
+        });
+        return painel;
+    }
+
+    private async Task AtualizarAdaptadoresRedeAsync()
+    {
+        var idSelecionado = _listaAdaptadoresRede.SelectedItems.Count > 0
+            ? (_listaAdaptadoresRede.SelectedItems[0].Tag as AdaptadorRedeInfo)?.AdapterId
+            : (int?)null;
+        _redeStatusLocal.Text = "Consultando adaptadores...";
+        try
+        {
+            var adaptadores = await Task.Run(NetworkService.ListarAdaptadores);
+            _listaAdaptadoresRede.BeginUpdate();
+            _listaAdaptadoresRede.Items.Clear();
+            foreach (var adaptador in adaptadores)
+            {
+                var item = new ListViewItem(adaptador.Nome) { Tag = adaptador };
+                item.SubItems.Add(adaptador.Status);
+                item.SubItems.Add(adaptador.Mac);
+                item.SubItems.Add(adaptador.Ip ?? "—");
+                item.SubItems.Add(adaptador.Dhcp ? "DHCP" : "Manual");
+                _listaAdaptadoresRede.Items.Add(item);
+            }
+            _listaAdaptadoresRede.EndUpdate();
+            var itemSelecionado = idSelecionado.HasValue
+                ? _listaAdaptadoresRede.Items.Cast<ListViewItem>().FirstOrDefault(i => (i.Tag as AdaptadorRedeInfo)?.AdapterId == idSelecionado.Value)
+                : null;
+            if (itemSelecionado != null)
+            {
+                itemSelecionado.Selected = true;
+            }
+            else if (_listaAdaptadoresRede.Items.Count > 0)
+            {
+                _listaAdaptadoresRede.Items[0].Selected = true;
+            }
+            if (adaptadores.Count > 0) _redeStatusLocal.Text = $"{adaptadores.Count} adaptador(es) TCP/IP encontrado(s).";
+            else
+            {
+                _redeStatusLocal.Text = "Nenhum adaptador com TCP/IP habilitado foi encontrado.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _redeStatusLocal.Text = $"Falha ao consultar adaptadores: {ex.Message}";
+        }
+    }
+
+    private void SelecionarAdaptadorRedeLocal()
+    {
+        if (_listaAdaptadoresRede.SelectedItems.Count == 0 || _listaAdaptadoresRede.SelectedItems[0].Tag is not AdaptadorRedeInfo adaptador)
+            return;
+        _redeDhcpLocal.Checked = adaptador.Dhcp;
+        _redeIpLocal.Text = adaptador.Ip ?? "";
+        _redeMascaraLocal.Text = adaptador.Mascara ?? "";
+        _redeGatewayLocal.Text = adaptador.Gateway ?? "";
+        _redeDnsLocal.Text = string.Join(", ", adaptador.Dns);
+        _redeBotaoReverter.Enabled = adaptador.ReversaoDisponivel;
+        AtualizarCamposRedeLocal();
+    }
+
+    private void AtualizarCamposRedeLocal()
+    {
+        var habilitado = !_redeDhcpLocal.Checked;
+        _redeIpLocal.Enabled = habilitado;
+        _redeMascaraLocal.Enabled = habilitado;
+        _redeGatewayLocal.Enabled = habilitado;
+        _redeDnsLocal.Enabled = habilitado;
+    }
+
+    private async Task AplicarRedeLocalAsync()
+    {
+        if (_listaAdaptadoresRede.SelectedItems.Count == 0 || _listaAdaptadoresRede.SelectedItems[0].Tag is not AdaptadorRedeInfo adaptador)
+        {
+            _redeStatusLocal.Text = "Selecione um adaptador primeiro.";
+            return;
+        }
+        if (!confirmarMudancaRede("Aplicar a configuração neste adaptador? A conexão pode cair se os dados estiverem incorretos."))
+            return;
+
+        var dns = _redeDnsLocal.Text.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        var parametro = JsonSerializer.Serialize(new
+        {
+            adapter_id = adaptador.AdapterId,
+            dhcp = _redeDhcpLocal.Checked,
+            ip = _redeIpLocal.Text.Trim(),
+            mascara = _redeMascaraLocal.Text.Trim(),
+            gateway = _redeGatewayLocal.Text.Trim(),
+            dns
+        });
+        try
+        {
+            _redeStatusLocal.Text = "Aplicando configuração e salvando snapshot...";
+            await Task.Run(() => NetworkService.Aplicar(parametro));
+            _redeStatusLocal.Text = "Configuração aplicada. A anterior está salva para reversão.";
+            await AtualizarAdaptadoresRedeAsync();
+        }
+        catch (Exception ex)
+        {
+            _redeStatusLocal.Text = $"Falha ao aplicar: {ex.Message}";
+        }
+    }
+
+    private async Task ReverterRedeLocalAsync()
+    {
+        if (_listaAdaptadoresRede.SelectedItems.Count == 0 || _listaAdaptadoresRede.SelectedItems[0].Tag is not AdaptadorRedeInfo adaptador)
+            return;
+        if (!confirmarMudancaRede("Restaurar a configuração de rede salva antes da última alteração?")) return;
+        try
+        {
+            _redeStatusLocal.Text = "Restaurando a configuração anterior...";
+            await Task.Run(() => NetworkService.Reverter(adaptador.AdapterId.ToString()));
+            _redeStatusLocal.Text = "Configuração anterior restaurada.";
+            await AtualizarAdaptadoresRedeAsync();
+        }
+        catch (Exception ex)
+        {
+            _redeStatusLocal.Text = $"Falha ao reverter: {ex.Message}";
+        }
+    }
+
+    private async Task TestarPingLocalAsync()
+    {
+        var ip = _redePingLocal.Text.Trim();
+        try
+        {
+            _redePingResultado.Text = "Testando...";
+            var parametro = JsonSerializer.Serialize(new { ip, quantidade = 4 });
+            var json = JsonSerializer.Serialize(await Task.Run(() => NetworkService.PingAsync(parametro)));
+            using var resultado = JsonDocument.Parse(json);
+            var respostas = resultado.RootElement.GetProperty("respostas").EnumerateArray();
+            _redePingResultado.Text = string.Join("  ·  ", respostas.Select(r => r.GetProperty("sucesso").GetBoolean()
+                ? $"{r.GetProperty("tempo_ms").GetInt64()} ms"
+                : r.GetProperty("status").GetString()));
+        }
+        catch (Exception ex)
+        {
+            _redePingResultado.Text = ex.Message;
+        }
+    }
+
+    private async Task TestarVelocidadeLocalAsync()
+    {
+        try
+        {
+            _redeSpeedResultado.Text = "Testando Cloudflare...";
+            var json = JsonSerializer.Serialize(await NetworkService.TestarVelocidadeAsync());
+            using var resultado = JsonDocument.Parse(json);
+            var dados = resultado.RootElement;
+            _redeSpeedResultado.Text = $"↓ {dados.GetProperty("download_mbps").GetDouble():0.##} Mbps  ↑ {dados.GetProperty("upload_mbps").GetDouble():0.##} Mbps";
+        }
+        catch (Exception ex)
+        {
+            _redeSpeedResultado.Text = ex.Message;
+        }
+    }
+
+    private static bool confirmarMudancaRede(string mensagem) =>
+        MessageBox.Show(mensagem, "RD Intranet - Rede", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes;
+
     private static Label CriarStatusDetector() => new()
     {
         Dock = DockStyle.Fill,
@@ -419,6 +677,7 @@ public sealed class MainForm : Form
         _paginaVisao.Visible = false;
         _paginaSeguranca.Visible = false;
         _paginaAtividade.Visible = false;
+        _paginaNetwork.Visible = false;
         _paginaConfig.Visible = false;
         pagina.Visible = true;
         pagina.BringToFront();
@@ -449,6 +708,13 @@ public sealed class MainForm : Form
             agora - _estado.UltimoHeartbeatEm.Value <= TimeSpan.FromSeconds(Math.Max(10, _heartbeatIntervalo() * 2 + 5));
         var conectado = _estado.UltimoHeartbeatSucesso && heartbeatRecente;
         _statusConexao.Definir(conectado ? "CONECTADO" : "SEM CONEXÃO", conectado ? Tema.Sucesso : Tema.Alerta);
+        var codigoAtivo = string.IsNullOrWhiteSpace(_estado.CodigoAtivo) ? "Aguardando identificação do servidor" : _estado.CodigoAtivo;
+        var detalheAtivo = string.Join("  ·  ", new[]
+        {
+            string.IsNullOrWhiteSpace(_estado.NomeAtivo) ? "Nome indisponível" : _estado.NomeAtivo,
+            "IP " + (string.IsNullOrWhiteSpace(_estado.IpAtivo) ? "não informado" : _estado.IpAtivo)
+        });
+        _cartaoAtivo.Definir("INFORMAÇÕES DO ATIVO", codigoAtivo, detalheAtivo, Tema.Acento);
 
         var checkin = _estado.UltimoCheckinEm.HasValue ? _estado.UltimoCheckinEm.Value.ToString("dd/MM/yyyy HH:mm:ss") : "Ainda não realizado";
         _cartaoCheckin.Definir("ÚLTIMO CHECKIN", checkin,

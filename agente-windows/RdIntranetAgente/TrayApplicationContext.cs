@@ -220,6 +220,16 @@ public class TrayApplicationContext : ApplicationContext
             if (resultado.Sucesso)
             {
                 AplicarNovaChaveApiSeNecessario(resultado.ChaveApiAtual);
+                if (resultado.Ativo != null &&
+                    (_estado.CodigoAtivo != resultado.Ativo.Codigo ||
+                     _estado.NomeAtivo != resultado.Ativo.Nome ||
+                     _estado.IpAtivo != resultado.Ativo.Ip))
+                {
+                    _estado.CodigoAtivo = resultado.Ativo.Codigo;
+                    _estado.NomeAtivo = resultado.Ativo.Nome;
+                    _estado.IpAtivo = resultado.Ativo.Ip;
+                    _estado.Salvar();
+                }
             }
 
             if (resultado.Sucesso && resultado.ForcarCheckin && !_coletando)
@@ -315,6 +325,26 @@ public class TrayApplicationContext : ApplicationContext
                             erro,
                             codigo_saida = codigo
                         });
+                        break;
+
+                    case "network_list":
+                        await cliente.ResponderAsync(_machineGuid!, solicitacao.Id, NetworkService.ListarAdaptadores());
+                        break;
+
+                    case "network_apply":
+                        await cliente.ResponderAsync(_machineGuid!, solicitacao.Id, NetworkService.Aplicar(solicitacao.Parametro));
+                        break;
+
+                    case "network_revert":
+                        await cliente.ResponderAsync(_machineGuid!, solicitacao.Id, NetworkService.Reverter(solicitacao.Parametro));
+                        break;
+
+                    case "network_ping":
+                        await cliente.ResponderAsync(_machineGuid!, solicitacao.Id, await NetworkService.PingAsync(solicitacao.Parametro));
+                        break;
+
+                    case "network_speedtest":
+                        await cliente.ResponderAsync(_machineGuid!, solicitacao.Id, await NetworkService.TestarVelocidadeAsync());
                         break;
                 }
             }
