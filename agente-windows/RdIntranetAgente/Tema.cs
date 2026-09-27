@@ -92,22 +92,66 @@ public static class Tema
         return caminho;
     }
 
+    [DllImport("uxtheme.dll", CharSet = CharSet.Unicode)]
+    private static extern int SetWindowTheme(IntPtr hwnd, string? pszSubAppName, string? pszSubIdList);
+
+    /// <summary>
+    /// Tema escuro nativo do Windows 10/11 no controle (barra de rolagem,
+    /// seta de lista, borda de campo) -- no lugar do visual claro clássico.
+    /// "DarkMode_CFD" é o tema escuro de campos/listas de escolha;
+    /// "DarkMode_Explorer" o de listas e áreas com rolagem. Em Windows
+    /// antigo o tema não existe e o controle fica como estava.
+    /// </summary>
+    public static void TemaEscuroNativo(Control c, bool campo = false, string? tema = null)
+    {
+        void Aplicar()
+        {
+            try
+            {
+                SetWindowTheme(c.Handle, tema ?? (campo ? "DarkMode_CFD" : "DarkMode_Explorer"), null);
+            }
+            catch
+            {
+                // sem uxtheme -- segue no visual padrão
+            }
+        }
+
+        if (c.IsHandleCreated) Aplicar();
+        c.HandleCreated += (s, e) => Aplicar();
+    }
+
     public static void EstilizarCampo(Control c)
     {
         c.BackColor = Campo;
         c.ForeColor = Texto;
         c.Font = Fonte(9.5F);
+        if (c is not NumericUpDown)
+        {
+            TemaEscuroNativo(c, campo: true);
+        }
 
         switch (c)
         {
             case TextBox t:
-                t.BorderStyle = BorderStyle.FixedSingle;
+                t.BorderStyle = BorderStyle.Fixed3D; // com o tema escuro nativo vira borda escura discreta
                 break;
             case ComboBox cb:
-                cb.FlatStyle = FlatStyle.Flat;
+                cb.FlatStyle = FlatStyle.Standard; // Flat desenha a seta clássica por conta própria e ignora o tema
                 break;
             case NumericUpDown n:
+                // Sem tema e sem borda: caixa escura lisa, da mesma cor da área
+                // de digitação (com tema, sobrava um bloco onde ficavam as setas).
                 n.BorderStyle = BorderStyle.FixedSingle;
+                // Os botõezinhos de subir/descer são desenhados pelo WinForms no
+                // estilo clássico -- escondidos; digita, setas do teclado ou rodinha.
+                if (n.Controls.Count > 1)
+                {
+                    n.Controls[0].Visible = false;
+                    n.Controls[1].BackColor = Campo;
+                    n.Controls[1].ForeColor = Texto;
+                    // Sem os botões, a área de digitação ocupa a caixa toda
+                    // (senão sobra um bloco escuro onde eles ficavam).
+                }
                 break;
         }
     }

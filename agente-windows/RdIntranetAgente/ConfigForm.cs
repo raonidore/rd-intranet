@@ -38,6 +38,13 @@ public class ConfigForm : Form
 
     public Config ConfigResultante { get; private set; }
 
+    /// <summary>
+    /// Usados quando a tela vai embutida no painel (MainForm, área
+    /// "Configurações") -- lá não existe DialogResult pra fechar.
+    /// </summary>
+    public event Action<Config>? Salvo;
+    public event Action? Cancelado;
+
     public ConfigForm(Config configAtual)
     {
         ConfigResultante = configAtual;
@@ -216,7 +223,9 @@ public class ConfigForm : Form
                 SetorId = setorEscolhido?.Id ?? _setorIdAnterior,
                 LocalizacaoId = localizacaoEscolhida?.Id ?? _localizacaoIdAnterior
             };
+            Salvo?.Invoke(ConfigResultante);
         };
+        botaoCancelar.Click += (s, e) => Cancelado?.Invoke();
 
         Controls.AddRange(new Control[]
         {
@@ -305,16 +314,12 @@ public class ConfigForm : Form
 
         protected override void OnPaint(PaintEventArgs e)
         {
-            var meio = Height / 2;
+            // Só o nome da seção, em destaque discreto -- sem traço de acento
+            // nem linha divisória (visual de sistema antigo).
+            e.Graphics.Clear(BackColor);
             using var fonte = Tema.FonteSemibold(8.25F);
-            using var acento = new Pen(Tema.Acento, 2F);
-            using var divisor = new Pen(Tema.BordaSuave);
-            e.Graphics.DrawLine(acento, 0, meio - 4, 0, meio + 4);
-            var larguraTexto = TextRenderer.MeasureText(e.Graphics, Text, fonte, Size, TextFormatFlags.NoPadding).Width;
-            TextRenderer.DrawText(e.Graphics, Text, fonte, new Rectangle(10, 0, larguraTexto + 4, Height), Tema.TextoSecundario,
+            TextRenderer.DrawText(e.Graphics, Text, fonte, new Rectangle(0, 0, Width, Height), Tema.Ciano,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-            var inicioDivisor = Math.Min(Width - 1, larguraTexto + 22);
-            e.Graphics.DrawLine(divisor, inicioDivisor, meio, Width - 1, meio);
         }
     }
 

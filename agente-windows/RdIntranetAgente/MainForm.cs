@@ -11,7 +11,8 @@ public sealed class MainForm : Form
     private readonly Func<int> _heartbeatIntervalo;
     private readonly Func<Task> _coletar;
     private readonly Func<Task> _atualizar;
-    private readonly Action _configuracoes;
+    private readonly Func<Config> _configAtual;
+    private readonly Action<Config> _aplicarConfig;
     private readonly Func<Task> _alternarServico;
     private readonly System.Windows.Forms.Timer _timer;
     private readonly Panel _conteudo;
@@ -19,6 +20,10 @@ public sealed class MainForm : Form
     private readonly Panel _paginaVisao;
     private readonly Panel _paginaSeguranca;
     private readonly Panel _paginaAtividade;
+    private readonly Panel _paginaConfig;
+    private readonly Panel _hostConfig;
+    private readonly Button _botaoConfig;
+    private ConfigForm? _formConfig;
     private readonly PilulaStatus _statusConexao;
     private readonly CartaoInfo _cartaoCheckin;
     private readonly CartaoInfo _cartaoHeartbeat;
@@ -38,7 +43,8 @@ public sealed class MainForm : Form
         Func<int> heartbeatIntervalo,
         Func<Task> coletar,
         Func<Task> atualizar,
-        Action configuracoes,
+        Func<Config> configAtual,
+        Action<Config> aplicarConfig,
         Func<Task> alternarServico)
     {
         _estado = estado;
@@ -46,8 +52,15 @@ public sealed class MainForm : Form
         _heartbeatIntervalo = heartbeatIntervalo;
         _coletar = coletar;
         _atualizar = atualizar;
-        _configuracoes = configuracoes;
+        _configAtual = configAtual;
+        _aplicarConfig = aplicarConfig;
         _alternarServico = alternarServico;
+
+        // Escala por DPI: medidas escritas pra 100% (96 DPI) crescem sozinhas
+        // em 125%/150%/200%; o layout empilhado acompanha o redimensionamento.
+        SuspendLayout();
+        AutoScaleDimensions = new SizeF(96F, 96F);
+        AutoScaleMode = AutoScaleMode.Dpi;
 
         Text = "RD Intranet - Agente";
         StartPosition = FormStartPosition.CenterScreen;
@@ -75,19 +88,19 @@ public sealed class MainForm : Form
         var botaoVisao = CriarBotaoNavegacao("Visão geral", 100);
         var botaoSeguranca = CriarBotaoNavegacao("Segurança", 145);
         var botaoAtividade = CriarBotaoNavegacao("Atividade", 190);
+        _botaoConfig = CriarBotaoNavegacao("Configurações", 235);
         botaoVisao.Click += (s, e) => MostrarPagina(_paginaVisao!, botaoVisao);
         botaoSeguranca.Click += (s, e) => MostrarPagina(_paginaSeguranca!, botaoSeguranca);
         botaoAtividade.Click += (s, e) => MostrarPagina(_paginaAtividade!, botaoAtividade);
-        _navegacao.Controls.AddRange(new Control[] { botaoVisao, botaoSeguranca, botaoAtividade });
+        _botaoConfig.Click += (s, e) => AbrirConfiguracoes();
+        _navegacao.Controls.AddRange(new Control[] { botaoVisao, botaoSeguranca, botaoAtividade, _botaoConfig });
 
         var versao = new Label
         {
             Text = $"Versão {Tema.Versao()}",
-            Left = 20,
-            Top = 590,
-            Width = 140,
-            Height = 24,
-            Anchor = AnchorStyles.Left | AnchorStyles.Bottom,
+            Dock = DockStyle.Bottom,
+            Height = 36,
+            Padding = new Padding(20, 0, 0, 12),
             ForeColor = Tema.TextoSecundario
         };
         _navegacao.Controls.Add(versao);
@@ -98,7 +111,9 @@ public sealed class MainForm : Form
 
         _paginaVisao = CriarPagina();
         var tituloVisao = CriarTitulo("Visão geral", "Condição atual do agente nesta máquina.");
-        _statusConexao = new PilulaStatus { Location = new Point(0, 78) };
+        _statusConexao = new PilulaStatus { Location = new Point(0, 6) };
+        var linhaStatus = new Panel { Height = 44, BackColor = Tema.Fundo };
+        linhaStatus.Controls.Add(_statusConexao);
         var grade = new TableLayoutPanel
         {
             Location = new Point(0, 122),
@@ -128,13 +143,15 @@ public sealed class MainForm : Form
             Size = new Size(720, 42),
             Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
             BackColor = Tema.Fundo,
-            WrapContents = true
+            WrapContents = true,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink
         };
         acoes.Controls.Add(CriarBotaoAcao("Coletar agora", BotaoTema.Variante.Primario, async () => await _coletar()));
         acoes.Controls.Add(CriarBotaoAcao("Atualizar agora", BotaoTema.Variante.Secundario, async () => await _atualizar()));
-        acoes.Controls.Add(CriarBotaoAcao("Configurações", BotaoTema.Variante.Secundario, () => _configuracoes()));
+        acoes.Controls.Add(CriarBotaoAcao("Configurações", BotaoTema.Variante.Secundario, () => AbrirConfiguracoes()));
         acoes.Controls.Add(CriarBotaoAcao("Serviço do Windows", BotaoTema.Variante.Secundario, async () => await _alternarServico()));
-        _paginaVisao.Controls.AddRange(new Control[] { tituloVisao, _statusConexao, grade, acoes });
+        Empilhar(_paginaVisao, null, tituloVisao, linhaStatus, grade, Espaco(16), acoes);
 
         _paginaSeguranca = CriarPagina();
         var tituloSeguranca = CriarTitulo("Segurança", "Detectores locais e eventos reportados ao servidor.");
@@ -171,7 +188,7 @@ public sealed class MainForm : Form
         _listaEventos.Location = new Point(0, 250);
         _listaEventos.Size = new Size(720, 340);
         _listaEventos.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-        _paginaSeguranca.Controls.AddRange(new Control[] { tituloSeguranca, _avisoIsolamento, detectores, rotuloEventos, _listaEventos });
+        Empilhar(_paginaSeguranca, _listaEventos, tituloSeguranca, _avisoIsolamento, Espaco(10), detectores, Espaco(14), rotuloEventos);
 
         _paginaAtividade = CriarPagina();
         var tituloAtividade = CriarTitulo("Atividade", "Registro recente do que o agente executou.");
@@ -179,10 +196,20 @@ public sealed class MainForm : Form
         _listaAtividade.Location = new Point(0, 86);
         _listaAtividade.Size = new Size(720, 500);
         _listaAtividade.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-        _paginaAtividade.Controls.AddRange(new Control[] { tituloAtividade, _listaAtividade });
+        Empilhar(_paginaAtividade, _listaAtividade, tituloAtividade, Espaco(8));
 
-        _conteudo.Controls.AddRange(new Control[] { _paginaVisao, _paginaSeguranca, _paginaAtividade });
+        // Configurações dentro do próprio painel (antes era uma janela à parte):
+        // a mesma tela de sempre, embutida -- validação e busca de unidades iguais.
+        _paginaConfig = CriarPagina();
+        var tituloConfig = CriarTitulo("Configurações", "Conexão com o RD Intranet e preferências desta máquina.");
+        _hostConfig = new Panel { BackColor = Tema.Fundo, AutoScroll = true };
+        Tema.TemaEscuroNativo(_hostConfig);
+        Empilhar(_paginaConfig, _hostConfig, tituloConfig);
+
+        _conteudo.Controls.AddRange(new Control[] { _paginaVisao, _paginaSeguranca, _paginaAtividade, _paginaConfig });
         MostrarPagina(_paginaVisao, botaoVisao);
+        ResumeLayout(false);
+        PerformLayout();
 
         _timer = new System.Windows.Forms.Timer { Interval = 1500 };
         _timer.Tick += (s, e) => AtualizarDados();
@@ -202,6 +229,57 @@ public sealed class MainForm : Form
         AtualizarAtividade();
     }
 
+    /// <summary>
+    /// Empilha os blocos de cima pra baixo ocupando a largura toda (Dock
+    /// Top) e deixa "preencher" com o resto da altura. Antes cada bloco
+    /// tinha posição/largura fixas com âncora à direita, calculadas contra
+    /// o tamanho inicial da página (menor que a janela) -- o conteúdo
+    /// passava da borda e aparecia cortado.
+    /// </summary>
+    private static void Empilhar(Panel pagina, Control? preencher, params Control[] deCimaPraBaixo)
+    {
+        foreach (var bloco in deCimaPraBaixo)
+        {
+            bloco.Dock = DockStyle.Top;
+            pagina.Controls.Add(bloco);
+            bloco.BringToFront();
+        }
+
+        if (preencher != null)
+        {
+            preencher.Dock = DockStyle.Fill;
+            pagina.Controls.Add(preencher);
+            preencher.BringToFront();
+        }
+    }
+
+    private static Panel Espaco(int altura) => new() { Height = altura, BackColor = Tema.Fundo };
+
+    /// <summary>Abre a área Configurações com os valores atuais (recria a tela a cada abertura).</summary>
+    public void AbrirConfiguracoes()
+    {
+        _formConfig?.Dispose();
+        _formConfig = new ConfigForm(_configAtual())
+        {
+            TopLevel = false,
+            FormBorderStyle = FormBorderStyle.None,
+            Location = new Point(0, 0)
+        };
+        _formConfig.Salvo += config =>
+        {
+            _aplicarConfig(config);
+            LogAtividade.Registrar(NivelAtividade.Sucesso, "CONFIG", "Configurações salvas pelo painel.");
+            MostrarPagina(_paginaVisao, (Button)_navegacao.Controls[1]);
+        };
+        _formConfig.Cancelado += () => MostrarPagina(_paginaVisao, (Button)_navegacao.Controls[1]);
+        _hostConfig.Controls.Clear();
+        _hostConfig.Controls.Add(_formConfig);
+        _formConfig.Show();
+
+        Abrir();
+        MostrarPagina(_paginaConfig, _botaoConfig);
+    }
+
     private static Panel CriarPagina() => new()
     {
         Dock = DockStyle.Fill,
@@ -211,7 +289,7 @@ public sealed class MainForm : Form
 
     private static Panel CriarTitulo(string titulo, string subtitulo)
     {
-        var painel = new Panel { Location = new Point(0, 0), Size = new Size(720, 68), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+        var painel = new Panel { Height = 68, BackColor = Tema.Fundo };
         painel.Controls.Add(new Label
         {
             Text = titulo,
@@ -247,7 +325,7 @@ public sealed class MainForm : Form
 
     private static BotaoTema CriarBotaoAcao(string texto, BotaoTema.Variante variante, Action executar)
     {
-        var botao = new BotaoTema(texto, variante) { Width = 150, Margin = new Padding(0, 0, 8, 0) };
+        var botao = new BotaoTema(texto, variante) { Width = 150, Margin = new Padding(0, 0, 8, 8) };
         botao.Click += (s, e) => executar();
         return botao;
     }
@@ -282,9 +360,11 @@ public sealed class MainForm : Form
             HideSelection = false,
             BackColor = Tema.Superficie,
             ForeColor = Tema.Texto,
-            BorderStyle = BorderStyle.FixedSingle,
+            BorderStyle = BorderStyle.None,
             Font = Tema.Fonte(9F)
         };
+        // Sem tema nativo aqui: qualquer tema escuro do Windows faz a lista
+        // desenhar uma grade vertical entre as colunas e barra horizontal.
         foreach (var coluna in colunas) lista.Columns.Add(coluna.titulo, coluna.largura);
 
         // Cabeçalho padrão do Windows é claro e não aceita cor -- desenha
@@ -295,14 +375,42 @@ public sealed class MainForm : Form
             using var borda = new Pen(Tema.Borda);
             e.Graphics.FillRectangle(fundo, e.Bounds);
             e.Graphics.DrawLine(borda, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
-            e.Graphics.DrawLine(borda, e.Bounds.Right - 1, e.Bounds.Top + 4, e.Bounds.Right - 1, e.Bounds.Bottom - 5);
             using var fonte = Tema.FonteSemibold(8.25F);
             var area = new Rectangle(e.Bounds.X + 6, e.Bounds.Y, e.Bounds.Width - 8, e.Bounds.Height);
             TextRenderer.DrawText(e.Graphics, e.Header?.Text ?? "", fonte, area, Tema.TextoSecundario,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
         };
-        lista.DrawItem += (s, e) => e.DrawDefault = true;
-        lista.DrawSubItem += (s, e) => e.DrawDefault = true;
+        // Linhas desenhadas aqui (fundo, seleção, cor do texto) -- o desenho
+        // padrão com tema escuro traz uma grade vertical entre as colunas.
+        lista.DrawItem += (s, e) => { };
+        lista.DrawSubItem += (s, e) =>
+        {
+            if (e.Item == null || e.SubItem == null) return;
+            var selecionado = e.Item.Selected;
+            using (var fundo = new SolidBrush(selecionado ? Tema.SuperficieElevada : Tema.Superficie))
+            {
+                e.Graphics.FillRectangle(fundo, e.Bounds);
+            }
+            var area = new Rectangle(e.Bounds.X + 6, e.Bounds.Y, Math.Max(0, e.Bounds.Width - 10), e.Bounds.Height);
+            TextRenderer.DrawText(e.Graphics, e.SubItem.Text, lista.Font, area, e.Item.ForeColor,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+        };
+
+        // A última coluna ocupa o que sobrar -- sem isso, a sobra à direita
+        // do cabeçalho ficava como uma "coluna" branca sem sentido.
+        void AjustarUltimaColuna()
+        {
+            if (lista.Columns.Count == 0 || !lista.IsHandleCreated || !lista.Visible) return;
+            var outras = 0;
+            for (var i = 0; i < lista.Columns.Count - 1; i++) outras += lista.Columns[i].Width;
+            // ClientSize já desconta a barra vertical quando ela existe.
+            var largura = lista.ClientSize.Width - outras;
+            if (largura > 60 && lista.Columns[^1].Width != largura) lista.Columns[^1].Width = largura;
+        }
+        // Layout cobre redimensionar e também a página aparecer (se a janela
+        // mudou de tamanho com a página escondida, o Resize já tinha passado).
+        lista.Layout += (s, e) => AjustarUltimaColuna();
+        lista.VisibleChanged += (s, e) => AjustarUltimaColuna();
         return lista;
     }
 
@@ -311,6 +419,7 @@ public sealed class MainForm : Form
         _paginaVisao.Visible = false;
         _paginaSeguranca.Visible = false;
         _paginaAtividade.Visible = false;
+        _paginaConfig.Visible = false;
         pagina.Visible = true;
         pagina.BringToFront();
         foreach (Control controle in _navegacao.Controls)

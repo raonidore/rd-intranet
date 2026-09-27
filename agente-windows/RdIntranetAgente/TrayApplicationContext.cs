@@ -97,7 +97,8 @@ public class TrayApplicationContext : ApplicationContext
             () => _config.HeartbeatSegundos,
             () => ColetarEEnviarAsync(manual: true),
             () => AtualizarAgoraManualAsync(),
-            AbrirConfiguracoes,
+            () => _config,
+            AplicarConfiguracao,
             AlternarServicoAsync);
         _icone.MouseClick += (s, e) =>
         {
@@ -156,6 +157,14 @@ public class TrayApplicationContext : ApplicationContext
 
     private void AbrirConfiguracoes()
     {
+        // Já configurado: abre dentro do painel. Primeira configuração
+        // continua na janela própria (o painel ainda não tem o que mostrar).
+        if (_config.EstaConfigurado && _janelaPrincipal != null)
+        {
+            _janelaPrincipal.AbrirConfiguracoes();
+            return;
+        }
+
         using var form = new ConfigForm(_config);
 
         if (form.ShowDialog() != DialogResult.OK)
@@ -163,7 +172,12 @@ public class TrayApplicationContext : ApplicationContext
             return;
         }
 
-        _config = form.ConfigResultante;
+        AplicarConfiguracao(form.ConfigResultante);
+    }
+
+    private void AplicarConfiguracao(Config nova)
+    {
+        _config = nova;
         _config.Salvar();
         // Recalcula na hora -- principalmente pro "Identificador da
         // máquina" (override), que só é lido aqui; sem isso, só valeria
