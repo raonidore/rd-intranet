@@ -133,7 +133,11 @@ class EmailService
      *   vírgula, ou um array já separado -- normaliza e valida cada um.
      * @return array{success: bool, message: string}
      */
-    public function enviar(string|array $para, string $assunto, string $corpoHtml): array
+    /**
+     * @param array<string, array{0: string, 1: string}> $imagens imagens embutidas no corpo,
+     *   referenciadas como src="cid:<chave>" -- [chave => [caminho, mime]]
+     */
+    public function enviar(string|array $para, string $assunto, string $corpoHtml, array $imagens = []): array
     {
         if (!$this->configurado()) {
             return ['success' => false, 'message' => 'SMTP não configurado (Sistema > E-mail).'];
@@ -171,6 +175,11 @@ class EmailService
             $mail->isHTML(true);
             $mail->Subject = $assunto;
             $mail->Body = $corpoHtml;
+            foreach ($imagens as $cid => [$caminho, $mime]) {
+                if (is_file($caminho)) {
+                    $mail->addEmbeddedImage($caminho, $cid, $cid, PHPMailer::ENCODING_BASE64, $mime);
+                }
+            }
 
             $mail->send();
 

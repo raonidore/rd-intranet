@@ -66,7 +66,11 @@ use App\Components\Alert;
 
                     <label class="form-label small fw-semibold mb-1" for="padrao_alerta_emails">Avisar por e-mail</label>
                     <input type="text" name="alerta_emails" id="padrao_alerta_emails" class="form-control form-control-sm mb-2" placeholder="ti@empresa.com.br, outro@empresa.com.br" value="<?= htmlspecialchars($padraoSeguranca['alerta_emails']) ?>">
-                    <label class="form-label small fw-semibold mb-1" for="padrao_alerta_whatsapp">Avisar por WhatsApp</label>
+                    <label class="form-label small fw-semibold mb-1" for="padrao_alerta_url_portal">Endereço do portal nos alertas</label>
+        <input type="url" name="alerta_url_portal" id="padrao_alerta_url_portal" class="form-control form-control-sm mb-1"
+               placeholder="https://cliente.ddns.net:83/rd.intranet" value="<?= htmlspecialchars($padraoSeguranca['alerta_url_portal'] ?? '') ?>">
+        <div class="form-text small mb-2">Usado nos botões do e-mail. Em branco, usa o endereço pelo qual o agente chega ao servidor (costuma ser o IP interno, que só abre de dentro da rede do cliente).</div>
+        <label class="form-label small fw-semibold mb-1" for="padrao_alerta_whatsapp">Avisar por WhatsApp</label>
                     <input type="text" name="alerta_whatsapp" id="padrao_alerta_whatsapp" class="form-control form-control-sm mb-3" placeholder="5581999999999, 5581988888888" value="<?= htmlspecialchars($padraoSeguranca['alerta_whatsapp']) ?>">
 
                     <label class="form-label small fw-semibold mb-1" for="padrao_isolamento_liberados">Continuam com rede durante o isolamento</label>
@@ -79,12 +83,73 @@ use App\Components\Alert;
                     </div>
                 </div>
             </div>
+            <div class="border-top mt-4 pt-3">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                    <div>
+                        <label class="form-label small fw-semibold mb-0">Modelo do e-mail de alerta</label>
+                        <div class="form-text small mt-0">Todos levam o logo e o nome da empresa (Administração &rsaquo; Empresa), identificam o servidor e trazem os links da máquina e da Central.</div>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="botaoAlertaTeste">
+                        <i class="bi bi-envelope"></i> Enviar e-mail de teste
+                    </button>
+                </div>
+                <div class="row g-3">
+                    <?php foreach (\App\Services\SegurancaAlertaService::MODELOS as $modelo => [$rotuloModelo, $descricaoModelo]): ?>
+                        <div class="col-xl-4">
+                            <label class="card h-100 border <?= ($padraoSeguranca['alerta_modelo'] ?? 'sistema') === $modelo ? 'border-primary border-2' : '' ?>" style="cursor:pointer">
+                                <div class="card-body p-2">
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input js-modelo-alerta" type="radio" name="alerta_modelo" value="<?= $modelo ?>" id="modelo_<?= $modelo ?>"
+                                               <?= ($padraoSeguranca['alerta_modelo'] ?? 'sistema') === $modelo ? 'checked' : '' ?>>
+                                        <span class="form-check-label small"><strong><?= htmlspecialchars($rotuloModelo) ?></strong>
+                                            <span class="text-muted d-block"><?= htmlspecialchars($descricaoModelo) ?></span></span>
+                                    </div>
+                                    <iframe title="Prévia do modelo <?= htmlspecialchars($rotuloModelo) ?>" srcdoc="<?= htmlspecialchars($previasAlerta[$modelo] ?? '') ?>"
+                                            style="width:100%;height:420px;border:1px solid #e5e7eb;border-radius:6px;pointer-events:none" loading="lazy" sandbox></iframe>
+                                </div>
+                            </label>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
             <div class="mt-3">
                 <button class="btn btn-sm btn-primary">Salvar padrão</button>
             </div>
         </form>
     </div>
 </div>
+
+<script>
+(function () {
+    // Destaca o cartão escolhido sem precisar salvar pra ver.
+    document.querySelectorAll('.js-modelo-alerta').forEach(function (radio) {
+        radio.addEventListener('change', function () {
+            document.querySelectorAll('.js-modelo-alerta').forEach(function (r) {
+                r.closest('label.card').classList.toggle('border-primary', r.checked);
+                r.closest('label.card').classList.toggle('border-2', r.checked);
+            });
+        });
+    });
+
+    const botao = document.getElementById('botaoAlertaTeste');
+    botao.addEventListener('click', async function () {
+        const escolhido = document.querySelector('.js-modelo-alerta:checked');
+        botao.disabled = true;
+        try {
+            const res = await fetch(<?= json_encode(url('/ativos/seguranca/alerta-teste')) ?>, {
+                method: 'POST',
+                body: new URLSearchParams({ modelo: escolhido ? escolhido.value : 'sistema' })
+            });
+            const dados = await res.json();
+            alert(dados.message || (dados.success ? 'Enviado.' : 'Falha ao enviar.'));
+        } catch (e) {
+            alert('Falha de comunicação com o servidor.');
+        } finally {
+            botao.disabled = false;
+        }
+    });
+})();
+</script>
 
 <?php
 $conteudo = ob_get_clean();

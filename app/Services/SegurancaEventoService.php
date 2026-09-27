@@ -84,7 +84,7 @@ class SegurancaEventoService
 
         if ($severidade === 'CRITICAL') {
             $decisao = (new SegurancaIsolamentoService())->reagirAEvento($ativoId, $id);
-            $this->notificar($ativoId, $tipo, $severidade, $this->montarResumo($tipo, $detalhes), $decisao);
+            $this->notificar($ativoId, $tipo, $severidade, $this->montarResumo($tipo, $detalhes), $decisao, $detalhes, $id);
         }
 
         return ['success' => true, 'id' => $id];
@@ -340,7 +340,7 @@ class SegurancaEventoService
     }
 
     /** Não repete aviso da mesma máquina+tipo dentro de INTERVALO_NOTIFICACAO_MINUTOS -- o portal continua registrando tudo. */
-    private function notificar(int $ativoId, string $tipo, string $severidade, string $resumo, string $decisao): void
+    private function notificar(int $ativoId, string $tipo, string $severidade, string $resumo, string $decisao, array $detalhes = [], ?int $eventoId = null): void
     {
         $chave = "seguranca_ultima_notificacao_{$ativoId}_{$tipo}";
         $ultima = (int)(ConfigService::get($chave, '0') ?? 0);
@@ -349,22 +349,17 @@ class SegurancaEventoService
         }
         ConfigService::set($chave, (string)time());
 
-        $ativo = (new AtivoService())->buscar($ativoId);
-        $maquina = ($ativo['codigo_patrimonio'] ?? "#{$ativoId}") . ' (' . ($ativo['nome'] ?? '?') . ')';
+        $ativo = (new AtivoService())->buscar($ativoId) ?? ['id' => $ativoId];
         $padrao = (new SegurancaModuloService())->padrao();
 
-        $texto = "ALERTA DE SEGURANÇA -- {$maquina}\n"
-            . self::rotuloTipo($tipo) . " ({$severidade})\n"
-            . "{$resumo}\n"
-            . "Resposta: {$decisao}";
+        // Cliente, servidor, máquina e links -- a TI recebe alertas de
+        // vários clientes, cada um com o próprio RD Intranet.
+        $alerta = SegurancaAlertaService::montar($ativo, $tipo, $severidade, $resumo, $decisao, $detalhes, $eventoId);
+        $texto = $alerta['texto'];
 
         foreach (EmailService::normalizarLista($padrao['alerta_emails']) as $email) {
             try {
-                (new EmailService())->enviar(
-                    $email,
-                    '[RD Intranet] Alerta de segurança: ' . self::rotuloTipo($tipo) . ' em ' . ($ativo['codigo_patrimonio'] ?? "#{$ativoId}"),
-                    nl2br(htmlspecialchars($texto))
-                );
+                (new EmailService())->enviar($email, $alerta['assunto'], $alerta['html'], $alerta['imagens']);
             } catch (\Throwable) {
                 // falha de e-mail não pode impedir o registro/isolamento
             }

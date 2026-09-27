@@ -8,6 +8,7 @@ use App\Services\AtivoCatalogoService;
 use App\Services\AtivoService;
 use App\Services\AtivoTipoService;
 use App\Services\AuditService;
+use App\Services\EmailService;
 use App\Services\ChamadoExternoEstatisticaService;
 use App\Services\ChamadoService;
 use App\Services\CronService;
@@ -472,6 +473,27 @@ class AtivoController extends Controller
         exit;
     }
 
+    /** Envia o alerta de exemplo, no modelo escolhido, pros e-mails de alerta configurados. */
+    public function enviarAlertaTesteSeguranca(): void
+    {
+        AuthMiddleware::checkModulo('ativos_dashboard');
+        header('Content-Type: application/json');
+
+        $modelo = (string)($_POST['modelo'] ?? '');
+        $destinos = EmailService::normalizarLista((new SegurancaModuloService())->padrao()['alerta_emails']);
+        if (!$destinos) {
+            echo json_encode(['success' => false, 'message' => 'Cadastre ao menos um e-mail em "Avisar por e-mail" e salve antes de testar.']);
+            return;
+        }
+
+        $alerta = \App\Services\SegurancaAlertaService::exemplo($modelo, false);
+        $resultado = (new EmailService())->enviar($destinos, '[TESTE] ' . $alerta['assunto'], $alerta['html'], $alerta['imagens']);
+        echo json_encode([
+            'success' => $resultado['success'],
+            'message' => $resultado['success'] ? 'E-mail de teste enviado para ' . implode(', ', $destinos) . '.' : $resultado['message'],
+        ]);
+    }
+
     public function salvarExcecoesSeguranca(): void
     {
         AuthMiddleware::checkModulo('ativos_dashboard');
@@ -490,8 +512,14 @@ class AtivoController extends Controller
     {
         AuthMiddleware::checkModulo('ativos_dashboard');
 
+        $previas = [];
+        foreach (array_keys(\App\Services\SegurancaAlertaService::MODELOS) as $modelo) {
+            $previas[$modelo] = \App\Services\SegurancaAlertaService::exemplo($modelo, true)['html'];
+        }
+
         $this->view('ativos/seguranca_configuracao', [
             'padraoSeguranca' => (new SegurancaModuloService())->padrao(),
+            'previasAlerta' => $previas,
         ]);
     }
 

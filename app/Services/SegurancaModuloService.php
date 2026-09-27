@@ -53,6 +53,8 @@ class SegurancaModuloService
         $padrao['alerta_emails'] = ConfigService::get(self::PREFIXO . 'alerta_emails', '') ?? '';
         $padrao['alerta_whatsapp'] = ConfigService::get(self::PREFIXO . 'alerta_whatsapp', '') ?? '';
         $padrao['isolamento_liberados'] = ConfigService::get(self::PREFIXO . 'isolamento_liberados', '') ?? '';
+        $padrao['alerta_url_portal'] = ConfigService::get(self::PREFIXO . 'alerta_url_portal', '') ?? '';
+        $padrao['alerta_modelo'] = SegurancaAlertaService::modeloAtual();
         $padrao['fim_pastas_ignoradas'] = ConfigService::get(self::PREFIXO . 'fim_pastas_ignoradas', '') ?? '';
         $padrao['fim_extensoes_ignoradas'] = ConfigService::get(self::PREFIXO . 'fim_extensoes_ignoradas', '') ?? '';
         $padrao['janela_inicio'] = ConfigService::get(self::PREFIXO . 'janela_inicio', '') ?? '';
@@ -79,8 +81,11 @@ class SegurancaModuloService
 
         ConfigService::set(self::PREFIXO . 'alerta_emails', trim((string)($dados['alerta_emails'] ?? '')));
         ConfigService::set(self::PREFIXO . 'alerta_whatsapp', trim((string)($dados['alerta_whatsapp'] ?? '')));
-        ConfigService::set(self::PREFIXO . 'isolamento_liberados', implode("
-", self::normalizarLiberados((string)($dados['isolamento_liberados'] ?? ''))));
+        $modeloAlerta = (string)($dados['alerta_modelo'] ?? 'sistema');
+        ConfigService::set(self::PREFIXO . 'alerta_modelo', isset(SegurancaAlertaService::MODELOS[$modeloAlerta]) ? $modeloAlerta : 'sistema');
+        $urlPortal = rtrim(trim((string)($dados['alerta_url_portal'] ?? '')), '/');
+        ConfigService::set(self::PREFIXO . 'alerta_url_portal', preg_match('#^https?://[^\s<>"\']+$#i', $urlPortal) ? $urlPortal : '');
+        ConfigService::set(self::PREFIXO . 'isolamento_liberados', implode("\n", self::normalizarLiberados((string)($dados['isolamento_liberados'] ?? ''))));
     }
 
     /**
@@ -121,10 +126,8 @@ class SegurancaModuloService
             self::linhas((string)($dados['fim_extensoes_ignoradas'] ?? ''), 20, 100)
         );
 
-        ConfigService::set(self::PREFIXO . 'fim_pastas_ignoradas', implode("
-", $pastas));
-        ConfigService::set(self::PREFIXO . 'fim_extensoes_ignoradas', implode("
-", array_values(array_unique($extensoes))));
+        ConfigService::set(self::PREFIXO . 'fim_pastas_ignoradas', implode("\n", $pastas));
+        ConfigService::set(self::PREFIXO . 'fim_extensoes_ignoradas', implode("\n", array_values(array_unique($extensoes))));
 
         $hora = static fn ($v) => preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', (string)$v) ? (string)$v : '';
         ConfigService::set(self::PREFIXO . 'janela_inicio', $hora($dados['janela_inicio'] ?? ''));
