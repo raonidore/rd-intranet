@@ -134,6 +134,32 @@ class AtivoAgenteController extends Controller
         echo json_encode(['success' => true, 'versao' => $dados['versao'], 'extensoes' => $dados['extensoes'], 'notas' => $dados['notas']]);
     }
 
+    /** Botão "Pedir ajuda" do agente -- vira um cartão em Chamados > Suporte Remoto. */
+    public function pedidoSuporte(): void
+    {
+        header('Content-Type: application/json');
+
+        if (!$this->service->chaveValida($_SERVER['HTTP_X_RD_AGENTE_CHAVE'] ?? '')) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'message' => 'Chave de API inválida.']);
+            return;
+        }
+
+        $payload = json_decode(file_get_contents('php://input'), true);
+        $ativoId = is_array($payload) ? $this->service->idPorMachineGuid(trim((string)($payload['machine_guid'] ?? ''))) : null;
+        if ($ativoId === null) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Máquina ainda não cadastrada -- aguarde o primeiro envio de inventário.']);
+            return;
+        }
+
+        echo json_encode((new \App\Services\SuporteRemotoService())->registrarPedido(
+            $ativoId,
+            (string)($payload['usuario'] ?? ''),
+            (string)($payload['mensagem'] ?? '')
+        ));
+    }
+
     /** Agente devolve o resultado de uma solicitação (listar arquivos/processos) recebida no heartbeat. */
     public function responderSolicitacao(): void
     {

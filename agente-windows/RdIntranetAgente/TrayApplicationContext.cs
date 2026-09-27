@@ -69,6 +69,7 @@ public class TrayApplicationContext : ApplicationContext
         var itemPainel = new ToolStripMenuItem("Abrir painel do agente") { Font = new Font(menu.Font, FontStyle.Bold) };
         itemPainel.Click += (s, e) => _janelaPrincipal?.Abrir();
         menu.Items.Add(itemPainel);
+        menu.Items.Add("Pedir ajuda ao suporte...", null, async (s, e) => await PedidoAjuda.AbrirAsync(null, _config));
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Coletar agora", null, async (s, e) => await ColetarEEnviarAsync(manual: true));
         menu.Items.Add("Atualizar agora", null, async (s, e) => await AtualizarAgoraManualAsync());

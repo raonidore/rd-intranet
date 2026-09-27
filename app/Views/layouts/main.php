@@ -362,7 +362,8 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         || PermissionService::temAcesso('chamados_categorias')
         || PermissionService::temAcesso('chamados_setores')
         || PermissionService::temAcesso('chamados_estatisticas')
-        || PermissionService::temAcesso('chamados_configuracoes');
+        || PermissionService::temAcesso('chamados_configuracoes')
+        || PermissionService::temAcesso('ativos_acesso_remoto');
     ?>
     <?php
     $chamadosAguardando = 0;
@@ -406,6 +407,13 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         <a href="<?= url('/chamados/fila') ?>" class="rd-menu-item-badge <?= $uriAtual === '/chamados/fila' ? 'active' : '' ?>">
             <span><i class="bi bi-hourglass-split me-2"></i> Fila</span>
             <span class="rd-menu-badge" id="rdChamadosBadgeFila" style="<?= $chamadosFila > 0 ? '' : 'display:none' ?>"><?= $chamadosFila ?></span>
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('ativos_acesso_remoto')): ?>
+        <?php $pedidosSuporteRemoto = (new \App\Services\SuporteRemotoService())->contarAbertos(); ?>
+        <a href="<?= url('/chamados/suporte-remoto') ?>" class="rd-menu-item-badge <?= str_starts_with($uriAtual, '/chamados/suporte-remoto') ? 'active' : '' ?>">
+            <span><i class="bi bi-headset me-2"></i> Suporte Remoto</span>
+            <span class="rd-menu-badge" style="<?= $pedidosSuporteRemoto > 0 ? '' : 'display:none' ?>" title="Pedidos de ajuda abertos"><?= $pedidosSuporteRemoto ?></span>
         </a>
         <?php endif; ?>
         <?php if (PermissionService::temAcesso('chamados_externos_atendimentos')): ?>

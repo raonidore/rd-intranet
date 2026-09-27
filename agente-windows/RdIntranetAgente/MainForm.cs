@@ -131,6 +131,7 @@ public sealed class MainForm : Form
         Controls.Add(_navegacao);
 
         _paginaVisao = CriarPagina();
+        _paginaVisao.AutoScroll = true; // janela pequena: os botões de ação descem e continuam alcançáveis
         var tituloVisao = CriarTitulo("Visão geral", "Condição atual do agente nesta máquina.");
         _statusConexao = new PilulaStatus { Location = new Point(0, 6) };
         var linhaStatus = new Panel { Height = 44, BackColor = Tema.Fundo };
@@ -169,7 +170,8 @@ public sealed class MainForm : Form
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink
         };
-        acoes.Controls.Add(CriarBotaoAcao("Coletar agora", BotaoTema.Variante.Primario, async () => await _coletar()));
+        acoes.Controls.Add(CriarBotaoAcao("Pedir ajuda", BotaoTema.Variante.Primario, async () => await PedidoAjuda.AbrirAsync(this, _configAtual())));
+        acoes.Controls.Add(CriarBotaoAcao("Coletar agora", BotaoTema.Variante.Secundario, async () => await _coletar()));
         acoes.Controls.Add(CriarBotaoAcao("Atualizar agora", BotaoTema.Variante.Secundario, async () => await _atualizar()));
         acoes.Controls.Add(CriarBotaoAcao("Configurações", BotaoTema.Variante.Secundario, () => AbrirConfiguracoes()));
         acoes.Controls.Add(CriarBotaoAcao("Serviço do Windows", BotaoTema.Variante.Secundario, async () => await _alternarServico()));
