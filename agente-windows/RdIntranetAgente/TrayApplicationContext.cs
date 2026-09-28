@@ -34,6 +34,7 @@ public class TrayApplicationContext : ApplicationContext
     private string? _machineGuid;
     private bool _coletando;
     private bool _enviandoHeartbeat;
+    private bool _consultandoIpPublico;
     private DateTime _ultimoLogFalhaHeartbeatEm = DateTime.MinValue;
 
     public TrayApplicationContext()
@@ -220,6 +221,7 @@ public class TrayApplicationContext : ApplicationContext
 
             if (resultado.Sucesso)
             {
+                ConsultarIpPublicoSeNecessario();
                 AplicarNovaChaveApiSeNecessario(resultado.ChaveApiAtual);
                 if (resultado.Ativo != null &&
                     (_estado.CodigoAtivo != resultado.Ativo.Codigo ||
@@ -259,6 +261,35 @@ public class TrayApplicationContext : ApplicationContext
         finally
         {
             _enviandoHeartbeat = false;
+        }
+    }
+
+    private void ConsultarIpPublicoSeNecessario()
+    {
+        if (_consultandoIpPublico ||
+            (_estado.UltimaConsultaIpPublicoEm.HasValue && DateTime.Now - _estado.UltimaConsultaIpPublicoEm.Value < TimeSpan.FromMinutes(15)))
+            return;
+
+        _consultandoIpPublico = true;
+        _estado.UltimaConsultaIpPublicoEm = DateTime.Now;
+        _ = AtualizarIpPublicoAsync();
+    }
+
+    private async Task AtualizarIpPublicoAsync()
+    {
+        try
+        {
+            var ipPublico = await NetworkService.ObterIpPublicoAsync();
+            if (!string.IsNullOrWhiteSpace(ipPublico)) _estado.IpPublico = ipPublico;
+        }
+        catch
+        {
+            // Consulta externa é best-effort; o agente e a coleta não dependem dela.
+        }
+        finally
+        {
+            _estado.Salvar();
+            _consultandoIpPublico = false;
         }
     }
 

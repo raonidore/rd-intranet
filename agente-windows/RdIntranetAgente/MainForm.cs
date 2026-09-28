@@ -257,6 +257,7 @@ public sealed class MainForm : Form
         {
             ("Adaptador", 145), ("Link", 58), ("Ativo", 54), ("MAC", 125), ("IPv4", 105), ("Modo", 68), ("Wi-Fi", 110)
         });
+        Tema.TemaEscuroNativo(_listaAdaptadoresRede);
         _listaAdaptadoresRede.Height = 148;
         _listaAdaptadoresRede.Margin = new Padding(0, 0, 0, 10);
         _listaAdaptadoresRede.MultiSelect = false;
@@ -931,7 +932,8 @@ public sealed class MainForm : Form
         var detalheAtivo = string.Join("  ·  ", new[]
         {
             string.IsNullOrWhiteSpace(_estado.NomeAtivo) ? "Nome indisponível" : _estado.NomeAtivo,
-            "IP " + (string.IsNullOrWhiteSpace(_estado.IpAtivo) ? "não informado" : _estado.IpAtivo)
+            "IP local " + (string.IsNullOrWhiteSpace(_estado.IpAtivo) ? "não informado" : _estado.IpAtivo),
+            "IP público " + (string.IsNullOrWhiteSpace(_estado.IpPublico) ? "indisponível" : _estado.IpPublico)
         });
         _cartaoAtivo.Definir("INFORMAÇÕES DO ATIVO", codigoAtivo, detalheAtivo, Tema.Acento);
 

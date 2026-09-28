@@ -18,6 +18,8 @@ public class AppState
     public string CodigoAtivo { get; set; } = "";
     public string NomeAtivo { get; set; } = "";
     public string IpAtivo { get; set; } = "";
+    public string IpPublico { get; set; } = "";
+    public DateTime? UltimaConsultaIpPublicoEm { get; set; }
     public string UltimaMensagem { get; set; } = "";
     public long TotalBytesEnviados { get; set; }
     public long TotalBytesRecebidos { get; set; }

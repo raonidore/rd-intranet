@@ -223,6 +223,15 @@ public sealed class NetworkService
             .ToList();
     }
 
+    public static async Task<string?> ObterIpPublicoAsync()
+    {
+        using var cliente = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        var resposta = await cliente.GetStringAsync("https://www.cloudflare.com/cdn-cgi/trace");
+        var linha = resposta.Split('\n').FirstOrDefault(item => item.StartsWith("ip=", StringComparison.Ordinal));
+        var valor = linha?.Substring(3).Trim();
+        return IPAddress.TryParse(valor, out var endereco) ? endereco.ToString() : null;
+    }
+
     public static object Aplicar(string? parametro)
     {
         var config = JsonSerializer.Deserialize<ConfiguracaoSolicitada>(parametro ?? "")
