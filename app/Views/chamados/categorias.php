@@ -56,7 +56,7 @@ use App\Services\ChamadoSlaService;
                     <div class="pop-step-num">4</div>
                     <div>
                         <div class="pop-step-title"><i class="bi bi-stopwatch"></i> SLA por prioridade</div>
-                        <div class="pop-step-text">Clique no cabeçalho de uma categoria pra abrir o painel -- do lado direito, um prazo (em minutos) por prioridade (Baixa/Média/Alta/Urgente), com duas colunas: <strong>1ª resposta</strong> (tempo até alguém dar o primeiro retorno) e <strong>Resolução</strong> (tempo até o chamado ser resolvido). É esse prazo que o chamado usa pra calcular se está no prazo ou atrasado.</div>
+                        <div class="pop-step-text">Clique no cabeçalho de uma categoria pra abrir o painel -- do lado direito, um prazo (em minutos) por prioridade (Baixa/Média/Alta/Urgente), com duas colunas: <strong>1ª resposta</strong> (tempo até alguém dar o primeiro retorno) e <strong>Resolução</strong> (tempo até o chamado ser resolvido). É esse prazo que o chamado usa pra calcular se está no prazo ou atrasado. Desmarque <strong>Usar SLA</strong> quando os chamados da categoria não tiverem prazo -- eles abrem sem SLA e não contam como atrasados.</div>
                     </div>
                 </div>
 
@@ -97,7 +97,7 @@ use App\Services\ChamadoSlaService;
 <div class="card border-0 shadow-sm mb-3">
     <div class="card-body">
         <form method="post" action="<?= url('/chamados/categorias/criar') ?>" class="row g-2 align-items-end">
-            <div class="col-md-6">
+            <div class="col-md-5">
                 <label class="form-label small mb-1">Nome</label>
                 <input type="text" name="nome" class="form-control" placeholder="Ex: Impressoras" required maxlength="100">
             </div>
@@ -109,6 +109,12 @@ use App\Services\ChamadoSlaService;
                         <option value="<?= (int)$s['id'] ?>"><?= htmlspecialchars($s['nome']) ?></option>
                     <?php endforeach; ?>
                 </select>
+            </div>
+            <div class="col-md-1">
+                <div class="form-check mb-2" title="Desmarque se os chamados desta categoria não precisam de prazo">
+                    <input type="checkbox" name="usa_sla" class="form-check-input" id="novaUsaSla" checked>
+                    <label class="form-check-label small" for="novaUsaSla">Usar SLA</label>
+                </div>
             </div>
             <div class="col-md-2">
                 <button type="submit" class="btn btn-primary w-100 text-nowrap"><i class="bi bi-plus-lg"></i> Adicionar</button>
@@ -138,6 +144,9 @@ use App\Services\ChamadoSlaService;
                 <?php endif; ?>
                 <?php if (!empty($categoria['exige_subcategoria'])): ?>
                     <span class="badge text-bg-warning ms-1">Exige subcategoria</span>
+                <?php endif; ?>
+                <?php if (empty($categoria['usa_sla'])): ?>
+                    <span class="badge text-bg-secondary ms-1"><i class="bi bi-stopwatch"></i> Sem SLA</span>
                 <?php endif; ?>
             </div>
             <i class="bi bi-chevron-down text-muted"></i>
@@ -170,6 +179,10 @@ use App\Services\ChamadoSlaService;
                                 <input type="checkbox" name="exige_subcategoria" class="form-check-input" id="exige<?= (int)$categoria['id'] ?>" <?= !empty($categoria['exige_subcategoria']) ? 'checked' : '' ?>>
                                 <label class="form-check-label small" for="exige<?= (int)$categoria['id'] ?>">Exigir subcategoria na abertura</label>
                             </div>
+                            <div class="form-check mb-2">
+                                <input type="checkbox" name="usa_sla" class="form-check-input" id="usaSla<?= (int)$categoria['id'] ?>" <?= !empty($categoria['usa_sla']) ? 'checked' : '' ?>>
+                                <label class="form-check-label small" for="usaSla<?= (int)$categoria['id'] ?>">Usar SLA (prazos de 1ª resposta e resolução)</label>
+                            </div>
                             <button type="submit" class="btn btn-sm btn-outline-primary"><i class="bi bi-check-lg"></i> Salvar</button>
                         </form>
 
@@ -181,6 +194,11 @@ use App\Services\ChamadoSlaService;
 
                     <div class="col-md-7">
                         <h6 class="mb-2">SLA por prioridade</h6>
+                        <?php if (empty($categoria['usa_sla'])): ?>
+                            <div class="alert alert-secondary small py-2 mb-2">
+                                <i class="bi bi-stopwatch"></i> <strong>SLA desligado</strong> -- chamados desta categoria abrem sem prazo. Os valores abaixo ficam guardados para quando você ligar de novo em "Usar SLA".
+                            </div>
+                        <?php endif; ?>
                         <div class="d-flex fw-semibold small text-muted border-bottom pb-1 mb-1">
                             <div style="width:90px">Prioridade</div>
                             <div class="flex-fill">1ª resposta</div>

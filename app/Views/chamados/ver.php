@@ -200,6 +200,9 @@ $corStatus = ['fila' => 'secondary', 'em_atendimento' => 'primary', 'aguardando_
                 <div class="d-flex justify-content-between border-bottom py-1"><span class="text-muted">Categoria</span><span class="fw-semibold"><?= htmlspecialchars($chamado['categoria_nome']) ?></span></div>
                 <div class="d-flex justify-content-between border-bottom py-1"><span class="text-muted">Setor</span><span class="fw-semibold"><?= htmlspecialchars($chamado['setor_nome'] ?? '—') ?></span></div>
                 <div class="d-flex justify-content-between border-bottom py-1"><span class="text-muted">Atendente</span><span class="fw-semibold"><?= htmlspecialchars($chamado['usuario_nome'] ?? '— na fila —') ?></span></div>
+                <?php if (!$chamado['sla_resolucao_prazo'] && !$chamado['sla_resposta_prazo']): ?>
+                    <div class="d-flex justify-content-between border-bottom py-1"><span class="text-muted">SLA</span><span class="fw-semibold text-muted">Sem SLA</span></div>
+                <?php endif; ?>
                 <?php if ($chamado['sla_resolucao_prazo']): ?>
                     <div class="d-flex justify-content-between border-bottom py-1"><span class="text-muted">1ª resposta</span><span class="fw-semibold"><?= $chamado['primeira_resposta_em'] ? data_br($chamado['primeira_resposta_em'], 'd/m H:i') : data_br($chamado['sla_resposta_prazo'], 'd/m H:i') . ' (prazo)' ?></span></div>
                     <div class="d-flex justify-content-between py-1"><span class="text-muted">SLA resolução</span><span class="fw-semibold"><?= data_br($chamado['sla_resolucao_prazo'], 'd/m H:i') ?></span></div>

@@ -50,7 +50,7 @@ class ChamadoCategoriaController extends Controller
 
         $nome = trim($_POST['nome'] ?? '');
         $setorId = !empty($_POST['setor_padrao_id']) ? (int)$_POST['setor_padrao_id'] : null;
-        $resultado = $this->service->criar($nome, $setorId);
+        $resultado = $this->service->criar($nome, $setorId, isset($_POST['usa_sla']));
 
         AuditService::registrar('Chamados', 'Criar categoria', "Categoria \"{$nome}\": {$resultado['message']}");
 
@@ -64,7 +64,7 @@ class ChamadoCategoriaController extends Controller
         $id = (int)($_POST['id'] ?? 0);
         $nome = trim($_POST['nome'] ?? '');
         $setorId = !empty($_POST['setor_padrao_id']) ? (int)$_POST['setor_padrao_id'] : null;
-        $resultado = $this->service->atualizar($id, $nome, $setorId, isset($_POST['ativo']), isset($_POST['exige_subcategoria']));
+        $resultado = $this->service->atualizar($id, $nome, $setorId, isset($_POST['ativo']), isset($_POST['exige_subcategoria']), isset($_POST['usa_sla']));
 
         AuditService::registrar('Chamados', 'Atualizar categoria', "Categoria #{$id}: {$resultado['message']}");
 

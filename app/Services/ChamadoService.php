@@ -150,11 +150,22 @@ class ChamadoService
         return ['success' => true, 'message' => 'Chamado #' . $numeroControle . ' aberto com sucesso.', 'id' => $id, 'numero_controle' => $numeroControle];
     }
 
-    /** Subcategoria com "prazos próprios" ganha; senão (ou sem subcategoria) vale o SLA da categoria. */
+    /**
+     * Subcategoria com "prazos próprios" ganha; senão (ou sem subcategoria)
+     * vale o SLA da categoria -- a não ser que a categoria esteja marcada
+     * "sem SLA", aí o chamado abre sem prazo ([null, null]).
+     */
     private function calcularPrazos(int $categoriaId, string $prioridade, ?int $subcategoriaId = null): array
     {
         $sla = $subcategoriaId !== null ? (new ChamadoSubcategoriaService())->buscarSlaProprio($subcategoriaId, $prioridade) : null;
-        $sla ??= (new ChamadoSlaService())->buscar($categoriaId, $prioridade);
+
+        if (!$sla) {
+            $categoria = (new ChamadoCategoriaService())->buscar($categoriaId);
+            if ($categoria && empty($categoria['usa_sla'])) {
+                return [null, null];
+            }
+            $sla = (new ChamadoSlaService())->buscar($categoriaId, $prioridade);
+        }
 
         if (!$sla) {
             return [null, null];

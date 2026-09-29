@@ -6,6 +6,7 @@
 
 use App\Services\ChamadoSlaService;
 
+$categoriaUsaSla = !empty($categoria['usa_sla']);
 $slasDaCategoria = [];
 foreach ($slasPorCategoria[$categoria['id']] ?? [] as $slaCat) {
     $slasDaCategoria[$slaCat['prioridade']] = $slaCat;
@@ -52,7 +53,7 @@ foreach ($slasPorCategoria[$categoria['id']] ?? [] as $slaCat) {
                         <?php if (!$sub['ativo']): ?><span class="badge text-bg-secondary ms-1">Inativa</span><?php endif; ?>
                         <span class="badge text-bg-light border ms-1"><?= htmlspecialchars($sub['setor_padrao_nome'] ?? 'Setor da categoria') ?></span>
                         <span class="badge <?= $sub['sla_proprio'] ? 'text-bg-info' : 'text-bg-light border' ?> ms-1">
-                            <i class="bi bi-stopwatch"></i> <?= $sub['sla_proprio'] ? 'SLA próprio' : 'SLA da categoria' ?>
+                            <i class="bi bi-stopwatch"></i> <?= $sub['sla_proprio'] ? 'SLA próprio' : ($categoriaUsaSla ? 'SLA da categoria' : 'Sem SLA') ?>
                         </span>
                         <?php if ((int)$sub['total_chamados'] > 0): ?>
                             <span class="text-muted ms-1"><?= (int)$sub['total_chamados'] ?> chamado<?= (int)$sub['total_chamados'] > 1 ? 's' : '' ?></span>
@@ -84,7 +85,7 @@ foreach ($slasPorCategoria[$categoria['id']] ?? [] as $slaCat) {
                                         <label class="form-label small d-block">Prazos (SLA)</label>
                                         <div class="form-check">
                                             <input type="radio" name="sla_modo" value="herdar" class="form-check-input" id="slaHerdar<?= (int)$sub['id'] ?>" <?= !$sub['sla_proprio'] ? 'checked' : '' ?>>
-                                            <label class="form-check-label small" for="slaHerdar<?= (int)$sub['id'] ?>">Usar os prazos da categoria</label>
+                                            <label class="form-check-label small" for="slaHerdar<?= (int)$sub['id'] ?>"><?= $categoriaUsaSla ? 'Usar os prazos da categoria' : 'Seguir a categoria (sem SLA)' ?></label>
                                         </div>
                                         <div class="form-check">
                                             <input type="radio" name="sla_modo" value="proprio" class="form-check-input" id="slaProprio<?= (int)$sub['id'] ?>" <?= $sub['sla_proprio'] ? 'checked' : '' ?>>
@@ -130,6 +131,8 @@ foreach ($slasPorCategoria[$categoria['id']] ?? [] as $slaCat) {
                                             <button type="submit" class="btn btn-sm btn-outline-primary" style="width:40px" title="Salvar"><i class="bi bi-check-lg"></i></button>
                                         </form>
                                     <?php endforeach; ?>
+                                <?php elseif (!$categoriaUsaSla): ?>
+                                    <div class="small text-muted"><i class="bi bi-info-circle"></i> A categoria está sem SLA, então chamados desta subcategoria também abrem sem prazo. Para ter prazo só aqui, escolha "Definir prazos próprios" e salve.</div>
                                 <?php else: ?>
                                     <?php foreach (['urgente', 'alta', 'media', 'baixa'] as $prioridade): ?>
                                         <?php $slaCat = $slasDaCategoria[$prioridade] ?? null; ?>

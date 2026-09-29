@@ -55,7 +55,7 @@ class ChamadoCategoriaService
     }
 
     /** @return array{success: bool, message: string} */
-    public function criar(string $nome, ?int $setorPadraoId): array
+    public function criar(string $nome, ?int $setorPadraoId, bool $usaSla = true): array
     {
         $nome = trim($nome);
 
@@ -67,8 +67,8 @@ class ChamadoCategoriaService
             return ['success' => false, 'message' => 'Já existe uma categoria com esse nome.'];
         }
 
-        $stmt = $this->pdo->prepare('INSERT INTO chamados_categorias (nome, setor_padrao_id) VALUES (?, ?)');
-        $stmt->execute([$nome, $setorPadraoId ?: null]);
+        $stmt = $this->pdo->prepare('INSERT INTO chamados_categorias (nome, setor_padrao_id, usa_sla) VALUES (?, ?, ?)');
+        $stmt->execute([$nome, $setorPadraoId ?: null, $usaSla ? 1 : 0]);
 
         $categoriaId = (int)$this->pdo->lastInsertId();
 
@@ -85,7 +85,7 @@ class ChamadoCategoriaService
     }
 
     /** @return array{success: bool, message: string} */
-    public function atualizar(int $id, string $nome, ?int $setorPadraoId, bool $ativo, bool $exigeSubcategoria = false): array
+    public function atualizar(int $id, string $nome, ?int $setorPadraoId, bool $ativo, bool $exigeSubcategoria = false, bool $usaSla = true): array
     {
         $nome = trim($nome);
 
@@ -97,8 +97,8 @@ class ChamadoCategoriaService
             return ['success' => false, 'message' => 'Já existe uma categoria com esse nome.'];
         }
 
-        $stmt = $this->pdo->prepare('UPDATE chamados_categorias SET nome = ?, setor_padrao_id = ?, ativo = ?, exige_subcategoria = ? WHERE id = ?');
-        $stmt->execute([$nome, $setorPadraoId ?: null, $ativo ? 1 : 0, $exigeSubcategoria ? 1 : 0, $id]);
+        $stmt = $this->pdo->prepare('UPDATE chamados_categorias SET nome = ?, setor_padrao_id = ?, ativo = ?, exige_subcategoria = ?, usa_sla = ? WHERE id = ?');
+        $stmt->execute([$nome, $setorPadraoId ?: null, $ativo ? 1 : 0, $exigeSubcategoria ? 1 : 0, $usaSla ? 1 : 0, $id]);
 
         return ['success' => true, 'message' => 'Categoria atualizada com sucesso.'];
     }
