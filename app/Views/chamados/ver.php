@@ -29,6 +29,20 @@ $corStatus = ['fila' => 'secondary', 'em_atendimento' => 'primary', 'aguardando_
             </form>
         <?php endif; ?>
 
+        <?php if ($atendentes && !in_array($chamado['status'], ['resolvido', 'fechado'], true)): ?>
+            <?php $comigo = (int)($chamado['usuario_id'] ?? 0) === (int)$_SESSION['usuario']['id']; ?>
+            <?php if (!$comigo && $chamado['status'] !== 'fila'): ?>
+                <form method="post" action="<?= url('/chamados/atendimentos/transferir') ?>" onsubmit="return confirm('Assumir este chamado? Ele sai de <?= htmlspecialchars(addslashes($chamado['usuario_nome'] ?? '')) ?> e passa para você.');">
+                    <input type="hidden" name="id" value="<?= (int)$chamado['id'] ?>">
+                    <input type="hidden" name="usuario_id" value="<?= (int)$_SESSION['usuario']['id'] ?>">
+                    <button type="submit" class="btn btn-outline-primary"><i class="bi bi-hand-index-thumb"></i> Assumir</button>
+                </form>
+            <?php endif; ?>
+            <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalTransferir">
+                <i class="bi bi-arrow-left-right"></i> Transferir
+            </button>
+        <?php endif; ?>
+
         <?php if (!in_array($chamado['status'], ['resolvido', 'fechado'], true)): ?>
             <form method="post" action="<?= url('/chamados/atendimentos/status') ?>">
                 <input type="hidden" name="id" value="<?= (int)$chamado['id'] ?>">
@@ -198,6 +212,43 @@ $corStatus = ['fila' => 'secondary', 'em_atendimento' => 'primary', 'aguardando_
         </div>
     </div>
 </div>
+
+<?php if ($atendentes && !in_array($chamado['status'], ['resolvido', 'fechado'], true)): ?>
+<div class="modal fade" id="modalTransferir" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="<?= url('/chamados/atendimentos/transferir') ?>">
+                <input type="hidden" name="id" value="<?= (int)$chamado['id'] ?>">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-arrow-left-right"></i> Transferir chamado</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted">Hoje com: <strong><?= htmlspecialchars($chamado['usuario_nome'] ?? '— na fila —') ?></strong>. A transferência fica registrada como nota interna no chamado.</p>
+                    <div class="mb-3">
+                        <label class="form-label">Passar para</label>
+                        <select name="usuario_id" class="form-select" required>
+                            <option value="">— Selecione —</option>
+                            <?php foreach ($atendentes as $a): ?>
+                                <?php if ((int)$a['id'] === (int)($chamado['usuario_id'] ?? 0)) continue; ?>
+                                <option value="<?= (int)$a['id'] ?>"><?= htmlspecialchars($a['nome']) ?><?= (int)$a['id'] === (int)$_SESSION['usuario']['id'] ? ' (eu)' : '' ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="mb-0">
+                        <label class="form-label">Motivo <span class="text-muted">(opcional)</span></label>
+                        <input type="text" name="motivo" class="form-control" maxlength="300" placeholder="Ex: férias, especialista em ERP">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Transferir</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <?php if (in_array($chamado['status'], ['resolvido', 'fechado'], true)): ?>
 <?php

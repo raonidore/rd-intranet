@@ -458,6 +458,7 @@ $router->post('/chamados/atendimentos/novo', [ChamadoController::class, 'novo'])
 $router->get('/chamados/atendimentos/ver', [ChamadoController::class, 'ver']);
 $router->post('/chamados/atendimentos/responder', [ChamadoController::class, 'responder']);
 $router->post('/chamados/atendimentos/status', [ChamadoController::class, 'mudarStatus']);
+$router->post('/chamados/atendimentos/transferir', [ChamadoController::class, 'transferir']);
 $router->get('/chamados/atendimentos/contador', [ChamadoController::class, 'contadorApi']);
 $router->get('/chamados/atendimentos/ativos-buscar', [ChamadoController::class, 'ativosBuscarApi']);
 $router->get('/chamados/atendimentos/usuarios-buscar', [ChamadoController::class, 'usuariosBuscarApi']);
@@ -471,6 +472,10 @@ $router->post('/chamados/categorias/criar', [ChamadoCategoriaController::class, 
 $router->post('/chamados/categorias/atualizar', [ChamadoCategoriaController::class, 'atualizar']);
 $router->post('/chamados/categorias/excluir', [ChamadoCategoriaController::class, 'excluir']);
 $router->post('/chamados/categorias/sla', [ChamadoCategoriaController::class, 'salvarSla']);
+$router->post('/chamados/categorias/subcategoria/criar', [ChamadoCategoriaController::class, 'criarSubcategoria']);
+$router->post('/chamados/categorias/subcategoria/atualizar', [ChamadoCategoriaController::class, 'atualizarSubcategoria']);
+$router->post('/chamados/categorias/subcategoria/excluir', [ChamadoCategoriaController::class, 'excluirSubcategoria']);
+$router->post('/chamados/categorias/subcategoria/sla', [ChamadoCategoriaController::class, 'salvarSlaSubcategoria']);
 
 $router->get('/chamados/estatisticas', [ChamadoEstatisticaController::class, 'index']);
 $router->get('/chamados/estatisticas/tempo-real-api', [ChamadoEstatisticaController::class, 'tempoRealApi']);

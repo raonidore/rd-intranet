@@ -166,7 +166,7 @@ class AcessoRemotoController extends Controller
 
     public function compartilhar(): void
     {
-        AuthMiddleware::checkModulo('ativos_acesso_remoto');
+        AuthMiddleware::checkQualquerModulo(['ativos_acesso_remoto', 'chamados_suporte_remoto']);
         header('Content-Type: application/json');
 
         $ativoId = (int)($_POST['ativo_id'] ?? 0);

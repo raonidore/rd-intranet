@@ -25,7 +25,7 @@ class SuporteRemotoController extends Controller
 
     public function index(): void
     {
-        AuthMiddleware::checkModulo('ativos_acesso_remoto');
+        AuthMiddleware::checkModulo('chamados_suporte_remoto');
 
         $this->view('chamados/suporte_remoto', [
             'pedidos' => $this->service->listarAbertos(),
@@ -37,7 +37,7 @@ class SuporteRemotoController extends Controller
 
     public function instalarMeshAgent(): void
     {
-        AuthMiddleware::checkModulo('ativos_acesso_remoto');
+        AuthMiddleware::checkModulo('chamados_suporte_remoto');
         header('Content-Type: application/json');
 
         echo json_encode($this->service->solicitarInstalacaoMesh(
@@ -48,7 +48,7 @@ class SuporteRemotoController extends Controller
 
     public function statusInstalacaoMeshAgent(): void
     {
-        AuthMiddleware::checkModulo('ativos_acesso_remoto');
+        AuthMiddleware::checkModulo('chamados_suporte_remoto');
         header('Content-Type: application/json');
 
         echo json_encode($this->service->statusInstalacaoMesh(
@@ -59,7 +59,7 @@ class SuporteRemotoController extends Controller
 
     public function atender(): void
     {
-        AuthMiddleware::checkModulo('ativos_acesso_remoto');
+        AuthMiddleware::checkModulo('chamados_suporte_remoto');
         header('Content-Type: application/json');
 
         $ok = $this->service->marcarAtendido((int)($_POST['id'] ?? 0), $_SESSION['usuario']['nome'] ?? 'portal');
@@ -69,7 +69,7 @@ class SuporteRemotoController extends Controller
     /** Conexão rápida a um dispositivo do MeshCentral que não é ativo cadastrado. */
     public function conectarDispositivo(): void
     {
-        AuthMiddleware::checkModulo('ativos_acesso_remoto');
+        AuthMiddleware::checkModulo('chamados_suporte_remoto');
         header('Content-Type: application/json');
 
         $meshDeviceId = trim((string)($_POST['mesh_device_id'] ?? ''));

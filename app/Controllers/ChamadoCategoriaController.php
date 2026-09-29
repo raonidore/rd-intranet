@@ -8,17 +8,20 @@ use App\Services\AuditService;
 use App\Services\ChamadoCategoriaService;
 use App\Services\ChamadoSetorService;
 use App\Services\ChamadoSlaService;
+use App\Services\ChamadoSubcategoriaService;
 use App\Services\NotificationService;
 
 class ChamadoCategoriaController extends Controller
 {
     private ChamadoCategoriaService $service;
     private ChamadoSlaService $slaService;
+    private ChamadoSubcategoriaService $subcategoriaService;
 
     public function __construct()
     {
         $this->service = new ChamadoCategoriaService();
         $this->slaService = new ChamadoSlaService();
+        $this->subcategoriaService = new ChamadoSubcategoriaService();
     }
 
     public function index(): void
@@ -36,6 +39,8 @@ class ChamadoCategoriaController extends Controller
             'categorias' => $categorias,
             'setores' => (new ChamadoSetorService())->listarAtivos(),
             'slasPorCategoria' => $slasPorCategoria,
+            'subcategoriasPorCategoria' => $this->subcategoriaService->listarAgrupadas(),
+            'slasPorSubcategoria' => $this->subcategoriaService->listarSlasAgrupados(),
         ]);
     }
 
@@ -59,11 +64,11 @@ class ChamadoCategoriaController extends Controller
         $id = (int)($_POST['id'] ?? 0);
         $nome = trim($_POST['nome'] ?? '');
         $setorId = !empty($_POST['setor_padrao_id']) ? (int)$_POST['setor_padrao_id'] : null;
-        $resultado = $this->service->atualizar($id, $nome, $setorId, isset($_POST['ativo']));
+        $resultado = $this->service->atualizar($id, $nome, $setorId, isset($_POST['ativo']), isset($_POST['exige_subcategoria']));
 
         AuditService::registrar('Chamados', 'Atualizar categoria', "Categoria #{$id}: {$resultado['message']}");
 
-        $this->notificarEVoltar($resultado);
+        $this->notificarEVoltar($resultado, $id);
     }
 
     public function excluir(): void
@@ -90,10 +95,80 @@ class ChamadoCategoriaController extends Controller
 
         AuditService::registrar('Chamados', 'SLA', "SLA #{$id}: {$resultado['message']}");
 
-        $this->notificarEVoltar($resultado);
+        $this->notificarEVoltar($resultado, (int)($_POST['categoria_id'] ?? 0) ?: null);
     }
 
-    private function notificarEVoltar(array $resultado): void
+    public function criarSubcategoria(): void
+    {
+        AuthMiddleware::checkModulo('chamados_categorias');
+
+        $categoriaId = (int)($_POST['categoria_id'] ?? 0);
+        $nome = trim($_POST['nome'] ?? '');
+        $setorId = !empty($_POST['setor_padrao_id']) ? (int)$_POST['setor_padrao_id'] : null;
+        $resultado = $this->subcategoriaService->criar($categoriaId, $nome, $setorId);
+
+        AuditService::registrar('Chamados', 'Criar subcategoria', "Categoria #{$categoriaId}, subcategoria \"{$nome}\": {$resultado['message']}");
+
+        $this->notificarEVoltar($resultado, $categoriaId);
+    }
+
+    public function atualizarSubcategoria(): void
+    {
+        AuthMiddleware::checkModulo('chamados_categorias');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $setorId = !empty($_POST['setor_padrao_id']) ? (int)$_POST['setor_padrao_id'] : null;
+        $resultado = $this->subcategoriaService->atualizar(
+            $id,
+            trim($_POST['nome'] ?? ''),
+            $setorId,
+            ($_POST['sla_modo'] ?? 'herdar') === 'proprio',
+            isset($_POST['ativo'])
+        );
+
+        AuditService::registrar('Chamados', 'Atualizar subcategoria', "Subcategoria #{$id}: {$resultado['message']}");
+
+        $this->notificarEVoltar($resultado, $this->categoriaDaSubcategoria($id));
+    }
+
+    public function excluirSubcategoria(): void
+    {
+        AuthMiddleware::checkModulo('chamados_categorias');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $categoriaId = $this->categoriaDaSubcategoria($id);
+        $resultado = $this->subcategoriaService->excluir($id);
+
+        AuditService::registrar('Chamados', 'Excluir subcategoria', "Subcategoria #{$id}: {$resultado['message']}");
+
+        $this->notificarEVoltar($resultado, $categoriaId);
+    }
+
+    public function salvarSlaSubcategoria(): void
+    {
+        AuthMiddleware::checkModulo('chamados_categorias');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $resultado = $this->subcategoriaService->atualizarSla(
+            $id,
+            (int)($_POST['tempo_primeira_resposta_min'] ?? 0),
+            (int)($_POST['tempo_resolucao_min'] ?? 0)
+        );
+
+        AuditService::registrar('Chamados', 'SLA subcategoria', "SLA de subcategoria #{$id}: {$resultado['message']}");
+
+        $this->notificarEVoltar($resultado, (int)($_POST['categoria_id'] ?? 0) ?: null);
+    }
+
+    private function categoriaDaSubcategoria(int $subcategoriaId): ?int
+    {
+        $subcategoria = $this->subcategoriaService->buscar($subcategoriaId);
+
+        return $subcategoria ? (int)$subcategoria['categoria_id'] : null;
+    }
+
+    /** $categoriaAberta: volta com o painel dessa categoria já expandido (senão o usuário perde o lugar a cada salvar). */
+    private function notificarEVoltar(array $resultado, ?int $categoriaAberta = null): void
     {
         if ($resultado['success']) {
             NotificationService::success($resultado['message']);
@@ -101,7 +176,7 @@ class ChamadoCategoriaController extends Controller
             NotificationService::error($resultado['message']);
         }
 
-        header('Location: ' . url('/chamados/categorias'));
+        header('Location: ' . url('/chamados/categorias' . ($categoriaAberta ? '?aberta=' . $categoriaAberta : '')));
         exit;
     }
 }

@@ -11,6 +11,7 @@ use App\Services\ChamadoAnexoService;
 use App\Services\ChamadoCategoriaService;
 use App\Services\ChamadoService;
 use App\Services\ChamadoSetorService;
+use App\Services\ChamadoSubcategoriaService;
 use App\Services\KbService;
 use App\Services\NotificationService;
 use App\Services\NumeroControleService;
@@ -29,10 +30,27 @@ class ChamadoController extends Controller
 
         $aba = $_GET['aba'] ?? 'andamento';
 
+        $podeVerEquipe = PermissionService::temAcesso('chamados_equipe');
+        if ($aba === 'equipe' && !$podeVerEquipe) {
+            $aba = 'andamento';
+        }
+
+        $equipe = [];
+        $semSetor = false;
+        if ($podeVerEquipe) {
+            $ehAdmin = PermissionService::ehAdmin();
+            $setorIds = $ehAdmin ? null : (new ChamadoSetorService())->idsSetoresDoUsuario($usuarioId);
+            $semSetor = !$ehAdmin && empty($setorIds);
+            $equipe = $service->listarDaEquipe($setorIds, $usuarioId);
+        }
+
         $this->view('chamados/atendimentos', [
             'aba' => $aba,
             'chamados' => $service->listarDoUsuario($usuarioId),
             'encerrados' => $aba === 'encerrados' ? $service->listarEncerradosDoUsuario($usuarioId) : [],
+            'podeVerEquipe' => $podeVerEquipe,
+            'equipe' => $equipe,
+            'semSetor' => $semSetor,
         ]);
     }
 
@@ -56,6 +74,7 @@ class ChamadoController extends Controller
 
         $this->view('chamados/novo', [
             'categorias' => (new ChamadoCategoriaService())->listarAtivas(),
+            'subcategoriasPorCategoria' => (new ChamadoSubcategoriaService())->listarAtivasAgrupadas(),
             'setores' => (new ChamadoSetorService())->listarAtivos(),
             'unidades' => (new UnidadeService())->listarAtivas(),
             'ativoPreSelecionado' => !empty($_GET['ativo_id']) ? (new AtivoService())->buscar((int)$_GET['ativo_id']) : null,
@@ -108,7 +127,33 @@ class ChamadoController extends Controller
             'historico' => $service->historico($id),
             'anexos' => (new ChamadoAnexoService())->listarPorChamado($id),
             'somenteLeitura' => in_array($chamado['status'], ['resolvido', 'fechado'], true),
+            'atendentes' => PermissionService::temAcesso('chamados_transferir') ? $service->atendentesDisponiveis() : [],
         ]);
+    }
+
+    /** Passa o chamado pra outro atendente -- ou pra si mesmo, pra assumir um chamado que está com um colega. */
+    public function transferir(): void
+    {
+        AuthMiddleware::checkModulo('chamados_transferir');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $resultado = (new ChamadoService())->transferir(
+            $id,
+            (int)($_POST['usuario_id'] ?? 0),
+            (int)$_SESSION['usuario']['id'],
+            (string)($_POST['motivo'] ?? '')
+        );
+
+        AuditService::registrar('Chamados', 'Transferir chamado', "Chamado #{$id}: {$resultado['message']}");
+
+        if ($resultado['success']) {
+            NotificationService::success($resultado['message']);
+        } else {
+            NotificationService::error($resultado['message']);
+        }
+
+        header('Location: ' . url('/chamados/atendimentos/ver?id=' . $id));
+        exit;
     }
 
     public function responder(): void

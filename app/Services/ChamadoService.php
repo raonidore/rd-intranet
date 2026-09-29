@@ -30,13 +30,17 @@ class ChamadoService
     ];
 
     private const SELECT_ENRIQUECIDO = "
-        SELECT c.*, cat.nome AS categoria_nome, s.nome AS setor_nome,
+        SELECT c.*,
+               CONCAT(cat.nome, IF(sc.id IS NULL, '', CONCAT(' › ', sc.nome))) AS categoria_nome,
+               cat.nome AS categoria_raiz_nome, sc.nome AS subcategoria_nome,
+               s.nome AS setor_nome,
                u.nome AS unidade_nome, u.sigla AS unidade_sigla,
                sol.nome AS solicitante_nome, sol.email AS solicitante_email, sol.telefone AS solicitante_telefone,
                us.nome AS usuario_nome,
                a.codigo_patrimonio AS ativo_codigo, a.nome AS ativo_nome
         FROM chamados c
         JOIN chamados_categorias cat ON cat.id = c.categoria_id
+        LEFT JOIN chamados_subcategorias sc ON sc.id = c.subcategoria_id
         LEFT JOIN chamados_setores s ON s.id = c.setor_id
         JOIN unidades u ON u.id = c.unidade_id
         JOIN chamados_solicitantes sol ON sol.id = c.solicitante_id
@@ -78,6 +82,23 @@ class ChamadoService
             return ['success' => false, 'message' => 'Categoria inválida.'];
         }
 
+        // Subcategoria: opcional, mas precisa ser da categoria escolhida
+        // e estar ativa. "Exigir subcategoria" só vale pra quem escolhe
+        // na tela (painel/portal) -- chatbot e chamados automáticos não
+        // têm como escolher e seguiriam bloqueados.
+        $subcategoriaService = new ChamadoSubcategoriaService();
+        $subcategoriaId = !empty($post['subcategoria_id']) ? (int)$post['subcategoria_id'] : null;
+        $subcategoria = null;
+        if ($subcategoriaId !== null) {
+            $subcategoria = $subcategoriaService->buscar($subcategoriaId);
+            if (!$subcategoria || (int)$subcategoria['categoria_id'] !== $categoriaId || !$subcategoria['ativo']) {
+                return ['success' => false, 'message' => 'Subcategoria inválida para a categoria escolhida.'];
+            }
+        } elseif (!empty($categoria['exige_subcategoria']) && in_array($canal, ['painel', 'portal'], true)
+            && $subcategoriaService->contarAtivasDaCategoria($categoriaId) > 0) {
+            return ['success' => false, 'message' => 'Escolha uma subcategoria para "' . $categoria['nome'] . '".'];
+        }
+
         if (!(new UnidadeService())->buscar($unidadeId)) {
             return ['success' => false, 'message' => 'Unidade inválida.'];
         }
@@ -90,11 +111,14 @@ class ChamadoService
 
         $solicitante = (new ChamadoSolicitanteService())->buscarOuCriar($nomeSolicitante, $email, $telefone, $unidadeId);
 
-        $setorId = !empty($post['setor_id']) ? (int)$post['setor_id'] : ($categoria['setor_padrao_id'] ?: null);
+        // Setor: escolhido à mão > setor da subcategoria > setor da categoria.
+        $setorId = !empty($post['setor_id'])
+            ? (int)$post['setor_id']
+            : (($subcategoria['setor_padrao_id'] ?? null) ?: ($categoria['setor_padrao_id'] ?: null));
 
         $ativoId = !empty($post['ativo_id']) ? (int)$post['ativo_id'] : null;
 
-        [$slaResposta, $slaResolucao] = $this->calcularPrazos($categoriaId, $prioridade);
+        [$slaResposta, $slaResolucao] = $this->calcularPrazos($categoriaId, $prioridade, $subcategoriaId);
 
         // Quem preencheu o formulário (se logado) -- diferente de usuario_id
         // (o ATENDENTE, só setado quando alguém assume na Fila) e de
@@ -105,11 +129,11 @@ class ChamadoService
 
         $stmt = $this->pdo->prepare(
             "INSERT INTO chamados
-             (titulo, descricao, categoria_id, setor_id, unidade_id, ativo_id, solicitante_id, usuario_abertura_id, prioridade, canal_abertura, aguardando_resposta, sla_resposta_prazo, sla_resolucao_prazo)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)"
+             (titulo, descricao, categoria_id, subcategoria_id, setor_id, unidade_id, ativo_id, solicitante_id, usuario_abertura_id, prioridade, canal_abertura, aguardando_resposta, sla_resposta_prazo, sla_resolucao_prazo)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)"
         );
         $stmt->execute([
-            $titulo, $descricao, $categoriaId, $setorId, $unidadeId, $ativoId, $solicitante['id'], $usuarioAberturaId, $prioridade, $canal, $slaResposta, $slaResolucao,
+            $titulo, $descricao, $categoriaId, $subcategoriaId, $setorId, $unidadeId, $ativoId, $solicitante['id'], $usuarioAberturaId, $prioridade, $canal, $slaResposta, $slaResolucao,
         ]);
 
         $id = (int)$this->pdo->lastInsertId();
@@ -126,9 +150,11 @@ class ChamadoService
         return ['success' => true, 'message' => 'Chamado #' . $numeroControle . ' aberto com sucesso.', 'id' => $id, 'numero_controle' => $numeroControle];
     }
 
-    private function calcularPrazos(int $categoriaId, string $prioridade): array
+    /** Subcategoria com "prazos próprios" ganha; senão (ou sem subcategoria) vale o SLA da categoria. */
+    private function calcularPrazos(int $categoriaId, string $prioridade, ?int $subcategoriaId = null): array
     {
-        $sla = (new ChamadoSlaService())->buscar($categoriaId, $prioridade);
+        $sla = $subcategoriaId !== null ? (new ChamadoSubcategoriaService())->buscarSlaProprio($subcategoriaId, $prioridade) : null;
+        $sla ??= (new ChamadoSlaService())->buscar($categoriaId, $prioridade);
 
         if (!$sla) {
             return [null, null];
@@ -302,6 +328,112 @@ class ChamadoService
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * Aba "Equipe" de Atendimentos -- chamados já assumidos (em
+     * atendimento/aguardando cliente) por OUTRA pessoa, nos setores de
+     * quem está olhando. Sem isso, depois que alguém assume, o chamado
+     * sai da Fila e só aparece pra quem assumiu; o resto do setor não
+     * tem como achar. Mesmo filtro de setor da Fila.
+     *
+     * @param int[]|null $setorIds null = vê tudo (admin); [] = só chamados sem setor; senão, os setores do usuário + sem setor.
+     */
+    public function listarDaEquipe(?array $setorIds, int $excluirUsuarioId): array
+    {
+        $sql = self::SELECT_ENRIQUECIDO . " WHERE c.status IN ('em_atendimento','aguardando_cliente') AND (c.usuario_id IS NULL OR c.usuario_id != ?)";
+        $params = [$excluirUsuarioId];
+
+        if ($setorIds !== null) {
+            if (empty($setorIds)) {
+                $sql .= ' AND c.setor_id IS NULL';
+            } else {
+                $marcadores = implode(',', array_fill(0, count($setorIds), '?'));
+                $sql .= " AND (c.setor_id IN ({$marcadores}) OR c.setor_id IS NULL)";
+                $params = array_merge($params, $setorIds);
+            }
+        }
+
+        $sql .= ' ORDER BY c.ultima_mensagem_em DESC';
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Quem pode receber um chamado na transferência: usuário ativo que é admin ou tem Atendimentos (direto ou por grupo). */
+    public function atendentesDisponiveis(): array
+    {
+        return $this->pdo->query(
+            "SELECT u.id, u.nome
+             FROM usuarios u
+             WHERE u.ativo = 1 AND (
+                 u.perfil = 'admin'
+                 OR EXISTS (SELECT 1 FROM usuario_modulos um WHERE um.usuario_id = u.id AND um.modulo = 'chamados_atendimentos')
+                 OR EXISTS (SELECT 1 FROM grupo_usuarios gu JOIN grupo_modulos gm ON gm.grupo_id = gu.grupo_id
+                            WHERE gu.usuario_id = u.id AND gm.modulo = 'chamados_atendimentos')
+             )
+             ORDER BY u.nome"
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Passa o chamado pra outro atendente (ou pra si mesmo, pra assumir
+     * um chamado que estava com um colega). Chamado na fila vira "em
+     * atendimento". Deixa uma nota interna -- é o que aparece na
+     * conversa do chamado pra todo mundo saber quem pegou e por quê.
+     *
+     * @return array{success: bool, message: string}
+     */
+    public function transferir(int $chamadoId, int $novoUsuarioId, int $porUsuarioId, string $motivo = ''): array
+    {
+        $chamado = $this->buscar($chamadoId);
+        if (!$chamado) {
+            return ['success' => false, 'message' => 'Chamado não encontrado.'];
+        }
+        if (in_array($chamado['status'], ['resolvido', 'fechado'], true)) {
+            return ['success' => false, 'message' => 'Chamado encerrado não pode ser transferido -- reabra antes.'];
+        }
+        if ($chamado['usuario_id'] !== null && (int)$chamado['usuario_id'] === $novoUsuarioId) {
+            return ['success' => false, 'message' => 'O chamado já está com essa pessoa.'];
+        }
+
+        $destino = null;
+        foreach ($this->atendentesDisponiveis() as $atendente) {
+            if ((int)$atendente['id'] === $novoUsuarioId) {
+                $destino = $atendente;
+                break;
+            }
+        }
+        if (!$destino) {
+            return ['success' => false, 'message' => 'Escolha um atendente válido.'];
+        }
+
+        $novoStatus = $chamado['status'] === 'fila' ? 'em_atendimento' : $chamado['status'];
+
+        $this->pdo->prepare('UPDATE chamados SET usuario_id = ?, atribuido_em = NOW(), status = ? WHERE id = ?')
+            ->execute([$novoUsuarioId, $novoStatus, $chamadoId]);
+
+        $this->registrarHistorico($chamadoId, 'usuario_id', $chamado['usuario_id'] !== null ? (string)$chamado['usuario_id'] : null, (string)$novoUsuarioId, $porUsuarioId);
+        if ($novoStatus !== $chamado['status']) {
+            $this->registrarHistorico($chamadoId, 'status', $chamado['status'], $novoStatus, $porUsuarioId);
+        }
+
+        $de = $chamado['usuario_nome'] ?? 'a fila';
+        $nota = $novoUsuarioId === $porUsuarioId
+            ? "Chamado assumido (estava com {$de})."
+            : "Chamado transferido de {$de} para {$destino['nome']}.";
+        $motivo = trim($motivo);
+        if ($motivo !== '') {
+            $nota .= "\nMotivo: {$motivo}";
+        }
+        $this->pdo->prepare("INSERT INTO chamados_comentarios (chamado_id, usuario_id, tipo, conteudo) VALUES (?, ?, 'interna', ?)")
+            ->execute([$chamadoId, $porUsuarioId, $nota]);
+
+        $this->sincronizarPausaSlaLinha($chamadoId, $this->buscar($chamadoId));
+
+        return ['success' => true, 'message' => $novoUsuarioId === $porUsuarioId ? 'Chamado assumido.' : 'Chamado transferido para ' . $destino['nome'] . '.'];
+    }
+
     /** @return array{success: bool, message: string} */
     public function assumir(int $chamadoId, int $usuarioId): array
     {
@@ -352,7 +484,7 @@ class ChamadoService
         $reabertura = in_array($chamado['status'], ['resolvido', 'fechado'], true) && !in_array($novoStatus, ['resolvido', 'fechado'], true);
         if ($reabertura) {
             $campos[] = 'resolvido_em = NULL, fechado_em = NULL, sla_pausado_em = NULL';
-            [$slaResposta, $slaResolucao] = $this->calcularPrazos((int)$chamado['categoria_id'], $chamado['prioridade']);
+            [$slaResposta, $slaResolucao] = $this->calcularPrazos((int)$chamado['categoria_id'], $chamado['prioridade'], $chamado['subcategoria_id'] !== null ? (int)$chamado['subcategoria_id'] : null);
             $campos[] = 'sla_resposta_prazo = ?';
             $campos[] = 'sla_resolucao_prazo = ?';
             $params[] = $slaResposta;

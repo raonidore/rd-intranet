@@ -10,7 +10,7 @@ use App\Services\ChamadoSlaService;
 <div class="mb-4 d-flex justify-content-between align-items-start">
     <div>
         <h4 class="mb-1"><i class="bi bi-tags me-1"></i> Chamados - Categorias</h4>
-        <small class="text-muted">Categoria define o setor padrão de roteamento e o prazo de SLA por prioridade. Categoria nova já nasce com um SLA padrão -- ajuste como preferir.</small>
+        <small class="text-muted">Categoria define o setor padrão de roteamento e o prazo de SLA por prioridade. Categoria nova já nasce com um SLA padrão -- ajuste como preferir. Dentro de cada categoria você cadastra as subcategorias (ex.: Software › Excel).</small>
     </div>
     <button type="button" class="btn btn-outline-dark text-nowrap" data-bs-toggle="modal" data-bs-target="#modalPopCategorias">
         <i class="bi bi-broadcast"></i> POP - Categorias
@@ -63,6 +63,14 @@ use App\Services\ChamadoSlaService;
                 <div class="pop-step">
                     <div class="pop-step-num">5</div>
                     <div>
+                        <div class="pop-step-title"><i class="bi bi-diagram-2"></i> Subcategorias</div>
+                        <div class="pop-step-text">No painel da categoria, bloco <strong>Subcategorias</strong> -- detalham o assunto (ex.: Software › Excel). Cada uma pode ter <strong>setor próprio</strong> (senão vai pro setor da categoria) e escolher entre <strong>usar os prazos da categoria</strong> ou <strong>definir prazos próprios</strong>. Marque <strong>Exigir subcategoria</strong> na categoria pra que ninguém abra chamado nela sem escolher uma. Subcategoria com chamados não pode ser excluída -- desative.</div>
+                    </div>
+                </div>
+
+                <div class="pop-step">
+                    <div class="pop-step-num">6</div>
+                    <div>
                         <div class="pop-step-title"><i class="bi bi-trash"></i> Excluir categoria</div>
                         <div class="pop-step-text">Dentro do painel expandido -- <strong>prefira desativar</strong> em vez de excluir quando já existirem chamados nela, pra não perder a referência no histórico.</div>
                     </div>
@@ -113,18 +121,28 @@ use App\Services\ChamadoSlaService;
     <p class="text-muted">Nenhuma categoria cadastrada ainda.</p>
 <?php endif; ?>
 
+<?php $categoriaAberta = (int)($_GET['aberta'] ?? 0); ?>
 <?php foreach ($categorias as $categoria): ?>
-    <?php $idColapso = 'categoria' . (int)$categoria['id']; ?>
+    <?php
+    $idColapso = 'categoria' . (int)$categoria['id'];
+    $subcategorias = $subcategoriasPorCategoria[$categoria['id']] ?? [];
+    ?>
     <div class="card border-0 shadow-sm mb-2">
         <div class="card-header bg-white d-flex justify-content-between align-items-center" style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#<?= $idColapso ?>">
             <div>
                 <strong><?= htmlspecialchars($categoria['nome']) ?></strong>
                 <?= $categoria['ativo'] ? '<span class="badge text-bg-success ms-1">Ativa</span>' : '<span class="badge text-bg-secondary ms-1">Inativa</span>' ?>
                 <span class="badge text-bg-light border ms-1"><?= htmlspecialchars($categoria['setor_padrao_nome'] ?? 'Sem setor padrão') ?></span>
+                <?php if ($subcategorias): ?>
+                    <span class="badge text-bg-light border ms-1"><i class="bi bi-diagram-2"></i> <?= count($subcategorias) ?> subcategoria<?= count($subcategorias) > 1 ? 's' : '' ?></span>
+                <?php endif; ?>
+                <?php if (!empty($categoria['exige_subcategoria'])): ?>
+                    <span class="badge text-bg-warning ms-1">Exige subcategoria</span>
+                <?php endif; ?>
             </div>
             <i class="bi bi-chevron-down text-muted"></i>
         </div>
-        <div class="collapse" id="<?= $idColapso ?>">
+        <div class="collapse <?= $categoriaAberta === (int)$categoria['id'] ? 'show' : '' ?>" id="<?= $idColapso ?>">
             <div class="card-body border-top">
                 <div class="row g-4">
                     <div class="col-md-5">
@@ -148,6 +166,10 @@ use App\Services\ChamadoSlaService;
                                 <input type="checkbox" name="ativo" class="form-check-input" id="ativa<?= (int)$categoria['id'] ?>" <?= $categoria['ativo'] ? 'checked' : '' ?>>
                                 <label class="form-check-label small" for="ativa<?= (int)$categoria['id'] ?>">Categoria ativa</label>
                             </div>
+                            <div class="form-check mb-2">
+                                <input type="checkbox" name="exige_subcategoria" class="form-check-input" id="exige<?= (int)$categoria['id'] ?>" <?= !empty($categoria['exige_subcategoria']) ? 'checked' : '' ?>>
+                                <label class="form-check-label small" for="exige<?= (int)$categoria['id'] ?>">Exigir subcategoria na abertura</label>
+                            </div>
                             <button type="submit" class="btn btn-sm btn-outline-primary"><i class="bi bi-check-lg"></i> Salvar</button>
                         </form>
 
@@ -168,6 +190,7 @@ use App\Services\ChamadoSlaService;
                         <?php foreach ($slasPorCategoria[$categoria['id']] ?? [] as $sla): ?>
                             <form method="post" action="<?= url('/chamados/categorias/sla') ?>" class="d-flex align-items-center gap-2 mb-2">
                                 <input type="hidden" name="id" value="<?= (int)$sla['id'] ?>">
+                                <input type="hidden" name="categoria_id" value="<?= (int)$categoria['id'] ?>">
                                 <div style="width:90px" class="small"><?= htmlspecialchars(ChamadoSlaService::PRIORIDADES[$sla['prioridade']]) ?></div>
                                 <div class="flex-fill input-group input-group-sm">
                                     <input type="number" name="tempo_primeira_resposta_min" class="form-control" value="<?= (int)$sla['tempo_primeira_resposta_min'] ?>" min="1">
@@ -182,6 +205,8 @@ use App\Services\ChamadoSlaService;
                         <?php endforeach; ?>
                     </div>
                 </div>
+
+                <?php require __DIR__ . '/_subcategorias.php'; ?>
             </div>
         </div>
     </div>

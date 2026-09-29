@@ -40,25 +40,31 @@ $urlVoltarChamados = url(PermissionService::temAcesso('chamados_atendimentos') ?
             </div>
 
             <div class="row g-3 mb-3">
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label class="form-label">Categoria</label>
-                    <select name="categoria_id" class="form-select" required>
+                    <select name="categoria_id" id="campoCategoria" class="form-select" required>
                         <option value="">— Selecione —</option>
                         <?php foreach ($categorias as $c): ?>
-                            <option value="<?= (int)$c['id'] ?>"><?= htmlspecialchars($c['nome']) ?></option>
+                            <option value="<?= (int)$c['id'] ?>" data-exige-subcategoria="<?= !empty($c['exige_subcategoria']) ? '1' : '0' ?>"><?= htmlspecialchars($c['nome']) ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
+                    <label class="form-label">Subcategoria <span class="text-muted" id="rotuloSubcategoriaOpcional">(opcional)</span></label>
+                    <select name="subcategoria_id" id="campoSubcategoria" class="form-select" disabled>
+                        <option value="">— Escolha a categoria —</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
                     <label class="form-label">Setor responsável <span class="text-muted">(opcional)</span></label>
                     <select name="setor_id" class="form-select">
-                        <option value="">— Usar o padrão da categoria —</option>
+                        <option value="">— Usar o padrão —</option>
                         <?php foreach ($setores as $s): ?>
                             <option value="<?= (int)$s['id'] ?>"><?= htmlspecialchars($s['nome']) ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label class="form-label">Unidade</label>
                     <select name="unidade_id" class="form-select" required>
                         <?php foreach ($unidades as $u): ?>
@@ -117,6 +123,39 @@ $urlVoltarChamados = url(PermissionService::temAcesso('chamados_atendimentos') ?
 
 <script>
 (function () {
+    // --- Subcategoria: lista depende da categoria escolhida; obrigatória só quando a categoria exige e tem opções ---
+    const subcategoriasPorCategoria = <?= json_encode($subcategoriasPorCategoria, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?>;
+    const campoCategoria = document.getElementById('campoCategoria');
+    const campoSubcategoria = document.getElementById('campoSubcategoria');
+    const rotuloSubcategoriaOpcional = document.getElementById('rotuloSubcategoriaOpcional');
+
+    function atualizarSubcategorias() {
+        const opcaoCategoria = campoCategoria.selectedOptions[0];
+        const lista = subcategoriasPorCategoria[campoCategoria.value] || [];
+        const exige = opcaoCategoria && opcaoCategoria.dataset.exigeSubcategoria === '1' && lista.length > 0;
+
+        campoSubcategoria.innerHTML = '';
+        const vazia = document.createElement('option');
+        vazia.value = '';
+        vazia.textContent = !campoCategoria.value ? '— Escolha a categoria —'
+            : (lista.length ? (exige ? '— Selecione —' : '— Nenhuma —') : '— Sem subcategorias —');
+        campoSubcategoria.appendChild(vazia);
+
+        lista.forEach(function (sub) {
+            const opcao = document.createElement('option');
+            opcao.value = sub.id;
+            opcao.textContent = sub.nome;
+            campoSubcategoria.appendChild(opcao);
+        });
+
+        campoSubcategoria.disabled = lista.length === 0;
+        campoSubcategoria.required = exige;
+        rotuloSubcategoriaOpcional.textContent = exige ? '' : '(opcional)';
+    }
+
+    campoCategoria.addEventListener('change', atualizarSubcategorias);
+    atualizarSubcategorias();
+
     // --- Solicitante: exige e-mail ou telefone sem perder o restante do formulário preenchido ---
     const formChamado = document.querySelector('form[action="<?= url('/chamados/atendimentos/novo') ?>"]');
     const campoEmail = document.getElementById('campoSolicitanteEmail');

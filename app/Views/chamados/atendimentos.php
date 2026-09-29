@@ -141,18 +141,34 @@ $corStatus = ['fila' => 'secondary', 'em_atendimento' => 'primary', 'aguardando_
     <li class="nav-item">
         <a class="nav-link <?= $aba === 'andamento' ? 'active' : '' ?>" href="<?= url('/chamados/atendimentos?aba=andamento') ?>">Em andamento</a>
     </li>
+    <?php if ($podeVerEquipe): ?>
+    <li class="nav-item">
+        <a class="nav-link <?= $aba === 'equipe' ? 'active' : '' ?>" href="<?= url('/chamados/atendimentos?aba=equipe') ?>">
+            Equipe <?php if ($equipe): ?><span class="badge text-bg-secondary ms-1"><?= count($equipe) ?></span><?php endif; ?>
+        </a>
+    </li>
+    <?php endif; ?>
     <li class="nav-item">
         <a class="nav-link <?= $aba === 'encerrados' ? 'active' : '' ?>" href="<?= url('/chamados/atendimentos?aba=encerrados') ?>">Encerrados</a>
     </li>
 </ul>
 
-<?php $lista = $aba === 'encerrados' ? $encerrados : $chamados; ?>
+<?php if ($aba === 'equipe'): ?>
+    <p class="small text-muted mb-2">
+        Chamados em andamento com outros atendentes dos seus setores. Abra para acompanhar, responder ou assumir.
+        <?php if ($semSetor): ?>
+            <br><i class="bi bi-exclamation-triangle text-warning"></i> Você não está em nenhum setor -- só aparecem chamados sem setor. Peça para incluírem você em <strong>Chamados › Setores</strong>.
+        <?php endif; ?>
+    </p>
+<?php endif; ?>
+
+<?php $lista = $aba === 'encerrados' ? $encerrados : ($aba === 'equipe' ? $equipe : $chamados); ?>
 
 <?php if (empty($lista)): ?>
     <div class="card border-0 shadow-sm">
         <div class="card-body text-center text-muted py-4">
             <i class="bi bi-ticket" style="font-size:2rem;"></i>
-            <p class="mb-0 mt-2"><?= $aba === 'encerrados' ? 'Nenhum chamado encerrado ainda.' : 'Você não tem nenhum chamado em andamento.' ?></p>
+            <p class="mb-0 mt-2"><?= $aba === 'encerrados' ? 'Nenhum chamado encerrado ainda.' : ($aba === 'equipe' ? 'Nenhum chamado em andamento com colegas dos seus setores.' : 'Você não tem nenhum chamado em andamento.') ?></p>
         </div>
     </div>
 <?php else: ?>
@@ -169,6 +185,10 @@ $corStatus = ['fila' => 'secondary', 'em_atendimento' => 'primary', 'aguardando_
                             <?= htmlspecialchars($item['solicitante_nome']) ?> ·
                             <?= htmlspecialchars($item['categoria_nome']) ?> ·
                             <?= htmlspecialchars($item['unidade_nome']) ?>
+                            <?php if ($aba === 'equipe'): ?>
+                                · <i class="bi bi-person"></i> <?= htmlspecialchars($item['usuario_nome'] ?? '—') ?>
+                                <?php if (!empty($item['setor_nome'])): ?>(<?= htmlspecialchars($item['setor_nome']) ?>)<?php endif; ?>
+                            <?php endif; ?>
                         </div>
                     </div>
                     <small class="text-muted text-nowrap"><?= data_br($item['ultima_mensagem_em']) ?></small>
