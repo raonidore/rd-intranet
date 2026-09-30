@@ -9,7 +9,8 @@ namespace RdIntranetAgente;
 /// máquina, outro equipamento (monitor, impressora...) ou nenhum
 /// (software, acesso). Sem login a pessoa informa nome e contato; com o
 /// login do RD Intranet ela também acompanha e responde os próprios
-/// chamados em "Meus chamados".
+/// chamados em "Meus chamados". Campos e escolhas usam os controles de
+/// ControlesModernos.cs.
 /// </summary>
 public sealed class ChamadosPagina : Panel
 {
@@ -29,24 +30,26 @@ public sealed class ChamadosPagina : Panel
     private readonly Panel _areaDetalhe;
 
     // formulário
+    private readonly FlowLayoutPanel _pilha;
     private readonly Label _statusFormulario;
-    private readonly TextBox _titulo;
-    private readonly ComboBox _categoria;
-    private readonly ComboBox _subcategoria;
-    private readonly Label _rotuloSubcategoria;
-    private readonly ComboBox _prioridade;
-    private readonly ComboBox _unidade;
-    private readonly ComboBox _setor;
-    private readonly RadioButton _alvoEste;
-    private readonly RadioButton _alvoOutro;
-    private readonly RadioButton _alvoNenhum;
-    private readonly TableLayoutPanel _linhaOutro;
-    private readonly TextBox _buscaAtivo;
-    private readonly ComboBox _resultadoAtivo;
-    private readonly TextBox _descricao;
-    private readonly TextBox _solicitanteNome;
-    private readonly TextBox _solicitanteEmail;
-    private readonly TextBox _solicitanteTelefone;
+    private readonly CaixaTexto _titulo;
+    private readonly CaixaTexto _descricao;
+    private readonly SeletorModerno _categoria;
+    private readonly SeletorModerno _subcategoria;
+    private readonly RotuloCampo _rotuloSubcategoria;
+    private readonly SeletorSegmentado _prioridade;
+    private readonly SeletorModerno _unidade;
+    private readonly SeletorModerno _setor;
+    private readonly CartaoEscolha _alvoEste;
+    private readonly CartaoEscolha _alvoOutro;
+    private readonly CartaoEscolha _alvoNenhum;
+    private readonly CartaoSecao _cartaoAlvo;
+    private readonly TableLayoutPanel _gradeAlvo;
+    private readonly CaixaTexto _buscaAtivo;
+    private readonly SeletorModerno _resultadoAtivo;
+    private readonly CaixaTexto _solicitanteNome;
+    private readonly CaixaTexto _solicitanteEmail;
+    private readonly CaixaTexto _solicitanteTelefone;
     private readonly Label _dicaSolicitante;
     private readonly BotaoTema _botaoEnviar;
 
@@ -58,11 +61,13 @@ public sealed class ChamadosPagina : Panel
     private int _chamadoAbertoId;
     private readonly Label _tituloDetalhe;
     private readonly RichTextBox _conversa;
-    private readonly TextBox _resposta;
+    private readonly CaixaTexto _resposta;
     private readonly BotaoTema _botaoResponder;
 
-    private const string SemSubcategoria = "— Nenhuma —";
-    private const string SetorPadrao = "— Usar o padrão —";
+    private const string SemSubcategoria = "Nenhuma";
+    private const string SetorPadrao = "Usar o padrão da categoria";
+    private const int LinhaCampo = 74;
+    private const int AlturaCartaoAlvoFechado = 30 + 50 + 90;
 
     public ChamadosPagina(Func<Config> config)
     {
@@ -84,13 +89,13 @@ public sealed class ChamadosPagina : Panel
         });
 
         var barraSessao = new Panel { Height = 44, Dock = DockStyle.Top, BackColor = Tema.Fundo };
-        _botaoSessao = new BotaoTema("Entrar", BotaoTema.Variante.Secundario) { Width = 170, Dock = DockStyle.Right };
+        _botaoSessao = new BotaoTema("Entrar", BotaoTema.Variante.Secundario) { Width = 190, Dock = DockStyle.Right };
         _botaoSessao.Click += async (s, e) => await AlternarSessaoAsync();
         _rotuloSessao = new Label { Dock = DockStyle.Fill, ForeColor = Tema.TextoSecundario, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true };
         barraSessao.Controls.Add(_rotuloSessao);
         barraSessao.Controls.Add(_botaoSessao);
 
-        var barraAbas = new FlowLayoutPanel { Height = 42, Dock = DockStyle.Top, BackColor = Tema.Fundo, WrapContents = false };
+        var barraAbas = new FlowLayoutPanel { Height = 46, Dock = DockStyle.Top, BackColor = Tema.Fundo, WrapContents = false, Padding = new Padding(0, 4, 0, 4) };
         _abaAbrir = CriarAba("Abrir chamado");
         _abaMeus = CriarAba("Meus chamados");
         _abaAbrir.Click += (s, e) => MostrarArea(_areaAbrir!);
@@ -100,39 +105,62 @@ public sealed class ChamadosPagina : Panel
 
         // ---------------------------------------------------------- abrir
         _areaAbrir = new Panel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = Tema.Fundo };
-        var grade = new TableLayoutPanel
+        _pilha = new FlowLayoutPanel
         {
-            Dock = DockStyle.Top,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            ColumnCount = 2,
+            Location = Point.Empty,
             BackColor = Tema.Fundo,
-            Padding = new Padding(0, 0, 8, 12)
+            Margin = Padding.Empty,
+            Padding = new Padding(0, 4, 0, 8)
         };
-        grade.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        grade.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        _areaAbrir.Controls.Add(_pilha);
 
-        _statusFormulario = new Label { ForeColor = Tema.TextoSecundario, Dock = DockStyle.Fill, Height = 24, AutoEllipsis = true, Text = "Carregando..." };
-        _titulo = Campo();
-        _titulo.MaxLength = 200;
-        _titulo.PlaceholderText = "Ex: Impressora não imprime -- 2º andar financeiro";
-        _categoria = Combo();
-        _subcategoria = Combo();
-        _prioridade = Combo();
-        _unidade = Combo();
-        _setor = Combo();
-        _categoria.SelectedIndexChanged += (s, e) => AtualizarSubcategorias();
+        // 1. o problema
+        _titulo = new CaixaTexto(icone: Icones.Editar) { MaxLength = 200, PlaceholderText = "Ex: Impressora não imprime -- 2º andar financeiro" };
+        _descricao = new CaixaTexto(multilinha: true) { PlaceholderText = "O que aconteceu, desde quando, mensagem de erro que apareceu..." };
+        var gradeProblema = Grade(1);
+        AdicionarLinha(gradeProblema, LinhaCampo, Campo("Título", _titulo));
+        AdicionarLinha(gradeProblema, 150, Campo("Descrição", _descricao));
+        var cartaoProblema = Cartao(new CabecalhoSecao("1", "Qual é o problema?", "Um título curto e o máximo de detalhes na descrição."), gradeProblema, 30 + 50 + LinhaCampo + 150);
 
-        _alvoEste = Radio("Este computador");
-        _alvoOutro = Radio("Outro equipamento (monitor, impressora...)");
-        _alvoNenhum = Radio("Nenhum equipamento (software, acesso...)");
-        _alvoEste.Checked = true;
-        var linhaAlvo = new FlowLayoutPanel { Dock = DockStyle.Fill, Height = 30, BackColor = Tema.Fundo, WrapContents = true, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink };
-        linhaAlvo.Controls.AddRange(new Control[] { _alvoEste, _alvoOutro, _alvoNenhum });
+        // 2. classificação
+        _categoria = new SeletorModerno { Placeholder = "Escolha a categoria" };
+        _subcategoria = new SeletorModerno { Placeholder = SemSubcategoria };
+        _rotuloSubcategoria = new RotuloCampo("Subcategoria");
+        _prioridade = new SeletorSegmentado();
+        _unidade = new SeletorModerno { Placeholder = "Escolha a unidade" };
+        _setor = new SeletorModerno { Placeholder = SetorPadrao };
+        _categoria.SelecaoAlterada += (s, e) => AtualizarSubcategorias();
+        var gradeClasse = Grade(2);
+        AdicionarLinha(gradeClasse, LinhaCampo, Campo("Categoria", _categoria), CampoComRotulo(_rotuloSubcategoria, _subcategoria));
+        AdicionarLinha(gradeClasse, LinhaCampo, Campo("Prioridade", _prioridade));
+        AdicionarLinha(gradeClasse, LinhaCampo, Campo("Unidade", _unidade), Campo("Setor responsável (opcional)", _setor));
+        var cartaoClasse = Cartao(new CabecalhoSecao("2", "Classificação", "Ajuda a direcionar o chamado para a equipe certa."), gradeClasse, 30 + 50 + LinhaCampo * 3);
 
-        _buscaAtivo = Campo();
-        _buscaAtivo.PlaceholderText = "Código, nome ou nº de série (mín. 2 letras)";
-        _buscaAtivo.KeyDown += async (s, e) =>
+        // 3. sobre o quê
+        _alvoEste = new CartaoEscolha(Icones.Computador, "Este computador", "Esta máquina");
+        _alvoOutro = new CartaoEscolha(Icones.Monitor, "Outro equipamento", "Monitor, impressora...");
+        _alvoNenhum = new CartaoEscolha(Icones.Aplicativos, "Nenhum", "Software, acesso, e-mail");
+        _alvoEste.Selecionado = true;
+        foreach (var cartao in new[] { _alvoEste, _alvoOutro, _alvoNenhum })
+        {
+            cartao.Escolhido += (s, e) => EscolherAlvo((CartaoEscolha)s!);
+        }
+        var linhaCartoes = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, BackColor = Tema.Superficie, Margin = Padding.Empty };
+        for (var i = 0; i < 3; i++) linhaCartoes.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.333F));
+        _alvoEste.Dock = _alvoOutro.Dock = _alvoNenhum.Dock = DockStyle.Fill;
+        _alvoEste.Margin = new Padding(0, 0, 6, 8);
+        _alvoOutro.Margin = new Padding(3, 0, 3, 8);
+        _alvoNenhum.Margin = new Padding(6, 0, 0, 8);
+        linhaCartoes.Controls.Add(_alvoEste, 0, 0);
+        linhaCartoes.Controls.Add(_alvoOutro, 1, 0);
+        linhaCartoes.Controls.Add(_alvoNenhum, 2, 0);
+
+        _buscaAtivo = new CaixaTexto(icone: Icones.Busca) { PlaceholderText = "Código, nome ou nº de série -- Enter para buscar" };
+        _buscaAtivo.Caixa.KeyDown += async (s, e) =>
         {
             if (e.KeyCode == Keys.Enter)
             {
@@ -140,48 +168,38 @@ public sealed class ChamadosPagina : Panel
                 await BuscarAtivosAsync();
             }
         };
-        _resultadoAtivo = Combo();
-        var botaoBuscar = new BotaoTema("Buscar", BotaoTema.Variante.Secundario) { Width = 90, Dock = DockStyle.Right };
-        botaoBuscar.Click += async (s, e) => await BuscarAtivosAsync();
-        _buscaAtivo.Dock = DockStyle.Fill;
-        var buscaComBotao = new Panel { Dock = DockStyle.Fill, Height = 30, BackColor = Tema.Fundo };
-        buscaComBotao.Controls.Add(_buscaAtivo);
-        buscaComBotao.Controls.Add(new Panel { Width = 8, Dock = DockStyle.Right, BackColor = Tema.Fundo });
-        buscaComBotao.Controls.Add(botaoBuscar);
-        _linhaOutro = new TableLayoutPanel { Dock = DockStyle.Fill, Height = 58, ColumnCount = 2, BackColor = Tema.Fundo, Visible = false, Margin = Padding.Empty };
-        _linhaOutro.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        _linhaOutro.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        _linhaOutro.Controls.Add(ComRotulo("Buscar equipamento", buscaComBotao), 0, 0);
-        _linhaOutro.Controls.Add(ComRotulo("Equipamento", _resultadoAtivo), 1, 0);
-        foreach (var r in new[] { _alvoEste, _alvoOutro, _alvoNenhum })
-        {
-            r.CheckedChanged += (s, e) => _linhaOutro.Visible = _alvoOutro.Checked;
-        }
+        _resultadoAtivo = new SeletorModerno { Placeholder = "Busque ao lado para listar" };
+        _gradeAlvo = Grade(2);
+        AdicionarLinha(_gradeAlvo, 90, linhaCartoes);
+        AdicionarLinha(_gradeAlvo, 0, Campo("Buscar equipamento", _buscaAtivo), Campo("Equipamento", _resultadoAtivo));
+        _cartaoAlvo = Cartao(new CabecalhoSecao("3", "O chamado é sobre", "Assim o suporte já sabe qual equipamento olhar."), _gradeAlvo, AlturaCartaoAlvoFechado);
 
-        _descricao = Campo(multilinha: true);
-        _descricao.Height = 130;
-        _descricao.PlaceholderText = "Descreva o problema: o que aconteceu, desde quando, mensagem de erro...";
-        _solicitanteNome = Campo();
-        _solicitanteEmail = Campo();
-        _solicitanteTelefone = Campo();
-        _dicaSolicitante = new Label { Dock = DockStyle.Fill, ForeColor = Tema.TextoSecundario, Font = Tema.Fonte(8.5F), TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(3, 18, 0, 0) };
+        // 4. contato
+        _solicitanteNome = new CaixaTexto(icone: Icones.Pessoa);
+        _solicitanteEmail = new CaixaTexto { PlaceholderText = "nome@empresa.com" };
+        _solicitanteTelefone = new CaixaTexto { PlaceholderText = "(00) 00000-0000" };
+        _dicaSolicitante = new Label { Dock = DockStyle.Fill, ForeColor = Tema.TextoSecundario, BackColor = Tema.Superficie, Font = Tema.Fonte(8.5F), TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(8, 18, 0, 0) };
+        var gradeContato = Grade(2);
+        AdicionarLinha(gradeContato, LinhaCampo, Campo("Seu nome", _solicitanteNome), Campo("E-mail", _solicitanteEmail));
+        AdicionarLinha(gradeContato, LinhaCampo, Campo("Telefone", _solicitanteTelefone), _dicaSolicitante);
+        var cartaoContato = Cartao(new CabecalhoSecao("4", "Seus dados", "Para o suporte te responder."), gradeContato, 30 + 50 + LinhaCampo * 2);
 
-        _botaoEnviar = new BotaoTema("Abrir chamado", BotaoTema.Variante.Primario) { Width = 170, Margin = new Padding(3, 10, 3, 3) };
+        // rodapé: mensagem + botão
+        var rodape = new Panel { Height = 56, BackColor = Tema.Fundo, Margin = new Padding(0, 0, 0, 8) };
+        _botaoEnviar = new BotaoTema("Abrir chamado", BotaoTema.Variante.Primario) { Width = 210, Dock = DockStyle.Right, Font = Tema.FonteSemibold(10.5F) };
         _botaoEnviar.Click += async (s, e) => await EnviarAsync();
+        _statusFormulario = new Label { Dock = DockStyle.Fill, ForeColor = Tema.TextoSecundario, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true, Font = Tema.Fonte(9.5F), Text = "Carregando..." };
+        rodape.Controls.Add(_statusFormulario);
+        rodape.Controls.Add(_botaoEnviar);
 
-        _rotuloSubcategoria = new Label();
-        AdicionarLinha(grade, _statusFormulario, null);
-        AdicionarLinha(grade, ComRotulo("Título", _titulo), null);
-        AdicionarLinha(grade, ComRotulo("Categoria", _categoria), ComRotulo("Subcategoria", _subcategoria, _rotuloSubcategoria));
-        AdicionarLinha(grade, ComRotulo("Prioridade", _prioridade), ComRotulo("Unidade", _unidade));
-        AdicionarLinha(grade, ComRotulo("Setor responsável (opcional)", _setor), null);
-        AdicionarLinha(grade, ComRotulo("O chamado é sobre", linhaAlvo, altura: 62), null);
-        AdicionarLinha(grade, _linhaOutro, null);
-        AdicionarLinha(grade, ComRotulo("Descrição", _descricao, altura: 156), null);
-        AdicionarLinha(grade, ComRotulo("Seu nome", _solicitanteNome), ComRotulo("E-mail", _solicitanteEmail));
-        AdicionarLinha(grade, ComRotulo("Telefone", _solicitanteTelefone), _dicaSolicitante);
-        AdicionarLinha(grade, _botaoEnviar, null);
-        _areaAbrir.Controls.Add(grade);
+        _pilha.Controls.AddRange(new Control[] { cartaoProblema, cartaoClasse, _cartaoAlvo, cartaoContato, rodape });
+        void AjustarLarguras()
+        {
+            var largura = Math.Max(420, _areaAbrir.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 4);
+            foreach (Control c in _pilha.Controls) c.Width = largura;
+        }
+        _areaAbrir.Resize += (s, e) => AjustarLarguras();
+        AjustarLarguras();
 
         // ---------------------------------------------------------- meus
         _areaMeus = new Panel { Dock = DockStyle.Fill, BackColor = Tema.Fundo, Visible = false };
@@ -223,13 +241,11 @@ public sealed class ChamadosPagina : Panel
         topoDetalhe.Controls.Add(botaoVoltar);
         _conversa = new RichTextBox { Dock = DockStyle.Fill, ReadOnly = true, BorderStyle = BorderStyle.None, BackColor = Tema.Superficie, ForeColor = Tema.Texto, Font = Tema.Fonte(9.5F) };
         var rodapeDetalhe = new Panel { Dock = DockStyle.Bottom, Height = 110, BackColor = Tema.Fundo, Padding = new Padding(0, 8, 0, 0) };
-        _resposta = Campo(multilinha: true);
-        _resposta.PlaceholderText = "Escreva uma resposta para o suporte...";
-        _resposta.Dock = DockStyle.Fill;
+        _resposta = new CaixaTexto(multilinha: true) { PlaceholderText = "Escreva uma resposta para o suporte...", Dock = DockStyle.Fill };
         _botaoResponder = new BotaoTema("Enviar", BotaoTema.Variante.Primario) { Width = 110, Dock = DockStyle.Right };
         _botaoResponder.Click += async (s, e) => await ResponderAsync();
         rodapeDetalhe.Controls.Add(_resposta);
-        rodapeDetalhe.Controls.Add(new Panel { Width = 8, Dock = DockStyle.Right, BackColor = Tema.Fundo });
+        rodapeDetalhe.Controls.Add(new Panel { Width = 10, Dock = DockStyle.Right, BackColor = Tema.Fundo });
         rodapeDetalhe.Controls.Add(_botaoResponder);
         _areaDetalhe.Controls.Add(_conversa);
         _areaDetalhe.Controls.Add(rodapeDetalhe);
@@ -247,13 +263,15 @@ public sealed class ChamadosPagina : Panel
         AtualizarSessao(null);
     }
 
-    /// <summary>Chamado quando a página é mostrada -- recarrega categorias/unidades (uma vez) e o estado do login.</summary>
+    /// <summary>Chamado quando a página é mostrada -- carrega categorias/unidades na primeira vez.</summary>
     public async Task AoMostrarAsync()
     {
+        MostrarArea(_areaAbrir);
         if (_formulario == null)
         {
             await CarregarFormularioAsync();
         }
+        _titulo.Caixa.Focus();
     }
 
     // ================================================================ sessão
@@ -265,22 +283,21 @@ public sealed class ChamadosPagina : Panel
         var logado = Cliente().Logado;
         if (logado && usuario != null)
         {
-            _rotuloSessao.Text = $"Conectado como {usuario.Nome} ({usuario.Login}).";
+            _rotuloSessao.Text = $"●  Conectado como {usuario.Nome} ({usuario.Login})";
             _rotuloSessao.ForeColor = Tema.Sucesso;
         }
         else if (logado)
         {
-            _rotuloSessao.Text = "Conectado ao RD Intranet.";
+            _rotuloSessao.Text = "●  Conectado ao RD Intranet";
             _rotuloSessao.ForeColor = Tema.Sucesso;
         }
         else
         {
-            _rotuloSessao.Text = "Sem login: você pode abrir chamados informando seu nome e contato. Entre para acompanhar os seus.";
+            _rotuloSessao.Text = "Sem login você abre chamados informando seu contato. Entre para acompanhar os seus.";
             _rotuloSessao.ForeColor = Tema.TextoSecundario;
         }
 
         _botaoSessao.Text = logado ? "Sair" : "Entrar com RD Intranet";
-        _abaMeus.Enabled = true;
 
         _dicaSolicitante.Text = logado
             ? "Em branco, usa seu nome e e-mail do RD Intranet."
@@ -338,8 +355,7 @@ public sealed class ChamadosPagina : Panel
     {
         if (_carregando) return;
         _carregando = true;
-        _statusFormulario.Text = "Carregando categorias...";
-        _statusFormulario.ForeColor = Tema.TextoSecundario;
+        Status("Carregando categorias...", Tema.TextoSecundario);
         _botaoEnviar.Enabled = false;
 
         try
@@ -347,28 +363,19 @@ public sealed class ChamadosPagina : Panel
             var resposta = await Cliente().FormularioAsync();
             if (!resposta.Ok || resposta.Dados == null)
             {
-                _statusFormulario.Text = resposta.Mensagem;
-                _statusFormulario.ForeColor = Tema.Perigo;
+                Status(resposta.Mensagem, Tema.Perigo);
                 AtualizarSessao(null);
                 return;
             }
 
             _formulario = resposta.Dados;
-            PreencherCombos(_formulario);
+            PreencherCampos(_formulario);
             AtualizarSessao(_formulario.Usuario);
 
-            if (_formulario.Usuario != null)
-            {
-                if (_solicitanteNome.Text == "") _solicitanteNome.PlaceholderText = _formulario.Usuario.Nome;
-                if (_solicitanteEmail.Text == "") _solicitanteEmail.PlaceholderText = _formulario.Usuario.Email;
-            }
-            else
-            {
-                _solicitanteNome.PlaceholderText = "Obrigatório";
-                _solicitanteEmail.PlaceholderText = "";
-            }
+            _solicitanteNome.PlaceholderText = _formulario.Usuario?.Nome ?? "Obrigatório";
+            _solicitanteEmail.PlaceholderText = _formulario.Usuario?.Email is { Length: > 0 } email ? email : "nome@empresa.com";
 
-            _statusFormulario.Text = "";
+            Status("", Tema.TextoSecundario);
             _botaoEnviar.Enabled = true;
         }
         finally
@@ -377,44 +384,53 @@ public sealed class ChamadosPagina : Panel
         }
     }
 
-    private void PreencherCombos(FormularioChamado f)
+    private void PreencherCampos(FormularioChamado f)
     {
-        var categoriaAtual = (_categoria.SelectedItem as CategoriaChamado)?.Id;
-        _categoria.Items.Clear();
-        _categoria.Items.Add("— Selecione —");
-        foreach (var c in f.Categorias) _categoria.Items.Add(c);
-        _categoria.SelectedIndex = Math.Max(0, f.Categorias.FindIndex(c => c.Id == categoriaAtual) + 1);
+        var categoriaAtual = (_categoria.ItemSelecionado as CategoriaChamado)?.Id;
+        _categoria.DefinirItens(f.Categorias, f.Categorias.FindIndex(c => c.Id == categoriaAtual));
 
-        _prioridade.Items.Clear();
-        foreach (var p in f.Prioridades) _prioridade.Items.Add(p);
-        _prioridade.SelectedIndex = Math.Max(0, f.Prioridades.FindIndex(p => p.Id == "media"));
+        var cores = new Dictionary<string, Color>
+        {
+            ["baixa"] = Tema.TextoSecundario,
+            ["media"] = Tema.Acento,
+            ["alta"] = Tema.Alerta,
+            ["urgente"] = Tema.Perigo
+        };
+        _prioridade.DefinirOpcoes(f.Prioridades.Select(p => (p.Id, p.Nome, cores.GetValueOrDefault(p.Id, Tema.Acento))), "media");
 
-        _unidade.Items.Clear();
-        foreach (var u in f.Unidades) _unidade.Items.Add(u);
         var unidadeMaquina = f.EsteAtivo?.UnidadeId.ToString();
-        _unidade.SelectedIndex = f.Unidades.Count == 0 ? -1 : Math.Max(0, f.Unidades.FindIndex(u => u.Id == unidadeMaquina));
+        _unidade.DefinirItens(f.Unidades, f.Unidades.Count == 0 ? -1 : Math.Max(0, f.Unidades.FindIndex(u => u.Id == unidadeMaquina)));
 
-        _setor.Items.Clear();
-        _setor.Items.Add(SetorPadrao);
-        foreach (var s in f.Setores) _setor.Items.Add(s);
-        _setor.SelectedIndex = 0;
+        _setor.DefinirItens(new object[] { SetorPadrao }.Concat(f.Setores), 0);
 
-        _alvoEste.Text = f.EsteAtivo != null ? $"Este computador ({f.EsteAtivo.Codigo})" : "Este computador";
+        _alvoEste.Descricao = f.EsteAtivo?.Codigo ?? "Esta máquina";
         AtualizarSubcategorias();
     }
 
     private void AtualizarSubcategorias()
     {
-        _subcategoria.Items.Clear();
-        _subcategoria.Items.Add(SemSubcategoria);
-        var categoria = _categoria.SelectedItem as CategoriaChamado;
+        var categoria = _categoria.ItemSelecionado as CategoriaChamado;
         var lista = categoria != null && _formulario?.Subcategorias.TryGetValue(categoria.Id.ToString(), out var subs) == true ? subs : new List<SubcategoriaChamado>();
-        foreach (var s in lista) _subcategoria.Items.Add(s);
-        _subcategoria.SelectedIndex = 0;
-        _subcategoria.Enabled = lista.Count > 0;
-
         var exige = categoria?.ExigeSubcategoria == true && lista.Count > 0;
-        _rotuloSubcategoria.Text = exige ? "Subcategoria (obrigatória)" : "Subcategoria (opcional)";
+
+        _subcategoria.Placeholder = categoria == null ? "Escolha a categoria antes" : lista.Count == 0 ? "Sem subcategorias" : exige ? "Escolha a subcategoria" : SemSubcategoria;
+        _subcategoria.DefinirItens(exige ? lista : new object[] { SemSubcategoria }.Concat(lista), exige ? -1 : (lista.Count > 0 ? 0 : -1));
+        _subcategoria.Enabled = lista.Count > 0;
+        _rotuloSubcategoria.Text = exige ? "Subcategoria  ·  obrigatória" : "Subcategoria  ·  opcional";
+    }
+
+    private void EscolherAlvo(CartaoEscolha escolhido)
+    {
+        foreach (var cartao in new[] { _alvoEste, _alvoOutro, _alvoNenhum })
+        {
+            cartao.Selecionado = cartao == escolhido;
+        }
+
+        // A linha da busca só aparece em "Outro equipamento".
+        var aberto = escolhido == _alvoOutro;
+        _gradeAlvo.RowStyles[1].Height = aberto ? LinhaCampo : 0;
+        _cartaoAlvo.Height = AlturaCartaoAlvoFechado + (aberto ? LinhaCampo : 0);
+        if (aberto) _buscaAtivo.Caixa.Focus();
     }
 
     private async Task BuscarAtivosAsync()
@@ -422,28 +438,24 @@ public sealed class ChamadosPagina : Panel
         var termo = _buscaAtivo.Text.Trim();
         if (termo.Length < 2)
         {
-            MostrarErroFormulario("Digite pelo menos 2 letras para buscar o equipamento.");
+            Status("Digite pelo menos 2 letras para buscar o equipamento.", Tema.Perigo);
             return;
         }
 
-        _resultadoAtivo.Items.Clear();
+        Status("Buscando equipamentos...", Tema.TextoSecundario);
         var resposta = await Cliente().BuscarAtivosAsync(termo);
         if (!resposta.Ok || resposta.Dados == null)
         {
-            MostrarErroFormulario(resposta.Mensagem);
+            Status(resposta.Mensagem, Tema.Perigo);
             return;
         }
 
-        foreach (var a in resposta.Dados.Ativos) _resultadoAtivo.Items.Add(a);
-        if (_resultadoAtivo.Items.Count > 0)
-        {
-            _resultadoAtivo.SelectedIndex = 0;
-            _statusFormulario.Text = "";
-        }
-        else
-        {
-            MostrarErroFormulario("Nenhum equipamento encontrado. Se não achar, escolha \"Nenhum equipamento\" e explique na descrição.");
-        }
+        _resultadoAtivo.DefinirItens(resposta.Dados.Ativos, resposta.Dados.Ativos.Count > 0 ? 0 : -1);
+        _resultadoAtivo.Placeholder = "Nenhum equipamento encontrado";
+        Status(resposta.Dados.Ativos.Count > 0
+            ? $"{resposta.Dados.Ativos.Count} equipamento(s) encontrado(s)."
+            : "Nenhum equipamento encontrado. Se não achar, escolha \"Nenhum equipamento\" e explique na descrição.",
+            resposta.Dados.Ativos.Count > 0 ? Tema.TextoSecundario : Tema.Alerta);
     }
 
     private async Task EnviarAsync()
@@ -455,24 +467,27 @@ public sealed class ChamadosPagina : Panel
         }
 
         var logado = Cliente().Logado;
-        var categoria = _categoria.SelectedItem as CategoriaChamado;
-        var subcategoria = _subcategoria.SelectedItem as SubcategoriaChamado;
-        var unidade = _unidade.SelectedItem as ItemSimples;
-        var ativoOutro = _resultadoAtivo.SelectedItem as AtivoResumo;
+        var categoria = _categoria.ItemSelecionado as CategoriaChamado;
+        var subcategoria = _subcategoria.ItemSelecionado as SubcategoriaChamado;
+        var unidade = _unidade.ItemSelecionado as ItemSimples;
+        var ativoOutro = _resultadoAtivo.ItemSelecionado as AtivoResumo;
 
-        string? erro = null;
-        if (_titulo.Text.Trim() == "") erro = "Informe um título para o chamado.";
-        else if (categoria == null) erro = "Escolha a categoria.";
-        else if (_subcategoria.Enabled && categoria.ExigeSubcategoria && subcategoria == null) erro = $"Escolha uma subcategoria para \"{categoria.Nome}\".";
-        else if (unidade == null) erro = "Escolha a unidade.";
-        else if (_alvoOutro.Checked && ativoOutro == null) erro = "Busque e escolha o equipamento, ou marque \"Nenhum equipamento\".";
-        else if (_descricao.Text.Trim() == "") erro = "Descreva o problema.";
-        else if (!logado && _solicitanteNome.Text.Trim() == "") erro = "Informe seu nome.";
-        else if (!logado && _solicitanteEmail.Text.Trim() == "" && _solicitanteTelefone.Text.Trim() == "") erro = "Informe e-mail ou telefone para o suporte te retornar.";
+        (string Mensagem, Control Campo)? erro = null;
+        if (_titulo.Text.Trim() == "") erro = ("Informe um título para o chamado.", _titulo);
+        else if (_descricao.Text.Trim() == "") erro = ("Descreva o problema.", _descricao);
+        else if (categoria == null) erro = ("Escolha a categoria.", _categoria);
+        else if (_subcategoria.Enabled && categoria.ExigeSubcategoria && subcategoria == null) erro = ($"Escolha uma subcategoria para \"{categoria.Nome}\".", _subcategoria);
+        else if (unidade == null) erro = ("Escolha a unidade.", _unidade);
+        else if (_alvoOutro.Selecionado && ativoOutro == null) erro = ("Busque e escolha o equipamento, ou escolha \"Nenhum equipamento\".", _buscaAtivo);
+        else if (!logado && _solicitanteNome.Text.Trim() == "") erro = ("Informe seu nome.", _solicitanteNome);
+        else if (!logado && _solicitanteEmail.Text.Trim() == "" && _solicitanteTelefone.Text.Trim() == "") erro = ("Informe e-mail ou telefone para o suporte te retornar.", _solicitanteEmail);
 
         if (erro != null)
         {
-            MostrarErroFormulario(erro);
+            Status(erro.Value.Mensagem, Tema.Perigo);
+            if (erro.Value.Campo is CampoArredondado campoComErro) campoComErro.MarcarErro();
+            _areaAbrir.ScrollControlIntoView(erro.Value.Campo);
+            if (erro.Value.Campo is CaixaTexto caixa) caixa.Caixa.Focus(); else erro.Value.Campo.Focus();
             return;
         }
 
@@ -482,11 +497,11 @@ public sealed class ChamadosPagina : Panel
             descricao = _descricao.Text.Trim(),
             categoria_id = categoria!.Id,
             subcategoria_id = subcategoria?.Id,
-            prioridade = (_prioridade.SelectedItem as ItemSimples)?.Id ?? "media",
+            prioridade = _prioridade.ChaveSelecionada ?? "media",
             unidade_id = int.Parse(unidade!.Id),
-            setor_id = _setor.SelectedItem is ItemSimples setor ? int.Parse(setor.Id) : (int?)null,
-            alvo = _alvoOutro.Checked ? "outro" : _alvoNenhum.Checked ? "nenhum" : "este",
-            ativo_id = _alvoOutro.Checked ? ativoOutro?.Id : null,
+            setor_id = _setor.ItemSelecionado is ItemSimples setor ? int.Parse(setor.Id) : (int?)null,
+            alvo = _alvoOutro.Selecionado ? "outro" : _alvoNenhum.Selecionado ? "nenhum" : "este",
+            ativo_id = _alvoOutro.Selecionado ? ativoOutro?.Id : null,
             solicitante_nome = _solicitanteNome.Text.Trim(),
             solicitante_email = _solicitanteEmail.Text.Trim(),
             solicitante_telefone = _solicitanteTelefone.Text.Trim(),
@@ -494,20 +509,19 @@ public sealed class ChamadosPagina : Panel
         };
 
         _botaoEnviar.Enabled = false;
-        _statusFormulario.Text = "Enviando...";
-        _statusFormulario.ForeColor = Tema.TextoSecundario;
+        Status("Enviando...", Tema.TextoSecundario);
         try
         {
             var resposta = await Cliente().AbrirAsync(dados);
             if (resposta.Dados?.SessaoExpirada == true)
             {
                 AtualizarSessao(null);
-                MostrarErroFormulario(resposta.Mensagem + " Seus dados continuam preenchidos.");
+                Status(resposta.Mensagem + " Seus dados continuam preenchidos.", Tema.Perigo);
                 return;
             }
             if (!resposta.Ok)
             {
-                MostrarErroFormulario(resposta.Mensagem);
+                Status(resposta.Mensagem, Tema.Perigo);
                 return;
             }
 
@@ -515,8 +529,7 @@ public sealed class ChamadosPagina : Panel
             LogAtividade.Registrar(NivelAtividade.Sucesso, "CHAMADOS", $"Chamado #{numero} aberto pelo agente.");
             _titulo.Text = "";
             _descricao.Text = "";
-            _statusFormulario.Text = $"Chamado #{numero} aberto.";
-            _statusFormulario.ForeColor = Tema.Sucesso;
+            Status($"✓  Chamado #{numero} aberto.", Tema.Sucesso);
 
             MessageBox.Show(FindForm(),
                 $"Chamado #{numero} aberto com sucesso!" + (logado
@@ -530,11 +543,10 @@ public sealed class ChamadosPagina : Panel
         }
     }
 
-    private void MostrarErroFormulario(string mensagem)
+    private void Status(string mensagem, Color cor)
     {
         _statusFormulario.Text = mensagem;
-        _statusFormulario.ForeColor = Tema.Perigo;
-        _areaAbrir.AutoScrollPosition = new Point(0, 0);
+        _statusFormulario.ForeColor = cor;
     }
 
     // ================================================================ meus chamados
@@ -677,71 +689,63 @@ public sealed class ChamadosPagina : Panel
         FlatStyle = FlatStyle.Flat,
         FlatAppearance = { BorderSize = 0 },
         Font = Tema.FonteSemibold(9.5F),
-        Size = new Size(150, 34),
+        Size = new Size(150, 36),
         Cursor = Cursors.Hand,
         Margin = new Padding(0, 0, 6, 0)
     };
 
-    private static void AdicionarLinha(TableLayoutPanel grade, Control esquerda, Control? direita)
+    private static CartaoSecao Cartao(CabecalhoSecao cabecalho, Control conteudo, int altura)
+    {
+        var cartao = new CartaoSecao { Height = altura };
+        conteudo.Dock = DockStyle.Fill;
+        cartao.Controls.Add(conteudo);
+        cartao.Controls.Add(cabecalho);
+        return cartao;
+    }
+
+    private static TableLayoutPanel Grade(int colunas)
+    {
+        var grade = new TableLayoutPanel { ColumnCount = colunas, BackColor = Tema.Superficie, Margin = Padding.Empty, Padding = Padding.Empty };
+        for (var i = 0; i < colunas; i++) grade.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F / colunas));
+        return grade;
+    }
+
+    private static void AdicionarLinha(TableLayoutPanel grade, int altura, Control esquerda, Control? direita = null)
     {
         var linha = grade.RowCount;
         grade.RowCount = linha + 1;
-        grade.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        grade.RowStyles.Add(new RowStyle(SizeType.Absolute, altura));
+        var colunas = grade.ColumnCount;
+        esquerda.Margin = new Padding(0, 0, direita != null ? 8 : 0, 0);
         grade.Controls.Add(esquerda, 0, linha);
         if (direita == null)
         {
-            grade.SetColumnSpan(esquerda, 2);
+            if (colunas > 1) grade.SetColumnSpan(esquerda, colunas);
         }
         else
         {
+            direita.Margin = new Padding(8, 0, 0, 0);
             grade.Controls.Add(direita, 1, linha);
         }
     }
 
-    private static Panel ComRotulo(string texto, Control campo, Label? rotulo = null, int altura = 58)
+    private static Panel Campo(string rotulo, Control campo) => CampoComRotulo(new RotuloCampo(rotulo), campo);
+
+    private static Panel CampoComRotulo(RotuloCampo rotulo, Control campo)
     {
-        var painel = new Panel { Dock = DockStyle.Fill, Height = altura, BackColor = Tema.Fundo, Padding = new Padding(3, 0, 3, 4), Margin = Padding.Empty };
-        campo.Dock = DockStyle.Fill;
+        var painel = new Panel { Dock = DockStyle.Fill, BackColor = Tema.Superficie };
+        campo.Dock = campo is CaixaTexto { Height: > 60 } ? DockStyle.Fill : DockStyle.Top;
         painel.Controls.Add(campo);
-        rotulo ??= new Label();
-        rotulo.Text = texto;
-        rotulo.Dock = DockStyle.Top;
-        rotulo.Height = 20;
-        rotulo.ForeColor = Tema.TextoSecundario;
-        rotulo.Font = Tema.Fonte(8.5F);
         painel.Controls.Add(rotulo);
         return painel;
     }
-
-    private static TextBox Campo(bool multilinha = false)
-    {
-        var campo = new TextBox { Multiline = multilinha, ScrollBars = multilinha ? ScrollBars.Vertical : ScrollBars.None, AcceptsReturn = multilinha };
-        Tema.EstilizarCampo(campo);
-        return campo;
-    }
-
-    private static ComboBox Combo()
-    {
-        var combo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, IntegralHeight = false, MaxDropDownItems = 14 };
-        Tema.EstilizarCampo(combo);
-        return combo;
-    }
-
-    private static RadioButton Radio(string texto) => new()
-    {
-        Text = texto,
-        AutoSize = true,
-        ForeColor = Tema.Texto,
-        BackColor = Tema.Fundo,
-        Margin = new Padding(3, 6, 18, 0)
-    };
 }
 
 /// <summary>Janela de login do RD Intranet dentro do agente (usuário e senha; a senha não é guardada).</summary>
 public sealed class LoginChamadosForm : Form
 {
-    private readonly TextBox _login;
-    private readonly TextBox _senha;
+    private readonly CaixaTexto _login;
+    private readonly CaixaTexto _senha;
     private readonly Label _erro;
     private readonly BotaoTema _entrar;
 
@@ -758,28 +762,21 @@ public sealed class LoginChamadosForm : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(380, 262);
-        BackColor = Tema.Fundo;
+        ClientSize = new Size(400, 300);
+        BackColor = Tema.Superficie;
         ForeColor = Tema.Texto;
         Font = Tema.Fonte(9F);
         Tema.BarraTituloEscura(this);
 
-        var explicacao = new Label
-        {
-            Text = "Use o mesmo usuário e senha do portal RD Intranet.",
-            Location = new Point(20, 16),
-            Size = new Size(340, 22),
-            ForeColor = Tema.TextoSecundario
-        };
-        var rotuloLogin = new Label { Text = "Usuário", Location = new Point(20, 48), Size = new Size(340, 18), ForeColor = Tema.TextoSecundario };
-        _login = new TextBox { Location = new Point(20, 68), Width = 340 };
-        Tema.EstilizarCampo(_login);
-        var rotuloSenha = new Label { Text = "Senha", Location = new Point(20, 104), Size = new Size(340, 18), ForeColor = Tema.TextoSecundario };
-        _senha = new TextBox { Location = new Point(20, 124), Width = 340, UseSystemPasswordChar = true };
-        Tema.EstilizarCampo(_senha);
-        _erro = new Label { Location = new Point(20, 160), Size = new Size(340, 40), ForeColor = Tema.Perigo };
+        var cabecalho = new CabecalhoSecao("RD", "Entrar no RD Intranet", "Mesmo usuário e senha do portal.") { Dock = DockStyle.None, Location = new Point(24, 20), Width = 352 };
+        var rotuloLogin = new RotuloCampo("Usuário") { Dock = DockStyle.None, Location = new Point(24, 80), Width = 352 };
+        _login = new CaixaTexto(icone: Icones.Pessoa) { Location = new Point(24, 102), Width = 352 };
+        var rotuloSenha = new RotuloCampo("Senha") { Dock = DockStyle.None, Location = new Point(24, 152), Width = 352 };
+        _senha = new CaixaTexto { Location = new Point(24, 174), Width = 352 };
+        _senha.Caixa.UseSystemPasswordChar = true;
+        _erro = new Label { Location = new Point(24, 220), Size = new Size(352, 22), ForeColor = Tema.Perigo, BackColor = Tema.Superficie };
 
-        _entrar = new BotaoTema("Entrar", BotaoTema.Variante.Primario) { Location = new Point(250, 208), Width = 110 };
+        _entrar = new BotaoTema("Entrar", BotaoTema.Variante.Primario) { Location = new Point(256, 248), Width = 120 };
         _entrar.Click += (s, e) =>
         {
             if (Login == "" || Senha == "")
@@ -789,19 +786,20 @@ public sealed class LoginChamadosForm : Form
             }
             DialogResult = DialogResult.OK;
         };
-        var cancelar = new BotaoTema("Cancelar", BotaoTema.Variante.Secundario) { Location = new Point(130, 208), Width = 110 };
+        var cancelar = new BotaoTema("Cancelar", BotaoTema.Variante.Fantasma) { Location = new Point(146, 248), Width = 100 };
         cancelar.Click += (s, e) => DialogResult = DialogResult.Cancel;
 
         AcceptButton = _entrar;
         CancelButton = cancelar;
-        Controls.AddRange(new Control[] { explicacao, rotuloLogin, _login, rotuloSenha, _senha, _erro, _entrar, cancelar });
+        Controls.AddRange(new Control[] { cabecalho, rotuloLogin, _login, rotuloSenha, _senha, _erro, _entrar, cancelar });
+        Shown += (s, e) => _login.Caixa.Focus();
     }
 
     public void MostrarErro(string mensagem)
     {
         _erro.Text = mensagem;
         _senha.Text = "";
-        _senha.Focus();
+        _senha.Caixa.Focus();
     }
 
     public void Ocupado(bool ocupado)

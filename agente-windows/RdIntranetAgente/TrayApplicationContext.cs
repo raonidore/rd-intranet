@@ -71,6 +71,7 @@ public class TrayApplicationContext : ApplicationContext
         itemPainel.Click += (s, e) => _janelaPrincipal?.Abrir();
         menu.Items.Add(itemPainel);
         menu.Items.Add("Pedir ajuda ao suporte...", null, async (s, e) => await PedidoAjuda.AbrirAsync(null, _config));
+        menu.Items.Add("Abrir chamado...", null, async (s, e) => await _janelaPrincipal.AbrirChamadosAsync());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Coletar agora", null, async (s, e) => await ColetarEEnviarAsync(manual: true));
         menu.Items.Add("Atualizar agora", null, async (s, e) => await AtualizarAgoraManualAsync());

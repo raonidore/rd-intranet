@@ -25,6 +25,7 @@ public sealed class MainForm : Form
     private readonly Panel _paginaNetwork;
     private readonly Panel _paginaConfig;
     private readonly ChamadosPagina _paginaChamados;
+    private readonly Button _botaoChamados;
     private readonly Panel _hostConfig;
     private readonly Button _botaoConfig;
     private ConfigForm? _formConfig;
@@ -102,17 +103,13 @@ public sealed class MainForm : Form
         _navegacao.Controls.Add(marca);
 
         var botaoVisao = CriarBotaoNavegacao("Visão geral", 100);
-        var botaoChamados = CriarBotaoNavegacao("Chamados", 145);
+        _botaoChamados = CriarBotaoNavegacao("Chamados", 145);
         var botaoSeguranca = CriarBotaoNavegacao("Segurança", 190);
         var botaoAtividade = CriarBotaoNavegacao("Atividade", 235);
         _botaoConfig = CriarBotaoNavegacao("Configurações", 280);
         var botaoNetwork = CriarBotaoNavegacao("Network", 325);
         botaoVisao.Click += (s, e) => MostrarPagina(_paginaVisao!, botaoVisao);
-        botaoChamados.Click += async (s, e) =>
-        {
-            MostrarPagina(_paginaChamados!, botaoChamados);
-            await _paginaChamados!.AoMostrarAsync();
-        };
+        _botaoChamados.Click += async (s, e) => await AbrirChamadosAsync();
         botaoSeguranca.Click += (s, e) => MostrarPagina(_paginaSeguranca!, botaoSeguranca);
         botaoAtividade.Click += (s, e) => MostrarPagina(_paginaAtividade!, botaoAtividade);
         _botaoConfig.Click += (s, e) => AbrirConfiguracoes();
@@ -121,7 +118,7 @@ public sealed class MainForm : Form
             MostrarPagina(_paginaNetwork!, botaoNetwork);
             await AtualizarAdaptadoresRedeAsync();
         };
-        _navegacao.Controls.AddRange(new Control[] { botaoVisao, botaoChamados, botaoSeguranca, botaoAtividade, _botaoConfig, botaoNetwork });
+        _navegacao.Controls.AddRange(new Control[] { botaoVisao, _botaoChamados, botaoSeguranca, botaoAtividade, _botaoConfig, botaoNetwork });
 
         var versao = new Label
         {
@@ -178,6 +175,7 @@ public sealed class MainForm : Form
             AutoSizeMode = AutoSizeMode.GrowAndShrink
         };
         acoes.Controls.Add(CriarBotaoAcao("Pedir ajuda", BotaoTema.Variante.Primario, async () => await PedidoAjuda.AbrirAsync(this, _configAtual())));
+        acoes.Controls.Add(CriarBotaoAcao("Abrir chamado", BotaoTema.Variante.Primario, async () => await AbrirChamadosAsync()));
         acoes.Controls.Add(CriarBotaoAcao("Coletar agora", BotaoTema.Variante.Secundario, async () => await _coletar()));
         acoes.Controls.Add(CriarBotaoAcao("Atualizar agora", BotaoTema.Variante.Secundario, async () => await _atualizar()));
         acoes.Controls.Add(CriarBotaoAcao("Configurações", BotaoTema.Variante.Secundario, () => AbrirConfiguracoes()));
@@ -426,6 +424,14 @@ public sealed class MainForm : Form
     }
 
     private static Panel Espaco(int altura) => new() { Height = altura, BackColor = Tema.Fundo };
+
+    /// <summary>Mostra o painel já na página Chamados, no formulário de abertura (menu da bandeja e botão da Visão geral).</summary>
+    public async Task AbrirChamadosAsync()
+    {
+        Abrir();
+        MostrarPagina(_paginaChamados, _botaoChamados);
+        await _paginaChamados.AoMostrarAsync();
+    }
 
     /// <summary>Abre a área Configurações com os valores atuais (recria a tela a cada abertura).</summary>
     public void AbrirConfiguracoes()
