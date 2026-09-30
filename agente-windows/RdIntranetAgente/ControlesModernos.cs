@@ -16,16 +16,22 @@ namespace RdIntranetAgente;
 public static class Icones
 {
     // Segoe Fluent Icons (Windows 11) e Segoe MDL2 Assets (Windows 10) usam os mesmos códigos.
-    public const string Computador = "";
-    public const string Monitor = "";
-    public const string Aplicativos = "";
-    public const string Busca = "";
-    public const string Seta = "";
-    public const string Check = "";
-    public const string Enviar = "";
-    public const string Pessoa = "";
-    public const string Etiqueta = "";
-    public const string Editar = "";
+    public const string Computador = "\uE7F8";
+    public const string Monitor = "\uE7F4";
+    public const string Aplicativos = "\uE71D";
+    public const string Busca = "\uE721";
+    public const string Seta = "\uE70D";
+    public const string Check = "\uE73E";
+    public const string Enviar = "\uE724";
+    public const string Pessoa = "\uE77B";
+    public const string Etiqueta = "\uE8EC";
+    public const string Editar = "\uE70F";
+    public const string Globo = "\uE774";
+    public const string Chave = "\uE8D7";
+    public const string Rede = "\uE968";
+    public const string Velocidade = "\uEC4A";
+    public const string Rota = "\uE81D";
+    public const string Atualizar = "\uE72C";
 
     private static readonly string Familia = new System.Drawing.Text.InstalledFontCollection().Families
         .Select(f => f.Name)
@@ -706,6 +712,108 @@ public class SeletorSegmentado : Control
             }
             TextRenderer.DrawText(g, texto, Font, new Point(inicio + 14, r.Y + (r.Height - tamanhoTexto.Height) / 2),
                 i == _indice ? Tema.Texto : Tema.TextoSecundario);
+        }
+    }
+}
+
+/// <summary>Campo numérico arredondado: digita o número ou usa − / + à direita; unidade (min, s) ao lado do valor.</summary>
+public class CampoNumerico : CampoArredondado
+{
+    private readonly TextBox _caixa;
+    private readonly string _unidade;
+    private readonly int _minimo;
+    private readonly int _maximo;
+    private int _hoverBotao; // -1 menos, 1 mais, 0 nenhum
+
+    public CampoNumerico(int minimo, int maximo, int valor, string unidade)
+    {
+        _minimo = minimo;
+        _maximo = maximo;
+        _unidade = unidade;
+        _caixa = new TextBox
+        {
+            BorderStyle = BorderStyle.None,
+            BackColor = Color.FromArgb(14, 18, 24),
+            ForeColor = Tema.Texto,
+            Font = Tema.FonteSemibold(10.5F),
+            Text = Math.Clamp(valor, minimo, maximo).ToString()
+        };
+        _caixa.KeyPress += (s, e) => { if (!char.IsControl(e.KeyChar) && !char.IsDigit(e.KeyChar)) e.Handled = true; };
+        _caixa.KeyDown += (s, e) =>
+        {
+            if (e.KeyCode == Keys.Up) { Somar(1); e.Handled = true; }
+            else if (e.KeyCode == Keys.Down) { Somar(-1); e.Handled = true; }
+        };
+        _caixa.GotFocus += (s, e) => { Focado = true; Invalidate(); };
+        _caixa.LostFocus += (s, e) => { Focado = false; Valor = Valor; Invalidate(); };
+        _caixa.TextChanged += (s, e) => { LimparErro(); Invalidate(); };
+        _caixa.MouseWheel += (s, e) => Somar(Math.Sign(e.Delta));
+        Controls.Add(_caixa);
+        Cursor = Cursors.Default;
+    }
+
+    /// <summary>Valor atual, sempre dentro do mínimo/máximo.</summary>
+    public int Valor
+    {
+        get => int.TryParse(_caixa.Text, out var v) ? Math.Clamp(v, _minimo, _maximo) : _minimo;
+        set => _caixa.Text = Math.Clamp(value, _minimo, _maximo).ToString();
+    }
+
+    private void Somar(int passo) => Valor += passo;
+
+    private Rectangle BotaoMenos => new(Width - 76, 6, 32, Height - 13);
+    private Rectangle BotaoMais => new(Width - 40, 6, 32, Height - 13);
+
+    protected override void OnLayout(LayoutEventArgs levent)
+    {
+        base.OnLayout(levent);
+        if (_caixa is null) return;
+        var altura = _caixa.PreferredHeight;
+        var largura = Math.Max(24, TextRenderer.MeasureText(_maximo.ToString(), _caixa.Font).Width + 4);
+        _caixa.Bounds = new Rectangle(14, (Height - altura) / 2, largura, altura);
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        var novo = BotaoMenos.Contains(e.Location) ? -1 : BotaoMais.Contains(e.Location) ? 1 : 0;
+        Cursor = novo != 0 ? Cursors.Hand : Cursors.Default;
+        if (novo != _hoverBotao) { _hoverBotao = novo; Invalidate(); }
+    }
+
+    protected override void OnMouseLeave(EventArgs e)
+    {
+        base.OnMouseLeave(e);
+        _hoverBotao = 0;
+        Invalidate();
+    }
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        base.OnMouseDown(e);
+        if (BotaoMenos.Contains(e.Location)) Somar(-1);
+        else if (BotaoMais.Contains(e.Location)) Somar(1);
+        _caixa.Focus();
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        DesenharMoldura(e.Graphics);
+        var g = e.Graphics;
+        using (var fonteUnidade = Tema.Fonte(9F))
+        {
+            TextRenderer.DrawText(g, _unidade, fonteUnidade, new Rectangle(_caixa.Right + 4, 0, 60, Height), Tema.TextoSecundario,
+                TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+        }
+
+        foreach (var (r, texto, hover) in new[] { (BotaoMenos, "−", _hoverBotao == -1), (BotaoMais, "+", _hoverBotao == 1) })
+        {
+            using var caminho = Tema.Arredondado(r, 6);
+            using var fundo = new SolidBrush(hover ? Color.FromArgb(50, Tema.Acento) : Tema.SuperficieElevada);
+            g.FillPath(fundo, caminho);
+            using var fonte = Tema.FonteSemibold(11F);
+            TextRenderer.DrawText(g, texto, fonte, r, hover ? Tema.Acento : Tema.TextoSecundario,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         }
     }
 }

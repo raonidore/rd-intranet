@@ -9,21 +9,27 @@ namespace RdIntranetAgente;
 /// <summary>
 /// Formulário de configuração construído inteiramente em código (sem
 /// Designer/.resx) -- evita problemas de serialização de layout e é mais
-/// fácil de revisar/editar como texto puro.
+/// fácil de revisar/editar como texto puro. Usa os controles de
+/// ControlesModernos.cs, em seções numeradas como a página Chamados.
+/// Vai embutido no painel (MainForm, área "Configurações") ou numa janela
+/// própria na primeira configuração (TrayApplicationContext).
 /// </summary>
 public class ConfigForm : Form
 {
-    private readonly TextBox _campoServidor;
-    private readonly TextBox _campoChave;
+    private readonly CaixaTexto _campoServidor;
+    private readonly CaixaTexto _campoChave;
     private readonly BotaoTema _botaoVerificar;
     private readonly Label _rotuloStatusVerificacao;
-    private readonly ComboBox _campoUnidade;
-    private readonly ComboBox _campoSetor;
-    private readonly ComboBox _campoLocalizacao;
-    private readonly NumericUpDown _campoIntervalo;
-    private readonly NumericUpDown _campoHeartbeat;
-    private readonly ComboBox _campoImpressora;
-    private readonly TextBox _campoMachineGuidOverride;
+    private readonly SeletorModerno _campoUnidade;
+    private readonly SeletorModerno _campoSetor;
+    private readonly SeletorModerno _campoLocalizacao;
+    private readonly CampoNumerico _campoIntervalo;
+    private readonly CampoNumerico _campoHeartbeat;
+    private readonly SeletorModerno _campoImpressora;
+    private readonly CaixaTexto _campoMachineGuidOverride;
+    private readonly Label _statusSalvar;
+    private readonly Panel _rolagem;
+    private readonly FlowLayoutPanel _pilha;
 
     // Capturado ANTES de qualquer edição -- só exige escolher a unidade
     // quando o agente está sendo configurado pela primeira vez nesta
@@ -35,6 +41,9 @@ public class ConfigForm : Form
     private readonly int? _unidadeIdAnterior;
     private readonly int? _setorIdAnterior;
     private readonly int? _localizacaoIdAnterior;
+
+    private const string SemImpressora = "Nenhuma";
+    private const int LinhaCampo = 74;
 
     public Config ConfigResultante { get; private set; }
 
@@ -53,9 +62,10 @@ public class ConfigForm : Form
         _setorIdAnterior = configAtual.SetorId;
         _localizacaoIdAnterior = configAtual.LocalizacaoId;
 
+        AutoScaleDimensions = new SizeF(96F, 96F);
+        AutoScaleMode = AutoScaleMode.Dpi;
         Text = "RD Intranet - Configuração do Agente";
-        Width = 480;
-        Height = 570 + 5 * EspacoSecao;
+        ClientSize = new Size(680, 720);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -65,304 +75,271 @@ public class ConfigForm : Form
         Font = Tema.Fonte(9F);
         Tema.BarraTituloEscura(this);
 
-        // Cada seção começa no Top original do seu primeiro campo; o laço
-        // depois do AddRange abre EspacoSecao px pra cada título, empurrando
-        // tudo que vem abaixo (antes os títulos ficavam por cima dos campos).
-        var secaoConexao = CriarTituloSecao("CONEXÃO", 15);
-        var secaoLocalizacao = CriarTituloSecao("LOCALIZAÇÃO DO ATIVO", 163);
-        var secaoColeta = CriarTituloSecao("COLETA", 280);
-        var secaoEtiquetas = CriarTituloSecao("ETIQUETAS", 335);
-        var secaoAvancado = CriarTituloSecao("AVANÇADO", 408);
-        var secoes = new[] { secaoConexao, secaoLocalizacao, secaoColeta, secaoEtiquetas, secaoAvancado };
-
-        var rotuloServidor = new Label { Text = "Endereço do servidor (ex: https://rd.intranet)", Left = 15, Top = 15, Width = 420 };
-        _campoServidor = new TextBox { Left = 15, Top = 38, Width = 420, Text = configAtual.ServerUrl };
-
-        var rotuloChave = new Label { Text = "Chave de API do agente (Ativos > Dashboard, no RD Intranet)", Left = 15, Top = 70, Width = 420 };
-        _campoChave = new TextBox { Left = 15, Top = 93, Width = 420, Text = configAtual.ApiKey };
-
-        _botaoVerificar = new BotaoTema("Verificar unidades")
+        // ---------------------------------------------------------- 1. conexão
+        _campoServidor = new CaixaTexto(icone: Icones.Globo) { Text = configAtual.ServerUrl, PlaceholderText = "https://rd.intranet" };
+        _campoChave = new CaixaTexto(icone: Icones.Chave) { Text = configAtual.ApiKey, PlaceholderText = "Ativos > Dashboard, no RD Intranet" };
+        _botaoVerificar = new BotaoTema("Verificar conexão", BotaoTema.Variante.Secundario) { Width = 180, Dock = DockStyle.Left };
+        _rotuloStatusVerificacao = new Label
         {
-            Left = 15,
-            Top = 125,
-            Width = 190,
-            Height = 32
+            Dock = DockStyle.Fill,
+            ForeColor = Tema.TextoSecundario,
+            BackColor = Tema.Superficie,
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoEllipsis = true,
+            Padding = new Padding(12, 0, 0, 0),
+            Text = "Confere a URL e a chave e carrega as unidades."
         };
-        _rotuloStatusVerificacao = new Label { Left = 215, Top = 130, Width = 220, Height = 32, ForeColor = Color.Gray, Font = new Font("Segoe UI", 8F) };
+        var linhaVerificar = new Panel { Dock = DockStyle.Fill, BackColor = Tema.Superficie, Padding = new Padding(0, 2, 0, 10) };
+        linhaVerificar.Controls.Add(_rotuloStatusVerificacao);
+        linhaVerificar.Controls.Add(_botaoVerificar);
 
-        var rotuloUnidade = new Label { Text = "Unidade (obrigatório na primeira configuração)", Left = 15, Top = 163, Width = 420 };
-        _campoUnidade = new ComboBox { Left = 15, Top = 186, Width = 420, DropDownStyle = ComboBoxStyle.DropDownList };
-        _campoUnidade.Items.Add("-- selecione depois de verificar --");
-        _campoUnidade.SelectedIndex = 0;
+        var gradeConexao = Grade(1);
+        AdicionarLinha(gradeConexao, LinhaCampo, Campo("Endereço do servidor", _campoServidor));
+        AdicionarLinha(gradeConexao, LinhaCampo, Campo("Chave de API do agente", _campoChave));
+        AdicionarLinha(gradeConexao, 48, linhaVerificar);
+        var cartaoConexao = Cartao(new CabecalhoSecao("1", "Conexão", "Onde fica o RD Intranet e a chave que autoriza este agente."), gradeConexao, 30 + 50 + LinhaCampo * 2 + 48);
 
-        var rotuloSetor = new Label { Text = "Setor (opcional)", Left = 15, Top = 218, Width = 200 };
-        _campoSetor = new ComboBox { Left = 15, Top = 241, Width = 200, DropDownStyle = ComboBoxStyle.DropDownList };
-        _campoSetor.Items.Add("(nenhum)");
-        _campoSetor.SelectedIndex = 0;
+        // ---------------------------------------------------------- 2. localização
+        _campoUnidade = new SeletorModerno { Placeholder = "Verifique a conexão para listar" };
+        _campoSetor = new SeletorModerno { Placeholder = "Nenhum" };
+        _campoLocalizacao = new SeletorModerno { Placeholder = "Nenhuma" };
+        var gradeLocal = Grade(2);
+        AdicionarLinha(gradeLocal, LinhaCampo, Campo(_eraConfiguradoAoAbrir ? "Unidade" : "Unidade  ·  obrigatória", _campoUnidade));
+        AdicionarLinha(gradeLocal, LinhaCampo, Campo("Setor  ·  opcional", _campoSetor), Campo("Localização  ·  opcional", _campoLocalizacao));
+        var cartaoLocal = Cartao(new CabecalhoSecao("2", "Localização do ativo", "Em que unidade esta máquina fica no inventário."), gradeLocal, 30 + 50 + LinhaCampo * 2);
 
-        var rotuloLocalizacao = new Label { Text = "Localização (opcional)", Left = 235, Top = 218, Width = 200 };
-        _campoLocalizacao = new ComboBox { Left = 235, Top = 241, Width = 200, DropDownStyle = ComboBoxStyle.DropDownList };
-        _campoLocalizacao.Items.Add("(nenhuma)");
-        _campoLocalizacao.SelectedIndex = 0;
+        // ---------------------------------------------------------- 3. coleta
+        _campoIntervalo = new CampoNumerico(5, 240, configAtual.IntervaloMinutos <= 0 ? 15 : configAtual.IntervaloMinutos, "min");
+        _campoHeartbeat = new CampoNumerico(1, 60, configAtual.HeartbeatSegundos <= 0 ? 1 : configAtual.HeartbeatSegundos, "s");
+        var gradeColeta = Grade(2);
+        AdicionarLinha(gradeColeta, LinhaCampo, Campo("Coleta completa a cada", _campoIntervalo), Campo("Heartbeat (\"estou ligado\") a cada", _campoHeartbeat));
+        var cartaoColeta = Cartao(new CabecalhoSecao("3", "Coleta", "Com que frequência o inventário e o sinal de vida são enviados."), gradeColeta, 30 + 50 + LinhaCampo);
 
-        var rotuloIntervalo = new Label { Text = "Intervalo entre coletas completas (minutos)", Left = 15, Top = 280, Width = 220 };
-        _campoIntervalo = new NumericUpDown
-        {
-            Left = 15,
-            Top = 303,
-            Width = 80,
-            Minimum = 5,
-            Maximum = 240,
-            Value = Math.Clamp(configAtual.IntervaloMinutos <= 0 ? 15 : configAtual.IntervaloMinutos, 5, 240)
-        };
-
-        var rotuloHeartbeat = new Label { Text = "Heartbeat -- \"estou ligado\" (segundos)", Left = 245, Top = 280, Width = 190 };
-        _campoHeartbeat = new NumericUpDown
-        {
-            Left = 245,
-            Top = 303,
-            Width = 80,
-            Minimum = 1,
-            Maximum = 60,
-            Value = Math.Clamp(configAtual.HeartbeatSegundos <= 0 ? 1 : configAtual.HeartbeatSegundos, 1, 60)
-        };
-
-        var rotuloImpressora = new Label { Text = "Impressora de etiquetas (Zebra) -- opcional, só se for imprimir daqui", Left = 15, Top = 335, Width = 420 };
-        _campoImpressora = new ComboBox { Left = 15, Top = 358, Width = 420, DropDownStyle = ComboBoxStyle.DropDownList };
-        _campoImpressora.Items.Add("(nenhuma)");
+        // ---------------------------------------------------------- 4. etiquetas
+        _campoImpressora = new SeletorModerno { Placeholder = SemImpressora };
+        var impressoras = new List<object> { SemImpressora };
         try
         {
             foreach (string nome in PrinterSettings.InstalledPrinters)
             {
-                _campoImpressora.Items.Add(nome);
+                impressoras.Add(nome);
             }
         }
         catch
         {
-            // sem impressoras instaladas ou erro ao enumerar -- so fica com "(nenhuma)"
+            // sem impressoras instaladas ou erro ao enumerar -- só fica com "Nenhuma"
         }
+        _campoImpressora.DefinirItens(impressoras, Math.Max(0, impressoras.IndexOf(configAtual.ImpressoraEtiqueta)));
+        var gradeEtiquetas = Grade(1);
+        AdicionarLinha(gradeEtiquetas, LinhaCampo, Campo("Impressora de etiquetas (Zebra)  ·  opcional", _campoImpressora));
+        var cartaoEtiquetas = Cartao(new CabecalhoSecao("4", "Etiquetas", "Só se esta máquina for imprimir etiquetas de patrimônio."), gradeEtiquetas, 30 + 50 + LinhaCampo);
 
-        var indiceAtual = _campoImpressora.Items.IndexOf(configAtual.ImpressoraEtiqueta);
-        _campoImpressora.SelectedIndex = indiceAtual >= 0 ? indiceAtual : 0;
+        // ---------------------------------------------------------- 5. avançado
+        _campoMachineGuidOverride = new CaixaTexto(icone: Icones.Computador) { Text = configAtual.MachineGuidOverride, PlaceholderText = "Deixe em branco no dia a dia" };
+        var gradeAvancado = Grade(1);
+        AdicionarLinha(gradeAvancado, LinhaCampo, Campo("Identificador da máquina", _campoMachineGuidOverride));
+        var cartaoAvancado = Cartao(new CabecalhoSecao("5", "Avançado", "Só ao restaurar uma máquina reformatada, pra ela continuar sendo o mesmo ativo."), gradeAvancado, 30 + 50 + LinhaCampo);
 
-        var rotuloOverride = new Label
-        {
-            Text = "Identificador da máquina (avançado -- só preencha ao restaurar uma máquina reformatada; deixe em branco no dia a dia)",
-            Left = 15,
-            Top = 408,
-            Width = 420,
-            Height = 30
-        };
-        _campoMachineGuidOverride = new TextBox { Left = 15, Top = 440, Width = 420, Text = configAtual.MachineGuidOverride };
-
-        var rotuloVersao = new Label
-        {
-            Text = "VERSÃO  " + ObterVersao(),
-            Left = 15,
-            Top = 488,
-            Width = 115,
-            Height = 24,
-            ForeColor = Tema.TextoSecundario,
-            Font = Tema.FonteSemibold(8F),
-            TextAlign = ContentAlignment.MiddleLeft
-        };
-
+        // ---------------------------------------------------------- rodapé
         var (textoServico, corServico) = StatusServico();
-        var rotuloServico = new Label
+        var info = new Label
         {
-            Text = textoServico,
-            Left = 150,
-            Top = 488,
-            Width = 125,
-            Height = 24,
+            Dock = DockStyle.Fill,
+            Text = $"Versão {ObterVersao()}   ·   {textoServico}",
             ForeColor = corServico,
-            Font = Tema.FonteSemibold(8F),
-            TextAlign = ContentAlignment.MiddleLeft
+            TextAlign = ContentAlignment.MiddleLeft,
+            Font = Tema.FonteSemibold(8.5F)
         };
-
-        var botaoSalvar = new BotaoTema("Salvar", BotaoTema.Variante.Primario) { Left = 285, Top = 485, Width = 80, DialogResult = DialogResult.OK };
-        var botaoCancelar = new BotaoTema("Cancelar") { Left = 375, Top = 485, Width = 80, DialogResult = DialogResult.Cancel };
+        _statusSalvar = new Label { Dock = DockStyle.Top, Height = 22, ForeColor = Tema.Perigo, TextAlign = ContentAlignment.MiddleRight, AutoEllipsis = true };
+        var botaoSalvar = new BotaoTema("Salvar", BotaoTema.Variante.Primario) { Width = 150, Dock = DockStyle.Right, Font = Tema.FonteSemibold(10.5F) };
+        var botaoCancelar = new BotaoTema("Cancelar", BotaoTema.Variante.Fantasma) { Width = 110, Dock = DockStyle.Right };
+        var linhaBotoes = new Panel { Dock = DockStyle.Fill, BackColor = Tema.Fundo };
+        linhaBotoes.Controls.Add(info);
+        linhaBotoes.Controls.Add(botaoCancelar);
+        linhaBotoes.Controls.Add(new Panel { Width = 8, Dock = DockStyle.Right, BackColor = Tema.Fundo });
+        linhaBotoes.Controls.Add(botaoSalvar);
+        var rodape = new Panel { Height = 72, BackColor = Tema.Fundo, Margin = new Padding(0, 0, 0, 8) };
+        rodape.Controls.Add(linhaBotoes);
+        rodape.Controls.Add(_statusSalvar);
 
         _botaoVerificar.Click += async (s, e) => await VerificarEBuscarCadastrosAsync();
-
-        botaoSalvar.Click += (s, e) =>
+        botaoSalvar.Click += (s, e) => Salvar();
+        botaoCancelar.Click += (s, e) =>
         {
-            if (string.IsNullOrWhiteSpace(_campoServidor.Text) || string.IsNullOrWhiteSpace(_campoChave.Text))
-            {
-                MessageBox.Show("Preencha o endereço do servidor e a chave de API.", "RD Intranet",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                DialogResult = DialogResult.None;
-                return;
-            }
-
-            var unidadeEscolhida = _campoUnidade.SelectedItem as CadastroItem;
-
-            if (!_eraConfiguradoAoAbrir && unidadeEscolhida == null)
-            {
-                MessageBox.Show("Clique em \"Verificar / Buscar unidades\" e escolha a unidade antes de salvar -- é assim que o ativo já nasce na unidade certa, sem precisar corrigir depois.", "RD Intranet",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                DialogResult = DialogResult.None;
-                return;
-            }
-
-            var impressoraSelecionada = _campoImpressora.SelectedItem as string;
-            var setorEscolhido = _campoSetor.SelectedItem as CadastroItem;
-            var localizacaoEscolhida = _campoLocalizacao.SelectedItem as CadastroItem;
-
-            ConfigResultante = new Config
-            {
-                ServerUrl = _campoServidor.Text.Trim().TrimEnd('/'),
-                ApiKey = _campoChave.Text.Trim(),
-                IntervaloMinutos = (int)_campoIntervalo.Value,
-                HeartbeatSegundos = (int)_campoHeartbeat.Value,
-                ImpressoraEtiqueta = (impressoraSelecionada == "(nenhuma)" ? null : impressoraSelecionada) ?? "",
-                MachineGuidOverride = _campoMachineGuidOverride.Text.Trim(),
-                // Mantém a escolha anterior se o operador não buscou de novo
-                // (reconfiguração de um agente já em uso -- ver comentário no construtor).
-                UnidadeId = unidadeEscolhida?.Id ?? _unidadeIdAnterior,
-                SetorId = setorEscolhido?.Id ?? _setorIdAnterior,
-                LocalizacaoId = localizacaoEscolhida?.Id ?? _localizacaoIdAnterior
-            };
-            Salvo?.Invoke(ConfigResultante);
+            if (Modal) DialogResult = DialogResult.Cancel;
+            Cancelado?.Invoke();
         };
-        botaoCancelar.Click += (s, e) => Cancelado?.Invoke();
 
-        Controls.AddRange(new Control[]
+        _rolagem = new Panel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = Tema.Fundo, Padding = new Padding(0, 0, 0, 0) };
+        _pilha = new FlowLayoutPanel
         {
-            secaoConexao, secaoLocalizacao, secaoColeta, secaoEtiquetas, secaoAvancado,
-            rotuloServidor, _campoServidor,
-            rotuloChave, _campoChave,
-            _botaoVerificar, _rotuloStatusVerificacao,
-            rotuloUnidade, _campoUnidade,
-            rotuloSetor, _campoSetor,
-            rotuloLocalizacao, _campoLocalizacao,
-            rotuloIntervalo, _campoIntervalo,
-            rotuloHeartbeat, _campoHeartbeat,
-            rotuloImpressora, _campoImpressora,
-            rotuloOverride, _campoMachineGuidOverride,
-            rotuloVersao, rotuloServico,
-            botaoSalvar, botaoCancelar
-        });
-
-        var iniciosSecao = secoes.Select(sec => sec.Top).ToArray();
-        foreach (Control controle in Controls)
-        {
-            var indice = Array.IndexOf(secoes, controle);
-            if (indice >= 0)
-            {
-                controle.Top = iniciosSecao[indice] + indice * EspacoSecao;
-            }
-            else
-            {
-                controle.Top += EspacoSecao * iniciosSecao.Count(inicio => inicio <= controle.Top);
-            }
-
-            AplicarTema(controle);
-        }
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Location = Point.Empty,
+            BackColor = Tema.Fundo,
+            Margin = Padding.Empty
+        };
+        _pilha.Controls.AddRange(new Control[] { cartaoConexao, cartaoLocal, cartaoColeta, cartaoEtiquetas, cartaoAvancado, rodape });
+        _rolagem.Controls.Add(_pilha);
+        _rolagem.Resize += (s, e) => AjustarLarguras();
+        Controls.Add(_rolagem);
+        Tema.AplicarRolagemEscura(this);
 
         AcceptButton = null; // Enter não deve disparar Salvar sem passar pela validação de unidade
         CancelButton = botaoCancelar;
 
-        // Reconfiguração de um agente já configurado -- busca sozinho, sem
-        // precisar clicar, pra já mostrar as escolhas anteriores nos combos.
-        if (_eraConfiguradoAoAbrir)
+        Load += async (s, e) =>
         {
-            Load += async (s, e) => await VerificarEBuscarCadastrosAsync();
-        }
+            // Janela própria (primeira configuração): margem interna; embutida no painel: encosta nas bordas.
+            if (TopLevel) _rolagem.Padding = new Padding(20, 16, 12, 0);
+            AjustarLarguras();
+
+            // Reconfiguração de um agente já configurado -- busca sozinho, sem
+            // precisar clicar, pra já mostrar as escolhas anteriores nas listas.
+            if (_eraConfiguradoAoAbrir)
+            {
+                await VerificarEBuscarCadastrosAsync();
+            }
+        };
     }
 
-    private const int EspacoSecao = 20;
-
-    private static TituloSecaoConfig CriarTituloSecao(string texto, int top) => new(texto)
+    private void AjustarLarguras()
     {
-        Left = 15,
-        Top = top,
-        Width = 420,
-        Height = 18
-    };
-
-    private static void AplicarTema(Control controle)
-    {
-        if (controle is Label label)
-        {
-            if (label.ForeColor == SystemColors.ControlText) label.ForeColor = Tema.Texto;
-            label.BackColor = Tema.Fundo;
-            if (label.Font == SystemFonts.DefaultFont) label.Font = Tema.Fonte(9F);
-        }
-        else if (controle is TextBox or ComboBox or NumericUpDown)
-        {
-            Tema.EstilizarCampo(controle);
-        }
-        else if (controle is Button button && button is not BotaoTema)
-        {
-            button.BackColor = Tema.SuperficieElevada;
-            button.ForeColor = Tema.Texto;
-            button.FlatStyle = FlatStyle.Flat;
-            button.FlatAppearance.BorderColor = Tema.Borda;
-        }
+        var largura = Math.Max(420, _rolagem.ClientSize.Width - _rolagem.Padding.Horizontal - SystemInformation.VerticalScrollBarWidth - 4);
+        foreach (Control c in _pilha.Controls) c.Width = largura;
     }
 
-    private sealed class TituloSecaoConfig : Control
+    private void Salvar()
     {
-        public TituloSecaoConfig(string texto)
+        _statusSalvar.Text = "";
+
+        if (string.IsNullOrWhiteSpace(_campoServidor.Text) || string.IsNullOrWhiteSpace(_campoChave.Text))
         {
-            Text = texto;
-            BackColor = Tema.Fundo;
-            ForeColor = Tema.Ciano;
-            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer, true);
+            if (string.IsNullOrWhiteSpace(_campoServidor.Text)) _campoServidor.MarcarErro();
+            if (string.IsNullOrWhiteSpace(_campoChave.Text)) _campoChave.MarcarErro();
+            _statusSalvar.Text = "Preencha o endereço do servidor e a chave de API.";
+            _rolagem.ScrollControlIntoView(_campoServidor);
+            return;
         }
 
-        protected override void OnPaint(PaintEventArgs e)
+        var unidadeEscolhida = _campoUnidade.ItemSelecionado as CadastroItem;
+
+        if (!_eraConfiguradoAoAbrir && unidadeEscolhida == null)
         {
-            // Só o nome da seção, em destaque discreto -- sem traço de acento
-            // nem linha divisória (visual de sistema antigo).
-            e.Graphics.Clear(BackColor);
-            using var fonte = Tema.FonteSemibold(8.25F);
-            TextRenderer.DrawText(e.Graphics, Text, fonte, new Rectangle(0, 0, Width, Height), Tema.Ciano,
-                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+            _campoUnidade.MarcarErro();
+            _statusSalvar.Text = "Clique em \"Verificar conexão\" e escolha a unidade -- assim o ativo já nasce na unidade certa.";
+            _rolagem.ScrollControlIntoView(_campoUnidade);
+            return;
         }
+
+        var impressoraSelecionada = _campoImpressora.ItemSelecionado as string;
+        var setorEscolhido = _campoSetor.ItemSelecionado as CadastroItem;
+        var localizacaoEscolhida = _campoLocalizacao.ItemSelecionado as CadastroItem;
+
+        ConfigResultante = new Config
+        {
+            ServerUrl = _campoServidor.Text.Trim().TrimEnd('/'),
+            ApiKey = _campoChave.Text.Trim(),
+            IntervaloMinutos = _campoIntervalo.Valor,
+            HeartbeatSegundos = _campoHeartbeat.Valor,
+            ImpressoraEtiqueta = impressoraSelecionada == null || impressoraSelecionada == SemImpressora ? "" : impressoraSelecionada,
+            MachineGuidOverride = _campoMachineGuidOverride.Text.Trim(),
+            // Mantém a escolha anterior se o operador não buscou de novo
+            // (reconfiguração de um agente já em uso -- ver comentário no construtor).
+            UnidadeId = unidadeEscolhida?.Id ?? _unidadeIdAnterior,
+            SetorId = setorEscolhido?.Id ?? _setorIdAnterior,
+            LocalizacaoId = localizacaoEscolhida?.Id ?? _localizacaoIdAnterior
+        };
+
+        if (Modal) DialogResult = DialogResult.OK;
+        Salvo?.Invoke(ConfigResultante);
     }
 
     private async Task VerificarEBuscarCadastrosAsync()
     {
         _botaoVerificar.Enabled = false;
-        _rotuloStatusVerificacao.ForeColor = Color.Gray;
+        _rotuloStatusVerificacao.ForeColor = Tema.TextoSecundario;
         _rotuloStatusVerificacao.Text = "Verificando...";
 
         var dados = await new CadastrosClient().BuscarAsync(_campoServidor.Text.Trim().TrimEnd('/'), _campoChave.Text.Trim());
 
         if (dados == null)
         {
-            _rotuloStatusVerificacao.ForeColor = Color.Firebrick;
-            _rotuloStatusVerificacao.Text = "Falha ao conectar -- confira a URL e a chave de API.";
+            _rotuloStatusVerificacao.ForeColor = Tema.Perigo;
+            _rotuloStatusVerificacao.Text = "●  Falha ao conectar -- confira a URL e a chave de API.";
             _botaoVerificar.Enabled = true;
             return;
         }
 
-        PreencherCombo(_campoUnidade, dados.Unidades, "-- selecione --", _unidadeIdAnterior);
-        PreencherCombo(_campoSetor, dados.Setores, "(nenhum)", _setorIdAnterior);
-        PreencherCombo(_campoLocalizacao, dados.Localizacoes, "(nenhuma)", _localizacaoIdAnterior);
+        PreencherLista(_campoUnidade, dados.Unidades, null, _unidadeIdAnterior);
+        PreencherLista(_campoSetor, dados.Setores, "Nenhum", _setorIdAnterior);
+        PreencherLista(_campoLocalizacao, dados.Localizacoes, "Nenhuma", _localizacaoIdAnterior);
+        _campoUnidade.Placeholder = "Escolha a unidade";
 
-        _rotuloStatusVerificacao.ForeColor = Color.SeaGreen;
-        _rotuloStatusVerificacao.Text = $"Conectado -- {dados.Unidades.Count} unidade(s) encontrada(s).";
+        _rotuloStatusVerificacao.ForeColor = Tema.Sucesso;
+        _rotuloStatusVerificacao.Text = $"●  Conectado -- {dados.Unidades.Count} unidade(s) encontrada(s).";
         _botaoVerificar.Enabled = true;
     }
 
-    private static void PreencherCombo(ComboBox combo, List<CadastroItem> itens, string rotuloVazio, int? idParaSelecionar)
+    /// <summary>rotuloVazio null = sem opção "nenhum" (unidade é obrigatória, começa sem seleção).</summary>
+    private static void PreencherLista(SeletorModerno lista, List<CadastroItem> itens, string? rotuloVazio, int? idParaSelecionar)
     {
-        combo.Items.Clear();
-        combo.Items.Add(rotuloVazio);
+        var indice = idParaSelecionar == null ? -1 : itens.FindIndex(i => i.Id == idParaSelecionar.Value);
 
-        foreach (var item in itens)
+        if (rotuloVazio == null)
         {
-            combo.Items.Add(item);
+            lista.DefinirItens(itens, indice);
+            return;
         }
 
-        var indice = idParaSelecionar == null
-            ? -1
-            : itens.FindIndex(i => i.Id == idParaSelecionar.Value);
+        lista.DefinirItens(new object[] { rotuloVazio }.Concat(itens), indice >= 0 ? indice + 1 : 0);
+    }
 
-        combo.SelectedIndex = indice >= 0 ? indice + 1 : 0;
+    // ================================================================ layout
+
+    private static CartaoSecao Cartao(CabecalhoSecao cabecalho, Control conteudo, int altura)
+    {
+        var cartao = new CartaoSecao { Height = altura };
+        conteudo.Dock = DockStyle.Fill;
+        cartao.Controls.Add(conteudo);
+        cartao.Controls.Add(cabecalho);
+        return cartao;
+    }
+
+    private static TableLayoutPanel Grade(int colunas)
+    {
+        var grade = new TableLayoutPanel { ColumnCount = colunas, BackColor = Tema.Superficie, Margin = Padding.Empty, Padding = Padding.Empty };
+        for (var i = 0; i < colunas; i++) grade.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F / colunas));
+        return grade;
+    }
+
+    private static void AdicionarLinha(TableLayoutPanel grade, int altura, Control esquerda, Control? direita = null)
+    {
+        var linha = grade.RowCount;
+        grade.RowCount = linha + 1;
+        grade.RowStyles.Add(new RowStyle(SizeType.Absolute, altura));
+        esquerda.Margin = new Padding(0, 0, direita != null ? 8 : 0, 0);
+        grade.Controls.Add(esquerda, 0, linha);
+        if (direita == null)
+        {
+            if (grade.ColumnCount > 1) grade.SetColumnSpan(esquerda, grade.ColumnCount);
+        }
+        else
+        {
+            direita.Margin = new Padding(8, 0, 0, 0);
+            grade.Controls.Add(direita, 1, linha);
+        }
+    }
+
+    private static Panel Campo(string rotulo, Control campo)
+    {
+        var painel = new Panel { Dock = DockStyle.Fill, BackColor = Tema.Superficie };
+        campo.Dock = DockStyle.Top;
+        painel.Controls.Add(campo);
+        painel.Controls.Add(new RotuloCampo(rotulo));
+        return painel;
     }
 
     private static string ObterVersao()
@@ -384,12 +361,12 @@ public class ConfigForm : Form
         {
             using var controlador = new ServiceController(AgenteServico.NomeServico);
             return controlador.Status == ServiceControllerStatus.Running
-                ? ("SERVIÇO ATIVO", Tema.Sucesso)
-                : ($"SERVIÇO {controlador.Status.ToString().ToUpperInvariant()}", Tema.Alerta);
+                ? ("Serviço ativo", Tema.Sucesso)
+                : ($"Serviço {controlador.Status.ToString().ToLowerInvariant()}", Tema.Alerta);
         }
         catch (InvalidOperationException)
         {
-            return ("SERVIÇO AUSENTE", Tema.TextoSecundario);
+            return ("Serviço não instalado", Tema.TextoSecundario);
         }
     }
 }
