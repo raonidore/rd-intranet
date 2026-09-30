@@ -274,6 +274,18 @@ public sealed class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Tempo desde o último boot completo -- mesma conta do Gerenciador de
+    /// Tarefas (com "inicialização rápida", desligar não zera; reiniciar zera).
+    /// </summary>
+    private static string UptimeTexto()
+    {
+        var ligadoHa = TimeSpan.FromMilliseconds(Environment.TickCount64);
+        var dias = (int)ligadoHa.TotalDays;
+        var horas = $"{ligadoHa.Hours:00}:{ligadoHa.Minutes:00}";
+        return dias >= 1 ? $"{dias} dia{(dias == 1 ? "" : "s")}, {horas}" : $"{horas} h";
+    }
+
     private static Panel Espaco(int altura) => new() { Height = altura, BackColor = Tema.Fundo };
 
     /// <summary>Mostra o painel já na página Chamados, no formulário de abertura (menu da bandeja e botão da Visão geral).</summary>
@@ -487,7 +499,8 @@ public sealed class MainForm : Form
         {
             string.IsNullOrWhiteSpace(_estado.NomeAtivo) ? "Nome indisponível" : _estado.NomeAtivo,
             "IP local " + (string.IsNullOrWhiteSpace(_estado.IpAtivo) ? "não informado" : _estado.IpAtivo),
-            "IP público " + (string.IsNullOrWhiteSpace(_estado.IpPublico) ? "indisponível" : _estado.IpPublico)
+            "IP público " + (string.IsNullOrWhiteSpace(_estado.IpPublico) ? "indisponível" : _estado.IpPublico),
+            "Ligada há " + UptimeTexto()
         });
         _cartaoAtivo.Definir("INFORMAÇÕES DO ATIVO", codigoAtivo, detalheAtivo, Tema.Acento);
 
@@ -503,6 +516,7 @@ public sealed class MainForm : Form
         var statusServico = ObterStatusServico();
         var servicoTexto = statusServico == null ? "Não instalado" : statusServico == ServiceControllerStatus.Running ? "Em execução" : statusServico.ToString() ?? "Desconhecido";
         _cartaoServico.Definir("SERVIÇO DO WINDOWS", servicoTexto, "RD Intranet - Agente", statusServico == ServiceControllerStatus.Running ? Tema.Sucesso : Tema.TextoSecundario);
+
 
         var status = _seguranca.ObterStatus();
         _statusCanary.Text = $"ARQUIVOS-ISCA\n{TextoEstado(status.CanaryAtivo)}  ·  {status.CanaryArquivos} arquivos";

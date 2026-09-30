@@ -756,7 +756,7 @@ public sealed class ResultadoTerminal : Panel
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
         BackColor = Tema.Superficie;
         Padding = new Padding(12, 10, 6, 8);
-        _texto = new RichTextBox
+        _texto = new RichTextBoxRepassaRolagem
         {
             Dock = DockStyle.Fill,
             ReadOnly = true,
@@ -796,5 +796,33 @@ public sealed class ResultadoTerminal : Panel
         g.FillPath(fundo, caminho);
         using var borda = new Pen(Tema.BordaSuave);
         g.DrawPath(borda, caminho);
+    }
+}
+
+/// <summary>
+/// RichTextBox que devolve a rodinha pra página quando o texto cabe inteiro --
+/// a RichTextBox padrão fica com a mensagem mesmo sem ter o que rolar, e a
+/// página parava de rolar com o ponteiro em cima de um resultado.
+/// </summary>
+internal sealed class RichTextBoxRepassaRolagem : RichTextBox
+{
+    private const int WmMouseWheel = 0x020A;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam);
+
+    protected override void WndProc(ref Message m)
+    {
+        if (m.Msg == WmMouseWheel && Parent != null)
+        {
+            var fimDoTexto = GetPositionFromCharIndex(Math.Max(0, TextLength - 1)).Y + Font.Height;
+            var cabe = GetPositionFromCharIndex(0).Y >= 0 && fimDoTexto <= ClientSize.Height;
+            if (cabe)
+            {
+                SendMessage(Parent.Handle, m.Msg, m.WParam, m.LParam);
+                return;
+            }
+        }
+        base.WndProc(ref m);
     }
 }

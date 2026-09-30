@@ -747,7 +747,8 @@ public class CampoNumerico : CampoArredondado
         _caixa.GotFocus += (s, e) => { Focado = true; Invalidate(); };
         _caixa.LostFocus += (s, e) => { Focado = false; Valor = Valor; Invalidate(); };
         _caixa.TextChanged += (s, e) => { LimparErro(); Invalidate(); };
-        _caixa.MouseWheel += (s, e) => Somar(Math.Sign(e.Delta));
+        // Só com o campo em foco: rolar a página por cima dele não pode mudar o valor sem querer.
+        _caixa.MouseWheel += (s, e) => { if (_caixa.Focused) Somar(Math.Sign(e.Delta)); };
         Controls.Add(_caixa);
         Cursor = Cursors.Default;
     }
@@ -886,5 +887,45 @@ public class InterruptorModerno : Control
 
         TextRenderer.DrawText(g, Text, Font, new Rectangle(trilho.Right + 10, 0, Width - trilho.Right - 10, Height),
             _ligado ? Tema.Texto : Tema.TextoSecundario, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+    }
+}
+
+/// <summary>
+/// Manda a rodinha do mouse pro controle que está debaixo do ponteiro, não
+/// pro que tem o foco. Sem isso, depois de clicar num item do menu lateral
+/// (Configurações, Network) a rodinha ia pro botão do menu e a página não
+/// rolava -- só pela barra lateral. Do controle sob o ponteiro a mensagem
+/// sobe pelos pais até a área com rolagem.
+/// </summary>
+public sealed class RoteadorRolagem : IMessageFilter
+{
+    private const int WmMouseWheel = 0x020A;
+    private const int WmMouseHWheel = 0x020E;
+    private static bool _instalado;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr WindowFromPoint(Point ponto);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam);
+
+    /// <summary>Registra uma vez só, pro processo inteiro.</summary>
+    public static void Instalar()
+    {
+        if (_instalado) return;
+        _instalado = true;
+        Application.AddMessageFilter(new RoteadorRolagem());
+    }
+
+    public bool PreFilterMessage(ref Message m)
+    {
+        if (m.Msg is not (WmMouseWheel or WmMouseHWheel)) return false;
+
+        var sobCursor = WindowFromPoint(Cursor.Position);
+        // Já está indo pro controle certo, ou o ponteiro está fora das nossas janelas.
+        if (sobCursor == IntPtr.Zero || sobCursor == m.HWnd || Control.FromChildHandle(sobCursor) == null) return false;
+
+        SendMessage(sobCursor, m.Msg, m.WParam, m.LParam);
+        return true;
     }
 }

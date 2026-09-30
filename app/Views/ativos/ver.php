@@ -24,6 +24,8 @@ $camposTipo = AtivoService::CAMPOS_DETALHES[$ativo['tipo_slug'] ?? ''] ?? [];
 // processo residente) e nunca manda heartbeat, então nunca vai responder
 // a essas solicitações. Só oferece pra quem está no agente de bandeja (.exe).
 $agenteSuportaExplorador = $ativo['origem'] === 'agente' && ($ativo['agente_versao'] ?? '') !== 'ps1';
+// MTR remoto (network_mtr) só existe a partir do agente 1.0.48 -- agente antigo ignora o pedido e a tela ficaria esperando à toa.
+$agenteSuportaMtr = $agenteSuportaExplorador && version_compare((string)($ativo['agente_versao'] ?? '0'), '1.0.48', '>=');
 $podeAlterarRedeRemota = PermissionService::temAcesso('ativos_novo');
 
 // Campos de "Componentes" ficam numa aba própria -- o resto dos
@@ -916,6 +918,52 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                         <button type="button" class="btn btn-outline-primary" id="botaoTestarTraceRoute" title="Rastrear rota" aria-label="Rastrear rota"><i class="bi bi-signpost-split"></i></button>
                                     </div>
                                     <pre class="small mb-0 text-break rede-resultado rede-resultado-trace" id="redeTraceResultado" aria-live="polite">Aguardando teste.</pre>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <div class="border rounded-3 p-3 rede-diagnostico" id="painelMtr">
+                                    <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                                        <div><strong><i class="bi bi-activity"></i> MTR · rota contínua</strong><div class="small text-muted">Como o WinMTR: perda e latência de cada salto até o destino, medidas pelo agente desta máquina.</div></div>
+                                        <div class="d-flex gap-1">
+                                            <button type="button" class="btn btn-sm btn-outline-secondary" id="botaoMtrCopiar" disabled title="Copiar tabela em texto"><i class="bi bi-clipboard"></i> Copiar</button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary" id="botaoMtrTxt" disabled><i class="bi bi-filetype-txt"></i> TXT</button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary" id="botaoMtrHtml" disabled><i class="bi bi-filetype-html"></i> HTML</button>
+                                        </div>
+                                    </div>
+                                    <?php if (!$agenteSuportaMtr): ?>
+                                        <div class="alert alert-secondary small py-2 mb-0"><i class="bi bi-info-circle"></i> O MTR pelo portal precisa do agente <strong>1.0.48</strong> ou mais novo -- esta máquina está na <?= htmlspecialchars($ativo['agente_versao'] ?: '?') ?>. Atualize em Ativos &rsaquo; Dashboard &rsaquo; "Baixar do repositório".</div>
+                                    <?php else: ?>
+                                        <div class="row g-2 align-items-end mb-2">
+                                            <div class="col-12 col-md-4">
+                                                <label class="form-label small mb-1" for="mtrHost">Destino</label>
+                                                <input type="text" class="form-control form-control-sm font-monospace" id="mtrHost" placeholder="8.8.8.8 ou google.com" maxlength="253" autocomplete="off">
+                                            </div>
+                                            <div class="col-6 col-md-2">
+                                                <label class="form-label small mb-1" for="mtrCiclos">Ciclos</label>
+                                                <select class="form-select form-select-sm" id="mtrCiclos"><option value="10" selected>10</option><option value="20">20</option><option value="30">30</option><option value="60">60</option></select>
+                                            </div>
+                                            <div class="col-6 col-md-2">
+                                                <label class="form-label small mb-1" for="mtrIntervalo">Intervalo</label>
+                                                <select class="form-select form-select-sm" id="mtrIntervalo"><option value="0.5">0,5 s</option><option value="1" selected>1 s</option><option value="2">2 s</option></select>
+                                            </div>
+                                            <div class="col-6 col-md-2">
+                                                <label class="form-label small mb-1" for="mtrTamanho">Ping (bytes)</label>
+                                                <input type="number" class="form-control form-control-sm" id="mtrTamanho" value="64" min="32" max="1400">
+                                            </div>
+                                            <div class="col-6 col-md-2 d-flex flex-column justify-content-end">
+                                                <div class="form-check form-switch mb-1"><input class="form-check-input" type="checkbox" role="switch" id="mtrResolver" checked><label class="form-check-label small" for="mtrResolver">Resolver nomes</label></div>
+                                                <button type="button" class="btn btn-sm btn-primary" id="botaoMtrExecutar"><i class="bi bi-play-fill"></i> Executar</button>
+                                            </div>
+                                        </div>
+                                        <div class="progress mb-2 d-none" id="mtrProgresso" style="height:4px"><div class="progress-bar progress-bar-striped progress-bar-animated" style="width:0%"></div></div>
+                                        <div class="small text-muted mb-2" id="mtrStatus" role="status">Informe o destino e clique em Executar. O agente mede a rota a partir desta máquina.</div>
+                                        <div class="table-responsive d-none" id="mtrTabelaArea">
+                                            <table class="table table-sm align-middle mb-0 mtr-tabela">
+                                                <thead><tr><th>Nr</th><th>Host</th><th class="text-end">Perda</th><th class="text-end">Env.</th><th class="text-end">Rec.</th><th class="text-end">Melhor</th><th class="text-end">Média</th><th class="text-end">Pior</th><th class="text-end">Último</th><th>Últimas respostas</th></tr></thead>
+                                                <tbody id="mtrTabela"></tbody>
+                                            </table>
+                                        </div>
+                                    <?php endif; ?>
                                 </div>
                             </div>
                             </div>
@@ -5380,6 +5428,128 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro, tempoLimiteMs
         } finally {
             botaoTraceRoute.disabled = false;
         }
+    });
+
+    // ------------------------------------------------------------ MTR (agente 1.0.48+)
+    const botaoMtr = document.getElementById('botaoMtrExecutar');
+    let ultimoMtr = null;
+    const corLatencia = (ms) => ms === null || ms === undefined ? 'text-muted' : ms < 80 ? '' : ms < 200 ? 'text-warning' : 'text-danger';
+
+    function grafico(historico) {
+        // uma barra por pacote (mais recente à direita); perdido = barra vermelha cheia
+        const ultimos = (historico || []).slice(-40);
+        const maior = Math.max(20, ...ultimos.filter(v => v >= 0));
+        const barras = ultimos.map((v, i) => {
+            const x = 160 - (ultimos.length - i) * 4;
+            if (v < 0) return `<rect x="${x}" y="0" width="3" height="22" fill="#dc3545"/>`;
+            const h = Math.max(2, Math.round(22 * Math.min(1, v / maior)));
+            const cor = v < 80 ? '#20c997' : v < 200 ? '#ffc107' : '#dc3545';
+            return `<rect x="${x}" y="${22 - h}" width="3" height="${h}" fill="${cor}"/>`;
+        }).join('');
+        return `<svg width="160" height="22" viewBox="0 0 160 22" class="mtr-grafico" role="img" aria-label="Últimas respostas"><rect width="160" height="22" rx="3" fill="rgba(128,128,128,.12)"/>${barras}</svg>`;
+    }
+
+    function renderizarMtr(dados) {
+        const corpo = document.getElementById('mtrTabela');
+        corpo.innerHTML = (dados.saltos || []).map(s => {
+            const perda = Number(s.perda || 0);
+            const classePerda = s.enviados === 0 ? 'text-bg-secondary' : perda === 0 ? 'text-bg-success' : perda < 20 ? 'text-bg-warning' : 'text-bg-danger';
+            const host = s.ip === null
+                ? '<span class="text-muted">Sem resposta do host</span>'
+                : (s.nome ? `${escapar(s.nome)}<div class="small text-muted font-monospace">${escapar(s.ip)}</div>` : `<span class="font-monospace">${escapar(s.ip)}</span>`);
+            const num = (v) => v === null || v === undefined ? '-' : Math.round(v);
+            return `<tr><td class="text-muted font-monospace">${s.nr}</td><td>${host}</td>`
+                + `<td class="text-end"><span class="badge rounded-pill ${classePerda}">${perda.toFixed(0)}%</span></td>`
+                + `<td class="text-end font-monospace">${s.enviados}</td><td class="text-end font-monospace">${s.recebidos}</td>`
+                + `<td class="text-end font-monospace ${corLatencia(s.melhor)}">${num(s.melhor)}</td>`
+                + `<td class="text-end font-monospace ${corLatencia(s.media)}">${num(s.media)}</td>`
+                + `<td class="text-end font-monospace ${corLatencia(s.pior)}">${num(s.pior)}</td>`
+                + `<td class="text-end font-monospace ${corLatencia(s.ultimo)}">${num(s.ultimo)}</td>`
+                + `<td>${grafico(s.historico)}</td></tr>`;
+        }).join('');
+        document.getElementById('mtrTabelaArea').classList.remove('d-none');
+        ['botaoMtrCopiar', 'botaoMtrTxt', 'botaoMtrHtml'].forEach(id => document.getElementById(id).disabled = false);
+    }
+
+    function baixar(nome, conteudo, tipo) {
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(new Blob([conteudo], { type: tipo }));
+        link.download = nome;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(link.href), 2000);
+    }
+
+    function nomeArquivoMtr(extensao) {
+        const agora = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        const host = String(ultimoMtr?.host || 'destino').replace(/[^a-z0-9.-]/gi, '_');
+        return `mtr-<?= htmlspecialchars(preg_replace('/[^A-Za-z0-9-]/', '_', (string)$ativo['codigo_patrimonio'])) ?>-${host}-${agora.getFullYear()}${pad(agora.getMonth() + 1)}${pad(agora.getDate())}-${pad(agora.getHours())}${pad(agora.getMinutes())}.${extensao}`;
+    }
+
+    botaoMtr?.addEventListener('click', async () => {
+        const host = document.getElementById('mtrHost').value.trim();
+        const status = document.getElementById('mtrStatus');
+        if (!host) { status.textContent = 'Informe o destino (IP ou nome).'; status.className = 'small text-danger mb-2'; return; }
+
+        const ciclos = parseInt(document.getElementById('mtrCiclos').value, 10);
+        const intervalo = parseFloat(document.getElementById('mtrIntervalo').value);
+        const pedido = {
+            host,
+            ciclos,
+            intervalo,
+            tamanho: Math.min(1400, Math.max(32, parseInt(document.getElementById('mtrTamanho').value, 10) || 64)),
+            max_saltos: 30,
+            resolver: document.getElementById('mtrResolver').checked
+        };
+
+        // Barra de progresso pelo tempo estimado (o agente só responde no fim).
+        const estimadoMs = ciclos * Math.max(1, intervalo) * 1000 + 4000;
+        const progresso = document.getElementById('mtrProgresso');
+        const barra = progresso.querySelector('.progress-bar');
+        const inicio = Date.now();
+        progresso.classList.remove('d-none');
+        barra.style.width = '0%';
+        const relogio = setInterval(() => {
+            const pct = Math.min(97, (Date.now() - inicio) / estimadoMs * 100);
+            barra.style.width = pct + '%';
+            status.textContent = `Medindo a rota até ${host} pelo agente -- ${Math.round((Date.now() - inicio) / 1000)}s de ~${Math.round(estimadoMs / 1000)}s...`;
+        }, 400);
+
+        botaoMtr.disabled = true;
+        status.className = 'small text-muted mb-2';
+        try {
+            const dados = await solicitar('network_mtr', JSON.stringify(pedido), estimadoMs + 45000);
+            ultimoMtr = dados;
+            renderizarMtr(dados);
+            const ultimo = (dados.saltos || []).slice(-1)[0];
+            status.textContent = `Concluído: ${dados.rodadas} ciclo(s) até ${dados.host} (${dados.destino}) · ${(dados.saltos || []).length} saltos`
+                + (ultimo && ultimo.recebidos > 0 ? ` · destino ${Math.round(ultimo.media)} ms, perda ${Number(ultimo.perda).toFixed(0)}%` : ' · o destino não respondeu');
+            status.className = 'small text-success mb-2';
+        } catch (erro) {
+            status.textContent = erro.message;
+            status.className = 'small text-danger mb-2';
+        } finally {
+            clearInterval(relogio);
+            barra.style.width = '100%';
+            setTimeout(() => progresso.classList.add('d-none'), 600);
+            botaoMtr.disabled = false;
+        }
+    });
+
+    document.getElementById('mtrHost')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); botaoMtr.click(); } });
+    document.getElementById('botaoMtrCopiar')?.addEventListener('click', async () => {
+        if (!ultimoMtr) return;
+        try { await navigator.clipboard.writeText(ultimoMtr.texto); document.getElementById('mtrStatus').textContent = 'Tabela copiada em texto.'; }
+        catch { document.getElementById('mtrStatus').textContent = 'O navegador bloqueou a cópia -- use Exportar TXT.'; }
+    });
+    document.getElementById('botaoMtrTxt')?.addEventListener('click', () => ultimoMtr && baixar(nomeArquivoMtr('txt'), ultimoMtr.texto, 'text/plain;charset=utf-8'));
+    document.getElementById('botaoMtrHtml')?.addEventListener('click', () => {
+        if (!ultimoMtr) return;
+        const linhas = (ultimoMtr.saltos || []).map(s => `<tr><td>${s.nr}</td><td>${escapar(s.nome || s.ip || 'Sem resposta do host')}</td><td>${Number(s.perda).toFixed(0)}</td><td>${s.enviados}</td><td>${s.recebidos}</td><td>${s.melhor ?? '-'}</td><td>${s.media === null ? '-' : Math.round(s.media)}</td><td>${s.pior ?? '-'}</td><td>${s.ultimo ?? '-'}</td></tr>`).join('');
+        const html = `<!doctype html><html><head><meta charset="utf-8"><title>MTR ${escapar(ultimoMtr.host)}</title></head><body style="font-family:Segoe UI,Arial">`
+            + `<h3>MTR -- <?= htmlspecialchars($ativo['codigo_patrimonio'] . ' ' . $ativo['nome'], ENT_QUOTES) ?></h3><p>Destino ${escapar(ultimoMtr.host)} (${escapar(ultimoMtr.destino)}) · ${ultimoMtr.rodadas} ciclos · iniciado ${escapar(ultimoMtr.iniciado_em)}</p>`
+            + `<table border="1" cellpadding="4" cellspacing="0" style="border-collapse:collapse"><tr><th>Nr</th><th>Host</th><th>Perda %</th><th>Enviados</th><th>Recebidos</th><th>Melhor</th><th>Média</th><th>Pior</th><th>Último</th></tr>${linhas}</table></body></html>`;
+        baixar(nomeArquivoMtr('html'), html, 'text/html;charset=utf-8');
     });
 
     configurarOctetos();

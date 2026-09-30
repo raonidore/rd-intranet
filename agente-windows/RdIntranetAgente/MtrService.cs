@@ -187,6 +187,73 @@ public sealed class MtrService
             ?? throw new InvalidOperationException($"Não consegui resolver \"{host}\".");
     }
 
+    // ================================================================ pedido remoto (ficha do ativo no portal)
+
+    /// <summary>
+    /// "network_mtr" vindo do portal: roda N ciclos e devolve a tabela inteira
+    /// de uma vez (o canal de solicitações é pergunta-e-resposta, não fluxo).
+    /// Parâmetro JSON: host, ciclos (5-60), intervalo (0,5-5 s), tamanho,
+    /// max_saltos, resolver.
+    /// </summary>
+    public static async Task<object> ExecutarRemotoAsync(string? parametro)
+    {
+        using var json = System.Text.Json.JsonDocument.Parse(string.IsNullOrWhiteSpace(parametro) ? "{}" : parametro);
+        var raiz = json.RootElement;
+        string Texto(string nome) => raiz.TryGetProperty(nome, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String ? v.GetString() ?? "" : "";
+        double Numero(string nome, double padrao) => raiz.TryGetProperty(nome, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.Number ? v.GetDouble() : padrao;
+        bool Logico(string nome, bool padrao) => raiz.TryGetProperty(nome, out var v) && v.ValueKind is System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False ? v.GetBoolean() : padrao;
+
+        var host = Texto("host").Trim();
+        if (host == "") throw new ArgumentException("Informe o destino.");
+        var ciclos = (int)Math.Clamp(Numero("ciclos", 10), 5, 60);
+        var opcoes = new OpcoesMtr(
+            Math.Clamp(Numero("intervalo", 1), 0.5, 5),
+            (int)Math.Clamp(Numero("tamanho", 64), 32, 1400),
+            (int)Math.Clamp(Numero("max_saltos", 30), 5, 64),
+            Logico("resolver", true));
+
+        var mtr = new MtrService();
+        var rodadas = 0;
+        using var cancelar = new CancellationTokenSource(TimeSpan.FromSeconds(ciclos * Math.Max(1, opcoes.IntervaloSegundos) + 60));
+        mtr.Atualizado += () => { if (Interlocked.Increment(ref rodadas) >= ciclos) cancelar.Cancel(); };
+        try
+        {
+            await mtr.ExecutarAsync(host, opcoes, cancelar.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // fim normal: atingiu os ciclos (ou o teto de tempo)
+        }
+
+        // Dá um instante pros nomes (resolvidos em paralelo) chegarem.
+        await Task.Delay(opcoes.ResolverNomes ? 1500 : 0);
+
+        return new
+        {
+            host,
+            destino = mtr.Destino?.ToString(),
+            rodadas,
+            intervalo = opcoes.IntervaloSegundos,
+            tamanho = opcoes.TamanhoPing,
+            iniciado_em = mtr.IniciadoEm?.ToString("yyyy-MM-dd HH:mm:ss"),
+            saltos = mtr.Fotografia().Select(sal => new
+            {
+                nr = sal.Numero,
+                ip = sal.Endereco?.ToString(),
+                nome = sal.Nome,
+                enviados = sal.Enviados,
+                recebidos = sal.Recebidos,
+                perda = Math.Round(sal.PerdaPercentual, 1),
+                melhor = sal.Recebidos > 0 ? sal.Melhor : (long?)null,
+                media = sal.Recebidos > 0 ? Math.Round(sal.Media, 1) : (double?)null,
+                pior = sal.Recebidos > 0 ? sal.Pior : (long?)null,
+                ultimo = sal.Ultimo >= 0 ? sal.Ultimo : (long?)null,
+                historico = sal.Historico
+            }).ToList(),
+            texto = mtr.ComoTexto()
+        };
+    }
+
     // ================================================================ exportação (mesmo espírito do WinMTR)
 
     public string ComoTexto()

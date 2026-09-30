@@ -78,6 +78,7 @@ internal static class Program
         }
 
         ApplicationConfiguration.Initialize();
+        RoteadorRolagem.Instalar(); // rodinha do mouse vai pro que está sob o ponteiro (ver ControlesModernos.cs)
         LiberarAvisoDeBandeja();
 
         using (var splash = new SplashForm())

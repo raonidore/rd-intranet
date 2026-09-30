@@ -380,6 +380,23 @@ public class TrayApplicationContext : ApplicationContext
                         await cliente.ResponderAsync(_machineGuid!, solicitacao.Id, await NetworkService.TracerouteAsync(solicitacao.Parametro));
                         break;
 
+                    case "network_mtr":
+                        // Leva de 10 s a 1 min: roda em paralelo pra não segurar o heartbeat
+                        // nem as outras solicitações (a máquina pareceria desligada no portal).
+                        var pedidoMtr = solicitacao;
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                await cliente.ResponderAsync(_machineGuid!, pedidoMtr.Id, await MtrService.ExecutarRemotoAsync(pedidoMtr.Parametro));
+                            }
+                            catch (Exception ex)
+                            {
+                                await cliente.ResponderErroAsync(_machineGuid!, pedidoMtr.Id, ex.Message);
+                            }
+                        });
+                        break;
+
                     case "network_speedtest":
                         await cliente.ResponderAsync(_machineGuid!, solicitacao.Id, await NetworkService.TestarVelocidadeAsync());
                         break;

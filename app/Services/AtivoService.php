@@ -3983,7 +3983,7 @@ class AtivoService
 
     private const TIPOS_SOLICITACAO_VALIDOS = [
         'listar_arquivos', 'listar_processos', 'baixar_arquivo', 'executar_cmd', 'executar_powershell',
-        'network_list', 'network_apply', 'network_revert', 'network_ping', 'network_speedtest', 'network_traceroute', 'mesh_install',
+        'network_list', 'network_apply', 'network_revert', 'network_ping', 'network_speedtest', 'network_traceroute', 'network_mtr', 'mesh_install',
     ];
 
     public function solicitarListagem(int $ativoId, string $tipo, ?string $parametro, ?string $solicitadoPor = null, bool $elevado = false): array
@@ -3992,7 +3992,7 @@ class AtivoService
             return ['success' => false, 'message' => 'Tipo de solicitação inválido.'];
         }
 
-        if (in_array($tipo, ['baixar_arquivo', 'executar_cmd', 'executar_powershell', 'network_apply', 'network_revert', 'network_ping', 'network_traceroute'], true) && empty($parametro)) {
+        if (in_array($tipo, ['baixar_arquivo', 'executar_cmd', 'executar_powershell', 'network_apply', 'network_revert', 'network_ping', 'network_traceroute', 'network_mtr'], true) && empty($parametro)) {
             return ['success' => false, 'message' => 'Informe o caminho do arquivo/comando.'];
         }
 
@@ -4022,6 +4022,19 @@ class AtivoService
             }
         } elseif ($tipo === 'network_revert' && (!ctype_digit((string)$parametro) || (int)$parametro <= 0)) {
             return ['success' => false, 'message' => 'Adaptador inválido para reversão.'];
+        } elseif ($tipo === 'network_mtr') {
+            // MTR aceita nome além de IP (o agente resolve) -- só letras, números, ponto e hífen.
+            $pedido = json_decode((string)$parametro, true);
+            $host = trim((string)($pedido['host'] ?? ''));
+            $hostValido = filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)
+                || (strlen($host) <= 253 && preg_match('/^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/i', $host));
+            if (!is_array($pedido) || !$hostValido) {
+                return ['success' => false, 'message' => 'Destino inválido -- informe um IPv4 ou um nome (ex.: google.com).'];
+            }
+            $ciclos = (int)($pedido['ciclos'] ?? 10);
+            if ($ciclos < 5 || $ciclos > 60) {
+                return ['success' => false, 'message' => 'Ciclos devem ficar entre 5 e 60.'];
+            }
         } elseif (in_array($tipo, ['network_ping', 'network_traceroute'], true)) {
             $pedido = json_decode((string)$parametro, true);
             if (!is_array($pedido) || !filter_var($pedido['ip'] ?? '', FILTER_VALIDATE_IP)) {
