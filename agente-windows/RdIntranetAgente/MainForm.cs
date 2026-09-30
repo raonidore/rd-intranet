@@ -478,7 +478,48 @@ public sealed class MainForm : Form
         botaoSelecionado.BackColor = Tema.SuperficieElevada;
         botaoSelecionado.ForeColor = Tema.Acento;
         AtualizarDados();
+
+        // Foco pra dentro da página (como Chamados já fazia): o Windows entrega a
+        // rodinha ao controle com foco -- se ele ficar no botão do menu lateral,
+        // a página não rola.
+        if (IsHandleCreated)
+        {
+            BeginInvoke(() =>
+            {
+                if (pagina.Visible && !pagina.ContainsFocus) pagina.SelectNextControl(null, true, true, true, false);
+            });
+        }
     }
+
+    /// <summary>
+    /// Rede de segurança da rolagem: rodinha que subiu até a janela (ex.: veio do
+    /// menu lateral, que não rola) vai pra área com rolagem da página visível.
+    /// </summary>
+    protected override void OnMouseWheel(MouseEventArgs e)
+    {
+        base.OnMouseWheel(e);
+        if (e is HandledMouseEventArgs { Handled: true }) return;
+
+        var pagina = _conteudo.Controls.OfType<Control>().FirstOrDefault(c => c.Visible);
+        var rolavel = pagina == null ? null : AreasComRolagem(pagina).FirstOrDefault(c => c.Visible && c.VerticalScroll.Visible);
+        if (rolavel == null) return;
+
+        const int WmMouseWheel = 0x020A;
+        SendMessage(rolavel.Handle, WmMouseWheel, new IntPtr(e.Delta << 16), IntPtr.Zero);
+        if (e is HandledMouseEventArgs tratado) tratado.Handled = true;
+    }
+
+    private static IEnumerable<ScrollableControl> AreasComRolagem(Control raiz)
+    {
+        foreach (Control filho in raiz.Controls)
+        {
+            if (filho is ScrollableControl { AutoScroll: true } area) yield return area;
+            foreach (var neta in AreasComRolagem(filho)) yield return neta;
+        }
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam);
 
     private void AtualizarDados()
     {
