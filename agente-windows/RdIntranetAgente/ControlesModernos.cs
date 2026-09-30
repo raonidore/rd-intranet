@@ -817,3 +817,74 @@ public class CampoNumerico : CampoArredondado
         }
     }
 }
+
+/// <summary>Chave liga/desliga (substitui o checkbox): trilho arredondado com bolinha e texto ao lado.</summary>
+[DefaultEvent(nameof(Alterado))]
+public class InterruptorModerno : Control
+{
+    private bool _ligado;
+    private bool _hover;
+
+    public event EventHandler? Alterado;
+
+    public InterruptorModerno(string texto, bool ligado = false)
+    {
+        Text = texto;
+        _ligado = ligado;
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
+        Height = 40;
+        Cursor = Cursors.Hand;
+        TabStop = true;
+        Font = Tema.Fonte(9.5F);
+        MouseEnter += (s, e) => { _hover = true; Invalidate(); };
+        MouseLeave += (s, e) => { _hover = false; Invalidate(); };
+    }
+
+    public bool Ligado
+    {
+        get => _ligado;
+        set
+        {
+            if (_ligado == value) return;
+            _ligado = value;
+            Invalidate();
+            Alterado?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    protected override void OnClick(EventArgs e) { base.OnClick(e); Focus(); Ligado = !Ligado; }
+    protected override bool IsInputKey(Keys keyData) => keyData == Keys.Space || base.IsInputKey(keyData);
+    protected override void OnKeyDown(KeyEventArgs e) { base.OnKeyDown(e); if (e.KeyCode == Keys.Space) Ligado = !Ligado; }
+    protected override void OnGotFocus(EventArgs e) { base.OnGotFocus(e); Invalidate(); }
+    protected override void OnLostFocus(EventArgs e) { base.OnLostFocus(e); Invalidate(); }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.Clear(Parent?.BackColor ?? Tema.Superficie);
+
+        var trilho = new Rectangle(2, (Height - 22) / 2, 42, 22);
+        using (var caminho = Tema.Arredondado(trilho, 11))
+        {
+            if (_ligado)
+            {
+                using var gradiente = new LinearGradientBrush(trilho, Tema.AcentoEscuro, Tema.Ciano, 0F);
+                g.FillPath(gradiente, caminho);
+            }
+            else
+            {
+                using var fundo = new SolidBrush(_hover ? Tema.SuperficieElevada : Color.FromArgb(14, 18, 24));
+                g.FillPath(fundo, caminho);
+                using var borda = new Pen(Focused ? Tema.Acento : Tema.Borda);
+                g.DrawPath(borda, caminho);
+            }
+        }
+
+        var bolinha = new Rectangle(_ligado ? trilho.Right - 19 : trilho.X + 3, trilho.Y + 3, 16, 16);
+        using (var pincel = new SolidBrush(_ligado ? Color.White : Tema.TextoSecundario)) g.FillEllipse(pincel, bolinha);
+
+        TextRenderer.DrawText(g, Text, Font, new Rectangle(trilho.Right + 10, 0, Width - trilho.Right - 10, Height),
+            _ligado ? Tema.Texto : Tema.TextoSecundario, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+    }
+}

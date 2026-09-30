@@ -8,8 +8,9 @@ namespace RdIntranetAgente;
 /// <summary>
 /// Página "Network" do painel: adaptadores desta máquina, configuração
 /// TCP/IP (DHCP ou manual, com snapshot pra reverter) e diagnósticos
-/// (ping, velocidade, trace route). Mesmo visual da página Chamados --
-/// seções numeradas e controles de ControlesModernos.cs.
+/// (ping, velocidade, trace route) e MTR contínuo, com as funções do WinMTR.
+/// Mesmo visual da página Chamados -- seções numeradas e controles de
+/// ControlesModernos.cs.
 /// </summary>
 public sealed class NetworkPagina : Panel
 {
@@ -34,7 +35,22 @@ public sealed class NetworkPagina : Panel
     private readonly CaixaTexto _alvoTrace;
     private readonly ResultadoTerminal _resultadoTrace;
 
+    // MTR
+    private readonly CaixaTexto _mtrDestino;
+    private readonly BotaoTema _mtrBotao;
+    private readonly SeletorSegmentado _mtrIntervalo;
+    private readonly CampoNumerico _mtrTamanho;
+    private readonly CampoNumerico _mtrSaltos;
+    private readonly InterruptorModerno _mtrResolver;
+    private readonly Label _mtrStatus;
+    private readonly TabelaMtr _mtrTabela;
+    private readonly CartaoSecao _cartaoMtr;
+    private MtrService? _mtr;
+    private CancellationTokenSource? _mtrCancelar;
+    private int _mtrRodadas;
+
     private const int LinhaCampo = 74;
+    private const int AlturaBaseMtr = 30 + 50 + 74 + 74 + 52;
     private const int AlturaBaseAdaptadores = 30 + 50;
 
     public NetworkPagina()
@@ -121,7 +137,70 @@ public sealed class NetworkPagina : Panel
         AdicionarLinha(gradeDiag, 250, Ferramenta("Trace route", "Os saltos até o IP de destino (máximo 12).", _alvoTrace, botaoTrace, _resultadoTrace));
         var cartaoDiag = Cartao(new CabecalhoSecao("3", "Diagnóstico", "Testes rápidos de conectividade a partir desta máquina."), gradeDiag, 30 + 50 + 214 + 250);
 
-        _pilha.Controls.AddRange(new Control[] { _cartaoAdaptadores, cartaoTcp, cartaoDiag });
+        // ---------------------------------------------------------- 4. MTR
+        _mtrDestino = new CaixaTexto(icone: Icones.Globo) { PlaceholderText = "8.8.8.8 ou um nome, ex.: google.com" };
+        _mtrDestino.Caixa.KeyDown += async (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; await AlternarMtrAsync(); } };
+        _mtrBotao = new BotaoTema("Iniciar", BotaoTema.Variante.Primario) { Width = 130, Dock = DockStyle.Right };
+        _mtrBotao.Click += async (s, e) => await AlternarMtrAsync();
+        var linhaDestino = new Panel { Dock = DockStyle.Top, Height = 40, BackColor = Tema.Superficie };
+        _mtrDestino.Dock = DockStyle.Fill;
+        linhaDestino.Controls.Add(_mtrDestino);
+        linhaDestino.Controls.Add(new Panel { Width = 10, Dock = DockStyle.Right, BackColor = Tema.Superficie });
+        linhaDestino.Controls.Add(_mtrBotao);
+        var campoDestino = new Panel { Dock = DockStyle.Fill, BackColor = Tema.Superficie };
+        campoDestino.Controls.Add(linhaDestino);
+        campoDestino.Controls.Add(new RotuloCampo("Destino (host)"));
+
+        _mtrIntervalo = new SeletorSegmentado();
+        _mtrIntervalo.DefinirOpcoes(new[] { ("0.5", "0,5 s", Tema.Ciano), ("1", "1 s", Tema.Ciano), ("2", "2 s", Tema.Ciano), ("5", "5 s", Tema.Ciano) }, "1");
+        _mtrTamanho = new CampoNumerico(32, 1400, 64, "");
+        _mtrSaltos = new CampoNumerico(5, 64, 30, "");
+        _mtrResolver = new InterruptorModerno("Resolver nomes", ligado: true);
+        var gradeOpcoes = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, BackColor = Tema.Superficie, Margin = Padding.Empty };
+        foreach (var peso in new[] { 34F, 22F, 22F, 22F }) gradeOpcoes.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, peso));
+        gradeOpcoes.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        var opcoes = new (string Rotulo, Control Campo)[] { ("Intervalo", _mtrIntervalo), ("Tamanho do ping (bytes)", _mtrTamanho), ("Máximo de saltos", _mtrSaltos), ("Nomes", _mtrResolver) };
+        for (var i = 0; i < opcoes.Length; i++)
+        {
+            var celula = Campo(opcoes[i].Rotulo, opcoes[i].Campo);
+            celula.Margin = new Padding(i == 0 ? 0 : 8, 0, i == opcoes.Length - 1 ? 0 : 8, 0);
+            gradeOpcoes.Controls.Add(celula, i, 0);
+        }
+
+        _mtrStatus = new Label { Dock = DockStyle.Fill, ForeColor = Tema.TextoSecundario, BackColor = Tema.Superficie, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true, Text = "Parado." };
+        var acoesMtr = new FlowLayoutPanel { Dock = DockStyle.Right, Width = 430, BackColor = Tema.Superficie, WrapContents = false, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(0, 6, 0, 0) };
+        foreach (var (texto, acao) in new (string, Action)[]
+        {
+            ("Exportar HTML", () => ExportarMtr(html: true)),
+            ("Exportar TXT", () => ExportarMtr(html: false)),
+            ("Copiar HTML", () => CopiarMtr(html: true)),
+            ("Copiar texto", () => CopiarMtr(html: false))
+        })
+        {
+            var botao = new BotaoTema(texto, BotaoTema.Variante.Secundario) { Width = 100, Height = 32, Margin = new Padding(6, 0, 0, 0), Font = Tema.FonteSemibold(8.5F) };
+            botao.Click += (s, e) => acao();
+            acoesMtr.Controls.Add(botao);
+        }
+        var linhaAcoesMtr = new Panel { Dock = DockStyle.Fill, BackColor = Tema.Superficie };
+        linhaAcoesMtr.Controls.Add(_mtrStatus);
+        linhaAcoesMtr.Controls.Add(acoesMtr);
+
+        _mtrTabela = new TabelaMtr { Dock = DockStyle.Fill };
+        var gradeMtr = Grade(1);
+        AdicionarLinha(gradeMtr, LinhaCampo, campoDestino);
+        AdicionarLinha(gradeMtr, LinhaCampo, gradeOpcoes);
+        AdicionarLinha(gradeMtr, 52, linhaAcoesMtr);
+        AdicionarLinha(gradeMtr, _mtrTabela.AlturaNecessaria, _mtrTabela);
+        _mtrTabela.AlturaAlterada += (s, e) =>
+        {
+            gradeMtr.RowStyles[3].Height = _mtrTabela.AlturaNecessaria;
+            _cartaoMtr!.Height = AlturaBaseMtr + _mtrTabela.AlturaNecessaria + 8;
+        };
+        _cartaoMtr = Cartao(new CabecalhoSecao("4", "MTR · rota contínua", "Como o WinMTR: perda e latência de cada salto até o destino, atualizadas em tempo real."), gradeMtr, AlturaBaseMtr + _mtrTabela.AlturaNecessaria + 8);
+
+        _pilha.Controls.AddRange(new Control[] { _cartaoAdaptadores, cartaoTcp, cartaoDiag, _cartaoMtr });
+        // Janela do painel escondida (fechar = volta pra bandeja): para o MTR, não fica pingando à toa.
+        VisibleChanged += (s, e) => { if (FindForm() is { Visible: false }) PararMtr(); };
         _rolagem.Resize += (s, e) => AjustarLarguras();
 
         Controls.Add(_rolagem);
@@ -304,6 +383,133 @@ public sealed class NetworkPagina : Panel
         catch (Exception ex)
         {
             _resultadoTrace.Mostrar(ex.Message, Tema.Perigo);
+        }
+    }
+
+    // ================================================================ MTR
+
+    private async Task AlternarMtrAsync()
+    {
+        if (_mtrCancelar != null)
+        {
+            PararMtr();
+            return;
+        }
+
+        var destino = _mtrDestino.Text.Trim();
+        if (destino == "")
+        {
+            _mtrDestino.MarcarErro();
+            _mtrStatus.Text = "Informe o destino (IP ou nome).";
+            _mtrStatus.ForeColor = Tema.Perigo;
+            return;
+        }
+
+        var intervalo = double.Parse(_mtrIntervalo.ChaveSelecionada ?? "1", System.Globalization.CultureInfo.InvariantCulture);
+        var opcoes = new OpcoesMtr(intervalo, _mtrTamanho.Valor, _mtrSaltos.Valor, _mtrResolver.Ligado);
+        _mtr = new MtrService();
+        _mtrCancelar = new CancellationTokenSource();
+        _mtrRodadas = 0;
+        _mtrBotao.Text = "Parar";
+        _mtrTabela.Definir(new List<SaltoMtr>());
+        _mtrStatus.Text = $"Resolvendo {destino}...";
+        _mtrStatus.ForeColor = Tema.TextoSecundario;
+
+        var mtr = _mtr;
+        mtr.Atualizado += () =>
+        {
+            // Vem de thread de fundo; a tela redesenha no thread dela.
+            if (!IsHandleCreated || IsDisposed) return;
+            BeginInvoke(() =>
+            {
+                if (_mtr != mtr) return;
+                _mtrRodadas++;
+                var saltos = mtr.Fotografia();
+                _mtrTabela.Definir(saltos);
+                var destinoFinal = saltos.LastOrDefault();
+                _mtrStatus.ForeColor = Tema.Sucesso;
+                _mtrStatus.Text = $"●  Rodando · {saltos.Count} saltos · {_mtrRodadas} rodada(s)"
+                    + (destinoFinal is { Recebidos: > 0 } ? $" · destino {destinoFinal.Media:0} ms · perda {destinoFinal.PerdaPercentual:0}%" : "");
+            });
+        };
+
+        LogAtividade.Registrar(NivelAtividade.Info, "REDE", $"MTR iniciado para {destino}.");
+        try
+        {
+            await mtr.ExecutarAsync(destino, opcoes, _mtrCancelar.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // parado pelo usuário
+        }
+        catch (Exception ex)
+        {
+            _mtrStatus.Text = ex.Message;
+            _mtrStatus.ForeColor = Tema.Perigo;
+        }
+        finally
+        {
+            if (_mtr == mtr)
+            {
+                _mtrCancelar?.Dispose();
+                _mtrCancelar = null;
+                _mtrBotao.Text = "Iniciar";
+                if (_mtrStatus.ForeColor != Tema.Perigo)
+                {
+                    _mtrStatus.Text = $"Parado · {_mtrRodadas} rodada(s) para {mtr.Destino}. Os números ficam na tabela para exportar.";
+                    _mtrStatus.ForeColor = Tema.TextoSecundario;
+                }
+            }
+        }
+    }
+
+    private void PararMtr() => _mtrCancelar?.Cancel();
+
+    private void CopiarMtr(bool html)
+    {
+        if (_mtr?.Destino == null)
+        {
+            _mtrStatus.Text = "Rode o MTR antes de copiar.";
+            return;
+        }
+        try
+        {
+            Clipboard.SetText(html ? _mtr.ComoHtml() : _mtr.ComoTexto());
+            _mtrStatus.Text = html ? "Tabela copiada em HTML." : "Tabela copiada em texto.";
+        }
+        catch (Exception ex)
+        {
+            _mtrStatus.Text = $"Não foi possível copiar: {ex.Message}";
+        }
+    }
+
+    private void ExportarMtr(bool html)
+    {
+        if (_mtr?.Destino == null)
+        {
+            _mtrStatus.Text = "Rode o MTR antes de exportar.";
+            return;
+        }
+
+        var nomeSeguro = string.Concat(_mtr.HostDigitado.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+        using var dialogo = new SaveFileDialog
+        {
+            FileName = $"mtr-{nomeSeguro}-{DateTime.Now:yyyyMMdd-HHmm}.{(html ? "html" : "txt")}",
+            Filter = html ? "Página HTML (*.html)|*.html" : "Texto (*.txt)|*.txt",
+            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Desktop)
+        };
+        if (dialogo.ShowDialog(FindForm()) != DialogResult.OK) return;
+
+        try
+        {
+            File.WriteAllText(dialogo.FileName, html
+                ? $"<!doctype html><html><head><meta charset=\"utf-8\"><title>MTR {System.Net.WebUtility.HtmlEncode(_mtr.HostDigitado)}</title></head><body>{_mtr.ComoHtml()}</body></html>"
+                : _mtr.ComoTexto(), System.Text.Encoding.UTF8);
+            _mtrStatus.Text = $"Salvo em {dialogo.FileName}";
+        }
+        catch (Exception ex)
+        {
+            _mtrStatus.Text = $"Não foi possível salvar: {ex.Message}";
         }
     }
 
