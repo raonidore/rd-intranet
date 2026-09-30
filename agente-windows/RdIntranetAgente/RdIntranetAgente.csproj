@@ -9,7 +9,7 @@
     <AssemblyName>RdIntranetAgente</AssemblyName>
     <RootNamespace>RdIntranetAgente</RootNamespace>
     <Product>RD Intranet - Agente</Product>
-    <Version>1.0.43</Version>
+    <Version>1.0.44</Version>
     <InvariantGlobalization>true</InvariantGlobalization>
     <ApplicationIcon>assets/icone.ico</ApplicationIcon>
 
@@ -23,6 +23,8 @@
     <PackageReference Include="System.Management" Version="8.0.0" />
     <PackageReference Include="System.Diagnostics.EventLog" Version="8.0.0" />
     <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
+    <!-- DPAPI: guarda o token de login do módulo Chamados criptografado por usuário do Windows (ChamadoAgenteClient). -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>

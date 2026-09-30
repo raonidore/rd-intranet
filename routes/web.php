@@ -1113,6 +1113,15 @@ $router->get('/api/ativos/comandos/anexo', [AtivoAgenteController::class, 'baixa
 $router->get('/api/ativos/agente/versao', [AtivoAgenteController::class, 'versaoExecutavel']);
 $router->get('/api/ativos/agente/download', [AtivoAgenteController::class, 'downloadAtualizacao']);
 $router->get('/api/ativos/cadastros', [AtivoAgenteController::class, 'cadastros']);
+// Módulo Chamados do agente Windows -- chave de instalação + máquina inventariada; login do RD Intranet opcional (token).
+$router->get('/api/agente/chamados/formulario', [\App\Controllers\AgenteChamadoController::class, 'formulario']);
+$router->get('/api/agente/chamados/ativos', [\App\Controllers\AgenteChamadoController::class, 'ativos']);
+$router->post('/api/agente/chamados/login', [\App\Controllers\AgenteChamadoController::class, 'login']);
+$router->post('/api/agente/chamados/logout', [\App\Controllers\AgenteChamadoController::class, 'logout']);
+$router->post('/api/agente/chamados/abrir', [\App\Controllers\AgenteChamadoController::class, 'abrir']);
+$router->get('/api/agente/chamados/meus', [\App\Controllers\AgenteChamadoController::class, 'meus']);
+$router->get('/api/agente/chamados/ver', [\App\Controllers\AgenteChamadoController::class, 'ver']);
+$router->post('/api/agente/chamados/responder', [\App\Controllers\AgenteChamadoController::class, 'responder']);
 
 $router->post('/api/whatsapp/webhook', [WhatsAppWebhookController::class, 'receber']);
 $router->get('/api/whatsapp/webhook/meta', [WhatsAppWebhookController::class, 'verificarMeta']);

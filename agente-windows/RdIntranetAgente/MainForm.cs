@@ -24,6 +24,7 @@ public sealed class MainForm : Form
     private readonly Panel _paginaAtividade;
     private readonly Panel _paginaNetwork;
     private readonly Panel _paginaConfig;
+    private readonly ChamadosPagina _paginaChamados;
     private readonly Panel _hostConfig;
     private readonly Button _botaoConfig;
     private ConfigForm? _formConfig;
@@ -101,11 +102,17 @@ public sealed class MainForm : Form
         _navegacao.Controls.Add(marca);
 
         var botaoVisao = CriarBotaoNavegacao("Visão geral", 100);
-        var botaoSeguranca = CriarBotaoNavegacao("Segurança", 145);
-        var botaoAtividade = CriarBotaoNavegacao("Atividade", 190);
-        _botaoConfig = CriarBotaoNavegacao("Configurações", 235);
-        var botaoNetwork = CriarBotaoNavegacao("Network", 280);
+        var botaoChamados = CriarBotaoNavegacao("Chamados", 145);
+        var botaoSeguranca = CriarBotaoNavegacao("Segurança", 190);
+        var botaoAtividade = CriarBotaoNavegacao("Atividade", 235);
+        _botaoConfig = CriarBotaoNavegacao("Configurações", 280);
+        var botaoNetwork = CriarBotaoNavegacao("Network", 325);
         botaoVisao.Click += (s, e) => MostrarPagina(_paginaVisao!, botaoVisao);
+        botaoChamados.Click += async (s, e) =>
+        {
+            MostrarPagina(_paginaChamados!, botaoChamados);
+            await _paginaChamados!.AoMostrarAsync();
+        };
         botaoSeguranca.Click += (s, e) => MostrarPagina(_paginaSeguranca!, botaoSeguranca);
         botaoAtividade.Click += (s, e) => MostrarPagina(_paginaAtividade!, botaoAtividade);
         _botaoConfig.Click += (s, e) => AbrirConfiguracoes();
@@ -114,7 +121,7 @@ public sealed class MainForm : Form
             MostrarPagina(_paginaNetwork!, botaoNetwork);
             await AtualizarAdaptadoresRedeAsync();
         };
-        _navegacao.Controls.AddRange(new Control[] { botaoVisao, botaoSeguranca, botaoAtividade, _botaoConfig, botaoNetwork });
+        _navegacao.Controls.AddRange(new Control[] { botaoVisao, botaoChamados, botaoSeguranca, botaoAtividade, _botaoConfig, botaoNetwork });
 
         var versao = new Label
         {
@@ -368,7 +375,9 @@ public sealed class MainForm : Form
         Tema.TemaEscuroNativo(_hostConfig);
         Empilhar(_paginaConfig, _hostConfig, tituloConfig);
 
-        _conteudo.Controls.AddRange(new Control[] { _paginaVisao, _paginaSeguranca, _paginaAtividade, _paginaNetwork, _paginaConfig });
+        _paginaChamados = new ChamadosPagina(_configAtual);
+
+        _conteudo.Controls.AddRange(new Control[] { _paginaVisao, _paginaChamados, _paginaSeguranca, _paginaAtividade, _paginaNetwork, _paginaConfig });
         MostrarPagina(_paginaVisao, botaoVisao);
         ResumeLayout(false);
         Tema.AplicarRolagemEscura(this);
@@ -899,6 +908,7 @@ public sealed class MainForm : Form
         _paginaAtividade.Visible = false;
         _paginaNetwork.Visible = false;
         _paginaConfig.Visible = false;
+        _paginaChamados.Visible = false;
         pagina.Visible = true;
         pagina.BringToFront();
         foreach (Control controle in _navegacao.Controls)

@@ -54,9 +54,10 @@ class ChamadoService
     }
 
     /** @return array{success: bool, message: string, id?: int} */
-    public function abrir(array $post, string $canal = 'painel'): array
+    /** $usuarioAberturaId: quem abriu, quando não há sessão web (ex.: login feito dentro do agente); null = usuário da sessão, se houver. */
+    public function abrir(array $post, string $canal = 'painel', ?int $usuarioAberturaId = null): array
     {
-        if (!in_array($canal, ['painel', 'email', 'whatsapp', 'portal', 'sistema'], true)) {
+        if (!in_array($canal, ['painel', 'email', 'whatsapp', 'portal', 'sistema', 'agente'], true)) {
             $canal = 'painel';
         }
 
@@ -94,7 +95,7 @@ class ChamadoService
             if (!$subcategoria || (int)$subcategoria['categoria_id'] !== $categoriaId || !$subcategoria['ativo']) {
                 return ['success' => false, 'message' => 'Subcategoria inválida para a categoria escolhida.'];
             }
-        } elseif (!empty($categoria['exige_subcategoria']) && in_array($canal, ['painel', 'portal'], true)
+        } elseif (!empty($categoria['exige_subcategoria']) && in_array($canal, ['painel', 'portal', 'agente'], true)
             && $subcategoriaService->contarAtivasDaCategoria($categoriaId) > 0) {
             return ['success' => false, 'message' => 'Escolha uma subcategoria para "' . $categoria['nome'] . '".'];
         }
@@ -125,7 +126,7 @@ class ChamadoService
         // solicitante_id (contato solto, nem sempre ligado a um login).
         // É o que permite "Meus Chamados" (Dashboard + Chamados > Meus
         // Chamados) mostrar só o que esse usuário efetivamente abriu.
-        $usuarioAberturaId = (int)($_SESSION['usuario']['id'] ?? 0) ?: null;
+        $usuarioAberturaId ??= (int)($_SESSION['usuario']['id'] ?? 0) ?: null;
 
         $stmt = $this->pdo->prepare(
             "INSERT INTO chamados
@@ -141,7 +142,7 @@ class ChamadoService
         $numeroControle = NumeroControleService::gerar($this->pdo, 'chamados', 'aberto_em', 'CI', $id);
         $this->pdo->prepare('UPDATE chamados SET numero_controle = ? WHERE id = ?')->execute([$numeroControle, $id]);
 
-        $this->registrarHistorico($id, 'status', null, 'fila', (int)($_SESSION['usuario']['id'] ?? 0) ?: null);
+        $this->registrarHistorico($id, 'status', null, 'fila', $usuarioAberturaId);
 
         $this->sincronizarPausaSlaLinha($id, $this->buscar($id));
 
