@@ -18,6 +18,9 @@ class SegurancaEventoService
         'SHADOW_COPY_DELETE_ATTEMPT' => 'Shadow copies apagadas',
         'BACKUP_DELETE_ATTEMPT' => 'Tentativa de apagar backups/recuperação',
         'MASS_FILE_CHANGE' => 'Mudança em massa de arquivos',
+        // Agente 1.0.47+: surto quase só de exclusões, sem nenhum sinal de
+        // criptografia (mover pra outra unidade, apagar pasta) -- sempre INFO.
+        'MASS_FILE_DELETE' => 'Exclusão/movimentação em massa',
         'RANSOM_NOTE_CREATED' => 'Nota de resgate criada',
     ];
 
@@ -334,6 +337,8 @@ class SegurancaEventoService
             'MASS_FILE_CHANGE' => (int)($d['eventos'] ?? 0) . ' arquivos alterados em ' . (int)($d['janela_segundos'] ?? 0) . 's em ' . ($d['pasta'] ?? '?')
                 . (!empty($d['motivo']) ? ' -- ' . $d['motivo'] : '')
                 . (!empty($d['extensoes_novas']) ? ' -- extensões novas: ' . implode(', ', array_slice((array)$d['extensoes_novas'], 0, 5)) : ''),
+            'MASS_FILE_DELETE' => (int)($d['excluidos'] ?? 0) . ' arquivos excluídos/movidos em ' . (int)($d['janela_segundos'] ?? 0) . 's em ' . ($d['pasta'] ?? '?')
+                . (!empty($d['motivo']) ? ' -- ' . $d['motivo'] : ''),
             'RANSOM_NOTE_CREATED' => 'Nota de resgate conhecida "' . ($d['nota_resgate'] ?? '?') . '" criada em várias pastas (' . ($d['pasta'] ?? '?') . ')',
             default => self::rotuloTipo($tipo),
         };

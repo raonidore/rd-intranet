@@ -498,6 +498,15 @@ public sealed class SegurancaService : IDisposable
             {
                 _criadosRecentemente[caminho] = agora;
                 RegistrarNotaDeResgate(caminho, agora);
+
+                // Variante "grava a cópia criptografada num arquivo novo e apaga o
+                // original": não passa por Renamed, então a extensão conhecida de
+                // ransomware no arquivo criado já conta como sinal.
+                var extCriada = Path.GetExtension(caminho).ToLowerInvariant();
+                if (extCriada != "" && _assinaturasExtensoes.Contains(extCriada))
+                {
+                    _janelaFim.AddLast((agora, caminho, 'K', extCriada));
+                }
                 return;
             }
 
@@ -602,7 +611,8 @@ public sealed class SegurancaService : IDisposable
     private void AvaliarFim()
     {
         List<string> amostrar;
-        int janela, critico, aviso, total, alterados, suspeitas, conhecidas, excluidos;
+        int janela, critico, aviso, total, alterados, suspeitas, conhecidas, excluidos, criadosIncomuns;
+        List<string> criadosNaJanela;
         List<string> extensoesNovas, exemplos;
         string pastaPrincipal;
         bool estouro;
@@ -682,6 +692,16 @@ public sealed class SegurancaService : IDisposable
                 : "?";
 
             exemplos = porArquivo.Take(10).Select(e => e.caminho).ToList();
+
+            // Arquivos criados na mesma janela: é o que separa "mover/apagar"
+            // (nada novo, ou cópias normais) de "criptografar num arquivo novo
+            // e apagar o original".
+            criadosNaJanela = _criadosRecentemente.Where(k => k.Value >= corte).Select(k => k.Key).ToList();
+            criadosIncomuns = criadosNaJanela.Count(c =>
+            {
+                var ext = Path.GetExtension(c);
+                return ext != "" && !ExtensoesComuns.Contains(ext);
+            });
             amostrar = porArquivo.Where(e => e.tipo == 'M').Select(e => e.caminho).Take(12).ToList();
 
             // Não repete o mesmo surto a cada segundo -- silencia por duas
@@ -706,9 +726,38 @@ public sealed class SegurancaService : IDisposable
             }
         }
 
+        // Surto dominado por exclusão (mover pra outra unidade, apagar pasta de
+        // backup): só vira alerta se algo novo apareceu junto com cara de
+        // criptografia. Confere o conteúdo de uma amostra dos criados.
+        var soExclusao = nota == null && conhecidas == 0 && suspeitas == 0 && total > 0 && excluidos * 10 >= total * 8;
+        var (criadosAmostrados, criadosInvalidos) = (0, 0);
+        if (soExclusao)
+        {
+            foreach (var caminho in criadosNaJanela.Take(12))
+            {
+                var invalido = ConteudoInvalido(caminho);
+                if (invalido == null) continue;
+                criadosAmostrados++;
+                if (invalido == true) criadosInvalidos++;
+            }
+        }
+        var criadosSuspeitos = criadosIncomuns > 0 || (criadosAmostrados >= 2 && criadosInvalidos * 2 >= criadosAmostrados);
+
         string? severidade = null;
         string motivo;
-        if (nota != null)
+        if (soExclusao && criadosAmostrados >= 2 && criadosInvalidos * 2 >= criadosAmostrados && excluidos >= critico / 2)
+        {
+            severidade = "CRITICAL";
+            motivo = $"originais apagados e {criadosInvalidos} de {criadosAmostrados} arquivos novos com conteúdo ilegível";
+        }
+        else if (soExclusao && !criadosSuspeitos)
+        {
+            severidade = "INFO";
+            motivo = criadosNaJanela.Count > 0
+                ? "exclusão/movimentação em massa -- arquivos novos com extensão comum e conteúdo válido"
+                : "exclusão/movimentação em massa, sem sinal de criptografia";
+        }
+        else if (nota != null)
         {
             severidade = "CRITICAL";
             motivo = $"nota de resgate conhecida \"{nota.Value.nome}\" criada em {nota.Value.pastas} pastas";
@@ -716,7 +765,7 @@ public sealed class SegurancaService : IDisposable
         else if (conhecidas >= 5)
         {
             severidade = "CRITICAL";
-            motivo = $"{conhecidas} arquivos renomeados pra extensão conhecida de ransomware";
+            motivo = $"{conhecidas} arquivos com extensão conhecida de ransomware (renomeados ou criados)";
         }
         else if (total >= critico && suspeitas + conhecidas >= critico / 2)
         {
@@ -738,11 +787,13 @@ public sealed class SegurancaService : IDisposable
 
         Registrar(new EventoSeguranca
         {
-            Tipo = nota != null ? "RANSOM_NOTE_CREATED" : "MASS_FILE_CHANGE",
+            Tipo = nota != null ? "RANSOM_NOTE_CREATED" : severidade == "INFO" ? "MASS_FILE_DELETE" : "MASS_FILE_CHANGE",
             Severidade = severidade,
             Resumo = nota != null
                 ? $"Nota de resgate \"{nota.Value.nome}\" criada em {nota.Value.pastas} pastas"
-                : $"{total} arquivos alterados em {janela}s em {pastaPrincipal} -- {motivo}",
+                : severidade == "INFO"
+                    ? $"{excluidos} arquivos excluídos/movidos em {janela}s em {pastaPrincipal} -- {motivo}"
+                    : $"{total} arquivos alterados em {janela}s em {pastaPrincipal} -- {motivo}",
             Detalhes = new Dictionary<string, object?>
             {
                 ["eventos"] = total,
@@ -752,6 +803,10 @@ public sealed class SegurancaService : IDisposable
                 ["extensao_suspeita"] = suspeitas,
                 ["extensao_ransomware"] = conhecidas,
                 ["excluidos"] = excluidos,
+                ["criados"] = criadosNaJanela.Count,
+                ["criados_extensao_incomum"] = criadosIncomuns,
+                ["criados_amostrados"] = criadosAmostrados,
+                ["criados_conteudo_invalido"] = criadosInvalidos,
                 ["extensoes_novas"] = extensoesNovas,
                 ["amostrados"] = amostrados,
                 ["conteudo_invalido"] = invalidos,
