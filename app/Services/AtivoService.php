@@ -3381,6 +3381,34 @@ class AtivoService
      * (LinuxService::executarScript, script sincronizado em
      * /opt/rdtecnologia/scripts/ via scripts/sync-system-scripts.sh).
      */
+    private const CHAVE_AGENTE_AUTOMATICO = 'agente_atualizacao_automatica';
+
+    /**
+     * "Freio" por servidor: desligado, a sincronização automática continua
+     * trazendo as regras do anti-ransomware, mas NÃO baixa executável novo --
+     * só anota a versão disponível; a atualização volta a ser pelo botão
+     * "Baixar do repositório" (ex.: segurar um cliente numa versão testada).
+     */
+    public function atualizacaoAutomaticaAgente(): bool
+    {
+        return ConfigService::get(self::CHAVE_AGENTE_AUTOMATICO, '1') !== '0';
+    }
+
+    public function definirAtualizacaoAutomaticaAgente(bool $ligada): void
+    {
+        ConfigService::set(self::CHAVE_AGENTE_AUTOMATICO, $ligada ? '1' : '0');
+        AuditService::registrar('Ativos', 'Agente Windows', 'Atualização automática do agente ' . ($ligada ? 'LIGADA' : 'DESLIGADA') . ' neste servidor.');
+    }
+
+    /** Versão publicada no repositório que ainda não foi baixada (só preenchida com a atualização automática desligada). */
+    public function versaoAgenteDisponivelNaoBaixada(): string
+    {
+        $disponivel = (string)ConfigService::get('agente_versao_disponivel', '');
+        $atual = (string)ConfigService::get('ativos_agente_exe_versao', '');
+
+        return $disponivel !== '' && version_compare($disponivel, $atual ?: '0', '>') ? $disponivel : '';
+    }
+
     /**
      * Cron "rd agente:sincronizar" (30 min): lê no repositório, sem mexer no
      * código rodando, a versão publicada do agente e as regras do
@@ -3412,7 +3440,13 @@ class AtivoService
 
         $versaoRemota = (string)($dados['versao_agente'] ?? '');
         $versaoLocal = (string)ConfigService::get('ativos_agente_exe_versao', '');
-        if ($versaoRemota !== '' && version_compare($versaoRemota, $versaoLocal ?: '0', '>')) {
+        if ($versaoRemota !== '') {
+            ConfigService::set('agente_versao_disponivel', $versaoRemota);
+        }
+
+        if ($versaoRemota !== '' && version_compare($versaoRemota, $versaoLocal ?: '0', '>') && !$this->atualizacaoAutomaticaAgente()) {
+            $mensagens[] = "Versão {$versaoRemota} do agente disponível no repositório, mas a atualização automática está DESLIGADA neste servidor -- continua na {$versaoLocal} (use \"Baixar do repositório\" quando quiser).";
+        } elseif ($versaoRemota !== '' && version_compare($versaoRemota, $versaoLocal ?: '0', '>')) {
             $baixar = json_decode(trim($this->linux->executarScript('/opt/rdtecnologia/scripts/agente_baixar_git.sh')['output']), true);
             if (is_array($baixar) && ($baixar['success'] ?? false)) {
                 ConfigService::set('ativos_agente_exe_versao', (string)($baixar['versao'] ?? $versaoRemota));

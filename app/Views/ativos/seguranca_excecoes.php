@@ -216,6 +216,9 @@ $taxaFp = $totalGeral > 0 ? round($totalFp * 100 / $totalGeral) : 0;
                     <dt class="col-7 fw-normal text-muted">Pastas ignoradas extras</dt><dd class="col-5 mb-1"><?= $regrasAgente['arquivos']['pastas_ignoradas_extra'] ? htmlspecialchars(implode(', ', $regrasAgente['arquivos']['pastas_ignoradas_extra'])) : '—' ?></dd>
                     <dt class="col-7 fw-normal text-muted">Agente distribuído por este servidor</dt><dd class="col-5 mb-1"><?= htmlspecialchars($versaoAgenteDistribuida ?: '—') ?></dd>
                 </dl>
+                <div class="mb-2">
+                    <?php $podeEditarFreio = $podeEditar; $voltarFreio = 'excecoes'; require __DIR__ . '/_freio_agente.php'; ?>
+                </div>
                 <p class="text-muted mb-2"><i class="bi bi-arrow-repeat"></i> Última sincronização: <?= $sincronizacaoAgente !== '' ? htmlspecialchars($sincronizacaoAgente) : 'ainda não rodou' ?></p>
                 <?php if ($podeEditar): ?>
                     <form method="post" action="<?= url('/ativos/seguranca/regras/sincronizar') ?>">

@@ -386,6 +386,12 @@ $statusCores = [
                             <form action="<?= url('/ativos/agente/exe/baixar-git') ?>" method="post" class="d-inline">
                                 <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-git"></i> Baixar do repositório</button>
                             </form>
+                            <div class="mt-2">
+                                <?php $podeEditarFreio = true; $voltarFreio = 'dashboard'; require __DIR__ . '/_freio_agente.php'; ?>
+                            </div>
+                            <?php if ($agenteSincronizacaoUltima !== ''): ?>
+                                <p class="text-muted small mt-1 mb-0"><i class="bi bi-arrow-repeat"></i> Última sincronização: <?= htmlspecialchars($agenteSincronizacaoUltima) ?></p>
+                            <?php endif; ?>
 
                             <hr>
 

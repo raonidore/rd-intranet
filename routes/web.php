@@ -1032,6 +1032,7 @@ $router->get('/ativos/seguranca/configuracao', [AtivoController::class, 'seguran
 $router->post('/ativos/seguranca/excecoes', [AtivoController::class, 'salvarExcecoesSeguranca']);
 $router->post('/ativos/seguranca/assinaturas', [AtivoController::class, 'configurarAssinaturasSeguranca']);
 $router->post('/ativos/seguranca/regras/sincronizar', [AtivoController::class, 'sincronizarAgenteERegras']);
+$router->post('/ativos/agente/atualizacao-automatica', [AtivoController::class, 'alternarAtualizacaoAutomaticaAgente']);
 $router->post('/ativos/seguranca/alerta-teste', [AtivoController::class, 'enviarAlertaTesteSeguranca']);
 $router->post('/ativos/seguranca/padrao', [AtivoController::class, 'salvarPadraoSeguranca']);
 $router->post('/ativos/seguranca/modulos', [AtivoController::class, 'salvarModulosSeguranca']);

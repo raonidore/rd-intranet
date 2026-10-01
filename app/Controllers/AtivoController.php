@@ -56,7 +56,25 @@ class AtivoController extends Controller
             'dotnetRuntimeDisponivel' => $this->service->dotnetRuntimeDisponivel(),
             'dotnetRuntimeLabel' => $this->service->dotnetRuntimeLabel(),
             'padraoSeguranca' => (new SegurancaModuloService())->padrao(),
+            'agenteAtualizacaoAutomatica' => $this->service->atualizacaoAutomaticaAgente(),
+            'agenteVersaoDisponivel' => $this->service->versaoAgenteDisponivelNaoBaixada(),
+            'agenteSincronizacaoUltima' => (string)\App\Services\ConfigService::get('agente_sincronizacao_ultima', ''),
         ]));
+    }
+
+    /** Freio da atualização automática do agente neste servidor (Dashboard de Ativos e Central de Segurança). */
+    public function alternarAtualizacaoAutomaticaAgente(): void
+    {
+        AuthMiddleware::checkModulo('ativos_dashboard');
+
+        $ligar = ($_POST['ligada'] ?? '') === '1';
+        $this->service->definirAtualizacaoAutomaticaAgente($ligar);
+        NotificationService::success($ligar
+            ? 'Atualização automática do agente LIGADA: versão nova publicada no repositório chega sozinha em até 30 min.'
+            : 'Atualização automática do agente DESLIGADA: este servidor fica na versão atual; regras do anti-ransomware continuam chegando.');
+
+        header('Location: ' . url(($_POST['voltar'] ?? '') === 'excecoes' ? '/ativos/seguranca/excecoes' : '/ativos'));
+        exit;
     }
 
     public function index(): void
@@ -448,6 +466,8 @@ class AtivoController extends Controller
             'regrasAgente' => (new \App\Services\SegurancaRegrasService())->dados(),
             'sincronizacaoAgente' => (string)\App\Services\ConfigService::get('agente_sincronizacao_ultima', ''),
             'versaoAgenteDistribuida' => (string)\App\Services\ConfigService::get('ativos_agente_exe_versao', ''),
+            'agenteAtualizacaoAutomatica' => $this->service->atualizacaoAutomaticaAgente(),
+            'agenteVersaoDisponivel' => $this->service->versaoAgenteDisponivelNaoBaixada(),
         ]);
     }
 
