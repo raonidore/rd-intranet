@@ -970,11 +970,27 @@ public sealed class SegurancaService : IDisposable
             return;
         }
 
+        // Rodízio x ataque (MDA-PC-0012, Maurílio, 30/09): uma rotina agendada criou a
+        // cópia do dia e o Windows descartou as 2 mais antigas no mesmo minuto (6 → 5).
+        // Ransomware apaga TODAS e não cria nenhuma -- então: cópia nova no mesmo
+        // intervalo + só as mais antigas saíram + ainda sobram cópias = rodízio.
+        var (classificacao, novasCount, maisAntigasPrimeiro) = ClassificarRemocaoShadow(anteriores, atuais);
+
+        if (classificacao == "rodizio")
+        {
+            LogAtividade.Registrar(NivelAtividade.Info, "SEGURANÇA",
+                $"Rodízio de shadow copies: {novasCount} nova(s) criada(s) e as {removidas.Count} mais antiga(s) descartada(s) ({anteriores.Count} → {atuais.Count}) -- comportamento normal do Windows/backup.");
+            return;
+        }
+
+        var parcialDasAntigas = classificacao == "parcial";
+
         Registrar(new EventoSeguranca
         {
             Tipo = "SHADOW_COPY_DELETE_ATTEMPT",
-            Severidade = "CRITICAL",
-            Resumo = $"{removidas.Count} shadow copies removidas de uma vez ({anteriores.Count} → {atuais.Count}), {semExplicacao} sem explicação",
+            Severidade = parcialDasAntigas ? "WARNING" : "CRITICAL",
+            Resumo = $"{removidas.Count} shadow copies removidas de uma vez ({anteriores.Count} → {atuais.Count}), {semExplicacao} sem explicação"
+                + (parcialDasAntigas ? " -- só as mais antigas, ainda restam cópias" : ""),
             Detalhes = new Dictionary<string, object?>
             {
                 ["linha_comando"] = $"Contagem de shadow copies caiu de {anteriores.Count} para {atuais.Count} em menos de 1 minuto",
@@ -983,9 +999,42 @@ public sealed class SegurancaService : IDisposable
                 ["temporarias"] = temporarias,
                 ["expiradas"] = expiradas,
                 ["apagadas_pelo_windows"] = apagadasPeloWindows,
-                ["sem_explicacao"] = semExplicacao
+                ["sem_explicacao"] = semExplicacao,
+                ["removidas"] = removidas.Count,
+                ["novas"] = novasCount,
+                ["mais_antigas_primeiro"] = maisAntigasPrimeiro
             }
         });
+    }
+
+    /// <summary>
+    /// Separa rodízio de ataque olhando QUAIS cópias saíram:
+    ///  - "rodizio": cópia nova no mesmo intervalo, só as mais antigas saíram e
+    ///    pelo menos metade das antigas continua (rotina mantendo N cópias);
+    ///  - "parcial": só as mais antigas saíram, sem nova, e sobrou pelo menos metade -- alerta, sem isolar;
+    ///  - "ataque": zerou, sobrou menos da metade ou saíram cópias mais novas que
+    ///    outras que ficaram (ninguém legítimo apaga a do meio).
+    /// Ransomware ("vssadmin delete shadows /all", wmic shadowcopy delete) apaga
+    /// todas e não cria nenhuma.
+    /// </summary>
+    internal static (string classificacao, int novas, bool maisAntigasPrimeiro) ClassificarRemocaoShadow(
+        IReadOnlyDictionary<string, DateTime> anteriores, IReadOnlyDictionary<string, DateTime> atuais)
+    {
+        var removidas = anteriores.Where(a => !atuais.ContainsKey(a.Key)).Select(a => a.Value).ToList();
+        var novas = atuais.Count(a => !anteriores.ContainsKey(a.Key));
+        var antigasQueFicaram = atuais.Where(a => anteriores.ContainsKey(a.Key) && a.Value != DateTime.MinValue).Select(a => a.Value).ToList();
+        var datasRemovidas = removidas.Where(r => r != DateTime.MinValue).ToList();
+        var maisAntigasPrimeiro = removidas.Count > 0 && datasRemovidas.Count == removidas.Count
+            && (antigasQueFicaram.Count == 0 || datasRemovidas.Max() <= antigasQueFicaram.Min());
+
+        // Rodízio descarta só o excedente: pelo menos metade das cópias antigas continua lá.
+        // Sem isso, "apagar tudo e criar uma de fachada" passaria como rodízio.
+        var antigasRestantes = atuais.Count(a => anteriores.ContainsKey(a.Key));
+        var sobrouMetade = antigasRestantes > 0 && antigasRestantes * 2 >= anteriores.Count;
+
+        if (novas > 0 && maisAntigasPrimeiro && sobrouMetade) return ("rodizio", novas, true);
+        if (maisAntigasPrimeiro && sobrouMetade) return ("parcial", novas, true);
+        return ("ataque", novas, maisAntigasPrimeiro);
     }
 
     /// <summary>

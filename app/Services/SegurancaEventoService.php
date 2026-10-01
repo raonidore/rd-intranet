@@ -63,6 +63,9 @@ class SegurancaEventoService
             $severidade = 'WARNING';
         }
 
+        $detalhes = is_array($payload['detalhes'] ?? null) ? $payload['detalhes'] : [];
+        $severidade = $this->rebaixarRodizioShadowDeAgenteAntigo($tipo, $severidade, $detalhes);
+
         if ($this->contarRecentes($ativoId) >= self::MAX_EVENTOS_JANELA) {
             return ['success' => true, 'message' => 'Limite de eventos da janela atingido -- descartado.'];
         }
@@ -71,7 +74,6 @@ class SegurancaEventoService
         if (!in_array($acao, self::ACOES_AGENTE, true)) {
             $acao = 'nenhuma';
         }
-        $detalhes = is_array($payload['detalhes'] ?? null) ? $payload['detalhes'] : [];
         $ocorridoEm = strtotime((string)($payload['ocorrido_em'] ?? '')) ?: time();
 
         $id = $this->inserir($ativoId, $tipo, $severidade, $this->montarResumo($tipo, $detalhes), $detalhes, $acao, $ocorridoEm);
@@ -91,6 +93,35 @@ class SegurancaEventoService
         }
 
         return ['success' => true, 'id' => $id];
+    }
+
+    /**
+     * Agente anterior ao 1.0.50 marca como CRITICAL (e isola) o rodízio normal de
+     * shadow copies: a rotina cria a cópia do dia e o Windows descarta as mais
+     * antigas no mesmo minuto (MDA-PC-0012, Maurílio, 30/09: 6 -> 5 com 1 nova e
+     * 2 descartadas). Os números do próprio evento mostram isso: saíram mais
+     * cópias do que a contagem caiu = alguma foi criada junto. Se ainda sobrou
+     * pelo menos metade, vira WARNING (alerta sem isolar). Apagar tudo continua
+     * CRITICAL. Agente 1.0.50+ já faz essa análise (com as datas) e manda "novas".
+     */
+    private function rebaixarRodizioShadowDeAgenteAntigo(string $tipo, string $severidade, array &$detalhes): string
+    {
+        if ($tipo !== 'SHADOW_COPY_DELETE_ATTEMPT' || $severidade !== 'CRITICAL' || array_key_exists('novas', $detalhes)
+            || !isset($detalhes['contagem_anterior'], $detalhes['contagem_atual'], $detalhes['sem_explicacao'])) {
+            return $severidade;
+        }
+
+        $anterior = (int)$detalhes['contagem_anterior'];
+        $atual = (int)$detalhes['contagem_atual'];
+        $saiuNoMinimo = (int)($detalhes['temporarias'] ?? 0) + (int)($detalhes['expiradas'] ?? 0) + (int)$detalhes['sem_explicacao'];
+        $criadasJunto = $saiuNoMinimo - ($anterior - $atual);
+
+        if ($criadasJunto >= 1 && $atual >= 1 && $atual * 2 >= $anterior) {
+            $detalhes['rebaixado_pelo_servidor'] = 'rodízio provável: ' . $criadasJunto . ' cópia(s) criada(s) no mesmo intervalo e ainda restam ' . $atual . ' de ' . $anterior;
+            return 'WARNING';
+        }
+
+        return $severidade;
     }
 
     public function registrarDoServidor(int $ativoId, string $tipo, string $resumo, array $detalhes = []): int
