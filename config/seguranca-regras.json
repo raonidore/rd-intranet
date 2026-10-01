@@ -1,0 +1,18 @@
+{
+    "versao": "2026-10-01.1",
+    "descricao": "Regras de comportamento do anti-ransomware do agente. Mudou aqui + commit/push = em até 30 min todos os servidores sincronizam (rd agente:sincronizar) e os agentes aplicam no próximo heartbeat, sem recompilar. Suba a \"versao\" a cada mudança -- é ela que avisa os agentes.",
+    "shadow": {
+        "fracao_minima_restante": 0.5,
+        "temporaria_horas": 2,
+        "expirada_dias": 55,
+        "sem_explicacao_minimo": 2
+    },
+    "arquivos": {
+        "proporcao_exclusao": 0.8,
+        "extensoes_comuns_extra": [],
+        "pastas_ignoradas_extra": []
+    },
+    "historico": [
+        "2026-10-01.1: primeira versão -- valores iguais aos fixos do agente 1.0.50 (rodízio de shadow copies da MDA-PC-0012; exclusão em massa do Patrimonial)."
+    ]
+}

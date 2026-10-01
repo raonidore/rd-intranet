@@ -1031,6 +1031,7 @@ $router->get('/ativos/seguranca/excecoes', [AtivoController::class, 'segurancaEx
 $router->get('/ativos/seguranca/configuracao', [AtivoController::class, 'segurancaConfiguracao']);
 $router->post('/ativos/seguranca/excecoes', [AtivoController::class, 'salvarExcecoesSeguranca']);
 $router->post('/ativos/seguranca/assinaturas', [AtivoController::class, 'configurarAssinaturasSeguranca']);
+$router->post('/ativos/seguranca/regras/sincronizar', [AtivoController::class, 'sincronizarAgenteERegras']);
 $router->post('/ativos/seguranca/alerta-teste', [AtivoController::class, 'enviarAlertaTesteSeguranca']);
 $router->post('/ativos/seguranca/padrao', [AtivoController::class, 'salvarPadraoSeguranca']);
 $router->post('/ativos/seguranca/modulos', [AtivoController::class, 'salvarModulosSeguranca']);
@@ -1105,6 +1106,7 @@ $router->post('/api/ativos/checkin', [AtivoAgenteController::class, 'checkin']);
 $router->post('/api/ativos/heartbeat', [AtivoAgenteController::class, 'heartbeat']);
 $router->post('/api/ativos/seguranca/evento', [AtivoAgenteController::class, 'eventoSeguranca']);
 $router->get('/api/ativos/seguranca/assinaturas', [AtivoAgenteController::class, 'assinaturasSeguranca']);
+$router->get('/api/ativos/seguranca/regras', [AtivoAgenteController::class, 'regrasSeguranca']);
 $router->post('/api/ativos/suporte/pedido', [AtivoAgenteController::class, 'pedidoSuporte']);
 $router->post('/api/ativos/agente/meshagent', [AtivoAgenteController::class, 'baixarInstaladorMeshAgent']);
 $router->post('/api/ativos/solicitacoes/resultado', [AtivoAgenteController::class, 'responderSolicitacao']);

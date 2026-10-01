@@ -20,6 +20,7 @@ if (!$comando) {
     echo "  antivirus:verificar     Escaneia os compartilhamentos do Samba em busca de ameaças\n";
     echo "  backup:executar <id>    Roda o backup em nuvem do destino <id> (Backup > Configuração)\n";
     echo "  certificado:verificar   Manda e-mail se o certificado HTTPS estiver perto de vencer/vencido\n";
+    echo "  agente:sincronizar      Busca no repositório a versão nova do agente Windows e as regras do anti-ransomware\n";
     echo "  kb:sincronizar          Atualiza o cache local da Base de Conhecimento pública e confere status dos artigos propostos\n";
     echo "  whatsapp:encerrar-inativos  Encerra atendimentos sem mensagem há mais tempo que o configurado em Chatbot > Finalização\n";
     echo "  chamados:distribuir     Atribui automaticamente chamados parados na fila (Chamados > Configurações)\n";
@@ -253,6 +254,19 @@ switch ($comando) {
         $resultado = (new \App\Services\CertificadoService())->verificarVencimento();
 
         echo ($resultado['success'] ? 'OK: ' : 'ERRO: ') . $resultado['message'] . "\n";
+
+        if (!$resultado['success']) {
+            exit(1);
+        }
+
+        break;
+
+    case 'agente:sincronizar':
+        $resultado = (new \App\Services\AtivoService())->sincronizarAgenteERegras();
+
+        foreach ($resultado['mensagens'] as $mensagem) {
+            echo ($resultado['success'] ? 'OK: ' : 'ERRO: ') . $mensagem . "\n";
+        }
 
         if (!$resultado['success']) {
             exit(1);

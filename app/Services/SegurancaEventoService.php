@@ -116,7 +116,8 @@ class SegurancaEventoService
         $saiuNoMinimo = (int)($detalhes['temporarias'] ?? 0) + (int)($detalhes['expiradas'] ?? 0) + (int)$detalhes['sem_explicacao'];
         $criadasJunto = $saiuNoMinimo - ($anterior - $atual);
 
-        if ($criadasJunto >= 1 && $atual >= 1 && $atual * 2 >= $anterior) {
+        $fracao = (float)(new SegurancaRegrasService())->dados()['shadow']['fracao_minima_restante'];
+        if ($criadasJunto >= 1 && $atual >= 1 && $atual >= $anterior * $fracao) {
             $detalhes['rebaixado_pelo_servidor'] = 'rodízio provável: ' . $criadasJunto . ' cópia(s) criada(s) no mesmo intervalo e ainda restam ' . $atual . ' de ' . $anterior;
             return 'WARNING';
         }

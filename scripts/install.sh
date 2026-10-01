@@ -210,6 +210,7 @@ php -r 'require $argv[1] . "/vendor/autoload.php"; (new App\Services\Atualizacao
 # roda e nao faz nada).
 php -r 'require $argv[1] . "/vendor/autoload.php"; (new App\Services\AtualizacaoService())->garantirCronCertificado();' "$REPO_DIR"
 php -r 'require $argv[1] . "/vendor/autoload.php"; (new App\Services\AtualizacaoService())->garantirCronBaseConhecimento();' "$REPO_DIR"
+php -r 'require $argv[1] . "/vendor/autoload.php"; (new App\Services\AtualizacaoService())->garantirCronAgenteSincronizar();' "$REPO_DIR"
 
 # ---------------------------------------------------------------------
 # 7) sudoers: www-data pode rodar, sem senha, qualquer script ja aprovado

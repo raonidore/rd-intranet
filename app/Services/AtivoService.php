@@ -3381,6 +3381,56 @@ class AtivoService
      * (LinuxService::executarScript, script sincronizado em
      * /opt/rdtecnologia/scripts/ via scripts/sync-system-scripts.sh).
      */
+    /**
+     * Cron "rd agente:sincronizar" (30 min): lê no repositório, sem mexer no
+     * código rodando, a versão publicada do agente e as regras do
+     * anti-ransomware. Regras novas: guarda (agentes pegam no próximo
+     * heartbeat). Agente novo: baixa o .exe (os agentes se autoatualizam no
+     * próximo check-in) -- o mesmo que o botão "Baixar do repositório", sem clique.
+     *
+     * @return array{success: bool, mensagens: string[]}
+     */
+    public function sincronizarAgenteERegras(): array
+    {
+        $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/repositorio_agente_regras_git.sh');
+        $dados = json_decode(trim($resultado['output']), true);
+        if (!is_array($dados) || !($dados['success'] ?? false)) {
+            return ['success' => false, 'mensagens' => [$dados['message'] ?? ($resultado['output'] ?: 'Falha ao ler o repositório.')]];
+        }
+
+        $mensagens = [];
+        $ok = true;
+
+        $regrasJson = base64_decode((string)($dados['regras_base64'] ?? ''), true);
+        if ($regrasJson) {
+            $regras = (new SegurancaRegrasService())->guardarDoRepositorio($regrasJson);
+            $ok = $ok && $regras['success'];
+            $mensagens[] = $regras['success']
+                ? ($regras['mudou'] ? "Regras do anti-ransomware atualizadas para {$regras['versao']}." : "Regras já na versão {$regras['versao']}.")
+                : 'Regras: ' . $regras['message'];
+        }
+
+        $versaoRemota = (string)($dados['versao_agente'] ?? '');
+        $versaoLocal = (string)ConfigService::get('ativos_agente_exe_versao', '');
+        if ($versaoRemota !== '' && version_compare($versaoRemota, $versaoLocal ?: '0', '>')) {
+            $baixar = json_decode(trim($this->linux->executarScript('/opt/rdtecnologia/scripts/agente_baixar_git.sh')['output']), true);
+            if (is_array($baixar) && ($baixar['success'] ?? false)) {
+                ConfigService::set('ativos_agente_exe_versao', (string)($baixar['versao'] ?? $versaoRemota));
+                AuditService::registrar('Ativos', 'Agente Windows', "Agente .exe atualizado automaticamente do repositório: {$versaoLocal} -> {$versaoRemota}.");
+                $mensagens[] = "Agente atualizado de {$versaoLocal} para {$versaoRemota} (as máquinas se autoatualizam no próximo check-in).";
+            } else {
+                $ok = false;
+                $mensagens[] = 'Agente: ' . ($baixar['message'] ?? 'falha ao baixar do repositório.');
+            }
+        } else {
+            $mensagens[] = "Agente já na versão {$versaoLocal}.";
+        }
+
+        ConfigService::set('agente_sincronizacao_ultima', date('Y-m-d H:i:s') . ' -- ' . implode(' ', $mensagens));
+
+        return ['success' => $ok, 'mensagens' => $mensagens];
+    }
+
     public function atualizarAgenteViaGit(): array
     {
         $resultado = $this->linux->executarScript('/opt/rdtecnologia/scripts/agente_baixar_git.sh');

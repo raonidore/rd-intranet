@@ -439,4 +439,32 @@ public class ModuloSeguranca
     /// <summary>Versão da lista pública de ransomware; null = opção desligada no servidor.</summary>
     [JsonPropertyName("assinaturas_versao")]
     public string? AssinaturasVersao { get; set; }
+
+    /// <summary>Versão das regras de comportamento (limiares do anti-ransomware); mudou = baixar de novo.</summary>
+    [JsonPropertyName("regras_versao")]
+    public string? RegrasVersao { get; set; }
+}
+
+/// <summary>
+/// Regras de comportamento do anti-ransomware vindas do servidor
+/// (config/seguranca-regras.json no repositório) -- ajustar limiar sem
+/// recompilar o agente. Os padrões são os valores do agente 1.0.50.
+/// </summary>
+public sealed class RegrasSeguranca
+{
+    public static readonly RegrasSeguranca Padrao = new();
+
+    public string Versao { get; init; } = "padrao";
+    /// <summary>Rodízio de shadow copies: fração mínima das cópias antigas que precisa continuar.</summary>
+    public double ShadowFracaoMinimaRestante { get; init; } = 0.5;
+    /// <summary>Cópia mais nova que isso que sumiu = temporária (backup/fabricante), não conta.</summary>
+    public double ShadowTemporariaHoras { get; init; } = 2;
+    /// <summary>Cópia mais velha que isso que sumiu = expirada pelo Windows, não conta.</summary>
+    public double ShadowExpiradaDias { get; init; } = 55;
+    /// <summary>A partir de quantas remoções sem explicação vira evento.</summary>
+    public int ShadowSemExplicacaoMinimo { get; init; } = 2;
+    /// <summary>Surto com essa proporção (ou mais) de exclusões, sem sinal de criptografia = exclusão em massa (INFO).</summary>
+    public double ArquivosProporcaoExclusao { get; init; } = 0.8;
+    public HashSet<string> ExtensoesComunsExtra { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+    public List<string> PastasIgnoradasExtra { get; init; } = new();
 }

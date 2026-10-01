@@ -135,6 +135,20 @@ class AtivoAgenteController extends Controller
         echo json_encode(['success' => true, 'versao' => $dados['versao'], 'extensoes' => $dados['extensoes'], 'notas' => $dados['notas']]);
     }
 
+    /** Regras de comportamento do anti-ransomware (limiares), baixadas pelo agente quando "regras_versao" muda. */
+    public function regrasSeguranca(): void
+    {
+        header('Content-Type: application/json');
+
+        if (!$this->service->chaveValida($_SERVER['HTTP_X_RD_AGENTE_CHAVE'] ?? '')) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'message' => 'Chave de API inválida.']);
+            return;
+        }
+
+        echo json_encode(['success' => true] + (new \App\Services\SegurancaRegrasService())->dados(), JSON_UNESCAPED_UNICODE);
+    }
+
     /** Botão "Pedir ajuda" do agente -- vira um cartão em Chamados > Suporte Remoto. */
     public function pedidoSuporte(): void
     {

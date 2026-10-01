@@ -183,13 +183,43 @@ $taxaFp = $totalGeral > 0 ? round($totalFp * 100 / $totalGeral) : 0;
                     <p class="text-muted"><?= htmlspecialchars($assinaturas['mensagem']) ?></p>
                 <?php endif; ?>
                 <?php if ($podeEditar): ?>
-                    <form method="post" action="<?= url('/ativos/seguranca/assinaturas') ?>" class="d-flex flex-wrap gap-2">
+                    <form method="post" action="<?= url('/ativos/seguranca/assinaturas') ?>" class="d-flex flex-wrap gap-2" id="formAssinaturas">
                         <?php if ($assinaturas['ativo']): ?>
                             <button name="acao" value="desligar" class="btn btn-sm btn-outline-secondary">Desligar</button>
                             <button name="acao" value="atualizar" class="btn btn-sm btn-outline-primary">Atualizar agora</button>
                         <?php else: ?>
                             <button name="acao" value="ligar" class="btn btn-sm btn-primary">Ligar</button>
                         <?php endif; ?>
+                    </form>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mt-3">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <strong><i class="bi bi-sliders"></i> Regras de comportamento do agente</strong>
+                <span class="badge text-bg-light border font-monospace"><?= htmlspecialchars($regrasAgente['versao']) ?></span>
+            </div>
+            <div class="card-body small">
+                <p>
+                    Limiares que o agente usa pra separar rotina do Windows de ataque. Vêm do repositório
+                    (<code>config/seguranca-regras.json</code>) e são sincronizados sozinhos a cada 30 min, junto com a versão nova do agente --
+                    ajuste sem recompilar nem reinstalar. As máquinas aplicam no próximo heartbeat (agente 1.0.51 ou mais novo).
+                </p>
+                <dl class="row mb-3">
+                    <dt class="col-7 fw-normal text-muted">Shadow copies: fração mínima que precisa sobrar</dt><dd class="col-5 mb-1"><?= number_format($regrasAgente['shadow']['fracao_minima_restante'] * 100, 0) ?>%</dd>
+                    <dt class="col-7 fw-normal text-muted">Cópia temporária (backup) até</dt><dd class="col-5 mb-1"><?= (float)$regrasAgente['shadow']['temporaria_horas'] ?> h</dd>
+                    <dt class="col-7 fw-normal text-muted">Cópia expirada a partir de</dt><dd class="col-5 mb-1"><?= (int)$regrasAgente['shadow']['expirada_dias'] ?> dias</dd>
+                    <dt class="col-7 fw-normal text-muted">Remoções sem explicação pra alertar</dt><dd class="col-5 mb-1"><?= (int)$regrasAgente['shadow']['sem_explicacao_minimo'] ?></dd>
+                    <dt class="col-7 fw-normal text-muted">Exclusão em massa (só informativo) a partir de</dt><dd class="col-5 mb-1"><?= number_format($regrasAgente['arquivos']['proporcao_exclusao'] * 100, 0) ?>% exclusões</dd>
+                    <dt class="col-7 fw-normal text-muted">Extensões comuns extras</dt><dd class="col-5 mb-1"><?= $regrasAgente['arquivos']['extensoes_comuns_extra'] ? htmlspecialchars(implode(', ', $regrasAgente['arquivos']['extensoes_comuns_extra'])) : '—' ?></dd>
+                    <dt class="col-7 fw-normal text-muted">Pastas ignoradas extras</dt><dd class="col-5 mb-1"><?= $regrasAgente['arquivos']['pastas_ignoradas_extra'] ? htmlspecialchars(implode(', ', $regrasAgente['arquivos']['pastas_ignoradas_extra'])) : '—' ?></dd>
+                    <dt class="col-7 fw-normal text-muted">Agente distribuído por este servidor</dt><dd class="col-5 mb-1"><?= htmlspecialchars($versaoAgenteDistribuida ?: '—') ?></dd>
+                </dl>
+                <p class="text-muted mb-2"><i class="bi bi-arrow-repeat"></i> Última sincronização: <?= $sincronizacaoAgente !== '' ? htmlspecialchars($sincronizacaoAgente) : 'ainda não rodou' ?></p>
+                <?php if ($podeEditar): ?>
+                    <form method="post" action="<?= url('/ativos/seguranca/regras/sincronizar') ?>">
+                        <button class="btn btn-sm btn-outline-primary"><i class="bi bi-arrow-repeat"></i> Sincronizar agora</button>
                     </form>
                 <?php endif; ?>
             </div>

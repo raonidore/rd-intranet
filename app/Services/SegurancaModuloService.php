@@ -287,6 +287,8 @@ class SegurancaModuloService
             'fim_extensoes_ignoradas' => self::linhas((string)$efetivo['fim_extensoes_ignoradas'], 20, 100),
             // Lista pública de ransomware (opcional). null = desligada: o agente descarta a que tiver.
             'assinaturas_versao' => (new SegurancaAssinaturaService())->versaoParaAgente(),
+            // Agente 1.0.51+: regras de comportamento (limiares) -- baixa quando a versão muda.
+            'regras_versao' => (new SegurancaRegrasService())->versao(),
         ];
     }
 

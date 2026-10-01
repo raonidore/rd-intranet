@@ -181,6 +181,7 @@ class AtualizacaoService
             $this->garantirCronsColeta();
             $this->garantirCronCertificado();
             $this->garantirCronBaseConhecimento();
+            $this->garantirCronAgenteSincronizar();
             $this->garantirCronWhatsappInatividade();
             $this->garantirCronChamadosDistribuicao();
             $this->garantirCronChamadosSlaExpediente();
@@ -313,6 +314,21 @@ class AtualizacaoService
      * estiver configurada (Base de Conhecimento > Base central) --
      * roda e nao faz nada, sem erro, se nao estiver.
      */
+    /**
+     * Sincronização automática do agente Windows: versão nova do .exe e regras
+     * do anti-ransomware publicadas no repositório chegam sozinhas, sem
+     * ninguém clicar em "Baixar do repositório" em cada servidor.
+     */
+    public function garantirCronAgenteSincronizar(): void
+    {
+        $this->garantirCronJob(
+            'Sincronizar agente Windows e regras do anti-ransomware',
+            'Busca no repositório a versão nova do agente e as regras de comportamento do anti-ransomware; os agentes se atualizam no próximo check-in/heartbeat.',
+            '*/30 * * * *',
+            'php ' . $this->repoDir() . '/rd agente:sincronizar'
+        );
+    }
+
     public function garantirCronBaseConhecimento(): void
     {
         $this->garantirCronJob(

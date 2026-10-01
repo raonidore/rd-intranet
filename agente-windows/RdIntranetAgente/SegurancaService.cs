@@ -125,6 +125,8 @@ public sealed class SegurancaService : IDisposable
     private HashSet<string> _assinaturasNotas = new(StringComparer.OrdinalIgnoreCase);
     private string? _assinaturasVersao;
     private bool _baixandoAssinaturas;
+    private RegrasSeguranca _regras = RegrasSeguranca.Padrao;
+    private bool _baixandoRegras;
 
     // Shadow copies
     private Dictionary<string, DateTime>? _shadowIds;
@@ -202,6 +204,13 @@ public sealed class SegurancaService : IDisposable
             {
                 _baixandoAssinaturas = true;
                 _ = BaixarAssinaturasAsync();
+            }
+
+            // Regras de comportamento (limiares): versão nova no servidor = baixa e passa a valer na hora.
+            if (modulo?.RegrasVersao is { } versaoRegras && versaoRegras != _regras.Versao && !_baixandoRegras)
+            {
+                _baixandoRegras = true;
+                _ = BaixarRegrasAsync();
             }
         }
     }
@@ -530,7 +539,7 @@ public sealed class SegurancaService : IDisposable
                 {
                     tipo = 'K';
                 }
-                else if (novaNormalizada == "" || ExtensoesComuns.Contains(novaNormalizada))
+                else if (novaNormalizada == "" || EhExtensaoComum(novaNormalizada))
                 {
                     // Office salva em .tmp e renomeia pra .docx; navegador
                     // termina download de .crdownload pra .pdf -- extensão
@@ -599,7 +608,7 @@ public sealed class SegurancaService : IDisposable
             {
                 return true;
             }
-            if (modulo.FimPastasIgnoradas.Any(t => t.Length > 2 && caminho.Contains(t, StringComparison.OrdinalIgnoreCase)))
+            if (modulo.FimPastasIgnoradas.Concat(_regras.PastasIgnoradasExtra).Any(t => t.Length > 2 && caminho.Contains(t, StringComparison.OrdinalIgnoreCase)))
             {
                 return true;
             }
@@ -700,7 +709,7 @@ public sealed class SegurancaService : IDisposable
             criadosIncomuns = criadosNaJanela.Count(c =>
             {
                 var ext = Path.GetExtension(c);
-                return ext != "" && !ExtensoesComuns.Contains(ext);
+                return ext != "" && !EhExtensaoComum(ext);
             });
             amostrar = porArquivo.Where(e => e.tipo == 'M').Select(e => e.caminho).Take(12).ToList();
 
@@ -729,7 +738,7 @@ public sealed class SegurancaService : IDisposable
         // Surto dominado por exclusão (mover pra outra unidade, apagar pasta de
         // backup): só vira alerta se algo novo apareceu junto com cara de
         // criptografia. Confere o conteúdo de uma amostra dos criados.
-        var soExclusao = nota == null && conhecidas == 0 && suspeitas == 0 && total > 0 && excluidos * 10 >= total * 8;
+        var soExclusao = nota == null && conhecidas == 0 && suspeitas == 0 && total > 0 && excluidos >= total * _regras.ArquivosProporcaoExclusao;
         var (criadosAmostrados, criadosInvalidos) = (0, 0);
         if (soExclusao)
         {
@@ -957,13 +966,14 @@ public sealed class SegurancaService : IDisposable
         //  - Volsnap 33: o Windows apagou a mais antiga por limite de espaço;
         //    Volsnap 25/32/35/36: descartou todas por falta de espaço/volume.
         var agora = DateTime.Now;
-        var temporarias = removidas.Count(c => c != DateTime.MinValue && (agora - c).TotalHours < 2);
-        var expiradas = removidas.Count(c => c != DateTime.MinValue && (agora - c).TotalDays > 55);
+        var regras = _regras;
+        var temporarias = removidas.Count(c => c != DateTime.MinValue && (agora - c).TotalHours < regras.ShadowTemporariaHoras);
+        var expiradas = removidas.Count(c => c != DateTime.MinValue && (agora - c).TotalDays > regras.ShadowExpiradaDias);
         var persistentes = removidas.Count - temporarias - expiradas;
         var (apagadasPeloWindows, windowsDescartouTodas) = ExclusoesFeitasPeloWindows(verificadoAntes);
         var semExplicacao = windowsDescartouTodas ? 0 : Math.Max(0, persistentes - apagadasPeloWindows);
 
-        if (semExplicacao < 2)
+        if (semExplicacao < regras.ShadowSemExplicacaoMinimo)
         {
             LogAtividade.Registrar(NivelAtividade.Info, "SEGURANÇA",
                 $"{removidas.Count} shadow copies saíram ({anteriores.Count} → {atuais.Count}) -- explicadas: {temporarias} temporárias, {expiradas} expiradas, {apagadasPeloWindows} pelo Windows{(windowsDescartouTodas ? " (descarte total por espaço)" : "")}.");
@@ -974,7 +984,7 @@ public sealed class SegurancaService : IDisposable
         // cópia do dia e o Windows descartou as 2 mais antigas no mesmo minuto (6 → 5).
         // Ransomware apaga TODAS e não cria nenhuma -- então: cópia nova no mesmo
         // intervalo + só as mais antigas saíram + ainda sobram cópias = rodízio.
-        var (classificacao, novasCount, maisAntigasPrimeiro) = ClassificarRemocaoShadow(anteriores, atuais);
+        var (classificacao, novasCount, maisAntigasPrimeiro) = ClassificarRemocaoShadow(anteriores, atuais, regras.ShadowFracaoMinimaRestante);
 
         if (classificacao == "rodizio")
         {
@@ -1018,7 +1028,7 @@ public sealed class SegurancaService : IDisposable
     /// todas e não cria nenhuma.
     /// </summary>
     internal static (string classificacao, int novas, bool maisAntigasPrimeiro) ClassificarRemocaoShadow(
-        IReadOnlyDictionary<string, DateTime> anteriores, IReadOnlyDictionary<string, DateTime> atuais)
+        IReadOnlyDictionary<string, DateTime> anteriores, IReadOnlyDictionary<string, DateTime> atuais, double fracaoMinimaRestante = 0.5)
     {
         var removidas = anteriores.Where(a => !atuais.ContainsKey(a.Key)).Select(a => a.Value).ToList();
         var novas = atuais.Count(a => !anteriores.ContainsKey(a.Key));
@@ -1030,7 +1040,7 @@ public sealed class SegurancaService : IDisposable
         // Rodízio descarta só o excedente: pelo menos metade das cópias antigas continua lá.
         // Sem isso, "apagar tudo e criar uma de fachada" passaria como rodízio.
         var antigasRestantes = atuais.Count(a => anteriores.ContainsKey(a.Key));
-        var sobrouMetade = antigasRestantes > 0 && antigasRestantes * 2 >= anteriores.Count;
+        var sobrouMetade = antigasRestantes > 0 && antigasRestantes >= anteriores.Count * fracaoMinimaRestante;
 
         if (novas > 0 && maisAntigasPrimeiro && sobrouMetade) return ("rodizio", novas, true);
         if (maisAntigasPrimeiro && sobrouMetade) return ("parcial", novas, true);
@@ -1074,6 +1084,25 @@ public sealed class SegurancaService : IDisposable
         catch
         {
             return (0, false);
+        }
+    }
+
+    private bool EhExtensaoComum(string extensao) => ExtensoesComuns.Contains(extensao) || _regras.ExtensoesComunsExtra.Contains(extensao);
+
+    private async Task BaixarRegrasAsync()
+    {
+        try
+        {
+            var regras = await new SegurancaEventoClient(_config()).BaixarRegrasAsync();
+            if (regras == null) return; // tenta de novo no próximo heartbeat
+
+            lock (_trava) { _regras = regras; }
+            LogAtividade.Registrar(NivelAtividade.Seguranca, "SEGURANÇA",
+                $"Regras do anti-ransomware atualizadas pelo servidor: versão {regras.Versao}.");
+        }
+        finally
+        {
+            lock (_trava) { _baixandoRegras = false; }
         }
     }
 

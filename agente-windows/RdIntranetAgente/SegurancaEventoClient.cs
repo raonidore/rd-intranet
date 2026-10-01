@@ -1,3 +1,4 @@
+using RdIntranetAgente.Models;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -34,6 +35,54 @@ public class SegurancaEventoClient
     }
 
     /// <summary>Lista pública de ransomware já filtrada pelo servidor; null se desligada ou fora do ar.</summary>
+    /// <summary>GET /api/ativos/seguranca/regras -- null em qualquer falha (o agente segue com as regras atuais).</summary>
+    public async Task<RegrasSeguranca?> BaixarRegrasAsync()
+    {
+        if (!_config.EstaConfigurado)
+        {
+            return null;
+        }
+
+        var handler = new HttpClientHandler { ServerCertificateCustomValidationCallback = (msg, cert, chain, erros) => true };
+        using var cliente = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
+        cliente.DefaultRequestHeaders.Add("X-RD-Agente-Chave", _config.ApiKey);
+
+        try
+        {
+            var resposta = await cliente.GetAsync(_config.ServerUrl.TrimEnd('/') + "/api/ativos/seguranca/regras");
+            if (!resposta.IsSuccessStatusCode) return null;
+
+            using var json = JsonDocument.Parse(await resposta.Content.ReadAsStringAsync());
+            var raiz = json.RootElement;
+            if (!raiz.TryGetProperty("versao", out var versao)) return null;
+
+            double Numero(string grupo, string nome, double padrao) =>
+                raiz.TryGetProperty(grupo, out var g) && g.TryGetProperty(nome, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetDouble() : padrao;
+            List<string> Lista(string grupo, string nome) =>
+                raiz.TryGetProperty(grupo, out var g) && g.TryGetProperty(nome, out var v) && v.ValueKind == JsonValueKind.Array
+                    ? v.EnumerateArray().Where(i => i.ValueKind == JsonValueKind.String).Select(i => i.GetString()!).Where(t => t.Length > 0).ToList()
+                    : new List<string>();
+
+            var p = RegrasSeguranca.Padrao;
+            return new RegrasSeguranca
+            {
+                Versao = versao.GetString() ?? "padrao",
+                // O servidor já valida as faixas; aqui só garante que nunca fica absurdo.
+                ShadowFracaoMinimaRestante = Math.Clamp(Numero("shadow", "fracao_minima_restante", p.ShadowFracaoMinimaRestante), 0.1, 1),
+                ShadowTemporariaHoras = Math.Clamp(Numero("shadow", "temporaria_horas", p.ShadowTemporariaHoras), 0, 24),
+                ShadowExpiradaDias = Math.Clamp(Numero("shadow", "expirada_dias", p.ShadowExpiradaDias), 7, 365),
+                ShadowSemExplicacaoMinimo = (int)Math.Clamp(Numero("shadow", "sem_explicacao_minimo", p.ShadowSemExplicacaoMinimo), 1, 20),
+                ArquivosProporcaoExclusao = Math.Clamp(Numero("arquivos", "proporcao_exclusao", p.ArquivosProporcaoExclusao), 0.5, 1),
+                ExtensoesComunsExtra = new HashSet<string>(Lista("arquivos", "extensoes_comuns_extra").Select(e => e.StartsWith('.') ? e : "." + e), StringComparer.OrdinalIgnoreCase),
+                PastasIgnoradasExtra = Lista("arquivos", "pastas_ignoradas_extra")
+            };
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     public async Task<(string versao, List<string> extensoes, List<string> notas)?> BaixarAssinaturasAsync()
     {
         if (!_config.EstaConfigurado)

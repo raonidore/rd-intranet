@@ -445,7 +445,24 @@ class AtivoController extends Controller
             'falsosPositivos' => $eventos->listarTodos(['dias' => 90, 'resolucao' => 'falso_positivo'], 50),
             'podeEditar' => PermissionService::temAcesso('ativos_dashboard'),
             'assinaturas' => (new \App\Services\SegurancaAssinaturaService())->status(),
+            'regrasAgente' => (new \App\Services\SegurancaRegrasService())->dados(),
+            'sincronizacaoAgente' => (string)\App\Services\ConfigService::get('agente_sincronizacao_ultima', ''),
+            'versaoAgenteDistribuida' => (string)\App\Services\ConfigService::get('ativos_agente_exe_versao', ''),
         ]);
+    }
+
+    /** Botão "Sincronizar agora" -- o mesmo que o cron "rd agente:sincronizar" faz a cada 30 min. */
+    public function sincronizarAgenteERegras(): void
+    {
+        AuthMiddleware::checkModulo('ativos_dashboard');
+
+        $resultado = $this->service->sincronizarAgenteERegras();
+        $resultado['success']
+            ? NotificationService::success(implode(' ', $resultado['mensagens']))
+            : NotificationService::error('Sincronização do agente', implode(' ', $resultado['mensagens']));
+
+        header('Location: ' . url('/ativos/seguranca/excecoes'));
+        exit;
     }
 
     public function configurarAssinaturasSeguranca(): void
