@@ -93,6 +93,45 @@ public class Config
         return new Config();
     }
 
+    /// <summary>
+    /// Configuração vista pelo SERVIÇO do Windows (roda como SYSTEM, cujo
+    /// LocalAppData não é o de nenhum usuário). Ordem: config.json ao lado do
+    /// .exe (distribuição em massa) &gt; o config.json configurado mais recente
+    /// entre os perfis de usuário da máquina (onde a tela de configuração grava).
+    /// </summary>
+    public static Config CarregarParaServico()
+    {
+        var candidatos = new List<string> { Path.Combine(AppContext.BaseDirectory, "config.json") };
+        try
+        {
+            var usuarios = Path.Combine(Path.GetPathRoot(Environment.SystemDirectory) ?? @"C:\", "Users");
+            candidatos.AddRange(Directory.GetDirectories(usuarios)
+                .Select(perfil => Path.Combine(perfil, "AppData", "Local", "RDIntranetAgent", "config.json"))
+                .Where(File.Exists)
+                .OrderByDescending(File.GetLastWriteTimeUtc));
+        }
+        catch
+        {
+            // sem acesso a C:\Users -- fica só com o config ao lado do .exe
+        }
+
+        foreach (var caminho in candidatos)
+        {
+            try
+            {
+                if (!File.Exists(caminho)) continue;
+                var config = JsonSerializer.Deserialize<Config>(File.ReadAllText(caminho));
+                if (config is { EstaConfigurado: true }) return config;
+            }
+            catch
+            {
+                // arquivo corrompido ou sem acesso -- tenta o próximo
+            }
+        }
+
+        return new Config();
+    }
+
     public void Salvar()
     {
         if (!Directory.Exists(PastaDados))

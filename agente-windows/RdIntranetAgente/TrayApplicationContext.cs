@@ -600,6 +600,26 @@ public class TrayApplicationContext : ApplicationContext
     /// </summary>
     private async Task VerificarAtualizacaoAsync(bool forcar = false, bool interativo = false)
     {
+        // Com o serviço do Windows instalado, quem troca o .exe é o serviço
+        // (ver AtualizacaoServico): ele mantém o arquivo em uso, então a troca
+        // feita daqui falhava e a máquina ficava presa na versão antiga.
+        // Aqui só repassamos os pedidos explícitos (botão local / portal).
+        if (AtualizacaoServico.ServicoInstalado())
+        {
+            if (forcar)
+            {
+                var pedido = AtualizacaoServico.PedirVerificacaoAoServico();
+                if (interativo)
+                {
+                    MessageBox.Show(pedido
+                            ? "Pedido enviado ao serviço do Windows. Se houver versão nova, o agente fecha e reabre sozinho em instantes (alguns segundos sem ícone na bandeja é normal)."
+                            : "Nesta máquina a atualização é feita pelo serviço do Windows, que verifica sozinho a cada hora. Não consegui pedir a verificação agora (serviço parado ou sem permissão).",
+                        "RD Intranet", MessageBoxButtons.OK, pedido ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                }
+            }
+            return;
+        }
+
         if (!forcar && _estado.UltimaVerificacaoAtualizacao.HasValue &&
             (DateTime.Now - _estado.UltimaVerificacaoAtualizacao.Value) < TimeSpan.FromHours(12))
         {
@@ -922,7 +942,7 @@ set ""LOG={log}""
 echo [%date% %time%] Iniciando troca de versao > ""%LOG%""
 set contador=0
 :tentar
-timeout /t 1 /nobreak >nul
+ping -n 2 127.0.0.1 >nul
 move /y ""%ORIGEM%"" ""%DESTINO%"" >>""%LOG%"" 2>&1
 if exist ""%ORIGEM%"" (
     set /a contador+=1

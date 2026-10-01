@@ -30,6 +30,10 @@ public class AgenteServico : ServiceBase
 
     private readonly HashSet<int> _sessoesJaTentadas = new();
 
+    // Com serviço instalado quem atualiza o agente é o serviço (ver AtualizacaoServico):
+    // 3 min depois de subir e depois a cada hora.
+    private System.Threading.Timer? _timerAtualizacao;
+
     public AgenteServico()
     {
         ServiceName = NomeServico;
@@ -59,10 +63,25 @@ public class AgenteServico : ServiceBase
         {
             RegistrarEvento($"Falha ao lançar o agente nas sessões já ativas: {ex.Message}", EventLogEntryType.Warning);
         }
+
+        _timerAtualizacao = new System.Threading.Timer(
+            _ => _ = AtualizacaoServico.VerificarEAtualizarAsync("verificação periódica"),
+            null, TimeSpan.FromMinutes(3), TimeSpan.FromHours(1));
     }
 
     protected override void OnStop()
     {
+        _timerAtualizacao?.Dispose();
+    }
+
+    /// <summary>Comando 130 = "verifique atualização agora" (mandado pela bandeja em "Atualizar agora" e no "Forçar coleta" do portal).</summary>
+    protected override void OnCustomCommand(int command)
+    {
+        base.OnCustomCommand(command);
+        if (command == AtualizacaoServico.ComandoVerificarAgora)
+        {
+            _ = AtualizacaoServico.VerificarEAtualizarAsync("pedido da bandeja");
+        }
     }
 
     protected override void OnSessionChange(SessionChangeDescription changeDescription)
