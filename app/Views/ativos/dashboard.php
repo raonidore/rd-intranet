@@ -435,11 +435,11 @@ $statusCores = [
                     <?php if (!empty($mostrarMeshAgente)): ?>
                         <hr class="my-3">
 
-                        <div class="config-toggle text-secondary" data-bs-toggle="collapse" data-bs-target="#painelMeshAgentDashboard" role="button" aria-expanded="true">
+                        <div class="config-toggle text-secondary" data-bs-toggle="collapse" data-bs-target="#painelMeshAgentDashboard" role="button" aria-expanded="false">
                             <span class="small fw-semibold"><i class="bi bi-display"></i> Instaladores do MeshAgent <span class="text-muted fw-normal">(acesso remoto)</span></span>
                             <i class="bi bi-chevron-down"></i>
                         </div>
-                        <div class="collapse show" id="painelMeshAgentDashboard">
+                        <div class="collapse" id="painelMeshAgentDashboard">
                             <div class="pt-2">
                                 <p class="text-muted small mb-2">
                                     Agente de acesso remoto (MeshCentral) pra instalar junto com o agente acima -- assim a máquina nova já sai
