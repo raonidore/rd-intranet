@@ -76,8 +76,22 @@ class SegurancaAssinaturaService
             return null;
         }
         $dados = json_decode((string)file_get_contents($this->arquivoCache), true);
+        if (!is_array($dados) || !isset($dados['versao'])) {
+            return null;
+        }
 
-        return is_array($dados) && isset($dados['versao']) ? $dados : null;
+        // Extensões genéricas listadas em config/seguranca-regras.json (dados normais
+        // de programas, ex.: .delta/.info do perfil do Firefox) saem da lista entregue
+        // aos agentes. A versão inclui o filtro: mudou a regra, os agentes baixam de novo.
+        $ignoradas = (new SegurancaRegrasService())->dados()['assinaturas']['extensoes_ignoradas'] ?? [];
+        if ($ignoradas) {
+            $antes = count($dados['extensoes'] ?? []);
+            $dados['extensoes'] = array_values(array_diff($dados['extensoes'] ?? [], $ignoradas));
+            $dados['ignoradas_pelas_regras'] = $antes - count($dados['extensoes']);
+            $dados['versao'] = substr(sha1($dados['versao'] . '|' . implode(',', $ignoradas)), 0, 16);
+        }
+
+        return $dados;
     }
 
     public function status(): array

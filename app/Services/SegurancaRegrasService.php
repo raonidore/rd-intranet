@@ -28,6 +28,10 @@ class SegurancaRegrasService
             'extensoes_comuns_extra' => [],
             'pastas_ignoradas_extra' => [],
         ],
+        // Aplicado no servidor ao entregar a lista pública de ransomware -- vale pra qualquer versão do agente.
+        'assinaturas' => [
+            'extensoes_ignoradas' => [],
+        ],
     ];
 
     /** [mínimo, máximo] aceitos pra cada número. */
@@ -114,6 +118,7 @@ class SegurancaRegrasService
 
         $regras['arquivos']['extensoes_comuns_extra'] = $this->lista($bruto['arquivos']['extensoes_comuns_extra'] ?? [], '/^\.?[a-z0-9]{1,15}$/i', true);
         $regras['arquivos']['pastas_ignoradas_extra'] = $this->lista($bruto['arquivos']['pastas_ignoradas_extra'] ?? [], '/^[^<>"|?*]{3,200}$/', false);
+        $regras['assinaturas']['extensoes_ignoradas'] = $this->lista($bruto['assinaturas']['extensoes_ignoradas'] ?? [], '/^\.?[a-z0-9_\-$~!]{1,40}$/i', true);
 
         return $regras;
     }

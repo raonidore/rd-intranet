@@ -1,5 +1,5 @@
 {
-    "versao": "2026-10-01.1",
+    "versao": "2026-10-01.2",
     "descricao": "Regras de comportamento do anti-ransomware do agente. Mudou aqui + commit/push = em até 30 min todos os servidores sincronizam (rd agente:sincronizar) e os agentes aplicam no próximo heartbeat, sem recompilar. Suba a \"versao\" a cada mudança -- é ela que avisa os agentes.",
     "shadow": {
         "fracao_minima_restante": 0.5,
@@ -13,6 +13,22 @@
         "pastas_ignoradas_extra": []
     },
     "historico": [
-        "2026-10-01.1: primeira versão -- valores iguais aos fixos do agente 1.0.50 (rodízio de shadow copies da MDA-PC-0012; exclusão em massa do Patrimonial)."
-    ]
+        "2026-10-01.1: primeira versão -- valores iguais aos fixos do agente 1.0.50 (rodízio de shadow copies da MDA-PC-0012; exclusão em massa do Patrimonial).",
+        "2026-10-01.2: fora da lista pública de ransomware as extensões genéricas de dados de programas (.delta, .info, .data, .wal, .session(s), .safe, .secure, .rec, .ppam, .rdp) -- EP-PC-000001 (enzilab) isolada ao restaurar o Firefox, que copiou o perfil antigo pra \"Dados antigos do Firefox\"."
+    ],
+    "assinaturas": {
+        "extensoes_ignoradas": [
+            "delta",
+            "info",
+            "data",
+            "wal",
+            "session",
+            "sessions",
+            "safe",
+            "secure",
+            "rec",
+            "ppam",
+            "rdp"
+        ]
+    }
 }

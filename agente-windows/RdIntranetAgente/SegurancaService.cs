@@ -509,12 +509,13 @@ public sealed class SegurancaService : IDisposable
                 RegistrarNotaDeResgate(caminho, agora);
 
                 // Variante "grava a cópia criptografada num arquivo novo e apaga o
-                // original": não passa por Renamed, então a extensão conhecida de
-                // ransomware no arquivo criado já conta como sinal.
+                // original": não passa por Renamed. Entra como 'N' e só conta em
+                // AvaliarFim se houver exclusões na mesma janela -- copiar uma pasta
+                // com .delta/.info (perfil antigo do Firefox, EP-PC-000001) não é ataque.
                 var extCriada = Path.GetExtension(caminho).ToLowerInvariant();
                 if (extCriada != "" && _assinaturasExtensoes.Contains(extCriada))
                 {
-                    _janelaFim.AddLast((agora, caminho, 'K', extCriada));
+                    _janelaFim.AddLast((agora, caminho, 'N', extCriada));
                 }
                 return;
             }
@@ -671,10 +672,19 @@ public sealed class SegurancaService : IDisposable
                 .Select(g => g.Last())
                 .ToList();
 
+            // Criados com extensão conhecida ('N') só valem junto com originais
+            // apagados (ao menos metade, mínimo 3); sem isso é cópia e sai da conta.
+            excluidos = porArquivo.Count(e => e.tipo == 'D');
+            var criadosConhecidos = porArquivo.Count(e => e.tipo == 'N');
+            if (criadosConhecidos > 0 && excluidos < Math.Max(3, criadosConhecidos / 2))
+            {
+                porArquivo.RemoveAll(e => e.tipo == 'N');
+                criadosConhecidos = 0;
+            }
+
             alterados = porArquivo.Count(e => e.tipo == 'M');
             suspeitas = porArquivo.Count(e => e.tipo == 'R');
-            conhecidas = porArquivo.Count(e => e.tipo == 'K');
-            excluidos = porArquivo.Count(e => e.tipo == 'D');
+            conhecidas = porArquivo.Count(e => e.tipo == 'K') + criadosConhecidos;
             total = porArquivo.Count;
             estouro = _fimEstouro;
 
