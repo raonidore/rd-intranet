@@ -344,64 +344,42 @@ $statusCores = [
                     <hr class="my-3">
 
                     <div class="config-toggle text-secondary" data-bs-toggle="collapse" data-bs-target="#painelAtualizarAgente" role="button" aria-expanded="false">
-                        <span class="small fw-semibold"><i class="bi bi-upload"></i> Atualizar agente e runtime</span>
+                        <span class="small fw-semibold"><i class="bi bi-arrow-repeat"></i> Atualizar agente e runtime</span>
                         <i class="bi bi-chevron-down"></i>
                     </div>
                     <div class="collapse" id="painelAtualizarAgente">
                         <div class="pt-2">
-                            <p class="text-muted small mb-2">
-                                <?php if ($agenteExeDisponivel): ?>
-                                    Versão atual disponível: <strong>v<?= htmlspecialchars($versaoAgenteExe) ?></strong>.
-                                <?php else: ?>
-                                    Nenhuma versão enviada ainda -- os agentes .exe já instalados não se autoatualizam até o primeiro envio.
-                                <?php endif; ?>
-                                Envie aqui um novo <code>.exe</code> publicado (veja o README em <code>agente-windows/</code>) junto do
-                                número de versão (o mesmo do <code>&lt;Version&gt;</code> no <code>.csproj</code>) -- os agentes já
-                                instalados detectam a versão nova sozinhos e se atualizam no próximo check-in, sem precisar
-                                reinstalar máquina por máquina.
+                            <p class="small mb-2">
+                                <strong>Atualizações do agente.</strong> A RD Tecnologia publica as versões novas do agente e este servidor
+                                as recebe automaticamente (verificação a cada 30 min). As máquinas se atualizam sozinhas no próximo contato
+                                com o servidor -- ninguém precisa reinstalar máquina por máquina.
                             </p>
-                            <form action="<?= url('/ativos/agente/exe/upload') ?>" enctype="multipart/form-data" class="row g-2 align-items-end" id="formUploadAgente">
-                                <div class="col-auto">
-                                    <label class="form-label small mb-0">Versão</label>
-                                    <input type="text" name="versao" class="form-control form-control-sm" style="width:110px" placeholder="1.0.1" pattern="\d+\.\d+\.\d+" required>
-                                </div>
-                                <div class="col-auto">
-                                    <label class="form-label small mb-0">Arquivo (.exe)</label>
-                                    <input type="file" name="arquivo" accept=".exe" class="form-control form-control-sm" required>
-                                </div>
-                                <div class="col-auto">
-                                    <button type="submit" class="btn btn-sm btn-outline-primary" id="botaoUploadAgente"><i class="bi bi-upload"></i> Enviar</button>
-                                </div>
-                            </form>
-                            <div class="progress mt-2 d-none" id="progressoUploadAgente" style="height:20px">
-                                <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width:0%">0%</div>
-                            </div>
-
-                            <p class="text-muted small mb-1 mt-2">
-                                Roda o sistema em mais de um servidor? Publique o <code>.exe</code> em
-                                <code>agente-windows/dist/</code> no repositório git (veja o passo a passo no README em
-                                <code>agente-windows/</code>) e use o botão abaixo em cada servidor pra buscar a versão
-                                publicada, sem precisar repetir o upload manual.
+                            <p class="text-muted small mb-2">
+                                Versão distribuída por este servidor:
+                                <strong><?= $agenteExeDisponivel ? 'v' . htmlspecialchars($versaoAgenteExe) : 'nenhuma ainda' ?></strong>.
                             </p>
                             <form action="<?= url('/ativos/agente/exe/baixar-git') ?>" method="post" class="d-inline">
-                                <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-git"></i> Baixar do repositório</button>
+                                <button type="submit" class="btn btn-sm btn-outline-primary" title="Verifica na hora se há versão nova, sem esperar a próxima verificação automática">
+                                    <i class="bi bi-cloud-arrow-down"></i> Buscar atualização agora
+                                </button>
                             </form>
                             <div class="mt-2">
                                 <?php $podeEditarFreio = true; $voltarFreio = 'dashboard'; require __DIR__ . '/_freio_agente.php'; ?>
                             </div>
                             <?php if ($agenteSincronizacaoUltima !== ''): ?>
-                                <p class="text-muted small mt-1 mb-0"><i class="bi bi-arrow-repeat"></i> Última sincronização: <?= htmlspecialchars($agenteSincronizacaoUltima) ?></p>
+                                <p class="text-muted small mt-1 mb-0"><i class="bi bi-arrow-repeat"></i> Última verificação: <?= htmlspecialchars($agenteSincronizacaoUltima) ?></p>
                             <?php endif; ?>
 
                             <hr>
 
                             <p class="text-muted small mb-2">
+                                <strong class="text-body">.NET Desktop Runtime</strong> --
                                 <?php if ($dotnetRuntimeDisponivel): ?>
-                                    .NET Desktop Runtime disponível: <strong><?= htmlspecialchars($dotnetRuntimeLabel) ?></strong>.
+                                    disponível: <strong><?= htmlspecialchars($dotnetRuntimeLabel) ?></strong>.
                                 <?php else: ?>
-                                    Nenhum .NET Desktop Runtime enviado ainda.
+                                    nenhum enviado ainda.
                                 <?php endif; ?>
-                                Baixe o instalador em
+                                O agente precisa dele instalado na máquina. Baixe o instalador em
                                 <a href="https://dotnet.microsoft.com/download/dotnet/8.0" target="_blank">dotnet.microsoft.com</a>
                                 (".NET Desktop Runtime", <em>não</em> o SDK) e envie aqui -- fica disponível pra baixar direto
                                 da aba "Agente Windows" acima, sem precisar ir buscar no site da Microsoft em cada máquina nova.
@@ -422,8 +400,58 @@ $statusCores = [
                             <div class="progress mt-2 d-none" id="progressoUploadDotnet" style="height:20px">
                                 <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width:0%">0%</div>
                             </div>
+
+                            <div class="config-toggle text-secondary mt-3" data-bs-toggle="collapse" data-bs-target="#painelAgenteAvancado" role="button" aria-expanded="false">
+                                <span class="small fw-semibold"><i class="bi bi-tools"></i> Opções avançadas <span class="text-muted fw-normal">(suporte RD)</span></span>
+                                <i class="bi bi-chevron-down"></i>
+                            </div>
+                            <div class="collapse" id="painelAgenteAvancado">
+                                <div class="border rounded p-3 bg-light mt-2">
+                                    <p class="text-muted small mb-2">
+                                        Envio manual de um <code>.exe</code> do agente, com o número da versão. Use só se o suporte da RD pedir --
+                                        no dia a dia a versão chega sozinha pela atualização automática.
+                                    </p>
+                                    <form action="<?= url('/ativos/agente/exe/upload') ?>" enctype="multipart/form-data" class="row g-2 align-items-end" id="formUploadAgente">
+                                        <div class="col-auto">
+                                            <label class="form-label small mb-0">Versão</label>
+                                            <input type="text" name="versao" class="form-control form-control-sm" style="width:110px" placeholder="1.0.1" pattern="\d+\.\d+\.\d+" required>
+                                        </div>
+                                        <div class="col-auto">
+                                            <label class="form-label small mb-0">Arquivo (.exe)</label>
+                                            <input type="file" name="arquivo" accept=".exe" class="form-control form-control-sm" required>
+                                        </div>
+                                        <div class="col-auto">
+                                            <button type="submit" class="btn btn-sm btn-outline-primary" id="botaoUploadAgente"><i class="bi bi-upload"></i> Enviar</button>
+                                        </div>
+                                    </form>
+                                    <div class="progress mt-2 d-none" id="progressoUploadAgente" style="height:20px">
+                                        <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width:0%">0%</div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
+
+                    <?php if (!empty($mostrarMeshAgente)): ?>
+                        <hr class="my-3">
+
+                        <div class="config-toggle text-secondary" data-bs-toggle="collapse" data-bs-target="#painelMeshAgentDashboard" role="button" aria-expanded="true">
+                            <span class="small fw-semibold"><i class="bi bi-display"></i> Instaladores do MeshAgent <span class="text-muted fw-normal">(acesso remoto)</span></span>
+                            <i class="bi bi-chevron-down"></i>
+                        </div>
+                        <div class="collapse show" id="painelMeshAgentDashboard">
+                            <div class="pt-2">
+                                <p class="text-muted small mb-2">
+                                    Agente de acesso remoto (MeshCentral) pra instalar junto com o agente acima -- assim a máquina nova já sai
+                                    pronta pra tela remota. Escolha a arquitetura do Windows da máquina (a mais comum é x86-64).
+                                </p>
+                                <?php require __DIR__ . '/_instaladores_meshagent.php'; ?>
+                                <p class="small mt-2 mb-0">
+                                    <a href="<?= url('/ativos/acesso-remoto') ?>"><i class="bi bi-gear"></i> Enviar ou atualizar os instaladores em Acesso Remoto</a>
+                                </p>
+                            </div>
+                        </div>
+                    <?php endif; ?>
                 </div>
 
                 <div class="tab-pane fade" id="tabIntegracoes" role="tabpanel">

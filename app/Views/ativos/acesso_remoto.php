@@ -150,17 +150,7 @@ use App\Components\Badge;
             instaladores aqui pra disponibilizar o download direto por este portal, sem precisar entrar no
             console toda vez que uma máquina nova precisar do agente.
         </p>
-        <div class="d-flex flex-wrap gap-2 mb-3">
-            <?php foreach ($arquiteturasMeshAgente as $chave => $label): ?>
-                <?php if ($meshAgentesDisponiveis[$chave]): ?>
-                    <a href="<?= url('/ativos/acesso-remoto/mesh-agente?arquitetura=' . $chave) ?>" class="btn btn-sm btn-outline-primary">
-                        <i class="bi bi-download"></i> <?= htmlspecialchars($label) ?>
-                    </a>
-                <?php else: ?>
-                    <span class="btn btn-sm btn-outline-secondary disabled"><?= htmlspecialchars($label) ?> -- não enviado</span>
-                <?php endif; ?>
-            <?php endforeach; ?>
-        </div>
+        <div class="mb-3"><?php require __DIR__ . '/_instaladores_meshagent.php'; ?></div>
         <form action="<?= url('/ativos/acesso-remoto/mesh-agente/upload') ?>" enctype="multipart/form-data" class="row g-2 align-items-end" id="formUploadMeshAgente">
             <div class="col-auto">
                 <label class="form-label small mb-0">Arquitetura</label>

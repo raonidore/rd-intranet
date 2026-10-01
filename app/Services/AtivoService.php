@@ -3387,7 +3387,7 @@ class AtivoService
      * "Freio" por servidor: desligado, a sincronização automática continua
      * trazendo as regras do anti-ransomware, mas NÃO baixa executável novo --
      * só anota a versão disponível; a atualização volta a ser pelo botão
-     * "Baixar do repositório" (ex.: segurar um cliente numa versão testada).
+     * "Buscar atualização agora" (ex.: segurar um cliente numa versão testada).
      */
     public function atualizacaoAutomaticaAgente(): bool
     {
@@ -3414,7 +3414,7 @@ class AtivoService
      * código rodando, a versão publicada do agente e as regras do
      * anti-ransomware. Regras novas: guarda (agentes pegam no próximo
      * heartbeat). Agente novo: baixa o .exe (os agentes se autoatualizam no
-     * próximo check-in) -- o mesmo que o botão "Baixar do repositório", sem clique.
+     * próximo check-in) -- o mesmo que o botão "Buscar atualização agora", sem clique.
      *
      * @return array{success: bool, mensagens: string[]}
      */
@@ -3445,7 +3445,7 @@ class AtivoService
         }
 
         if ($versaoRemota !== '' && version_compare($versaoRemota, $versaoLocal ?: '0', '>') && !$this->atualizacaoAutomaticaAgente()) {
-            $mensagens[] = "Versão {$versaoRemota} do agente disponível no repositório, mas a atualização automática está DESLIGADA neste servidor -- continua na {$versaoLocal} (use \"Baixar do repositório\" quando quiser).";
+            $mensagens[] = "Versão {$versaoRemota} do agente disponível no repositório, mas a atualização automática está DESLIGADA neste servidor -- continua na {$versaoLocal} (use \"Buscar atualização agora\" quando quiser).";
         } elseif ($versaoRemota !== '' && version_compare($versaoRemota, $versaoLocal ?: '0', '>')) {
             $baixar = json_decode(trim($this->linux->executarScript('/opt/rdtecnologia/scripts/agente_baixar_git.sh')['output']), true);
             if (is_array($baixar) && ($baixar['success'] ?? false)) {

@@ -59,7 +59,35 @@ class AtivoController extends Controller
             'agenteAtualizacaoAutomatica' => $this->service->atualizacaoAutomaticaAgente(),
             'agenteVersaoDisponivel' => $this->service->versaoAgenteDisponivelNaoBaixada(),
             'agenteSincronizacaoUltima' => (string)\App\Services\ConfigService::get('agente_sincronizacao_ultima', ''),
-        ]));
+        ], $this->dadosInstaladoresMeshAgente()));
+    }
+
+    /**
+     * Instaladores do MeshAgent também na aba Agente Windows do Dashboard (além
+     * de Acesso Remoto) -- só pra quem pode baixar (mesma permissão da rota de
+     * download) e só com o MeshCentral instalado neste servidor.
+     */
+    private function dadosInstaladoresMeshAgente(): array
+    {
+        if (!PermissionService::temAcesso('ativos_acesso_remoto')) {
+            return ['mostrarMeshAgente' => false];
+        }
+
+        $acessoRemoto = new \App\Services\AcessoRemotoService();
+        if (!$acessoRemoto->instalado()) {
+            return ['mostrarMeshAgente' => false];
+        }
+
+        $disponiveis = [];
+        foreach (array_keys(\App\Services\AcessoRemotoService::ARQUITETURAS_MESH_AGENTE) as $arquitetura) {
+            $disponiveis[$arquitetura] = $acessoRemoto->meshAgenteDisponivel($arquitetura);
+        }
+
+        return [
+            'mostrarMeshAgente' => true,
+            'arquiteturasMeshAgente' => \App\Services\AcessoRemotoService::ARQUITETURAS_MESH_AGENTE,
+            'meshAgentesDisponiveis' => $disponiveis,
+        ];
     }
 
     /** Freio da atualização automática do agente neste servidor (Dashboard de Ativos e Central de Segurança). */
@@ -70,7 +98,7 @@ class AtivoController extends Controller
         $ligar = ($_POST['ligada'] ?? '') === '1';
         $this->service->definirAtualizacaoAutomaticaAgente($ligar);
         NotificationService::success($ligar
-            ? 'Atualização automática do agente LIGADA: versão nova publicada no repositório chega sozinha em até 30 min.'
+            ? 'Atualização automática do agente LIGADA: versão nova publicada pela RD chega sozinha em até 30 min.'
             : 'Atualização automática do agente DESLIGADA: este servidor fica na versão atual; regras do anti-ransomware continuam chegando.');
 
         header('Location: ' . url(($_POST['voltar'] ?? '') === 'excecoes' ? '/ativos/seguranca/excecoes' : '/ativos'));

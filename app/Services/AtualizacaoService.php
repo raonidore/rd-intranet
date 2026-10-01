@@ -317,7 +317,7 @@ class AtualizacaoService
     /**
      * Sincronização automática do agente Windows: versão nova do .exe e regras
      * do anti-ransomware publicadas no repositório chegam sozinhas, sem
-     * ninguém clicar em "Baixar do repositório" em cada servidor.
+     * ninguém clicar em "Buscar atualização agora" em cada servidor.
      */
     public function garantirCronAgenteSincronizar(): void
     {

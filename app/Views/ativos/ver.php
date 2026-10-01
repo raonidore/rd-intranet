@@ -931,7 +931,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                         </div>
                                     </div>
                                     <?php if (!$agenteSuportaMtr): ?>
-                                        <div class="alert alert-secondary small py-2 mb-0"><i class="bi bi-info-circle"></i> O MTR pelo portal precisa do agente <strong>1.0.48</strong> ou mais novo -- esta máquina está na <?= htmlspecialchars($ativo['agente_versao'] ?: '?') ?>. Atualize em Ativos &rsaquo; Dashboard &rsaquo; "Baixar do repositório".</div>
+                                        <div class="alert alert-secondary small py-2 mb-0"><i class="bi bi-info-circle"></i> O MTR pelo portal precisa do agente <strong>1.0.48</strong> ou mais novo -- esta máquina está na <?= htmlspecialchars($ativo['agente_versao'] ?: '?') ?>. A atualização chega sozinha em até 30 min (Ativos &rsaquo; Dashboard &rsaquo; Agente Windows).</div>
                                     <?php else: ?>
                                         <div class="row g-2 align-items-end mb-2">
                                             <div class="col-12 col-md-4">
