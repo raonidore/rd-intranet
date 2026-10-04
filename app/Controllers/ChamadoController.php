@@ -11,6 +11,7 @@ use App\Services\ChamadoAnexoService;
 use App\Services\ChamadoCategoriaService;
 use App\Services\ChamadoService;
 use App\Services\ChamadoSetorService;
+use App\Services\ChamadoSetorSolicitanteService;
 use App\Services\ChamadoSubcategoriaService;
 use App\Services\KbService;
 use App\Services\NotificationService;
@@ -37,6 +38,7 @@ class ChamadoController extends Controller
 
         $equipe = [];
         $semSetor = false;
+        $setorIds = [];
         if ($podeVerEquipe) {
             $ehAdmin = PermissionService::ehAdmin();
             $setorIds = $ehAdmin ? null : (new ChamadoSetorService())->idsSetoresDoUsuario($usuarioId);
@@ -44,10 +46,17 @@ class ChamadoController extends Controller
             $equipe = $service->listarDaEquipe($setorIds, $usuarioId);
         }
 
+        $encerrados = [];
+        if ($aba === 'encerrados') {
+            $encerrados = $podeVerEquipe
+                ? $service->listarEncerradosDaEquipe($setorIds, $usuarioId)
+                : $service->listarEncerradosDoUsuario($usuarioId);
+        }
+
         $this->view('chamados/atendimentos', [
             'aba' => $aba,
             'chamados' => $service->listarDoUsuario($usuarioId),
-            'encerrados' => $aba === 'encerrados' ? $service->listarEncerradosDoUsuario($usuarioId) : [],
+            'encerrados' => $encerrados,
             'podeVerEquipe' => $podeVerEquipe,
             'equipe' => $equipe,
             'semSetor' => $semSetor,
@@ -77,6 +86,8 @@ class ChamadoController extends Controller
             'subcategoriasPorCategoria' => (new ChamadoSubcategoriaService())->listarAtivasAgrupadas(),
             'setores' => (new ChamadoSetorService())->listarAtivos(),
             'unidades' => (new UnidadeService())->listarAtivas(),
+            'setoresSolicitantes' => (new ChamadoSetorSolicitanteService())->listarAtivos(),
+            'setorSolicitanteObrigatorio' => (new ChamadoSetorSolicitanteService())->obrigatorio(),
             'ativoPreSelecionado' => !empty($_GET['ativo_id']) ? (new AtivoService())->buscar((int)$_GET['ativo_id']) : null,
             'proximoNumero' => NumeroControleService::previewProximo(Database::connection(), 'chamados', 'aberto_em', 'CI'),
         ]);

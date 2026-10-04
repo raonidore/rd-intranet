@@ -434,6 +434,11 @@ $router->post('/chamados/setores/criar', [ChamadoSetorController::class, 'criar'
 $router->post('/chamados/setores/atualizar', [ChamadoSetorController::class, 'atualizar']);
 $router->post('/chamados/setores/excluir', [ChamadoSetorController::class, 'excluir']);
 $router->post('/chamados/setores/usuarios', [ChamadoSetorController::class, 'salvarUsuarios']);
+$router->post('/chamados/setores/converter', [ChamadoSetorController::class, 'converter']);
+$router->post('/chamados/setores/solicitantes/criar', [ChamadoSetorController::class, 'criarSolicitante']);
+$router->post('/chamados/setores/solicitantes/atualizar', [ChamadoSetorController::class, 'atualizarSolicitante']);
+$router->post('/chamados/setores/solicitantes/excluir', [ChamadoSetorController::class, 'excluirSolicitante']);
+$router->post('/chamados/setores/solicitantes/obrigatorio', [ChamadoSetorController::class, 'salvarObrigatorioSolicitante']);
 
 $router->get('/chamados/suporte-remoto', [\App\Controllers\SuporteRemotoController::class, 'index']);
 $router->post('/chamados/suporte-remoto/atender', [\App\Controllers\SuporteRemotoController::class, 'atender']);

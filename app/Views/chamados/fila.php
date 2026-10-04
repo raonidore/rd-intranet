@@ -12,7 +12,7 @@ $corPrioridade = ['baixa' => 'secondary', 'media' => 'primary', 'alta' => 'warni
 
 <div class="mb-4">
     <h4 class="mb-1"><i class="bi bi-hourglass-split me-1"></i> Chamados - Fila</h4>
-    <small class="text-muted">Chamados aguardando um atendente do(s) seu(s) setor(es).</small>
+    <small class="text-muted">Chamados aguardando um atendente do(s) seu(s) setor(es) de atendimento.</small>
 </div>
 
 <?php if (empty($fila)): ?>
@@ -23,6 +23,7 @@ $corPrioridade = ['baixa' => 'secondary', 'media' => 'primary', 'alta' => 'warni
         </div>
     </div>
 <?php else: ?>
+    <?php $temSetorSolicitante = (bool)array_filter($fila, fn ($c) => !empty($c['setor_solicitante_nome'])); ?>
     <div class="card border-0 shadow-sm">
         <div class="card-body p-0">
             <table class="table table-hover align-middle mb-0">
@@ -32,7 +33,8 @@ $corPrioridade = ['baixa' => 'secondary', 'media' => 'primary', 'alta' => 'warni
                         <th>Título</th>
                         <th>Solicitante</th>
                         <th>Categoria</th>
-                        <th>Setor</th>
+                        <?php if ($temSetorSolicitante): ?><th>Setor solicitante</th><?php endif; ?>
+                        <th>Atendimento</th>
                         <th>Prioridade</th>
                         <th>SLA</th>
                         <th>Aguardando há</th>
@@ -46,6 +48,9 @@ $corPrioridade = ['baixa' => 'secondary', 'media' => 'primary', 'alta' => 'warni
                             <td><?= htmlspecialchars($item['titulo']) ?></td>
                             <td><?= htmlspecialchars($item['solicitante_nome']) ?></td>
                             <td><?= htmlspecialchars($item['categoria_nome']) ?></td>
+                            <?php if ($temSetorSolicitante): ?>
+                                <td><?= !empty($item['setor_solicitante_nome']) ? htmlspecialchars($item['unidade_sigla'] . ' › ' . $item['setor_solicitante_nome']) : '<span class="text-muted">-</span>' ?></td>
+                            <?php endif; ?>
                             <td><?= $item['setor_nome'] ? htmlspecialchars($item['setor_nome']) : '<span class="text-muted">-</span>' ?></td>
                             <td><?= Badge::make(htmlspecialchars(ChamadoService::PRIORIDADES[$item['prioridade']]), $corPrioridade[$item['prioridade']] ?? 'secondary') ?></td>
                             <td>

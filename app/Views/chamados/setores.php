@@ -9,7 +9,10 @@ use App\Components\Alert;
 <div class="mb-4 d-flex justify-content-between align-items-start">
     <div>
         <h4 class="mb-1"><i class="bi bi-diagram-3 me-1"></i> Chamados - Setores</h4>
-        <small class="text-muted">Setores de atendimento e quais usuários (já cadastrados no sistema) atendem em cada um.</small>
+        <small class="text-muted">
+            <strong>Setores de atendimento</strong>: as equipes que <strong>resolvem</strong> os chamados (ex.: Suporte Técnico, TI) e quem trabalha em cada uma.
+            <strong>Setores do solicitante</strong>: os setores da empresa de onde os chamados <strong>vêm</strong> (ex.: Financeiro, RH, Vendas).
+        </small>
     </div>
     <button type="button" class="btn btn-outline-dark text-nowrap" data-bs-toggle="modal" data-bs-target="#modalPopSetores">
         <i class="bi bi-broadcast"></i> POP - Setores
@@ -25,13 +28,13 @@ use App\Components\Alert;
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="pop-body">
-                <p class="pop-intro">Setor é o "departamento" que atende o chamado -- toda categoria tem um setor padrão, e quem abre o chamado ainda pode escolher outro na hora, se precisar.</p>
+                <p class="pop-intro">Setor de atendimento é a <strong>equipe que atende</strong> o chamado (não o setor da empresa que pediu -- esse é o "Setor do solicitante", na outra aba) -- toda categoria tem um setor padrão, e quem abre o chamado ainda pode escolher outro na hora, se precisar.</p>
 
                 <div class="pop-step">
                     <div class="pop-step-num">1</div>
                     <div>
                         <div class="pop-step-title"><i class="bi bi-plus-lg"></i> Adicionar setor</div>
-                        <div class="pop-step-text">Só o <strong>nome</strong> é necessário pra criar (ex: "Suporte técnico", "Financeiro", "Infraestrutura") -- o resto se configura depois, expandindo o card do setor.</div>
+                        <div class="pop-step-text">Só o <strong>nome</strong> é necessário pra criar (ex: "Suporte técnico", "Infraestrutura", "Sistemas") -- o resto se configura depois, expandindo o card do setor.</div>
                     </div>
                 </div>
 
@@ -85,10 +88,110 @@ use App\Components\Alert;
 .pop-step-text strong { color:#c9d1d9; }
 </style>
 
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <a class="nav-link <?= $aba === 'equipes' ? 'active' : '' ?>" href="<?= url('/chamados/setores') ?>">
+            <i class="bi bi-headset"></i> Setores de atendimento <span class="badge text-bg-light border"><?= count($setores) ?></span>
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link <?= $aba === 'solicitantes' ? 'active' : '' ?>" href="<?= url('/chamados/setores?aba=solicitantes') ?>">
+            <i class="bi bi-building"></i> Setores do solicitante <span class="badge text-bg-light border"><?= count($setoresSolicitantes) ?></span>
+        </a>
+    </li>
+</ul>
+
+<?php if ($aba === 'solicitantes'): ?>
+    <?php require __DIR__ . '/_setores_solicitantes.php'; ?>
+<?php else: ?>
+
+<div class="alert alert-info small d-flex gap-2 align-items-start">
+    <i class="bi bi-info-circle fs-5"></i>
+    <div>
+        Aqui ficam só as <strong>equipes que atendem</strong> os chamados. O setor da empresa de onde o chamado vem (Financeiro, RH, Vendas...)
+        é cadastrado em <a href="<?= url('/chamados/setores?aba=solicitantes') ?>">Setores do solicitante</a>.
+        <?php if (count($setores) > 1): ?>
+            Cadastrou setores da empresa aqui por engano?
+            <a href="#" data-bs-toggle="collapse" data-bs-target="#painelConverter">Converter em setores do solicitante</a>.
+        <?php endif; ?>
+    </div>
+</div>
+
+<?php if (count($setores) > 1): ?>
+<div class="collapse mb-3" id="painelConverter">
+    <div class="card border-warning shadow-sm">
+        <div class="card-body">
+            <h6 class="mb-1"><i class="bi bi-arrow-left-right"></i> Converter em setores do solicitante</h6>
+            <p class="small text-muted mb-3">
+                Cada setor marcado vira um <strong>setor do solicitante</strong> com o mesmo nome. Os chamados dele guardam esse setor como origem
+                e passam para a equipe de destino. Categorias e subcategorias que apontavam para ele passam a apontar para o destino.
+                O setor de atendimento marcado é excluído.
+            </p>
+            <form method="post" action="<?= url('/chamados/setores/converter') ?>" id="formConverter">
+                <div class="row row-cols-1 row-cols-md-3 g-1 mb-3">
+                    <?php foreach ($setores as $setor): ?>
+                        <div class="col">
+                            <div class="form-check">
+                                <input type="checkbox" name="setores[]" value="<?= (int)$setor['id'] ?>" class="form-check-input conv-setor" id="conv<?= (int)$setor['id'] ?>">
+                                <label class="form-check-label small" for="conv<?= (int)$setor['id'] ?>"><?= htmlspecialchars($setor['nome']) ?></label>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label small mb-1">Equipe que vai atender esses chamados</label>
+                        <select name="destino_id" class="form-select form-select-sm" required id="convDestino">
+                            <option value="">— Selecione —</option>
+                            <?php foreach ($setores as $setor): ?>
+                                <option value="<?= (int)$setor['id'] ?>"><?= htmlspecialchars($setor['nome']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-md-5">
+                        <div class="form-check">
+                            <input type="checkbox" name="mover_todos" class="form-check-input" id="convMoverTodos" checked>
+                            <label class="form-check-label small" for="convMoverTodos">Colocar <strong>todos</strong> os chamados existentes nessa equipe (inclusive os das equipes que ficam e os sem setor)</label>
+                        </div>
+                    </div>
+                    <div class="col-md-3 text-md-end">
+                        <button type="submit" class="btn btn-sm btn-warning"><i class="bi bi-arrow-left-right"></i> Converter</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+(function () {
+    const destino = document.getElementById('convDestino');
+    const marcas = document.querySelectorAll('.conv-setor');
+    // O destino não pode ser convertido junto: desmarca e trava a caixa dele.
+    destino.addEventListener('change', () => {
+        marcas.forEach((m) => {
+            const ehDestino = m.value === destino.value;
+            if (ehDestino) m.checked = false;
+            m.disabled = ehDestino;
+        });
+    });
+    document.getElementById('formConverter').addEventListener('submit', (ev) => {
+        const nomes = Array.from(marcas).filter((m) => m.checked).map((m) => m.nextElementSibling.textContent.trim());
+        const alvo = destino.selectedOptions[0] ? destino.selectedOptions[0].textContent.trim() : '';
+        const todos = document.getElementById('convMoverTodos').checked;
+        if (!nomes.length && !todos) { ev.preventDefault(); alert('Marque pelo menos um setor para converter.'); return; }
+        const texto = (nomes.length ? 'Converter em setores do solicitante: ' + nomes.join(', ') + '.\n' : '')
+            + (todos ? 'TODOS os chamados vão para "' + alvo + '".' : 'Os chamados desses setores vão para "' + alvo + '".')
+            + '\n\nNão dá para desfazer automaticamente. Continuar?';
+        if (!confirm(texto)) ev.preventDefault();
+    });
+})();
+</script>
+<?php endif; ?>
+
 <div class="card border-0 shadow-sm mb-3">
     <div class="card-body">
         <form method="post" action="<?= url('/chamados/setores/criar') ?>" class="d-flex gap-2">
-            <input type="text" name="nome" class="form-control" placeholder="Nome do novo setor (ex: Suporte técnico)" required maxlength="100">
+            <input type="text" name="nome" class="form-control" placeholder="Nome da nova equipe de atendimento (ex: Suporte técnico, Infraestrutura)" required maxlength="100">
             <button type="submit" class="btn btn-primary text-nowrap">
                 <i class="bi bi-plus-lg"></i> Adicionar setor
             </button>
@@ -97,7 +200,7 @@ use App\Components\Alert;
 </div>
 
 <?php if (empty($setores)): ?>
-    <p class="text-muted">Nenhum setor cadastrado ainda.</p>
+    <p class="text-muted">Nenhum setor de atendimento cadastrado ainda.</p>
 <?php endif; ?>
 
 <?php foreach ($setores as $setor): ?>
@@ -172,6 +275,8 @@ use App\Components\Alert;
         </div>
     </div>
 <?php endforeach; ?>
+
+<?php endif; ?>
 
 <?php
 $conteudo = ob_get_clean();

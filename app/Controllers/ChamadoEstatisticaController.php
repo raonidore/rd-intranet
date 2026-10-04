@@ -26,6 +26,7 @@ class ChamadoEstatisticaController extends Controller
             'periodoGeral' => $periodoGeral,
             'periodoRanking' => $periodoRanking,
             'geral' => $estatistica->geral($periodoGeral),
+            'porSetorSolicitante' => $aba === 'geral' ? $estatistica->porSetorSolicitante() : [],
             'ranking' => $estatistica->ranking($periodoRanking),
             'tempoReal' => $estatistica->tempoReal(),
             'avaliacoes' => (new ChamadoAvaliacaoService())->resumo(),

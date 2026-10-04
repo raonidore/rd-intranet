@@ -153,6 +153,9 @@ $corStatus = ['fila' => 'secondary', 'em_atendimento' => 'primary', 'aguardando_
                     <div class="d-flex justify-content-between border-bottom py-1"><span class="text-muted">Telefone</span><span class="fw-semibold"><?= htmlspecialchars(telefone_br($chamado['solicitante_telefone'])) ?></span></div>
                 <?php endif; ?>
                 <div class="d-flex justify-content-between py-1"><span class="text-muted">Unidade</span><span class="fw-semibold"><?= htmlspecialchars($chamado['unidade_nome']) ?></span></div>
+                <?php if (!empty($chamado['setor_solicitante_nome'])): ?>
+                    <div class="d-flex justify-content-between border-top py-1"><span class="text-muted">Setor do solicitante</span><span class="fw-semibold"><?= htmlspecialchars($chamado['setor_solicitante_nome']) ?></span></div>
+                <?php endif; ?>
             </div>
         </div>
 
@@ -198,7 +201,7 @@ $corStatus = ['fila' => 'secondary', 'em_atendimento' => 'primary', 'aguardando_
             <div class="card-header bg-white"><strong>Prazo</strong></div>
             <div class="card-body small">
                 <div class="d-flex justify-content-between border-bottom py-1"><span class="text-muted">Categoria</span><span class="fw-semibold"><?= htmlspecialchars($chamado['categoria_nome']) ?></span></div>
-                <div class="d-flex justify-content-between border-bottom py-1"><span class="text-muted">Setor</span><span class="fw-semibold"><?= htmlspecialchars($chamado['setor_nome'] ?? '—') ?></span></div>
+                <div class="d-flex justify-content-between border-bottom py-1"><span class="text-muted">Setor de atendimento</span><span class="fw-semibold"><?= htmlspecialchars($chamado['setor_nome'] ?? '—') ?></span></div>
                 <div class="d-flex justify-content-between border-bottom py-1"><span class="text-muted">Atendente</span><span class="fw-semibold"><?= htmlspecialchars($chamado['usuario_nome'] ?? '— na fila —') ?></span></div>
                 <?php if (!$chamado['sla_resolucao_prazo'] && !$chamado['sla_resposta_prazo']): ?>
                     <div class="d-flex justify-content-between border-bottom py-1"><span class="text-muted">SLA</span><span class="fw-semibold text-muted">Sem SLA</span></div>

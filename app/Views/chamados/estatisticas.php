@@ -222,13 +222,35 @@ $rotulosPeriodoRanking = ['geral' => 'Histórico geral', 'mes' => 'Este mês', '
         </div>
     </div>
 
+    <?php if (!empty($porSetorSolicitante)): ?>
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white"><strong><i class="bi bi-building"></i> De onde vêm os chamados</strong> <small class="text-muted">-- por setor do solicitante, desde o início</small></div>
+            <div class="card-body p-0">
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead><tr><th>Unidade</th><th>Setor do solicitante</th><th class="text-end">Total</th><th class="text-end">Em aberto</th><th class="text-end">Últimos 30 dias</th></tr></thead>
+                    <tbody>
+                        <?php foreach ($porSetorSolicitante as $linha): ?>
+                            <tr>
+                                <td><?= htmlspecialchars($linha['unidade_nome']) ?></td>
+                                <td class="<?= $linha['setor_nome'] === 'Não informado' ? 'text-muted' : '' ?>"><?= htmlspecialchars($linha['setor_nome']) ?></td>
+                                <td class="text-end"><?= (int)$linha['total'] ?></td>
+                                <td class="text-end"><?= (int)$linha['em_aberto'] ?></td>
+                                <td class="text-end"><?= (int)$linha['ultimos_30_dias'] ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    <?php endif; ?>
+
     <div class="card border-0 shadow-sm">
         <div class="card-body p-0">
             <?php if (empty($geral['linhas'])): ?>
                 <p class="text-muted text-center py-4 mb-0">Nenhum chamado resolvido nesse período ainda.</p>
             <?php else: ?>
                 <table class="table table-hover align-middle mb-0">
-                    <thead><tr><th>Período</th><th>Setor</th><th>Total</th><th>Tempo total</th><th>Espera média</th></tr></thead>
+                    <thead><tr><th>Período</th><th>Setor de atendimento</th><th>Total</th><th>Tempo total</th><th>Espera média</th></tr></thead>
                     <tbody>
                         <?php foreach ($geral['linhas'] as $linha): ?>
                             <tr>

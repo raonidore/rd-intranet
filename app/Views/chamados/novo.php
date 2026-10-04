@@ -40,7 +40,7 @@ $urlVoltarChamados = url(PermissionService::temAcesso('chamados_atendimentos') ?
             </div>
 
             <div class="row g-3 mb-3">
-                <div class="col-md-3">
+                <div class="col-md-4">
                     <label class="form-label">Categoria</label>
                     <select name="categoria_id" id="campoCategoria" class="form-select" required>
                         <option value="">— Selecione —</option>
@@ -49,29 +49,38 @@ $urlVoltarChamados = url(PermissionService::temAcesso('chamados_atendimentos') ?
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-4">
                     <label class="form-label">Subcategoria <span class="text-muted" id="rotuloSubcategoriaOpcional">(opcional)</span></label>
                     <select name="subcategoria_id" id="campoSubcategoria" class="form-select" disabled>
                         <option value="">— Escolha a categoria —</option>
                     </select>
                 </div>
-                <div class="col-md-3">
-                    <label class="form-label">Setor responsável <span class="text-muted">(opcional)</span></label>
-                    <select name="setor_id" class="form-select">
-                        <option value="">— Usar o padrão —</option>
+                <div class="col-md-4">
+                    <label class="form-label">Setor de atendimento <span class="text-muted">(opcional)</span></label>
+                    <select name="setor_id" class="form-select" title="Equipe que vai atender o chamado">
+                        <option value="">— Usar o da categoria —</option>
                         <?php foreach ($setores as $s): ?>
                             <option value="<?= (int)$s['id'] ?>"><?= htmlspecialchars($s['nome']) ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-3">
+            </div>
+
+            <div class="row g-3 mb-3">
+                <div class="col-md-<?= $setoresSolicitantes ? '6' : '4' ?>">
                     <label class="form-label">Unidade</label>
-                    <select name="unidade_id" class="form-select" required>
+                    <select name="unidade_id" id="campoUnidade" class="form-select" required>
                         <?php foreach ($unidades as $u): ?>
                             <option value="<?= (int)$u['id'] ?>"><?= htmlspecialchars($u['nome']) ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
+                <?php if ($setoresSolicitantes): ?>
+                    <div class="col-md-6">
+                        <label class="form-label">Setor do solicitante <span class="text-muted" id="rotuloSetorSolicitanteOpcional">(opcional)</span></label>
+                        <select name="setor_solicitante_id" id="campoSetorSolicitante" class="form-select" title="De qual setor da unidade o chamado está vindo"></select>
+                    </div>
+                <?php endif; ?>
             </div>
 
             <div class="mb-3 position-relative">
@@ -155,6 +164,39 @@ $urlVoltarChamados = url(PermissionService::temAcesso('chamados_atendimentos') ?
 
     campoCategoria.addEventListener('change', atualizarSubcategorias);
     atualizarSubcategorias();
+
+    // --- Setor do solicitante: só os da unidade escolhida (ou de todas as unidades) ---
+    const setoresSolicitantes = <?= json_encode($setoresSolicitantes, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?>;
+    const setorSolicitanteObrigatorio = <?= $setorSolicitanteObrigatorio ? 'true' : 'false' ?>;
+    const campoUnidade = document.getElementById('campoUnidade');
+    const campoSetorSolicitante = document.getElementById('campoSetorSolicitante');
+
+    function atualizarSetoresSolicitantes() {
+        if (!campoSetorSolicitante) return;
+        const anterior = campoSetorSolicitante.value;
+        const lista = setoresSolicitantes.filter((s) => s.unidade_id === null || String(s.unidade_id) === campoUnidade.value);
+        const exige = setorSolicitanteObrigatorio && lista.length > 0;
+
+        campoSetorSolicitante.innerHTML = '';
+        const vazia = document.createElement('option');
+        vazia.value = '';
+        vazia.textContent = lista.length ? (exige ? '— Selecione —' : '— Não informar —') : '— Sem setores nesta unidade —';
+        campoSetorSolicitante.appendChild(vazia);
+        lista.forEach((s) => {
+            const opcao = document.createElement('option');
+            opcao.value = s.id;
+            opcao.textContent = s.nome;
+            opcao.selected = String(s.id) === anterior;
+            campoSetorSolicitante.appendChild(opcao);
+        });
+
+        campoSetorSolicitante.disabled = lista.length === 0;
+        campoSetorSolicitante.required = exige;
+        document.getElementById('rotuloSetorSolicitanteOpcional').textContent = exige ? '' : '(opcional)';
+    }
+
+    campoUnidade.addEventListener('change', atualizarSetoresSolicitantes);
+    atualizarSetoresSolicitantes();
 
     // --- Solicitante: exige e-mail ou telefone sem perder o restante do formulário preenchido ---
     const formChamado = document.querySelector('form[action="<?= url('/chamados/atendimentos/novo') ?>"]');

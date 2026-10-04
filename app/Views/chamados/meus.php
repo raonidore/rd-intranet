@@ -38,7 +38,7 @@ $corStatus = ['fila' => 'secondary', 'em_atendimento' => 'primary', 'aguardando_
                         <?= Badge::make(htmlspecialchars(ChamadoService::PRIORIDADES[$item['prioridade']]), $corPrioridade[$item['prioridade']] ?? 'secondary') ?>
                         <div class="text-muted small">
                             <?= htmlspecialchars($item['categoria_nome']) ?> ·
-                            <?= htmlspecialchars($item['unidade_nome']) ?>
+                            <?= htmlspecialchars($item['unidade_nome']) ?><?php if (!empty($item['setor_solicitante_nome'])): ?> › <?= htmlspecialchars($item['setor_solicitante_nome']) ?><?php endif; ?>
                         </div>
                     </div>
                     <small class="text-muted text-nowrap"><?= data_br($item['ultima_mensagem_em']) ?></small>

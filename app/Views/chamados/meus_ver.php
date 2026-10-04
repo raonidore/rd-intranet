@@ -74,6 +74,9 @@ $corStatus = ['fila' => 'secondary', 'em_atendimento' => 'primary', 'aguardando_
             <div class="card-body small">
                 <div class="d-flex justify-content-between border-bottom py-1"><span class="text-muted">Categoria</span><span class="fw-semibold"><?= htmlspecialchars($chamado['categoria_nome']) ?></span></div>
                 <div class="d-flex justify-content-between border-bottom py-1"><span class="text-muted">Unidade</span><span class="fw-semibold"><?= htmlspecialchars($chamado['unidade_nome']) ?></span></div>
+                <?php if (!empty($chamado['setor_solicitante_nome'])): ?>
+                    <div class="d-flex justify-content-between border-bottom py-1"><span class="text-muted">Setor</span><span class="fw-semibold"><?= htmlspecialchars($chamado['setor_solicitante_nome']) ?></span></div>
+                <?php endif; ?>
                 <div class="d-flex justify-content-between py-1"><span class="text-muted">Aberto em</span><span class="fw-semibold"><?= data_br($chamado['aberto_em'], 'd/m/Y H:i') ?></span></div>
             </div>
         </div>

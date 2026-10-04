@@ -33,7 +33,7 @@ class ChamadoService
         SELECT c.*,
                CONCAT(cat.nome, IF(sc.id IS NULL, '', CONCAT(' › ', sc.nome))) AS categoria_nome,
                cat.nome AS categoria_raiz_nome, sc.nome AS subcategoria_nome,
-               s.nome AS setor_nome,
+               s.nome AS setor_nome, ss.nome AS setor_solicitante_nome,
                u.nome AS unidade_nome, u.sigla AS unidade_sigla,
                sol.nome AS solicitante_nome, sol.email AS solicitante_email, sol.telefone AS solicitante_telefone,
                us.nome AS usuario_nome,
@@ -42,6 +42,7 @@ class ChamadoService
         JOIN chamados_categorias cat ON cat.id = c.categoria_id
         LEFT JOIN chamados_subcategorias sc ON sc.id = c.subcategoria_id
         LEFT JOIN chamados_setores s ON s.id = c.setor_id
+        LEFT JOIN chamados_setores_solicitantes ss ON ss.id = c.setor_solicitante_id
         JOIN unidades u ON u.id = c.unidade_id
         JOIN chamados_solicitantes sol ON sol.id = c.solicitante_id
         LEFT JOIN usuarios us ON us.id = c.usuario_id
@@ -104,6 +105,17 @@ class ChamadoService
             return ['success' => false, 'message' => 'Unidade inválida.'];
         }
 
+        // Setor DO SOLICITANTE (de onde o chamado vem), não a equipe que atende.
+        $setorSolicitanteService = new ChamadoSetorSolicitanteService();
+        $setorSolicitanteId = !empty($post['setor_solicitante_id']) ? (int)$post['setor_solicitante_id'] : null;
+        if ($setorSolicitanteId !== null && !$setorSolicitanteService->validoParaUnidade($setorSolicitanteId, $unidadeId)) {
+            return ['success' => false, 'message' => 'Setor do solicitante inválido para a unidade escolhida.'];
+        }
+        if ($setorSolicitanteId === null && $canal === 'painel' && $setorSolicitanteService->obrigatorio()
+            && $setorSolicitanteService->existeAtivoParaUnidade($unidadeId)) {
+            return ['success' => false, 'message' => 'Informe de qual setor da unidade o chamado está vindo.'];
+        }
+
         $email = trim($post['solicitante_email'] ?? '') ?: null;
         $telefone = trim($post['solicitante_telefone'] ?? '') ?: null;
         if ($email === null && $telefone === null) {
@@ -130,11 +142,11 @@ class ChamadoService
 
         $stmt = $this->pdo->prepare(
             "INSERT INTO chamados
-             (titulo, descricao, categoria_id, subcategoria_id, setor_id, unidade_id, ativo_id, solicitante_id, usuario_abertura_id, prioridade, canal_abertura, aguardando_resposta, sla_resposta_prazo, sla_resolucao_prazo)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)"
+             (titulo, descricao, categoria_id, subcategoria_id, setor_id, unidade_id, setor_solicitante_id, ativo_id, solicitante_id, usuario_abertura_id, prioridade, canal_abertura, aguardando_resposta, sla_resposta_prazo, sla_resolucao_prazo)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)"
         );
         $stmt->execute([
-            $titulo, $descricao, $categoriaId, $subcategoriaId, $setorId, $unidadeId, $ativoId, $solicitante['id'], $usuarioAberturaId, $prioridade, $canal, $slaResposta, $slaResolucao,
+            $titulo, $descricao, $categoriaId, $subcategoriaId, $setorId, $unidadeId, $setorSolicitanteId, $ativoId, $solicitante['id'], $usuarioAberturaId, $prioridade, $canal, $slaResposta, $slaResolucao,
         ]);
 
         $id = (int)$this->pdo->lastInsertId();
@@ -336,6 +348,37 @@ class ChamadoService
         $stmt->bindValue(1, $usuarioId, PDO::PARAM_INT);
         $stmt->bindValue(2, $limite, PDO::PARAM_INT);
         $stmt->execute();
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Aba "Encerrados" pra quem enxerga a equipe: os encerrados dos setores
+     * de quem olha + os sem setor + os que ele mesmo atendeu (mesmo filtro
+     * da Fila/Equipe). Sem isso o admin, que normalmente não atende, via
+     * "Nenhum chamado encerrado" enquanto as Estatísticas contavam dezenas.
+     *
+     * @param int[]|null $setorIds null = vê tudo (admin).
+     */
+    public function listarEncerradosDaEquipe(?array $setorIds, int $usuarioId, int $limite = 200): array
+    {
+        $sql = self::SELECT_ENRIQUECIDO . " WHERE c.status IN ('resolvido','fechado')";
+        $params = [];
+
+        if ($setorIds !== null) {
+            $condicao = 'c.setor_id IS NULL OR c.usuario_id = ?';
+            $params[] = $usuarioId;
+            if ($setorIds) {
+                $condicao .= ' OR c.setor_id IN (' . implode(',', array_fill(0, count($setorIds), '?')) . ')';
+                $params = array_merge($params, $setorIds);
+            }
+            $sql .= " AND ({$condicao})";
+        }
+
+        $sql .= ' ORDER BY COALESCE(c.fechado_em, c.resolvido_em) DESC LIMIT ' . max(1, $limite);
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }

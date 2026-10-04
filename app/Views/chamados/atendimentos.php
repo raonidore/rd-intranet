@@ -184,8 +184,8 @@ $corStatus = ['fila' => 'secondary', 'em_atendimento' => 'primary', 'aguardando_
                         <div class="text-muted small">
                             <?= htmlspecialchars($item['solicitante_nome']) ?> ·
                             <?= htmlspecialchars($item['categoria_nome']) ?> ·
-                            <?= htmlspecialchars($item['unidade_nome']) ?>
-                            <?php if ($aba === 'equipe'): ?>
+                            <?= htmlspecialchars($item['unidade_nome']) ?><?php if (!empty($item['setor_solicitante_nome'])): ?> › <?= htmlspecialchars($item['setor_solicitante_nome']) ?><?php endif; ?>
+                            <?php if ($aba === 'equipe' || ($aba === 'encerrados' && $podeVerEquipe)): ?>
                                 · <i class="bi bi-person"></i> <?= htmlspecialchars($item['usuario_nome'] ?? '—') ?>
                                 <?php if (!empty($item['setor_nome'])): ?>(<?= htmlspecialchars($item['setor_nome']) ?>)<?php endif; ?>
                             <?php endif; ?>

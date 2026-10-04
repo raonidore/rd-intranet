@@ -111,6 +111,23 @@ class ChamadoEstatisticaService
         return $linhas;
     }
 
+    /** De onde vêm os chamados (setor DA EMPRESA) -- vazio se nenhum chamado tem setor do solicitante. */
+    public function porSetorSolicitante(): array
+    {
+        return $this->pdo->query(
+            "SELECT u.nome AS unidade_nome, COALESCE(ss.nome, 'Não informado') AS setor_nome,
+                    COUNT(*) AS total,
+                    SUM(c.status NOT IN ('resolvido','fechado')) AS em_aberto,
+                    SUM(c.aberto_em >= DATE_SUB(NOW(), INTERVAL 30 DAY)) AS ultimos_30_dias
+             FROM chamados c
+             JOIN unidades u ON u.id = c.unidade_id
+             LEFT JOIN chamados_setores_solicitantes ss ON ss.id = c.setor_solicitante_id
+             WHERE EXISTS (SELECT 1 FROM chamados WHERE setor_solicitante_id IS NOT NULL)
+             GROUP BY u.nome, ss.id, ss.nome
+             ORDER BY total DESC"
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     /** Retrato de agora: quanto tem em cada status não-encerrado. */
     public function tempoReal(): array
     {
