@@ -259,6 +259,18 @@ public sealed class FormularioChamado : RespostaSimples
     [JsonPropertyName("unidades")] public List<ItemSimples> Unidades { get; set; } = new();
     [JsonPropertyName("prioridades")] public List<ItemSimples> Prioridades { get; set; } = new();
     [JsonPropertyName("este_ativo")] public AtivoResumo? EsteAtivo { get; set; }
+    [JsonPropertyName("setores_solicitantes")] public List<SetorSolicitante> SetoresSolicitantes { get; set; } = new();
+    [JsonPropertyName("setor_solicitante_obrigatorio")] public bool SetorSolicitanteObrigatorio { get; set; }
+    [JsonPropertyName("setor_solicitante_sugerido")] public int? SetorSolicitanteSugerido { get; set; }
+}
+
+/// <summary>Setor DA EMPRESA de quem pede (Financeiro, RH...) -- não a equipe que atende. Unidade nula = vale pra todas.</summary>
+public sealed class SetorSolicitante
+{
+    [JsonPropertyName("id")] public int Id { get; set; }
+    [JsonPropertyName("nome")] public string Nome { get; set; } = "";
+    [JsonPropertyName("unidade_id")] public int? UnidadeId { get; set; }
+    public override string ToString() => Nome;
 }
 
 public sealed class ListaAtivos : RespostaSimples

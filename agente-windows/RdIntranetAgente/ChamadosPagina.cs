@@ -39,7 +39,9 @@ public sealed class ChamadosPagina : Panel
     private readonly RotuloCampo _rotuloSubcategoria;
     private readonly SeletorSegmentado _prioridade;
     private readonly SeletorModerno _unidade;
-    private readonly SeletorModerno _setor;
+    private readonly SeletorModerno _setorSolicitante;
+    private readonly RotuloCampo _rotuloSetorSolicitante;
+    private readonly Panel _campoSetorSolicitante;
     private readonly CartaoEscolha _alvoEste;
     private readonly CartaoEscolha _alvoOutro;
     private readonly CartaoEscolha _alvoNenhum;
@@ -65,7 +67,7 @@ public sealed class ChamadosPagina : Panel
     private readonly BotaoTema _botaoResponder;
 
     private const string SemSubcategoria = "Nenhuma";
-    private const string SetorPadrao = "Usar o padrão da categoria";
+    private const string SemSetor = "Não informar";
     private const int LinhaCampo = 74;
     private const int AlturaCartaoAlvoFechado = 30 + 50 + 90;
 
@@ -132,12 +134,17 @@ public sealed class ChamadosPagina : Panel
         _rotuloSubcategoria = new RotuloCampo("Subcategoria");
         _prioridade = new SeletorSegmentado();
         _unidade = new SeletorModerno { Placeholder = "Escolha a unidade" };
-        _setor = new SeletorModerno { Placeholder = SetorPadrao };
+        _setorSolicitante = new SeletorModerno { Placeholder = SemSetor };
+        _rotuloSetorSolicitante = new RotuloCampo("Seu setor");
         _categoria.SelecaoAlterada += (s, e) => AtualizarSubcategorias();
+        _unidade.SelecaoAlterada += (s, e) => AtualizarSetoresSolicitantes();
         var gradeClasse = Grade(2);
         AdicionarLinha(gradeClasse, LinhaCampo, Campo("Categoria", _categoria), CampoComRotulo(_rotuloSubcategoria, _subcategoria));
         AdicionarLinha(gradeClasse, LinhaCampo, Campo("Prioridade", _prioridade));
-        AdicionarLinha(gradeClasse, LinhaCampo, Campo("Unidade", _unidade), Campo("Setor responsável (opcional)", _setor));
+        // Setor DA EMPRESA de quem pede, filtrado pela unidade. A equipe que atende
+        // sai da categoria -- o "Setor responsável" daqui confundia quem abre.
+        _campoSetorSolicitante = CampoComRotulo(_rotuloSetorSolicitante, _setorSolicitante);
+        AdicionarLinha(gradeClasse, LinhaCampo, Campo("Unidade", _unidade), _campoSetorSolicitante);
         var cartaoClasse = Cartao(new CabecalhoSecao("2", "Classificação", "Ajuda a direcionar o chamado para a equipe certa."), gradeClasse, 30 + 50 + LinhaCampo * 3);
 
         // 3. sobre o quê
@@ -401,7 +408,7 @@ public sealed class ChamadosPagina : Panel
         var unidadeMaquina = f.EsteAtivo?.UnidadeId.ToString();
         _unidade.DefinirItens(f.Unidades, f.Unidades.Count == 0 ? -1 : Math.Max(0, f.Unidades.FindIndex(u => u.Id == unidadeMaquina)));
 
-        _setor.DefinirItens(new object[] { SetorPadrao }.Concat(f.Setores), 0);
+        AtualizarSetoresSolicitantes(f.SetorSolicitanteSugerido);
 
         _alvoEste.Descricao = f.EsteAtivo?.Codigo ?? "Esta máquina";
         AtualizarSubcategorias();
@@ -417,6 +424,27 @@ public sealed class ChamadosPagina : Panel
         _subcategoria.DefinirItens(exige ? lista : new object[] { SemSubcategoria }.Concat(lista), exige ? -1 : (lista.Count > 0 ? 0 : -1));
         _subcategoria.Enabled = lista.Count > 0;
         _rotuloSubcategoria.Text = exige ? "Subcategoria  ·  obrigatória" : "Subcategoria  ·  opcional";
+    }
+
+    /// <summary>Só os setores da unidade escolhida (ou de todas). Servidor sem setores cadastrados = campo escondido.</summary>
+    private void AtualizarSetoresSolicitantes(int? sugerido = null)
+    {
+        var todos = _formulario?.SetoresSolicitantes ?? new List<SetorSolicitante>();
+        _campoSetorSolicitante.Visible = todos.Count > 0;
+        if (todos.Count == 0) return;
+
+        var unidadeId = (_unidade.ItemSelecionado as ItemSimples)?.Id;
+        var lista = todos.Where(s => s.UnidadeId == null || s.UnidadeId.ToString() == unidadeId).ToList();
+        var exige = _formulario!.SetorSolicitanteObrigatorio && lista.Count > 0;
+
+        // Mantém a escolha ao trocar de unidade, se o setor também existir na nova.
+        var manter = sugerido ?? (_setorSolicitante.ItemSelecionado as SetorSolicitante)?.Id;
+        var indice = lista.FindIndex(s => s.Id == manter);
+
+        _setorSolicitante.Placeholder = lista.Count == 0 ? "Sem setores nesta unidade" : exige ? "Escolha o seu setor" : SemSetor;
+        _setorSolicitante.DefinirItens(exige ? lista : new object[] { SemSetor }.Concat(lista), exige ? indice : (lista.Count > 0 ? indice + 1 : -1));
+        _setorSolicitante.Enabled = lista.Count > 0;
+        _rotuloSetorSolicitante.Text = exige ? "Seu setor  ·  obrigatório" : "Seu setor  ·  opcional";
     }
 
     private void EscolherAlvo(CartaoEscolha escolhido)
@@ -470,6 +498,7 @@ public sealed class ChamadosPagina : Panel
         var categoria = _categoria.ItemSelecionado as CategoriaChamado;
         var subcategoria = _subcategoria.ItemSelecionado as SubcategoriaChamado;
         var unidade = _unidade.ItemSelecionado as ItemSimples;
+        var setorSolicitante = _setorSolicitante.ItemSelecionado as SetorSolicitante;
         var ativoOutro = _resultadoAtivo.ItemSelecionado as AtivoResumo;
 
         (string Mensagem, Control Campo)? erro = null;
@@ -478,6 +507,7 @@ public sealed class ChamadosPagina : Panel
         else if (categoria == null) erro = ("Escolha a categoria.", _categoria);
         else if (_subcategoria.Enabled && categoria.ExigeSubcategoria && subcategoria == null) erro = ($"Escolha uma subcategoria para \"{categoria.Nome}\".", _subcategoria);
         else if (unidade == null) erro = ("Escolha a unidade.", _unidade);
+        else if (_campoSetorSolicitante.Visible && _setorSolicitante.Enabled && _formulario.SetorSolicitanteObrigatorio && setorSolicitante == null) erro = ("Escolha o seu setor.", _setorSolicitante);
         else if (_alvoOutro.Selecionado && ativoOutro == null) erro = ("Busque e escolha o equipamento, ou escolha \"Nenhum equipamento\".", _buscaAtivo);
         else if (!logado && _solicitanteNome.Text.Trim() == "") erro = ("Informe seu nome.", _solicitanteNome);
         else if (!logado && _solicitanteEmail.Text.Trim() == "" && _solicitanteTelefone.Text.Trim() == "") erro = ("Informe e-mail ou telefone para o suporte te retornar.", _solicitanteEmail);
@@ -499,7 +529,7 @@ public sealed class ChamadosPagina : Panel
             subcategoria_id = subcategoria?.Id,
             prioridade = _prioridade.ChaveSelecionada ?? "media",
             unidade_id = int.Parse(unidade!.Id),
-            setor_id = _setor.ItemSelecionado is ItemSimples setor ? int.Parse(setor.Id) : (int?)null,
+            setor_solicitante_id = _campoSetorSolicitante.Visible ? setorSolicitante?.Id : null,
             alvo = _alvoOutro.Selecionado ? "outro" : _alvoNenhum.Selecionado ? "nenhum" : "este",
             ativo_id = _alvoOutro.Selecionado ? ativoOutro?.Id : null,
             solicitante_nome = _solicitanteNome.Text.Trim(),

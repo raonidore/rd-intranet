@@ -111,7 +111,9 @@ class ChamadoService
         if ($setorSolicitanteId !== null && !$setorSolicitanteService->validoParaUnidade($setorSolicitanteId, $unidadeId)) {
             return ['success' => false, 'message' => 'Setor do solicitante inválido para a unidade escolhida.'];
         }
-        if ($setorSolicitanteId === null && $canal === 'painel' && $setorSolicitanteService->obrigatorio()
+        // Exigir: painel e agente que tem o campo (manda a chave); WhatsApp/e-mail/agente antigo não têm como escolher.
+        $temCampoSetor = $canal === 'painel' || ($canal === 'agente' && array_key_exists('setor_solicitante_id', $post));
+        if ($setorSolicitanteId === null && $temCampoSetor && $setorSolicitanteService->obrigatorio()
             && $setorSolicitanteService->existeAtivoParaUnidade($unidadeId)) {
             return ['success' => false, 'message' => 'Informe de qual setor da unidade o chamado está vindo.'];
         }

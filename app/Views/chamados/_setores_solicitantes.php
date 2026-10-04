@@ -43,7 +43,7 @@ $opcoesUnidade = function (?int $selecionada) use ($unidades): string {
                        <?= $setorSolicitanteObrigatorio ? 'checked' : '' ?> onchange="this.form.submit()">
                 <label class="form-check-label small" for="setorSolicitanteObrigatorio">
                     Exigir o setor do solicitante ao abrir chamado pelo painel
-                    <span class="text-muted">(só nas unidades que têm setor cadastrado; WhatsApp, e-mail e agente seguem sem exigir)</span>
+                    <span class="text-muted">(painel e agente 1.0.55+, só nas unidades que têm setor cadastrado; WhatsApp e e-mail seguem sem exigir)</span>
                 </label>
             </div>
         </form>

@@ -148,6 +148,7 @@ class AgenteChamadoService
     public function formulario(int $ativoId): array
     {
         $ativo = (new AtivoService())->buscar($ativoId);
+        $setoresSolicitantes = new ChamadoSetorSolicitanteService();
 
         return [
             'categorias' => array_map(fn (array $c) => [
@@ -158,6 +159,14 @@ class AgenteChamadoService
             'subcategorias' => (object)(new ChamadoSubcategoriaService())->listarAtivasAgrupadas(),
             'setores' => array_map(fn (array $s) => ['id' => (int)$s['id'], 'nome' => $s['nome']], (new ChamadoSetorService())->listarAtivos()),
             'unidades' => array_map(fn (array $u) => ['id' => (int)$u['id'], 'nome' => $u['nome']], (new UnidadeService())->listarAtivas()),
+            // Setor DA EMPRESA de quem pede (agente 1.0.55+); vazio = cliente não usa, o agente esconde o campo.
+            'setores_solicitantes' => array_map(fn (array $s) => [
+                'id' => (int)$s['id'],
+                'nome' => $s['nome'],
+                'unidade_id' => $s['unidade_id'] !== null ? (int)$s['unidade_id'] : null,
+            ], $setoresSolicitantes->listarAtivos()),
+            'setor_solicitante_obrigatorio' => $setoresSolicitantes->obrigatorio(),
+            'setor_solicitante_sugerido' => $this->ultimoSetorSolicitanteDaMaquina($ativoId),
             'prioridades' => array_map(fn ($chave, $rotulo) => ['id' => $chave, 'nome' => $rotulo], array_keys(ChamadoService::PRIORIDADES), ChamadoService::PRIORIDADES),
             'este_ativo' => $ativo ? [
                 'id' => (int)$ativo['id'],
@@ -166,6 +175,18 @@ class AgenteChamadoService
                 'unidade_id' => (int)$ativo['unidade_id'],
             ] : null,
         ];
+    }
+
+    /** Quem usa a máquina costuma ser do mesmo setor: sugere o do último chamado aberto sobre ela. */
+    private function ultimoSetorSolicitanteDaMaquina(int $ativoId): ?int
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT setor_solicitante_id FROM chamados WHERE ativo_id = ? AND setor_solicitante_id IS NOT NULL ORDER BY id DESC LIMIT 1'
+        );
+        $stmt->execute([$ativoId]);
+        $id = $stmt->fetchColumn();
+
+        return $id === false ? null : (int)$id;
     }
 
     /**
@@ -219,6 +240,12 @@ class AgenteChamadoService
             'solicitante_email' => trim((string)($dados['solicitante_email'] ?? '')),
             'solicitante_telefone' => trim((string)($dados['solicitante_telefone'] ?? '')),
         ];
+
+        // Só o agente 1.0.55+ manda a chave (mesmo nula) -- é o que liga o "Exigir"
+        // em ChamadoService; agente antigo, que não tem o campo, segue abrindo.
+        if (array_key_exists('setor_solicitante_id', $dados)) {
+            $post['setor_solicitante_id'] = (int)($dados['setor_solicitante_id'] ?? 0) ?: null;
+        }
 
         // Logado: o solicitante é o próprio usuário, se ele não preencheu outro nome/e-mail.
         if ($usuario) {
