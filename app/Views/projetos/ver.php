@@ -220,10 +220,13 @@ $colunaLabels = [
                                                 <span class="small text-muted d-flex align-items-center gap-2">
                                                     <?php
                                                         $mensagensCard = count(array_filter($timeline, fn ($c) => (int)($c['tarefa_id'] ?? 0) === (int)$tarefa['id'] && $c['tipo'] === 'nota'));
-                                                        $novasCard = $naoLidasPorTarefa[(int)$tarefa['id']] ?? 0;
+                                                        $novasCard = $naoLidasPorTarefa[(int)$tarefa['id']] ?? null;
                                                     ?>
                                                     <?php if ($novasCard): ?>
-                                                        <span class="badge text-bg-danger badge-novas-tarefa" data-tarefa-id="<?= (int)$tarefa['id'] ?>" title="Mensagens novas para você"><i class="bi bi-chat-dots-fill"></i> <?= $novasCard ?></span>
+                                                        <span class="badge text-bg-danger badge-novas-tarefa <?= $novasCard['mencoes'] ? 'badge-mencao' : '' ?>" data-tarefa-id="<?= (int)$tarefa['id'] ?>"
+                                                              title="<?= $novasCard['mencoes'] ? 'Você foi mencionado' : 'Mensagens novas para você' ?>">
+                                                            <i class="bi <?= $novasCard['mencoes'] ? 'bi-at' : 'bi-chat-dots-fill' ?>"></i> <?= $novasCard['total'] ?>
+                                                        </span>
                                                     <?php elseif ($mensagensCard): ?>
                                                         <span title="Mensagens na conversa"><i class="bi bi-chat-dots"></i> <?= $mensagensCard ?></span>
                                                     <?php endif; ?>
@@ -759,7 +762,15 @@ $colunaLabels = [
                                     <?php if (!empty($c['participante_externo_id'])): ?><span class="badge text-bg-light border">externo</span><?php endif; ?>
                                     <span class="text-muted">· <?= date('d/m/Y H:i', strtotime($c['criado_em'])) ?></span>
                                 </div>
-                                <div class="conversa-texto"><?= htmlspecialchars($c['conteudo']) ?></div>
+                                <?php
+                                    $textoMsg = htmlspecialchars($c['conteudo']);
+                                    foreach ($pessoas as $pp) {
+                                        $ehEu = $pp['tipo'] === 'interno' && (int)$pp['id'] === (int)$usuarioLogadoId;
+                                        $marca = '@' . htmlspecialchars($pp['nome']);
+                                        $textoMsg = str_ireplace($marca, '<span class="mencao' . ($ehEu ? ' mencao-eu' : '') . '">' . $marca . '</span>', $textoMsg);
+                                    }
+                                ?>
+                                <div class="conversa-texto"><?= $textoMsg ?></div>
                                 <?php foreach ($anexosTarefa as $a): ?>
                                     <?php if ((int)($a['comentario_id'] ?? 0) === (int)$c['id']): ?>
                                         <a class="small d-block" href="<?= url('/projetos/anexo?anexo_id=' . (int)$a['id']) ?>"><i class="bi bi-paperclip"></i> <?= htmlspecialchars($a['anexo_nome_original']) ?></a>
@@ -769,12 +780,20 @@ $colunaLabels = [
                         <?php endif; ?>
                     <?php endforeach; ?>
                 </div>
-                <form method="post" action="<?= url('/projetos/comentar') ?>" enctype="multipart/form-data" class="mb-3 form-conversa-tarefa">
+                <?php
+                    $marcaveis = array_values(array_map(
+                        fn ($pp) => ['chave' => $pp['tipo'] . ':' . (int)$pp['id'], 'nome' => $pp['nome'], 'tipo' => $pp['tipo']],
+                        array_filter($pessoas, fn ($pp) => !($pp['tipo'] === 'interno' && (int)$pp['id'] === (int)$usuarioLogadoId))
+                    ));
+                ?>
+                <form method="post" action="<?= url('/projetos/comentar') ?>" enctype="multipart/form-data" class="mb-3 form-conversa-tarefa position-relative"
+                      data-marcaveis="<?= htmlspecialchars(json_encode($marcaveis, JSON_UNESCAPED_UNICODE)) ?>">
+                    <div class="list-group position-absolute shadow-sm d-none lista-mencoes" style="z-index:30; bottom:100%; min-width:260px; max-height:200px; overflow-y:auto"></div>
                     <input type="hidden" name="projeto_id" value="<?= (int)$projeto['id'] ?>">
                     <input type="hidden" name="tarefa_id" value="<?= (int)$tarefa['id'] ?>">
                     <input type="hidden" name="voltar_tarefa" value="1">
                     <textarea name="conteudo" class="form-control form-control-sm mb-1" rows="2" required
-                              placeholder="Escreva para <?= htmlspecialchars(implode(', ', array_column(array_filter($pessoas, fn ($pp) => !($pp['tipo'] === 'interno' && (int)$pp['id'] === (int)$usuarioLogadoId)), 'nome')) ?: 'a equipe') ?>... (Ctrl+Enter envia)"></textarea>
+                              placeholder="<?= $marcaveis ? 'Escreva para ' . htmlspecialchars(implode(', ', array_column($marcaveis, 'nome'))) . '... Use @ para marcar alguém (Ctrl+Enter envia)' : 'Escreva uma mensagem... (Ctrl+Enter envia)' ?>"></textarea>
                     <div class="d-flex justify-content-between align-items-center gap-2">
                         <label class="btn btn-outline-secondary btn-sm mb-0">
                             <i class="bi bi-paperclip"></i> Anexar
@@ -810,6 +829,10 @@ $colunaLabels = [
 .conversa-msg.minha { background: #e7f1ff; border-color: #b6d4fe; margin-left: auto; }
 .conversa-autor { font-size: 11px; font-weight: 600; margin-bottom: 2px; }
 .conversa-texto { white-space: pre-wrap; word-break: break-word; }
+.mencao { color: #0a58ca; font-weight: 600; }
+.mencao-eu { background: #fff3cd; color: #842029; border-radius: 4px; padding: 0 2px; }
+.badge-mencao { animation: pulsoMencaoCard 1.4s ease-in-out infinite; }
+@keyframes pulsoMencaoCard { 50% { box-shadow: 0 0 0 .3rem rgba(220, 53, 69, .3); } }
 </style>
 
 <script>
@@ -832,10 +855,8 @@ $colunaLabels = [
             }).then((r) => r.json()).then(function (dados) {
                 if (!dados.success) return;
                 badge.remove();
-                const menu = document.getElementById('rdProjetosBadge');
-                if (menu) {
-                    menu.textContent = dados.total_nao_lidas;
-                    menu.style.display = dados.total_nao_lidas > 0 ? '' : 'none';
+                if (typeof window.rdAtualizarAvisoProjetos === 'function') {
+                    window.rdAtualizarAvisoProjetos(dados.total_nao_lidas, dados.mencoes);
                 }
             }).catch(function () {});
         });
@@ -853,7 +874,83 @@ $colunaLabels = [
         form.querySelector('.campo-anexo-conversa').addEventListener('change', function () {
             form.querySelector('.nome-anexo-conversa').textContent = this.files[0] ? this.files[0].name : '';
         });
+        const marcaveis = JSON.parse(form.dataset.marcaveis || '[]');
+        const lista = form.querySelector('.lista-mencoes');
+        const escolhidas = new Map(); // chave -> nome
+        let opcoes = [];
+        let ativa = 0;
+
+        function termoAtual() {
+            const antes = texto.value.slice(0, texto.selectionStart);
+            const m = antes.match(/(?:^|\s)@([^@\n]{0,30})$/);
+            return m ? m[1] : null;
+        }
+
+        function fecharLista() { lista.classList.add('d-none'); opcoes = []; }
+
+        function desenharLista() {
+            lista.innerHTML = opcoes.map((p, i) =>
+                '<button type="button" class="list-group-item list-group-item-action py-1 small' + (i === ativa ? ' active' : '') + '" data-i="' + i + '">'
+                + '<i class="bi ' + (p.tipo === 'interno' ? 'bi-person' : 'bi-person-badge') + '"></i> ' + p.nome.replace(/</g, '&lt;')
+                + (p.tipo === 'externo' ? ' <span class="badge text-bg-light border">externo</span>' : '') + '</button>'
+            ).join('');
+            lista.classList.toggle('d-none', opcoes.length === 0);
+        }
+
+        function escolher(p) {
+            const pos = texto.selectionStart;
+            const antes = texto.value.slice(0, pos).replace(/@([^@\n]{0,30})$/, '@' + p.nome + ' ');
+            texto.value = antes + texto.value.slice(pos);
+            texto.selectionStart = texto.selectionEnd = antes.length;
+            escolhidas.set(p.chave, p.nome);
+            fecharLista();
+            texto.focus();
+        }
+
+        if (marcaveis.length) {
+            texto.addEventListener('input', function () {
+                const termo = termoAtual();
+                if (termo === null) return fecharLista();
+                const t = termo.toLowerCase();
+                opcoes = marcaveis.filter((p) => p.nome.toLowerCase().includes(t)).slice(0, 8);
+                ativa = 0;
+                desenharLista();
+            });
+            texto.addEventListener('keydown', function (ev) {
+                if (lista.classList.contains('d-none')) return;
+                if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+                    ev.preventDefault();
+                    ativa = (ativa + (ev.key === 'ArrowDown' ? 1 : opcoes.length - 1)) % opcoes.length;
+                    desenharLista();
+                } else if (ev.key === 'Enter' || ev.key === 'Tab') {
+                    ev.preventDefault();
+                    ev.stopImmediatePropagation();
+                    escolher(opcoes[ativa]);
+                } else if (ev.key === 'Escape') {
+                    ev.stopPropagation();
+                    fecharLista();
+                }
+            });
+            lista.addEventListener('mousedown', function (ev) {
+                const item = ev.target.closest('[data-i]');
+                if (!item) return;
+                ev.preventDefault();
+                escolher(opcoes[parseInt(item.dataset.i, 10)]);
+            });
+            texto.addEventListener('blur', function () { setTimeout(fecharLista, 150); });
+        }
+
         form.addEventListener('submit', function () {
+            // Só manda quem continua marcado no texto (apagou o @Nome = não marca).
+            form.querySelectorAll('input[name="mencoes[]"]').forEach((i) => i.remove());
+            escolhidas.forEach(function (nome, chave) {
+                if (!texto.value.toLowerCase().includes('@' + nome.toLowerCase())) return;
+                const campo = document.createElement('input');
+                campo.type = 'hidden';
+                campo.name = 'mencoes[]';
+                campo.value = chave;
+                form.appendChild(campo);
+            });
             form.querySelector('button[type="submit"]').disabled = true;
         });
     });

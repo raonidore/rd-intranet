@@ -70,6 +70,29 @@ $prioridadeClasses = [
     </div>
 </form>
 
+<?php
+    $totalNovasProjetos = array_sum(array_column($naoLidasPorProjeto, 'total'));
+    $totalMencoesProjetos = array_sum(array_column($naoLidasPorProjeto, 'mencoes'));
+    $nomesProjetos = array_column($projetos, 'titulo', 'id');
+?>
+<?php if ($totalNovasProjetos > 0): ?>
+    <div class="alert <?= $totalMencoesProjetos ? 'alert-danger' : 'alert-warning' ?> d-flex align-items-start gap-2">
+        <i class="bi <?= $totalMencoesProjetos ? 'bi-at' : 'bi-chat-dots-fill' ?> fs-4"></i>
+        <div>
+            <strong>
+                <?= $totalMencoesProjetos ? ($totalMencoesProjetos === 1 ? 'Você foi mencionado em 1 mensagem' : "Você foi mencionado em {$totalMencoesProjetos} mensagens") . ' · ' : '' ?>
+                <?= $totalNovasProjetos === 1 ? '1 mensagem nova' : "{$totalNovasProjetos} mensagens novas" ?> nas suas tarefas
+            </strong>
+            <div class="small">
+                <?php foreach ($naoLidasPorProjeto as $projetoIdNovas => $novas): ?>
+                    <?php if (!isset($nomesProjetos[$projetoIdNovas])) continue; ?>
+                    <a href="<?= url('/projetos/ver?id=' . (int)$projetoIdNovas) ?>" class="me-3"><?= htmlspecialchars($nomesProjetos[$projetoIdNovas]) ?> (<?= $novas['total'] ?><?= $novas['mencoes'] ? ', @' . $novas['mencoes'] : '' ?>)</a>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    </div>
+<?php endif; ?>
+
 <?php if (empty($projetos)): ?>
     <div class="card border-0 shadow-sm">
         <div class="card-body text-center text-muted py-5">
@@ -82,13 +105,20 @@ $prioridadeClasses = [
         <?php foreach ($projetos as $projeto): ?>
             <div class="col-md-6 col-lg-4">
                 <a href="<?= url('/projetos/ver?id=' . (int)$projeto['id']) ?>" class="text-decoration-none text-reset">
-                    <div class="card border-0 shadow-sm h-100">
+                    <?php $novasProjeto = $naoLidasPorProjeto[(int)$projeto['id']] ?? null; ?>
+                    <div class="card shadow-sm h-100 <?= $novasProjeto ? ($novasProjeto['mencoes'] ? 'border border-2 border-danger projeto-com-mencao' : 'border border-warning') : 'border-0' ?>">
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-start mb-2">
                                 <span class="badge text-bg-light border"><?= htmlspecialchars($projeto['area_nome']) ?></span>
                                 <span class="badge <?= $prioridadeClasses[$projeto['prioridade']] ?? '' ?>"><?= ucfirst($projeto['prioridade']) ?></span>
                             </div>
-                            <h6 class="mb-1"><?= htmlspecialchars($projeto['titulo']) ?><?php if (!empty($naoLidasPorProjeto[(int)$projeto['id']])): ?> <span class="badge text-bg-danger" title="Mensagens novas nas suas tarefas"><i class="bi bi-chat-dots-fill"></i> <?= (int)$naoLidasPorProjeto[(int)$projeto['id']] ?></span><?php endif; ?></h6>
+                            <h6 class="mb-1"><?= htmlspecialchars($projeto['titulo']) ?></h6>
+                            <?php if ($novasProjeto): ?>
+                                <div class="small fw-semibold <?= $novasProjeto['mencoes'] ? 'text-danger' : 'text-warning-emphasis' ?> mb-1">
+                                    <i class="bi <?= $novasProjeto['mencoes'] ? 'bi-at' : 'bi-chat-dots-fill' ?>"></i>
+                                    <?= $novasProjeto['mencoes'] ? 'Você foi mencionado · ' : '' ?><?= $novasProjeto['total'] === 1 ? '1 mensagem nova' : $novasProjeto['total'] . ' mensagens novas' ?>
+                                </div>
+                            <?php endif; ?>
                             <?php if (!empty($projeto['cliente'])): ?>
                                 <p class="text-muted small mb-2"><i class="bi bi-building"></i> <?= htmlspecialchars($projeto['cliente']) ?></p>
                             <?php endif; ?>
@@ -100,6 +130,11 @@ $prioridadeClasses = [
         <?php endforeach; ?>
     </div>
 <?php endif; ?>
+
+<style>
+.projeto-com-mencao { animation: pulsoMencao 1.6s ease-in-out 3; }
+@keyframes pulsoMencao { 50% { box-shadow: 0 0 0 .35rem rgba(220, 53, 69, .25) !important; } }
+</style>
 
 <?php
 $conteudo = ob_get_clean();

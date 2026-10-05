@@ -51,6 +51,10 @@ class ProjetoComentarioController extends Controller
         }
 
         if ($resultado['success'] && $tarefaId !== null) {
+            $marcados = $_POST['mencoes'] ?? [];
+            if (is_array($marcados) && $marcados) {
+                (new ProjetoComentarioService())->salvarMencoes((int)$resultado['id'], $tarefaId, (string)($_POST['conteudo'] ?? ''), $marcados);
+            }
             (new ProjetoComentarioService())->marcarLido($tarefaId, $usuarioId);
             (new ProjetoNotificacaoService())->notificarComentario((int)$resultado['id']);
         }
@@ -88,7 +92,17 @@ class ProjetoComentarioController extends Controller
 
         $comentarios = new ProjetoComentarioService();
         $comentarios->marcarLido($tarefaId, $usuarioId);
+        $resumo = $comentarios->resumoNaoLidas($usuarioId);
 
-        echo json_encode(['success' => true, 'total_nao_lidas' => $comentarios->totalNaoLidas($usuarioId)]);
+        echo json_encode(['success' => true, 'total_nao_lidas' => $resumo['total'], 'mencoes' => $resumo['mencoes']]);
+    }
+
+    /** Consultado sozinho pelo menu (a cada 20 s): mensagens novas e menções nas tarefas do usuário. */
+    public function contador(): void
+    {
+        AuthMiddleware::checkModulo('projetos_atendimentos');
+        header('Content-Type: application/json');
+
+        echo json_encode(['success' => true] + (new ProjetoComentarioService())->resumoNaoLidas((int)$_SESSION['usuario']['id']));
     }
 }

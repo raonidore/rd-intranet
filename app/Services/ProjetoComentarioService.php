@@ -74,31 +74,99 @@ class ProjetoComentarioService
           AND (EXISTS (SELECT 1 FROM projetos_tarefas_responsaveis r WHERE r.tarefa_id = c.tarefa_id AND r.usuario_id = :u3)
                OR EXISTS (SELECT 1 FROM projetos_comentarios c2 WHERE c2.tarefa_id = c.tarefa_id AND c2.usuario_id = :u4 AND c2.tipo = 'nota'))";
 
-    /** Badge do menu Projetos. */
+    /** Mensagem nova que marca o usuário com @. */
+    private const SQL_MENCAO = "EXISTS (SELECT 1 FROM projetos_comentarios_mencoes m WHERE m.comentario_id = c.id AND m.usuario_id = :u5)";
+
+    private function parametrosNaoLidas(int $usuarioId): array
+    {
+        return ['u1' => $usuarioId, 'u2' => $usuarioId, 'u3' => $usuarioId, 'u4' => $usuarioId, 'u5' => $usuarioId];
+    }
+
+    /** @return array{total: int, mencoes: int, ultimo_id: int} -- menu Projetos (e o contador que ele consulta sozinho) */
+    public function resumoNaoLidas(int $usuarioId): array
+    {
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) AS total, COALESCE(SUM(' . self::SQL_MENCAO . '), 0) AS mencoes, COALESCE(MAX(c.id), 0) AS ultimo_id ' . self::SQL_NAO_LIDAS);
+        $stmt->execute($this->parametrosNaoLidas($usuarioId));
+        $linha = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        return ['total' => (int)($linha['total'] ?? 0), 'mencoes' => (int)($linha['mencoes'] ?? 0), 'ultimo_id' => (int)($linha['ultimo_id'] ?? 0)];
+    }
+
     public function totalNaoLidas(int $usuarioId): int
     {
-        $stmt = $this->pdo->prepare('SELECT COUNT(*) ' . self::SQL_NAO_LIDAS);
-        $stmt->execute(['u1' => $usuarioId, 'u2' => $usuarioId, 'u3' => $usuarioId, 'u4' => $usuarioId]);
-
-        return (int)$stmt->fetchColumn();
+        return $this->resumoNaoLidas($usuarioId)['total'];
     }
 
-    /** @return array<int, int> tarefa_id => mensagens novas, num projeto */
+    /** @return array<int, array{total: int, mencoes: int}> tarefa_id => novas, num projeto */
     public function naoLidasPorTarefa(int $projetoId, int $usuarioId): array
     {
-        $stmt = $this->pdo->prepare('SELECT c.tarefa_id, COUNT(*) ' . self::SQL_NAO_LIDAS . ' AND t.projeto_id = :p GROUP BY c.tarefa_id');
-        $stmt->execute(['u1' => $usuarioId, 'u2' => $usuarioId, 'u3' => $usuarioId, 'u4' => $usuarioId, 'p' => $projetoId]);
-
-        return array_map('intval', $stmt->fetchAll(PDO::FETCH_KEY_PAIR));
+        return $this->agruparNaoLidas('c.tarefa_id', $usuarioId, $projetoId);
     }
 
-    /** @return array<int, int> projeto_id => mensagens novas (lista de Projetos) */
+    /** @return array<int, array{total: int, mencoes: int}> projeto_id => novas (lista de Projetos) */
     public function naoLidasPorProjeto(int $usuarioId): array
     {
-        $stmt = $this->pdo->prepare('SELECT t.projeto_id, COUNT(*) ' . self::SQL_NAO_LIDAS . ' GROUP BY t.projeto_id');
-        $stmt->execute(['u1' => $usuarioId, 'u2' => $usuarioId, 'u3' => $usuarioId, 'u4' => $usuarioId]);
+        return $this->agruparNaoLidas('t.projeto_id', $usuarioId, null);
+    }
 
-        return array_map('intval', $stmt->fetchAll(PDO::FETCH_KEY_PAIR));
+    private function agruparNaoLidas(string $coluna, int $usuarioId, ?int $projetoId): array
+    {
+        $params = $this->parametrosNaoLidas($usuarioId);
+        $sql = "SELECT {$coluna} AS chave, COUNT(*) AS total, COALESCE(SUM(" . self::SQL_MENCAO . '), 0) AS mencoes ' . self::SQL_NAO_LIDAS;
+        if ($projetoId !== null) {
+            $sql .= ' AND t.projeto_id = :p';
+            $params['p'] = $projetoId;
+        }
+        $stmt = $this->pdo->prepare($sql . " GROUP BY {$coluna}");
+        $stmt->execute($params);
+
+        $saida = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $linha) {
+            $saida[(int)$linha['chave']] = ['total' => (int)$linha['total'], 'mencoes' => (int)$linha['mencoes']];
+        }
+
+        return $saida;
+    }
+
+    /**
+     * Guarda quem foi marcado com @. $marcados vem do formulário ("interno:5",
+     * "externo:3"); só vale pessoa da própria tarefa e só se o "@Nome" ainda
+     * estiver no texto (apagou a menção = não marca).
+     *
+     * @return array<int, array{tipo: string, id: int, nome: string, email: ?string}> quem ficou marcado
+     */
+    public function salvarMencoes(int $comentarioId, int $tarefaId, string $conteudo, array $marcados): array
+    {
+        $pessoas = [];
+        foreach ((new ProjetoTarefaService())->pessoas($tarefaId) as $pessoa) {
+            $pessoas[$pessoa['tipo'] . ':' . (int)$pessoa['id']] = $pessoa;
+        }
+
+        $salvos = [];
+        $stmt = $this->pdo->prepare('INSERT INTO projetos_comentarios_mencoes (comentario_id, usuario_id, participante_externo_id) VALUES (?, ?, ?)');
+        foreach (array_unique(array_map('strval', $marcados)) as $chave) {
+            $pessoa = $pessoas[$chave] ?? null;
+            if ($pessoa === null || mb_stripos($conteudo, '@' . $pessoa['nome']) === false) {
+                continue;
+            }
+            $interno = $pessoa['tipo'] === 'interno';
+            $stmt->execute([$comentarioId, $interno ? (int)$pessoa['id'] : null, $interno ? null : (int)$pessoa['id']]);
+            $salvos[] = $pessoa;
+        }
+
+        return $salvos;
+    }
+
+    /** @return string[] chaves "interno:ID"/"externo:ID" marcadas na mensagem */
+    public function mencoesDoComentario(int $comentarioId): array
+    {
+        $stmt = $this->pdo->prepare('SELECT usuario_id, participante_externo_id FROM projetos_comentarios_mencoes WHERE comentario_id = ?');
+        $stmt->execute([$comentarioId]);
+
+        return array_map(
+            fn (array $m) => $m['usuario_id'] !== null ? 'interno:' . (int)$m['usuario_id'] : 'externo:' . (int)$m['participante_externo_id'],
+            $stmt->fetchAll(PDO::FETCH_ASSOC)
+        );
     }
 
     /** Abriu a tarefa (ou comentou nela): tudo que existe até agora fica lido. */

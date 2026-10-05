@@ -450,25 +450,33 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         || PermissionService::temAcesso('projetos_estatisticas');
     // Mensagens novas nas conversas das tarefas em que a pessoa está envolvida.
     $projetosNaoLidas = 0;
+    $projetosMencoes = 0;
     if (PermissionService::temAcesso('projetos_atendimentos')) {
         try {
-            $projetosNaoLidas = (new \App\Services\ProjetoComentarioService())->totalNaoLidas((int)$_SESSION['usuario']['id']);
+            $resumoProjetos = (new \App\Services\ProjetoComentarioService())->resumoNaoLidas((int)$_SESSION['usuario']['id']);
+            $projetosNaoLidas = $resumoProjetos['total'];
+            $projetosMencoes = $resumoProjetos['mencoes'];
         } catch (\Throwable $e) {
-            $projetosNaoLidas = 0; // tabela de leituras ainda não migrada
+            // tabelas de leitura/menções ainda não migradas
         }
     }
     ?>
     <?php if ($temProjetos): ?>
     <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuProjetos"
             aria-expanded="<?= $abrirProjetos ? 'true' : 'false' ?>">
-        <span><i class="bi bi-kanban me-2"></i>Projetos<?php if ($projetosNaoLidas > 0): ?> <span class="rd-menu-badge" title="Mensagens novas nas suas tarefas"><?= $projetosNaoLidas ?></span><?php endif; ?></span>
+        <span>
+            <i class="bi bi-kanban me-2"></i>Projetos
+            <i class="bi <?= $projetosMencoes ? 'bi-at' : 'bi-exclamation-circle-fill' ?> text-danger ms-1" id="rdProjetosAlertaGeral"
+               style="<?= $projetosNaoLidas > 0 ? '' : 'display:none' ?>"
+               title="<?= $projetosMencoes ? 'Você foi mencionado em uma tarefa' : 'Mensagens novas nas suas tarefas' ?>"></i>
+        </span>
         <i class="bi bi-chevron-right chevron"></i>
     </button>
     <div class="collapse <?= $abrirProjetos ? 'show' : '' ?>" id="menuProjetos">
         <?php if (PermissionService::temAcesso('projetos_atendimentos')): ?>
         <a href="<?= url('/projetos') ?>" class="<?= $uriAtual === '/projetos' || str_starts_with($uriAtual, '/projetos/ver') || str_starts_with($uriAtual, '/projetos/novo') ? 'active' : '' ?>">
             <i class="bi bi-kanban me-2"></i> Projetos
-            <span class="rd-menu-badge" id="rdProjetosBadge" title="Mensagens novas nas suas tarefas" style="<?= $projetosNaoLidas > 0 ? '' : 'display:none' ?>"><?= $projetosNaoLidas ?></span>
+            <span class="rd-menu-badge" id="rdProjetosBadge" title="Mensagens novas nas suas tarefas" style="<?= $projetosNaoLidas > 0 ? '' : 'display:none' ?>"><?= $projetosMencoes ? '@ ' : '' ?><?= $projetosNaoLidas ?></span>
         </a>
         <?php endif; ?>
         <?php if (PermissionService::temAcesso('projetos_gerenciar')): ?>
@@ -1304,6 +1312,41 @@ function atualizarAlertaGeralChamados() {
 
     verificarChamados();
     setInterval(verificarChamados, 15000);
+})();
+</script>
+<?php endif; ?>
+
+<?php if (PermissionService::temAcesso('projetos_atendimentos') && isset($_SESSION['usuario']['id'])): ?>
+<script>
+(function () {
+    // Aviso do menu Projetos (mesma ideia do Chamados): mensagens novas e @menções
+    // nas conversas das tarefas da pessoa, conferidas a cada 20 s.
+    const badge = document.getElementById('rdProjetosBadge');
+    const alerta = document.getElementById('rdProjetosAlertaGeral');
+
+    window.rdAtualizarAvisoProjetos = function (total, mencoes) {
+        if (badge) {
+            badge.textContent = (mencoes > 0 ? '@ ' : '') + total;
+            badge.style.display = total > 0 ? '' : 'none';
+        }
+        if (alerta) {
+            alerta.className = 'bi ' + (mencoes > 0 ? 'bi-at' : 'bi-exclamation-circle-fill') + ' text-danger ms-1';
+            alerta.title = mencoes > 0 ? 'Você foi mencionado em uma tarefa' : 'Mensagens novas nas suas tarefas';
+            alerta.style.display = total > 0 ? '' : 'none';
+        }
+    };
+
+    async function verificarProjetos() {
+        try {
+            const resp = await fetch('<?= url('/projetos/mensagens/contador') ?>');
+            const dados = await resp.json();
+            if (dados.success) window.rdAtualizarAvisoProjetos(dados.total, dados.mencoes);
+        } catch (e) {
+            // rede instável -- tenta de novo no próximo ciclo
+        }
+    }
+
+    setInterval(verificarProjetos, 20000);
 })();
 </script>
 <?php endif; ?>

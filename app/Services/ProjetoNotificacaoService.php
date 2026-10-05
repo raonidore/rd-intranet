@@ -143,6 +143,7 @@ class ProjetoNotificacaoService
         }
 
         $urlBase = (($_SERVER['HTTPS'] ?? 'off') !== 'off' ? 'https://' : 'http://') . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+        $mencionados = (new ProjetoComentarioService())->mencoesDoComentario($comentarioId);
         $assunto = 'Nova mensagem: ' . $tarefa['titulo'];
         $corpo = '<p><strong>' . htmlspecialchars($autor ?: 'Alguém') . '</strong> escreveu na tarefa <strong>' . htmlspecialchars($tarefa['titulo']) . '</strong>'
             . ' (' . htmlspecialchars($tarefa['projeto_titulo'] ?? '') . '):</p>'
@@ -167,9 +168,10 @@ class ProjetoNotificacaoService
                 $link = (new ProjetoParticipanteTokenService())->emitirLink((int)$pessoa['id'], $urlBase);
             }
 
+            $foiMencionado = in_array($pessoa['tipo'] . ':' . (int)$pessoa['id'], $mencionados, true);
             $email->enviar(
                 $pessoa['email'],
-                $assunto,
+                $foiMencionado ? ($autor ?: 'Alguém') . ' mencionou você: ' . $tarefa['titulo'] : $assunto,
                 $corpo . ($link ? '<p><a href="' . htmlspecialchars($link) . '">Abrir a tarefa e responder</a></p>' : '')
             );
         }
