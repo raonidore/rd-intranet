@@ -2742,12 +2742,20 @@ class AtivoService
      *
      * @return array{success:bool, tipo_slug?:string, nome?:string, marca?:string, modelo?:string, firmware?:string, message:string}
      */
-    public function detectarPorIp(string $ip): array
+    public function detectarPorIp(string $ip, string $usuarioDvr = '', string $senhaDvr = ''): array
     {
         $ip = trim($ip);
 
         if ($ip === '') {
             return ['success' => false, 'message' => 'Informe um IP.'];
+        }
+        if (filter_var($ip, FILTER_VALIDATE_IP) === false) {
+            return ['success' => false, 'message' => 'IP inválido.'];
+        }
+
+        // Segunda etapa do DVR/NVR: usuário/senha digitados no formulário.
+        if ($usuarioDvr !== '' && $senhaDvr !== '') {
+            return $this->detectarDvrComCredencial($ip, $usuarioDvr, $senhaDvr);
         }
 
         $integracoesTentadas = [];
@@ -2808,29 +2816,65 @@ class AtivoService
             }
         }
 
+        // DVR/NVR Intelbras: cada equipamento tem a própria senha, então não
+        // depende de integração configurada -- primeiro tenta com a credencial
+        // salva (do IP ou padrão); se não der, reconhece o equipamento sem login
+        // e pede usuário/senha no formulário.
         $dvr = new IntelbrasDvrService();
+        $integracoesTentadas[] = 'DVR/NVR Intelbras';
         if ($dvr->configurado()) {
-            $integracoesTentadas[] = 'DVR/NVR Intelbras';
             $resultado = $dvr->coletar($ip);
-
             if ($resultado['success']) {
-                return [
-                    'success' => true,
-                    'tipo_slug' => 'dvr_nvr',
-                    'nome' => $resultado['nome_dispositivo'] ?: ($resultado['modelo'] ?? ''),
-                    'marca' => 'Intelbras',
-                    'modelo' => $resultado['modelo'] ?? '',
-                    'firmware' => $resultado['firmware'] ?? '',
-                    'message' => 'Encontrado como DVR/NVR Intelbras: ' . ($resultado['modelo'] ?? 'dispositivo') . '.',
-                ];
+                return $this->respostaDeteccaoDvr($resultado, 'Encontrado como DVR/NVR Intelbras');
             }
         }
 
-        if (empty($integracoesTentadas)) {
-            return ['success' => false, 'message' => 'Nenhuma integração de rede configurada (UniFi/Omada/DVR-NVR Intelbras) -- veja Integrações.'];
+        if ($dvr->pareceIntelbras($ip)) {
+            return [
+                'success' => true,
+                'precisa_credencial' => true,
+                'tipo_slug' => 'dvr_nvr',
+                'marca' => 'Intelbras',
+                'message' => 'É um DVR/NVR Intelbras. Informe o usuário e a senha dele para ler modelo, firmware e câmeras.',
+            ];
         }
 
         return ['success' => false, 'message' => 'Nenhum dispositivo com esse IP foi encontrado em: ' . implode(', ', $integracoesTentadas) . '.'];
+    }
+
+    /** Login digitado no Detectar: deu certo = guarda como credencial do IP (a coleta do ativo usa depois). */
+    private function detectarDvrComCredencial(string $ip, string $usuario, string $senha): array
+    {
+        $resultado = (new IntelbrasDvrService())->comCredencial($usuario, $senha)->coletar($ip);
+
+        if (!$resultado['success']) {
+            return [
+                'success' => false,
+                'precisa_credencial' => true,
+                'tipo_slug' => 'dvr_nvr',
+                'message' => $resultado['message'] ?? 'Não consegui entrar no DVR/NVR.',
+            ];
+        }
+
+        (new IntelbrasDvrService())->salvarCredencialPorIp($ip, $usuario, $senha);
+
+        return $this->respostaDeteccaoDvr($resultado, 'Conectado ao DVR/NVR Intelbras (credencial salva para este IP)');
+    }
+
+    private function respostaDeteccaoDvr(array $resultado, string $prefixo): array
+    {
+        $canais = count($resultado['canais'] ?? []);
+
+        return [
+            'success' => true,
+            'tipo_slug' => 'dvr_nvr',
+            'nome' => $resultado['nome_dispositivo'] ?: ($resultado['modelo'] ?? ''),
+            'marca' => 'Intelbras',
+            'modelo' => $resultado['modelo'] ?? '',
+            'firmware' => $resultado['firmware'] ?? '',
+            'numero_serie' => $resultado['serial'] ?? '',
+            'message' => $prefixo . ': ' . ($resultado['modelo'] ?? 'dispositivo') . ($canais ? " -- {$canais} canais" : '') . '.',
+        ];
     }
 
     /**

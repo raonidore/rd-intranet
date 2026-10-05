@@ -118,13 +118,21 @@ $idsTiposComSnmp = array_column(array_filter($tipos, fn (array $t) => (bool)$t['
                     <div class="input-group">
                         <input type="text" name="ip" id="campoIp" class="form-control" value="<?= htmlspecialchars($ativo['ip'] ?? $prefillIp ?? '') ?>" placeholder="192.168.0.10">
                         <?php if (!$editando): ?>
-                            <button type="button" class="btn btn-outline-primary" id="botaoDetectarPorIp" title="Buscar esse IP nas integrações de rede (UniFi/Omada) e preencher tipo/marca/modelo sozinho">
+                            <button type="button" class="btn btn-outline-primary" id="botaoDetectarPorIp" title="Buscar esse IP nas integrações de rede (UniFi/Omada) ou reconhecer DVR/NVR Intelbras e preencher tipo/marca/modelo sozinho">
                                 <i class="bi bi-search"></i> Detectar
                             </button>
                         <?php endif; ?>
                     </div>
                     <?php if (!$editando): ?>
-                        <div class="form-text" id="textoDetectarPorIp">Digite o IP e clique em "Detectar" pra preencher tipo, marca e modelo automaticamente, se o equipamento já estiver no UniFi ou Omada.</div>
+                        <div class="form-text" id="textoDetectarPorIp">Digite o IP e clique em "Detectar" pra preencher tipo, marca e modelo automaticamente (UniFi, Omada ou DVR/NVR Intelbras).</div>
+                        <!-- Login do DVR/NVR: inputs SEM name, não vão junto com o formulário do ativo. -->
+                        <div class="border rounded p-2 mt-2 d-none" id="blocoCredencialDvr">
+                            <div class="small fw-semibold mb-1"><i class="bi bi-shield-lock"></i> Login do DVR/NVR</div>
+                            <input type="text" id="dvrUsuario" class="form-control form-control-sm mb-1" placeholder="Usuário" value="admin" autocomplete="off">
+                            <input type="password" id="dvrSenha" class="form-control form-control-sm mb-1" placeholder="Senha" autocomplete="new-password">
+                            <button type="button" class="btn btn-sm btn-primary w-100" id="botaoConectarDvr"><i class="bi bi-plug"></i> Conectar</button>
+                            <div class="form-text small mb-0">Fica salvo para este IP (Integrações &gt; DVR/NVR), usado na coleta das câmeras.</div>
+                        </div>
                     <?php endif; ?>
                 </div>
             </div>
@@ -267,8 +275,19 @@ $idsTiposComSnmp = array_column(array_filter($tipos, fn (array $t) => (bool)$t['
     const campoModelo = document.querySelector('input[name="modelo"]');
     const texto = document.getElementById('textoDetectarPorIp');
     const textoOriginal = botao.innerHTML;
+    const campoSerie = document.querySelector('input[name="numero_serie"]');
+    const blocoCredencial = document.getElementById('blocoCredencialDvr');
+    const dvrUsuario = document.getElementById('dvrUsuario');
+    const dvrSenha = document.getElementById('dvrSenha');
+    const botaoConectarDvr = document.getElementById('botaoConectarDvr');
 
-    botao.addEventListener('click', async function () {
+    // DVR/NVR reconhecido sem login: pede usuário/senha e detecta de novo com eles.
+    botaoConectarDvr.addEventListener('click', () => detectar(true));
+    dvrSenha.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); detectar(true); } });
+    campoIp.addEventListener('input', () => blocoCredencial.classList.add('d-none'));
+    botao.addEventListener('click', () => detectar(false));
+
+    async function detectar(comLogin) {
         const ip = campoIp.value.trim();
         if (!ip) {
             texto.textContent = 'Digite um IP primeiro.';
@@ -284,15 +303,36 @@ $idsTiposComSnmp = array_column(array_filter($tipos, fn (array $t) => (bool)$t['
 
         const dados = new URLSearchParams();
         dados.set('ip', ip);
+        if (comLogin) {
+            if (!dvrUsuario.value.trim() || !dvrSenha.value) {
+                texto.textContent = 'Informe usuário e senha do DVR/NVR.';
+                texto.classList.add('text-danger');
+                botao.disabled = false;
+                botao.innerHTML = textoOriginal;
+                return;
+            }
+            dados.set('dvr_usuario', dvrUsuario.value.trim());
+            dados.set('dvr_senha', dvrSenha.value);
+            botaoConectarDvr.disabled = true;
+        }
 
         try {
             const res = await fetch(<?= json_encode(url('/ativos/detectar-por-ip')) ?>, { method: 'POST', body: dados });
             const resultado = await res.json();
 
             texto.textContent = resultado.message || (resultado.success ? 'Encontrado.' : 'Não encontrado.');
-            texto.classList.add(resultado.success ? 'text-success' : 'text-danger');
+            const faltaLogin = !!resultado.precisa_credencial;
+            texto.classList.add(resultado.success && !faltaLogin ? 'text-success' : (faltaLogin && resultado.success ? 'text-warning' : 'text-danger'));
+            blocoCredencial.classList.toggle('d-none', !faltaLogin);
+            if (faltaLogin) {
+                dvrSenha.value = '';
+                dvrSenha.focus();
+            }
 
             if (resultado.success) {
+                if (campoSerie && !campoSerie.value.trim() && resultado.numero_serie) {
+                    campoSerie.value = resultado.numero_serie;
+                }
                 if (campoNome && !campoNome.value.trim() && resultado.nome) {
                     campoNome.value = resultado.nome;
                 }
@@ -325,8 +365,9 @@ $idsTiposComSnmp = array_column(array_filter($tipos, fn (array $t) => (bool)$t['
         } finally {
             botao.disabled = false;
             botao.innerHTML = textoOriginal;
+            botaoConectarDvr.disabled = false;
         }
-    });
+    }
 })();
 
 (function () {

@@ -774,7 +774,11 @@ class AtivoController extends Controller
 
         $ip = trim((string)($_POST['ip'] ?? ''));
 
-        echo json_encode($this->service->detectarPorIp($ip));
+        echo json_encode($this->service->detectarPorIp(
+            $ip,
+            trim((string)($_POST['dvr_usuario'] ?? '')),
+            (string)($_POST['dvr_senha'] ?? '')
+        ));
     }
 
     public function trocarModoWanUnifi(): void

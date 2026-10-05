@@ -180,9 +180,58 @@ class IntelbrasDvrService
         AuditService::registrar('Intelbras DVR/NVR', 'Credencial por IP', "Credencial de {$ip} removida.");
     }
 
-    /** Credencial própria do IP tem prioridade; sem ela, cai pra padrão global (se houver). */
+    /** Usuário/senha digitados na hora (Detectar do Novo Ativo) -- ganham da credencial salva. */
+    private ?array $credencialForcada = null;
+
+    public function comCredencial(string $usuario, string $senha): static
+    {
+        $this->credencialForcada = ['usuario' => $usuario, 'senha' => $senha];
+
+        return $this;
+    }
+
+    /**
+     * Reconhece um DVR/NVR Intelbras (família Dahua) SEM login: a API CGI
+     * responde 401 com Digest realm "Login to <id>" (confirmado num NVD 1408 P
+     * do enzilab) e a página inicial tem "Intelbras" no título. Uma requisição
+     * sem senha não conta como tentativa falha, então não arrisca bloquear a conta.
+     */
+    public function pareceIntelbras(string $ip): bool
+    {
+        $cabecalhos = '';
+        $ch = curl_init("http://{$ip}/cgi-bin/magicBox.cgi?action=getDeviceType");
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 4,
+            CURLOPT_CONNECTTIMEOUT => 3,
+            CURLOPT_HEADERFUNCTION => function ($ch, $linha) use (&$cabecalhos) {
+                $cabecalhos .= $linha;
+                return strlen($linha);
+            },
+        ]);
+        curl_exec($ch);
+        $codigo = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($codigo === 401 && preg_match('/WWW-Authenticate:\s*Digest\s+realm="Login to /i', $cabecalhos)) {
+            return true;
+        }
+
+        $ch = curl_init("http://{$ip}/");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 4, CURLOPT_CONNECTTIMEOUT => 3]);
+        $pagina = (string)curl_exec($ch);
+        curl_close($ch);
+
+        return (bool)preg_match('/<title>[^<]*Intelbras/i', $pagina);
+    }
+
+    /** Credencial digitada na hora > própria do IP > padrão global (se houver). */
     private function credencialParaIp(string $ip): ?array
     {
+        if ($this->credencialForcada !== null) {
+            return $this->credencialForcada;
+        }
+
         $stmt = Database::connection()->prepare('SELECT usuario, senha_cifrada FROM intelbras_dvr_credenciais WHERE ip = ?');
         $stmt->execute([$ip]);
         $linha = $stmt->fetch(\PDO::FETCH_ASSOC);
