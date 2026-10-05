@@ -819,13 +819,22 @@ class IntelbrasDvrService
     }
 
     /**
-     * Imagem em tempo real: repassa o MJPEG do equipamento
-     * (cgi-bin/mjpg/video.cgi) direto pra saída -- o navegador mostra
-     * "multipart/x-mixed-replace" num <img> sem plugin. "normal" = sub-stream
-     * (subtype=1: NVD 1408 P 10 quadros/s 704x480 ~200 KB/s; MHDX 1116-C
-     * ~7 quadros/s); "alta" = stream principal (subtype=0: NVD 1408 P
-     * ~500 KB/s; o MHDX recusa com 401). Para quando o navegador fecha, ou
-     * em $maxSegundos (não prende processo do Apache pra sempre).
+     * Imagem em tempo real, sempre como MJPEG (multipart/x-mixed-replace) --
+     * o navegador mostra num <img> sem plugin. Três caminhos, nessa ordem:
+     *
+     * 1. MJPEG do próprio equipamento (cgi-bin/mjpg/video.cgi): só serve
+     *    quando o stream está codificado em MJPEG. NVD 1408 P: sub-stream
+     *    10 q/s 704x480 ~200 KB/s, principal ~500 KB/s. Os DVRs da
+     *    Patrimonial (XVR/MHDX) respondem 200 "image/jpeg", mas cada parte é
+     *    H.264 (começa com 00 00 FF FE) -- o navegador não mostra nada. Por
+     *    isso confere o 1º quadro antes de mandar qualquer coisa pro navegador.
+     * 2. ffmpeg instalado no servidor: lê o RTSP e converte pra MJPEG (vídeo
+     *    de verdade em qualquer modelo).
+     * 3. Sem ffmpeg: sequência de snapshots no mesmo formato (~1-3 q/s
+     *    medidos nos MHDX) -- não é fluido, mas é ao vivo.
+     *
+     * Para quando o navegador fecha, ou em $maxSegundos (não prende
+     * processo do Apache pra sempre).
      *
      * @return string|null mensagem de erro se não conseguiu começar; null = transmitiu
      */
@@ -836,11 +845,32 @@ class IntelbrasDvrService
             return "Nenhuma credencial cadastrada para {$ip}.";
         }
 
+        $inicio = microtime(true);
+        $nativo = $this->transmitirMjpegNativo($ip, $canal, $qualidade, $maxSegundos, $credencial);
+        if ($nativo === 'transmitiu') {
+            return null;
+        }
+        if ($nativo === 'senha') {
+            return 'Usuário/senha recusados pelo DVR/NVR.';
+        }
+
+        $restante = max(10, $maxSegundos - (int)(microtime(true) - $inicio));
+        if ($this->ffmpegDisponivel()) {
+            return $this->transmitirViaFfmpeg($ip, $canal, $qualidade, $restante, $credencial);
+        }
+
+        return $this->transmitirViaSnapshots($ip, $canal, $restante);
+    }
+
+    /** @return string 'transmitiu' | 'senha' | 'indisponivel' (stream não existe ou não é JPEG) */
+    private function transmitirMjpegNativo(string $ip, int $canal, string $qualidade, int $maxSegundos, array $credencial): string
+    {
         $tipoConteudo = '';
         $codigo = 0;
         $comecou = false;
-        $subtipo = $qualidade === 'alta' ? 0 : 1;
-        $ch = curl_init("http://{$ip}/cgi-bin/mjpg/video.cgi?channel={$canal}&subtype={$subtipo}");
+        $naoEhJpeg = false;
+        $buffer = '';
+        $ch = curl_init("http://{$ip}/cgi-bin/mjpg/video.cgi?channel={$canal}&subtype=" . ($qualidade === 'alta' ? 0 : 1));
         curl_setopt_array($ch, [
             CURLOPT_HTTPAUTH => CURLAUTH_DIGEST,
             CURLOPT_USERPWD => $credencial['usuario'] . ':' . $credencial['senha'],
@@ -854,15 +884,27 @@ class IntelbrasDvrService
                 }
                 return strlen($linha);
             },
-            CURLOPT_WRITEFUNCTION => function ($ch, $dados) use (&$tipoConteudo, &$codigo, &$comecou) {
+            CURLOPT_WRITEFUNCTION => function ($ch, $dados) use (&$tipoConteudo, &$codigo, &$comecou, &$naoEhJpeg, &$buffer) {
                 if ($codigo !== 200) {
                     return strlen($dados); // corpo do 401 do 1º passo do Digest: descarta
                 }
                 if (!$comecou) {
+                    // Segura até ver o começo do 1º quadro: JPEG começa com FF D8.
+                    $buffer .= $dados;
+                    $fimCabecalho = strpos($buffer, "\r\n\r\n");
+                    if ($fimCabecalho === false || strlen($buffer) < $fimCabecalho + 6) {
+                        return strlen($buffer) > 65536 ? 0 : strlen($dados);
+                    }
+                    if (substr($buffer, $fimCabecalho + 4, 2) !== "\xFF\xD8") {
+                        $naoEhJpeg = true;
+                        return 0; // H.264 embrulhado como "image/jpeg": desiste e cai no próximo caminho
+                    }
                     $comecou = true;
                     header('Content-Type: ' . ($tipoConteudo ?: 'multipart/x-mixed-replace; boundary=myboundary'));
                     header('Cache-Control: no-store');
                     header('X-Accel-Buffering: no');
+                    $dados = $buffer;
+                    $buffer = '';
                 }
                 echo $dados;
                 flush();
@@ -871,18 +913,88 @@ class IntelbrasDvrService
             },
         ]);
         curl_exec($ch);
-        $erro = curl_error($ch);
         curl_close($ch);
 
         if ($comecou) {
-            return null;
+            return 'transmitiu';
         }
 
-        if ($subtipo === 0 && $codigo !== 200) {
-            return 'Este equipamento não entrega a qualidade alta em tempo real.';
+        return $codigo === 401 && $qualidade !== 'alta' && !$naoEhJpeg ? 'senha' : 'indisponivel';
+    }
+
+    private function ffmpegDisponivel(): bool
+    {
+        return is_executable('/usr/bin/ffmpeg');
+    }
+
+    /** RTSP do equipamento → MJPEG pelo ffmpeg. A senha vai na URL do RTSP (só visível pra quem já tem shell no servidor). */
+    private function transmitirViaFfmpeg(string $ip, int $canal, string $qualidade, int $maxSegundos, array $credencial): ?string
+    {
+        $url = sprintf('rtsp://%s:%s@%s:554/cam/realmonitor?channel=%d&subtype=%d',
+            rawurlencode($credencial['usuario']), rawurlencode($credencial['senha']), $ip, $canal, $qualidade === 'alta' ? 0 : 1);
+        $comando = ['/usr/bin/ffmpeg', '-loglevel', 'error', '-rtsp_transport', 'tcp', '-i', $url, '-an',
+            '-t', (string)$maxSegundos, '-r', '10', '-q:v', $qualidade === 'alta' ? '4' : '7', '-f', 'mpjpeg', 'pipe:1'];
+
+        $processo = proc_open($comando, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $tubos);
+        if (!is_resource($processo)) {
+            return $this->transmitirViaSnapshots($ip, $canal, $maxSegundos);
         }
 
-        return $codigo === 401 ? 'Usuário/senha recusados pelo DVR/NVR.' : 'O equipamento não entregou a imagem em tempo real' . ($erro !== '' ? ": {$erro}" : '.');
+        $comecou = false;
+        while (!feof($tubos[1])) {
+            $dados = fread($tubos[1], 65536);
+            if ($dados === '' || $dados === false) {
+                continue;
+            }
+            if (!$comecou) {
+                $comecou = true;
+                header('Content-Type: multipart/x-mixed-replace; boundary=ffmpeg');
+                header('Cache-Control: no-store');
+                header('X-Accel-Buffering: no');
+            }
+            echo $dados;
+            flush();
+            if (connection_aborted()) {
+                break;
+            }
+        }
+        proc_terminate($processo);
+        fclose($tubos[1]);
+        fclose($tubos[2]);
+        proc_close($processo);
+
+        return $comecou ? null : $this->transmitirViaSnapshots($ip, $canal, $maxSegundos);
+    }
+
+    /** Snapshots em sequência, no mesmo formato multipart -- funciona em qualquer modelo, no ritmo que o equipamento aguenta. */
+    private function transmitirViaSnapshots(string $ip, int $canal, int $maxSegundos): ?string
+    {
+        $fim = microtime(true) + $maxSegundos;
+        $comecou = false;
+        while (microtime(true) < $fim) {
+            $quadro = $this->snapshot($ip, $canal);
+            if (!$quadro['success']) {
+                if (!$comecou) {
+                    return $quadro['message'];
+                }
+                usleep(500000);
+                continue;
+            }
+            if (!$comecou) {
+                $comecou = true;
+                header('Content-Type: multipart/x-mixed-replace; boundary=rdquadro');
+                header('Cache-Control: no-store');
+                header('X-Accel-Buffering: no');
+            }
+            echo "--rdquadro\r\nContent-Type: image/jpeg\r\nContent-Length: " . strlen($quadro['imagem']) . "\r\n\r\n" . $quadro['imagem'] . "\r\n";
+            flush();
+            if (connection_aborted()) {
+                break;
+            }
+            usleep(150000); // não martela o equipamento (~3 q/s no máximo)
+        }
+
+        return null;
     }
 
     /**
