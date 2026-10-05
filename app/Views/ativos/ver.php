@@ -1919,6 +1919,58 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             </div>
         </div>
         <?php endif; ?>
+
+        <?php if (!empty($detalhes['dvr_poe'])): ?>
+            <?php
+                $poe = $detalhes['dvr_poe'];
+                $portasPoe = [];
+                foreach ($poe['portas'] as $porta) {
+                    $portasPoe[(int)$porta['porta']] = $porta;
+                }
+                $comLink = count(array_filter($poe['portas'], fn ($p) => $p['link']));
+            ?>
+            <div class="card border-0 shadow-sm mt-3">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <strong><i class="bi bi-lightning-charge"></i> Portas PoE</strong>
+                    <small class="text-muted">
+                        <?= $comLink ?> de <?= (int)$poe['total_portas'] ?> portas com link
+                        <?php if ($poe['consumo_suportado'] && $poe['consumo_total_w'] !== null): ?>
+                            · consumo <?= htmlspecialchars((string)$poe['consumo_total_w']) ?> W de <?= htmlspecialchars((string)$poe['consumo_disponivel_w']) ?> W
+                        <?php endif; ?>
+                    </small>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead><tr><th>Porta</th><th>Link</th><th>IP</th><th>MAC</th><?php if ($poe['consumo_suportado']): ?><th>Consumo</th><?php endif; ?></tr></thead>
+                        <tbody>
+                            <?php for ($n = 1; $n <= max((int)$poe['total_portas'], count($portasPoe)); $n++): ?>
+                                <?php $porta = $portasPoe[$n] ?? null; ?>
+                                <tr class="<?= $porta ? '' : 'text-muted' ?>">
+                                    <td>Porta <?= $n ?></td>
+                                    <td>
+                                        <?php if (!$porta): ?>
+                                            <span class="small">Livre</span>
+                                        <?php elseif (!$porta['habilitada']): ?>
+                                            <?= Badge::make('Desabilitada', 'secondary') ?>
+                                        <?php else: ?>
+                                            <?= $porta['link'] ? Badge::make('Com link', 'success') : Badge::make('Sem link', 'danger') ?>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="font-monospace small"><?= $porta ? htmlspecialchars($porta['ip']) : '' ?></td>
+                                    <td class="font-monospace small"><?= $porta ? htmlspecialchars($porta['mac']) : '' ?></td>
+                                    <?php if ($poe['consumo_suportado']): ?>
+                                        <td><?= $porta && $porta['consumo_w'] !== null ? htmlspecialchars((string)$porta['consumo_w']) . ' W' : '—' ?></td>
+                                    <?php endif; ?>
+                                </tr>
+                            <?php endfor; ?>
+                        </tbody>
+                    </table>
+                    <?php if (!$poe['consumo_suportado']): ?>
+                        <p class="small text-muted px-3 py-2 mb-0">Este modelo não mede o consumo de cada porta (a própria interface do equipamento também não mostra). Câmera "Desconectada" com a porta "Com link" aponta para a câmera; "Sem link" aponta para o cabo ou a porta.</p>
+                    <?php endif; ?>
+                </div>
+            </div>
+        <?php endif; ?>
     </div>
     <?php endif; ?>
 

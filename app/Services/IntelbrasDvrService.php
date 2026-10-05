@@ -607,6 +607,7 @@ class IntelbrasDvrService
                 'sem_hd' => $infos !== null && empty($infos['params']['device']),
                 'discos' => $discos,
                 'cameras' => $this->camerasIp($ip, $sessao),
+                'poe' => $this->portasPoe($ip, $sessao),
                 'verificacao' => $this->verificacaoSeguranca($ip, $sessao),
             ];
         } finally {
@@ -712,6 +713,67 @@ class IntelbrasDvrService
         }
 
         return $cameras;
+    }
+
+    /**
+     * Switch PoE embutido (modelos "P"). Parâmetro tirado do JS da própria
+     * interface web do NVR (jsCore.RPC): getPortStatus/getPortPower recebem
+     * {name: <interface>}, e o nome vem de getInfo ("eth1"). Consumo em watts
+     * só quando getSwitchCaps diz PowerSupport = 1 -- a própria interface
+     * esconde a coluna sem isso (NVD 1408 P: 0, getPowerInfo vem zerado).
+     *
+     * @return array{total_portas: int, consumo_suportado: bool, consumo_total_w: ?float, consumo_disponivel_w: ?float, portas: array}|null
+     */
+    private function portasPoe(string $ip, string $sessao): ?array
+    {
+        $interface = $this->rpc($ip, $sessao, 'SwitchPoE.getInfo')['params']['list'][0] ?? null;
+        if (empty($interface['Name'])) {
+            return null; // sem switch PoE (DVR, NVR sem "P")
+        }
+
+        $status = $this->rpc($ip, $sessao, 'SwitchPoE.getPortStatus', ['name' => $interface['Name']])['params']['list'] ?? [];
+        $caps = $this->rpc($ip, $sessao, 'SwitchPoE.getSwitchCaps')['params']['Caps'] ?? [];
+        $comConsumo = !empty($caps['PowerSupport']);
+        $energia = $comConsumo ? ($this->rpc($ip, $sessao, 'SwitchPoE.getPowerInfo')['params']['Info'] ?? null) : null;
+
+        // A lista não diz o número da porta; a RemoteDevice sabe em qual porta
+        // PoE está cada câmera (PoEPort), casando pelo MAC.
+        $portaPorMac = [];
+        $remotos = $this->chamarApi($ip, '/cgi-bin/configManager.cgi?action=getConfig&name=RemoteDevice');
+        $porIndice = [];
+        foreach ($remotos['dados'] as $chave => $valor) {
+            if (preg_match('/INFO_(\d+)\.(Mac|PoEPort)$/', $chave, $m)) {
+                $porIndice[$m[1]][$m[2]] = $valor;
+            }
+        }
+        foreach ($porIndice as $par) {
+            if (!empty($par['Mac']) && (int)($par['PoEPort'] ?? 0) > 0) {
+                $portaPorMac[strtolower($par['Mac'])] = (int)$par['PoEPort'];
+            }
+        }
+
+        $portas = [];
+        foreach (is_array($status) ? $status : [] as $i => $p) {
+            $numero = $portaPorMac[strtolower((string)($p['PhysicalAddress'] ?? ''))] ?? $i + 1;
+            $consumo = $energia['Power'][$numero - 1] ?? null;
+            $portas[] = [
+                'porta' => $numero,
+                'link' => !empty($p['Link']),
+                'habilitada' => !empty($p['PortEnable']),
+                'ip' => $p['IPAddress'] ?? '',
+                'mac' => $p['PhysicalAddress'] ?? '',
+                'consumo_w' => $comConsumo && $consumo !== null ? round($consumo / 1000, 1) : null,
+            ];
+        }
+        usort($portas, fn ($a, $b) => $a['porta'] <=> $b['porta']);
+
+        return [
+            'total_portas' => (int)($interface['PortNum'] ?? count($portas)),
+            'consumo_suportado' => $comConsumo,
+            'consumo_total_w' => $comConsumo && isset($energia['TotalPower']) ? round($energia['TotalPower'] / 1000, 1) : null,
+            'consumo_disponivel_w' => $comConsumo && isset($energia['AvailablePower']) ? round($energia['AvailablePower'] / 1000, 1) : null,
+            'portas' => $portas,
+        ];
     }
 
     /** Último relatório do "Verificar segurança" do próprio equipamento (não dispara uma verificação nova). */

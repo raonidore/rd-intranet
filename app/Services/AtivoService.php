@@ -1947,6 +1947,7 @@ class AtivoService
                 $coletado['dvr_sem_hd'] = $rpc2['sem_hd'];
                 $coletado['dvr_discos'] = $rpc2['discos'];
                 $coletado['dvr_cameras_ip'] = $rpc2['cameras'];
+                $coletado['dvr_poe'] = $rpc2['poe'] ?? null;
                 $coletado['dvr_verificacao_seguranca'] = $rpc2['verificacao'];
             }
 
