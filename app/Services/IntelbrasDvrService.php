@@ -819,6 +819,67 @@ class IntelbrasDvrService
     }
 
     /**
+     * Imagem em tempo real: repassa o MJPEG do sub-stream do equipamento
+     * (cgi-bin/mjpg/video.cgi, subtype=1) direto pra saída -- o navegador
+     * mostra "multipart/x-mixed-replace" num <img> sem plugin. Confirmado
+     * no NVD 1408 P (~8 quadros/s) e no MHDX 1116-C; o stream principal
+     * (subtype=0) é pesado demais ou recusado. Para quando o navegador
+     * fecha, ou em $maxSegundos (não prende processo do Apache pra sempre).
+     *
+     * @return string|null mensagem de erro se não conseguiu começar; null = transmitiu
+     */
+    public function transmitirAoVivo(string $ip, int $canal, int $maxSegundos = 180): ?string
+    {
+        $credencial = $this->credencialParaIp($ip);
+        if ($credencial === null) {
+            return "Nenhuma credencial cadastrada para {$ip}.";
+        }
+
+        $tipoConteudo = '';
+        $codigo = 0;
+        $comecou = false;
+        $ch = curl_init("http://{$ip}/cgi-bin/mjpg/video.cgi?channel={$canal}&subtype=1");
+        curl_setopt_array($ch, [
+            CURLOPT_HTTPAUTH => CURLAUTH_DIGEST,
+            CURLOPT_USERPWD => $credencial['usuario'] . ':' . $credencial['senha'],
+            CURLOPT_CONNECTTIMEOUT => 5,
+            CURLOPT_TIMEOUT => $maxSegundos,
+            CURLOPT_HEADERFUNCTION => function ($ch, $linha) use (&$tipoConteudo, &$codigo) {
+                if (preg_match('#^HTTP/\S+\s+(\d+)#', $linha, $m)) {
+                    $codigo = (int)$m[1];
+                } elseif (stripos($linha, 'Content-Type:') === 0) {
+                    $tipoConteudo = trim(substr($linha, 13));
+                }
+                return strlen($linha);
+            },
+            CURLOPT_WRITEFUNCTION => function ($ch, $dados) use (&$tipoConteudo, &$codigo, &$comecou) {
+                if ($codigo !== 200) {
+                    return strlen($dados); // corpo do 401 do 1º passo do Digest: descarta
+                }
+                if (!$comecou) {
+                    $comecou = true;
+                    header('Content-Type: ' . ($tipoConteudo ?: 'multipart/x-mixed-replace; boundary=myboundary'));
+                    header('Cache-Control: no-store');
+                    header('X-Accel-Buffering: no');
+                }
+                echo $dados;
+                flush();
+
+                return connection_aborted() ? 0 : strlen($dados); // 0 = fecharam a janela, encerra
+            },
+        ]);
+        curl_exec($ch);
+        $erro = curl_error($ch);
+        curl_close($ch);
+
+        if ($comecou) {
+            return null;
+        }
+
+        return $codigo === 401 ? 'Usuário/senha recusados pelo DVR/NVR.' : 'O equipamento não entregou a imagem em tempo real' . ($erro !== '' ? ": {$erro}" : '.');
+    }
+
+    /**
      * A resposta de getEventIndexes vem como "channels[N]=X" -- N é só a
      * posição na lista (0, 1, 2...), o canal afetado de verdade é o VALOR X
      * (0-based). Soma 1 pra bater com a numeração "Canal 1..N" que o próprio

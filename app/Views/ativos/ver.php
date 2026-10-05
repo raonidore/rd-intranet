@@ -1772,6 +1772,9 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                         <button type="button" class="btn btn-sm btn-outline-primary botao-ver-snapshot-dvr" data-id="<?= (int)$ativo['id'] ?>" data-canal="<?= (int)($canal['numero'] ?? 0) ?>" title="Ver imagem atual">
                                             <i class="bi bi-camera-video"></i>
                                         </button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger botao-ao-vivo-dvr" data-id="<?= (int)$ativo['id'] ?>" data-canal="<?= (int)($canal['numero'] ?? 0) ?>" data-nome="<?= htmlspecialchars($canal['nome'] ?? '') ?>" title="Imagem em tempo real">
+                                            <i class="bi bi-broadcast"></i>
+                                        </button>
                                         <button type="button" class="btn btn-sm <?= !empty($canal['imagem_referencia_atualizada_em']) ? 'btn-outline-success' : 'btn-outline-warning' ?> botao-imagem-referencia-dvr" data-id="<?= (int)$ativo['id'] ?>" data-canal="<?= (int)($canal['numero'] ?? 0) ?>" title="Imagem de referência (como a câmera deveria estar)">
                                             <i class="bi bi-bookmark-star"></i>
                                         </button>
@@ -1806,6 +1809,27 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                     <a href="#" class="btn btn-sm btn-outline-primary disabled" id="botaoBaixarSnapshotDvr" download>
                         <i class="bi bi-download"></i> Baixar imagem
                     </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Imagem em tempo real (MJPEG repassado pelo servidor; até 3 min por vez) -->
+    <div class="modal fade" id="modalAoVivoDvr" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content bg-dark text-light">
+                <div class="modal-header border-secondary">
+                    <h6 class="modal-title"><span class="badge text-bg-danger me-2"><i class="bi bi-broadcast"></i> AO VIVO</span><span id="modalAoVivoDvrTitulo">Canal</span></h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body text-center p-1 position-relative" style="min-height:200px">
+                    <div id="aoVivoDvrStatus" class="position-absolute top-50 start-50 translate-middle small"><div class="spinner-border spinner-border-sm"></div> Conectando ao equipamento...</div>
+                    <img id="aoVivoDvrImagem" class="img-fluid rounded" alt="" style="display:none; width:100%">
+                </div>
+                <div class="modal-footer border-secondary">
+                    <span class="small text-secondary me-auto">Qualidade reduzida (sub-stream), até 3 minutos por vez.</span>
+                    <button type="button" class="btn btn-sm btn-outline-light" id="botaoAoVivoDvrTelaCheia"><i class="bi bi-arrows-fullscreen"></i> Tela cheia</button>
+                    <button type="button" class="btn btn-sm btn-outline-light" id="botaoAoVivoDvrReiniciar"><i class="bi bi-arrow-repeat"></i> Reproduzir de novo</button>
                 </div>
             </div>
         </div>
@@ -3982,6 +4006,75 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
 
     botaoAtualizar.addEventListener('click', function () {
         if (canalAberto) carregarSnapshot(canalAberto.id, canalAberto.canal);
+    });
+
+    // --- Tempo real: <img> apontando pro MJPEG; fechar a janela corta a conexão ---
+    const modalAoVivoEl = document.getElementById('modalAoVivoDvr');
+    const imagemAoVivo = document.getElementById('aoVivoDvrImagem');
+    const statusAoVivo = document.getElementById('aoVivoDvrStatus');
+    let modalAoVivo = null;
+    let aoVivoAberto = null;
+    let timerFimAoVivo = null;
+
+    function iniciarAoVivo() {
+        clearTimeout(timerFimAoVivo);
+        imagemAoVivo.style.display = 'none';
+        statusAoVivo.style.display = '';
+        statusAoVivo.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Conectando ao equipamento...';
+        imagemAoVivo.src = <?= json_encode(url('/ativos/intelbras-dvr/ao-vivo')) ?> + '?id=' + encodeURIComponent(aoVivoAberto.id)
+            + '&canal=' + encodeURIComponent(aoVivoAberto.canal) + '&_=' + Date.now();
+        // Nem todo navegador dispara "load" no stream MJPEG: o 1º quadro também é detectado pelo tamanho.
+        const verificarPrimeiroQuadro = setInterval(function () {
+            if (!aoVivoAberto) return clearInterval(verificarPrimeiroQuadro);
+            if (imagemAoVivo.naturalWidth > 1) {
+                clearInterval(verificarPrimeiroQuadro);
+                statusAoVivo.style.display = 'none';
+                imagemAoVivo.style.display = '';
+            }
+        }, 300);
+        // O servidor encerra em 3 min; avisa um pouco antes da imagem congelar.
+        timerFimAoVivo = setTimeout(function () {
+            statusAoVivo.style.display = '';
+            statusAoVivo.innerHTML = '<span class="badge text-bg-secondary">Transmissão encerrada -- clique em "Reproduzir de novo"</span>';
+        }, 178000);
+    }
+
+    function pararAoVivo() {
+        clearTimeout(timerFimAoVivo);
+        imagemAoVivo.removeAttribute('src');
+        imagemAoVivo.src = 'data:image/gif;base64,R0lGODlhAQABAAAAACw='; // força o navegador a soltar a conexão
+    }
+
+    imagemAoVivo.addEventListener('load', function () {
+        if (!imagemAoVivo.src.startsWith('data:')) {
+            statusAoVivo.style.display = 'none';
+            imagemAoVivo.style.display = '';
+        }
+    });
+    imagemAoVivo.addEventListener('error', function () {
+        if (!aoVivoAberto || imagemAoVivo.src.startsWith('data:')) return;
+        statusAoVivo.style.display = '';
+        statusAoVivo.innerHTML = '<div class="alert alert-danger mb-0 small">Não consegui abrir a imagem em tempo real deste canal.</div>';
+    });
+
+    document.querySelectorAll('.botao-ao-vivo-dvr').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+            aoVivoAberto = { id: botao.dataset.id, canal: botao.dataset.canal };
+            document.getElementById('modalAoVivoDvrTitulo').textContent = 'Canal ' + botao.dataset.canal + (botao.dataset.nome ? ' -- ' + botao.dataset.nome : '');
+            if (!modalAoVivo) modalAoVivo = new bootstrap.Modal(modalAoVivoEl);
+            modalAoVivo.show();
+            iniciarAoVivo();
+        });
+    });
+    modalAoVivoEl.addEventListener('hidden.bs.modal', function () {
+        pararAoVivo();
+        aoVivoAberto = null;
+    });
+    document.getElementById('botaoAoVivoDvrReiniciar').addEventListener('click', function () {
+        if (aoVivoAberto) iniciarAoVivo();
+    });
+    document.getElementById('botaoAoVivoDvrTelaCheia').addEventListener('click', function () {
+        if (imagemAoVivo.requestFullscreen) imagemAoVivo.requestFullscreen();
     });
 
     document.querySelectorAll('.campo-canal-em-uso-dvr').forEach(function (campo) {

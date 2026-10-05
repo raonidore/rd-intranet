@@ -13,6 +13,7 @@ use App\Services\ChamadoExternoEstatisticaService;
 use App\Services\ChamadoService;
 use App\Services\CronService;
 use App\Services\EtiquetaService;
+use App\Services\IntelbrasDvrService;
 use App\Services\NotificationService;
 use App\Services\PermissionService;
 use App\Services\PoliticaService;
@@ -950,6 +951,35 @@ class AtivoController extends Controller
         $canal = (int)($_POST['canal'] ?? 0);
 
         echo json_encode($this->service->snapshotCanalDvr($id, $canal));
+    }
+
+    /** Imagem em tempo real do canal (MJPEG repassado do equipamento) -- usado como src de um <img>. */
+    public function aoVivoCanalDvr(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+
+        $ativo = $this->service->buscar((int)($_GET['id'] ?? 0));
+        $canal = (int)($_GET['canal'] ?? 0);
+        if (!$ativo || empty($ativo['ip']) || ($ativo['tipo_slug'] ?? '') !== 'dvr_nvr' || $canal < 1 || $canal > 256) {
+            http_response_code(404);
+            exit;
+        }
+
+        // Transmissão longa: solta a sessão (senão trava a navegação do usuário
+        // até o vídeo acabar) e desliga os buffers de saída.
+        session_write_close();
+        set_time_limit(200);
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+
+        $erro = (new IntelbrasDvrService())->transmitirAoVivo($ativo['ip'], $canal);
+        if ($erro !== null && !headers_sent()) {
+            http_response_code(502);
+            header('Content-Type: text/plain; charset=utf-8');
+            echo $erro;
+        }
+        exit;
     }
 
     public function renomearCanalDvr(): void

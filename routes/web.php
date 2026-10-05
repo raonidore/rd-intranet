@@ -1058,6 +1058,7 @@ $router->post('/ativos/omada/ativar-coleta', [AtivoController::class, 'ativarCol
 $router->post('/ativos/coletar-intelbras-dvr', [AtivoController::class, 'coletarIntelbrasDvr']);
 $router->post('/ativos/intelbras-dvr/ativar-coleta', [AtivoController::class, 'ativarColetaIntelbrasDvr']);
 $router->post('/ativos/intelbras-dvr/snapshot-canal', [AtivoController::class, 'snapshotCanalDvr']);
+$router->get('/ativos/intelbras-dvr/ao-vivo', [AtivoController::class, 'aoVivoCanalDvr']);
 $router->post('/ativos/intelbras-dvr/renomear-canal', [AtivoController::class, 'renomearCanalDvr']);
 $router->post('/ativos/intelbras-dvr/canal-em-uso', [AtivoController::class, 'definirCanalEmUsoDvr']);
 $router->post('/ativos/intelbras-dvr/canal-sensibilidade', [AtivoController::class, 'definirSensibilidadeCanalDvr']);
