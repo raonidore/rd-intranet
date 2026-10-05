@@ -934,7 +934,10 @@ class IntelbrasDvrService
         $url = sprintf('rtsp://%s:%s@%s:554/cam/realmonitor?channel=%d&subtype=%d',
             rawurlencode($credencial['usuario']), rawurlencode($credencial['senha']), $ip, $canal, $qualidade === 'alta' ? 0 : 1);
         $comando = ['/usr/bin/ffmpeg', '-loglevel', 'error', '-rtsp_transport', 'tcp', '-i', $url, '-an',
-            '-t', (string)$maxSegundos, '-r', '10', '-q:v', $qualidade === 'alta' ? '4' : '7', '-f', 'mpjpeg', 'pipe:1'];
+            '-t', (string)$maxSegundos, '-r', '10',
+            // HD em 1280x720: 1920x1080 a 10 q/s dava ~2 MB/s (pesado pra quem vê de fora); 720p fica bem menor.
+            ...($qualidade === 'alta' ? ['-vf', 'scale=1280:-2', '-q:v', '6'] : ['-q:v', '7']),
+            '-f', 'mpjpeg', 'pipe:1'];
 
         $processo = proc_open($comando, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $tubos);
         if (!is_resource($processo)) {
