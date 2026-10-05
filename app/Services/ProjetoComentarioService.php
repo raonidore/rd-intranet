@@ -56,14 +56,19 @@ class ProjetoComentarioService
 
     /*
      |---------------------------------------------------------
-     | Mensagens novas -- conta só "nota" (conversa) de OUTRA pessoa, em
-     | tarefas onde o usuário está envolvido (responsável ou já falou na
-     | conversa), de projeto fora da lixeira. Admin que só olha não recebe
-     | badge de tudo.
+     | Mensagens novas de OUTRA pessoa, em projeto fora da lixeira:
+     | - conversa da tarefa: em tarefas onde o usuário está envolvido
+     |   (responsável ou já falou na conversa) -- admin que só olha não
+     |   recebe badge de tudo;
+     | - nota geral do projeto: só quando ela marca o usuário com @.
+     | Cada linha: id do comentário, tarefa (null = nota geral), projeto e
+     | se marca o usuário.
      |---------------------------------------------------------
      */
 
-    private const SQL_NAO_LIDAS = "
+    private const SQL_LINHAS_NAO_LIDAS = "
+        SELECT c.id, c.tarefa_id, t.projeto_id,
+               EXISTS (SELECT 1 FROM projetos_comentarios_mencoes m WHERE m.comentario_id = c.id AND m.usuario_id = :u5) AS mencao
         FROM projetos_comentarios c
         JOIN projetos_tarefas t ON t.id = c.tarefa_id
         JOIN projetos p ON p.id = t.projeto_id AND p.excluido_em IS NULL
@@ -72,20 +77,31 @@ class ProjetoComentarioService
           AND (c.usuario_id IS NULL OR c.usuario_id <> :u2)
           AND c.id > COALESCE(l.ultimo_comentario_id, 0)
           AND (EXISTS (SELECT 1 FROM projetos_tarefas_responsaveis r WHERE r.tarefa_id = c.tarefa_id AND r.usuario_id = :u3)
-               OR EXISTS (SELECT 1 FROM projetos_comentarios c2 WHERE c2.tarefa_id = c.tarefa_id AND c2.usuario_id = :u4 AND c2.tipo = 'nota'))";
-
-    /** Mensagem nova que marca o usuário com @. */
-    private const SQL_MENCAO = "EXISTS (SELECT 1 FROM projetos_comentarios_mencoes m WHERE m.comentario_id = c.id AND m.usuario_id = :u5)";
+               OR EXISTS (SELECT 1 FROM projetos_comentarios c2 WHERE c2.tarefa_id = c.tarefa_id AND c2.usuario_id = :u4 AND c2.tipo = 'nota'))
+        UNION ALL
+        SELECT c.id, NULL, c.projeto_id, 1
+        FROM projetos_comentarios c
+        JOIN projetos p ON p.id = c.projeto_id AND p.excluido_em IS NULL
+        LEFT JOIN projetos_leituras lp ON lp.projeto_id = c.projeto_id AND lp.usuario_id = :u6
+        WHERE c.tarefa_id IS NULL AND c.tipo = 'nota'
+          AND (c.usuario_id IS NULL OR c.usuario_id <> :u7)
+          AND c.id > COALESCE(lp.ultimo_comentario_id, 0)
+          AND EXISTS (SELECT 1 FROM projetos_comentarios_mencoes m2 WHERE m2.comentario_id = c.id AND m2.usuario_id = :u8)";
 
     private function parametrosNaoLidas(int $usuarioId): array
     {
-        return ['u1' => $usuarioId, 'u2' => $usuarioId, 'u3' => $usuarioId, 'u4' => $usuarioId, 'u5' => $usuarioId];
+        $params = [];
+        for ($i = 1; $i <= 8; $i++) {
+            $params["u{$i}"] = $usuarioId;
+        }
+
+        return $params;
     }
 
     /** @return array{total: int, mencoes: int, ultimo_id: int} -- menu Projetos (e o contador que ele consulta sozinho) */
     public function resumoNaoLidas(int $usuarioId): array
     {
-        $stmt = $this->pdo->prepare('SELECT COUNT(*) AS total, COALESCE(SUM(' . self::SQL_MENCAO . '), 0) AS mencoes, COALESCE(MAX(c.id), 0) AS ultimo_id ' . self::SQL_NAO_LIDAS);
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) AS total, COALESCE(SUM(x.mencao), 0) AS mencoes, COALESCE(MAX(x.id), 0) AS ultimo_id FROM (' . self::SQL_LINHAS_NAO_LIDAS . ') x');
         $stmt->execute($this->parametrosNaoLidas($usuarioId));
         $linha = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
@@ -97,27 +113,27 @@ class ProjetoComentarioService
         return $this->resumoNaoLidas($usuarioId)['total'];
     }
 
-    /** @return array<int, array{total: int, mencoes: int}> tarefa_id => novas, num projeto */
+    /** @return array<int, array{total: int, mencoes: int}> tarefa_id => novas, num projeto (notas gerais ficam de fora) */
     public function naoLidasPorTarefa(int $projetoId, int $usuarioId): array
     {
-        return $this->agruparNaoLidas('c.tarefa_id', $usuarioId, $projetoId);
+        return $this->agruparNaoLidas('tarefa_id', $usuarioId, $projetoId);
     }
 
-    /** @return array<int, array{total: int, mencoes: int}> projeto_id => novas (lista de Projetos) */
+    /** @return array<int, array{total: int, mencoes: int}> projeto_id => novas (lista de Projetos), inclui notas gerais */
     public function naoLidasPorProjeto(int $usuarioId): array
     {
-        return $this->agruparNaoLidas('t.projeto_id', $usuarioId, null);
+        return $this->agruparNaoLidas('projeto_id', $usuarioId, null);
     }
 
     private function agruparNaoLidas(string $coluna, int $usuarioId, ?int $projetoId): array
     {
         $params = $this->parametrosNaoLidas($usuarioId);
-        $sql = "SELECT {$coluna} AS chave, COUNT(*) AS total, COALESCE(SUM(" . self::SQL_MENCAO . '), 0) AS mencoes ' . self::SQL_NAO_LIDAS;
+        $sql = "SELECT x.{$coluna} AS chave, COUNT(*) AS total, COALESCE(SUM(x.mencao), 0) AS mencoes FROM (" . self::SQL_LINHAS_NAO_LIDAS . ") x WHERE x.{$coluna} IS NOT NULL";
         if ($projetoId !== null) {
-            $sql .= ' AND t.projeto_id = :p';
+            $sql .= ' AND x.projeto_id = :p';
             $params['p'] = $projetoId;
         }
-        $stmt = $this->pdo->prepare($sql . " GROUP BY {$coluna}");
+        $stmt = $this->pdo->prepare($sql . " GROUP BY x.{$coluna}");
         $stmt->execute($params);
 
         $saida = [];
@@ -128,17 +144,43 @@ class ProjetoComentarioService
         return $saida;
     }
 
+    /** Notas gerais do projeto que marcam o usuário e ele ainda não viu -- destaque na Linha do tempo. @return int[] */
+    public function mencoesGeraisNaoVistas(int $projetoId, int $usuarioId): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT c.id FROM projetos_comentarios c
+             JOIN projetos_comentarios_mencoes m ON m.comentario_id = c.id AND m.usuario_id = ?
+             LEFT JOIN projetos_leituras lp ON lp.projeto_id = c.projeto_id AND lp.usuario_id = ?
+             WHERE c.projeto_id = ? AND c.tarefa_id IS NULL AND c.id > COALESCE(lp.ultimo_comentario_id, 0)'
+        );
+        $stmt->execute([$usuarioId, $usuarioId, $projetoId]);
+
+        return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    /** Abriu o projeto: as notas gerais até agora contam como vistas. */
+    public function marcarLidoProjeto(int $projetoId, int $usuarioId): void
+    {
+        $this->pdo->prepare(
+            'INSERT INTO projetos_leituras (projeto_id, usuario_id, ultimo_comentario_id)
+             SELECT ?, ?, COALESCE(MAX(id), 0) FROM projetos_comentarios WHERE projeto_id = ? AND tarefa_id IS NULL
+             ON DUPLICATE KEY UPDATE ultimo_comentario_id = GREATEST(ultimo_comentario_id, VALUES(ultimo_comentario_id))'
+        )->execute([$projetoId, $usuarioId, $projetoId]);
+    }
+
     /**
      * Guarda quem foi marcado com @. $marcados vem do formulário ("interno:5",
-     * "externo:3"); só vale pessoa da própria tarefa e só se o "@Nome" ainda
-     * estiver no texto (apagou a menção = não marca).
+     * "externo:3"); só vale quem pode ser marcado ali (pessoas da tarefa, ou do
+     * projeto numa nota geral) e só se o "@Nome" ainda estiver no texto
+     * (apagou a menção = não marca).
      *
      * @return array<int, array{tipo: string, id: int, nome: string, email: ?string}> quem ficou marcado
      */
-    public function salvarMencoes(int $comentarioId, int $tarefaId, string $conteudo, array $marcados): array
+    public function salvarMencoes(int $comentarioId, ?int $tarefaId, string $conteudo, array $marcados, ?int $projetoId = null): array
     {
         $pessoas = [];
-        foreach ($this->marcaveisDaTarefa($tarefaId) as $pessoa) {
+        $lista = $tarefaId !== null ? $this->marcaveisDaTarefa($tarefaId) : $this->marcaveisDoProjeto((int)$projetoId);
+        foreach ($lista as $pessoa) {
             $pessoas[$pessoa['tipo'] . ':' . (int)$pessoa['id']] = $pessoa;
         }
 
@@ -155,6 +197,31 @@ class ProjetoComentarioService
         }
 
         return $salvos;
+    }
+
+    /**
+     * Quem pode ser marcado numa nota geral do projeto: quem enxerga o
+     * projeto por fazer parte dele -- responsáveis de alguma tarefa, gestores
+     * da área, quem criou o projeto (se for admin) e quem já escreveu nele. Externo fica de
+     * fora (o portal dele é por tarefa, não veria a nota geral).
+     *
+     * @return array<int, array{tipo: string, id: int, nome: string, email: ?string}>
+     */
+    public function marcaveisDoProjeto(int $projetoId): array
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT DISTINCT u.id, u.nome, u.email, 'interno' AS tipo FROM usuarios u
+             WHERE u.ativo = 1 AND (
+                 u.id IN (SELECT r.usuario_id FROM projetos_tarefas_responsaveis r JOIN projetos_tarefas t ON t.id = r.tarefa_id WHERE t.projeto_id = ?)
+                 OR u.id IN (SELECT g.usuario_id FROM projetos_areas_gestores g JOIN projetos p ON p.area_id = g.area_id WHERE p.id = ?)
+                 OR (u.perfil = 'admin' AND u.id = (SELECT criado_por FROM projetos WHERE id = ?)) -- só admin enxerga o projeto sem ser gestor/responsável
+                 OR u.id IN (SELECT c.usuario_id FROM projetos_comentarios c WHERE c.projeto_id = ? AND c.tipo = 'nota' AND c.usuario_id IS NOT NULL)
+             )
+             ORDER BY u.nome"
+        );
+        $stmt->execute([$projetoId, $projetoId, $projetoId, $projetoId]);
+
+        return array_map(fn (array $u) => ['id' => (int)$u['id']] + $u, $stmt->fetchAll(PDO::FETCH_ASSOC));
     }
 
     /**

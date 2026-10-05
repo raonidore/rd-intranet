@@ -109,13 +109,46 @@ class ProjetoNotificacaoService
         }
     }
 
+    /** Nota geral do projeto: só quem foi marcado com @ recebe e-mail, com link pro projeto. */
+    private function notificarMencaoNotaGeral(array $comentario): void
+    {
+        $email = new EmailService();
+        $marcados = (new ProjetoComentarioService())->mencoesDoComentario((int)$comentario['id']);
+        if (!$email->configurado() || !$marcados) {
+            return;
+        }
+
+        $stmt = $this->pdo->prepare('SELECT p.titulo, u.nome AS autor FROM projetos p LEFT JOIN usuarios u ON u.id = ? WHERE p.id = ?');
+        $stmt->execute([$comentario['usuario_id'], $comentario['projeto_id']]);
+        $info = $stmt->fetch(PDO::FETCH_ASSOC) ?: ['titulo' => '', 'autor' => ''];
+        $urlBase = (($_SERVER['HTTPS'] ?? 'off') !== 'off' ? 'https://' : 'http://') . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+        $link = $urlBase . url('/projetos/ver?id=' . (int)$comentario['projeto_id']);
+
+        foreach ((new ProjetoComentarioService())->marcaveisDoProjeto((int)$comentario['projeto_id']) as $pessoa) {
+            if (empty($pessoa['email']) || !in_array('interno:' . (int)$pessoa['id'], $marcados, true)) {
+                continue;
+            }
+            $email->enviar(
+                $pessoa['email'],
+                ($info['autor'] ?: 'Alguém') . ' mencionou você: ' . $info['titulo'],
+                '<p><strong>' . htmlspecialchars($info['autor'] ?: 'Alguém') . '</strong> mencionou você numa nota do projeto <strong>' . htmlspecialchars($info['titulo']) . '</strong>:</p>'
+                . '<blockquote style="border-left:3px solid #ccc;margin:0;padding:4px 12px;color:#333">' . nl2br(htmlspecialchars($comentario['conteudo'])) . '</blockquote>'
+                . '<p><a href="' . htmlspecialchars($link) . '">Abrir o projeto</a></p>'
+            );
+        }
+    }
+
     public function notificarComentario(int $comentarioId): void
     {
         $stmt = $this->pdo->prepare('SELECT * FROM projetos_comentarios WHERE id = ?');
         $stmt->execute([$comentarioId]);
         $comentario = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if (!$comentario || $comentario['tarefa_id'] === null) {
+        if (!$comentario) {
+            return;
+        }
+        if ($comentario['tarefa_id'] === null) {
+            $this->notificarMencaoNotaGeral($comentario);
             return;
         }
 

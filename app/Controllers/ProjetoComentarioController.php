@@ -50,12 +50,13 @@ class ProjetoComentarioController extends Controller
             (new ProjetoAnexoService())->anexarUploadComComentario($projetoId, $tarefaId, (int)$resultado['id'], $_FILES['arquivo'], $usuarioId, null);
         }
 
-        if ($resultado['success'] && $tarefaId !== null) {
+        if ($resultado['success']) {
+            $comentarios = new ProjetoComentarioService();
             $marcados = $_POST['mencoes'] ?? [];
             if (is_array($marcados) && $marcados) {
-                (new ProjetoComentarioService())->salvarMencoes((int)$resultado['id'], $tarefaId, (string)($_POST['conteudo'] ?? ''), $marcados);
+                $comentarios->salvarMencoes((int)$resultado['id'], $tarefaId, (string)($_POST['conteudo'] ?? ''), $marcados, $projetoId);
             }
-            (new ProjetoComentarioService())->marcarLido($tarefaId, $usuarioId);
+            $tarefaId !== null ? $comentarios->marcarLido($tarefaId, $usuarioId) : $comentarios->marcarLidoProjeto($projetoId, $usuarioId);
             (new ProjetoNotificacaoService())->notificarComentario((int)$resultado['id']);
         }
 

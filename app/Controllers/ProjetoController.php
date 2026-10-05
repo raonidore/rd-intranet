@@ -122,6 +122,12 @@ class ProjetoController extends Controller
         $usuarioId = (int)$_SESSION['usuario']['id'];
         $tarefaService = new ProjetoTarefaService();
 
+        // Notas gerais que marcam a pessoa: destaca as ainda não vistas e, ao
+        // abrir o projeto, conta como visto (o aviso do menu/lista some).
+        $comentarios = new ProjetoComentarioService();
+        $mencoesGeraisNovas = $comentarios->mencoesGeraisNaoVistas($id, $usuarioId);
+        $comentarios->marcarLidoProjeto($id, $usuarioId);
+
         $this->view('projetos/ver', [
             'projeto' => $projeto,
             'podeGerenciar' => $this->service->podeGerenciar($projeto, $usuarioId, $this->ehAdmin()),
@@ -130,7 +136,9 @@ class ProjetoController extends Controller
             'gantt' => $tarefaService->gantt($id),
             'resumo' => $tarefaService->resumo($id),
             'timeline' => (new ProjetoComentarioService())->timeline($id),
-            'naoLidasPorTarefa' => (new ProjetoComentarioService())->naoLidasPorTarefa($id, $usuarioId),
+            'naoLidasPorTarefa' => $comentarios->naoLidasPorTarefa($id, $usuarioId),
+            'mencoesGeraisNovas' => $mencoesGeraisNovas,
+            'marcaveisProjeto' => $comentarios->marcaveisDoProjeto($id),
             'usuarioLogadoId' => $usuarioId,
             'anexos' => (new ProjetoAnexoService())->porProjeto($id),
             'tarefaService' => $tarefaService,

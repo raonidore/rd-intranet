@@ -344,8 +344,19 @@ $colunaLabels = [
             <?php if (empty($timeline)): ?>
                 <li class="text-muted small">Nada por aqui ainda.</li>
             <?php endif; ?>
+            <?php
+                $nomesMarcaveis = [];
+                foreach ($mapaMarcaveis as $listaNomes) {
+                    foreach ($listaNomes as $pp) {
+                        $nomesMarcaveis[$pp['nome']] = true;
+                    }
+                }
+                $meuNome = (string)($_SESSION['usuario']['nome'] ?? '');
+            ?>
             <?php foreach (array_reverse($timeline) as $item): ?>
-                <li class="mb-3 pb-3 border-bottom">
+                <?php $mencaoNova = in_array((int)$item['id'], $mencoesGeraisNovas, true); ?>
+                <li class="mb-3 pb-3 border-bottom <?= $mencaoNova ? 'nota-mencao-nova' : '' ?>">
+                    <?php if ($mencaoNova): ?><div class="small fw-semibold text-danger mb-1"><i class="bi bi-at"></i> Você foi mencionado</div><?php endif; ?>
                     <?php if ($item['tipo'] === 'sistema'): ?>
                         <div class="small text-muted">
                             <i class="bi bi-gear"></i> <?= htmlspecialchars($item['conteudo']) ?>
@@ -358,7 +369,14 @@ $colunaLabels = [
                             <?php if ($item['participante_nome']): ?><span class="badge text-bg-light border ms-1">externo</span><?php endif; ?>
                             <?php if ($item['tarefa_titulo']): ?><span class="text-muted small"> em "<?= htmlspecialchars($item['tarefa_titulo']) ?>"</span><?php endif; ?>
                             <span class="text-muted small">· <?= date('d/m/Y H:i', strtotime($item['criado_em'])) ?></span>
-                            <p class="mb-0 mt-1" style="white-space:pre-wrap"><?= htmlspecialchars($item['conteudo']) ?></p>
+                            <?php
+                                $textoNota = htmlspecialchars($item['conteudo']);
+                                foreach (array_keys($nomesMarcaveis + ($meuNome !== '' ? [$meuNome => true] : [])) as $nomeMarcado) {
+                                    $marca = '@' . htmlspecialchars($nomeMarcado);
+                                    $textoNota = str_ireplace($marca, '<span class="mencao' . ($nomeMarcado === $meuNome ? ' mencao-eu' : '') . '">' . $marca . '</span>', $textoNota);
+                                }
+                            ?>
+                            <p class="mb-0 mt-1" style="white-space:pre-wrap"><?= $textoNota ?></p>
                             <?php if (!empty($item['latitude'])): ?>
                                 <a class="small" target="_blank" rel="noopener" href="https://www.google.com/maps?q=<?= $item['latitude'] ?>,<?= $item['longitude'] ?>">
                                     <i class="bi bi-geo-alt"></i> Ver no mapa
@@ -370,7 +388,23 @@ $colunaLabels = [
             <?php endforeach; ?>
         </ul>
 
-        <form method="post" action="<?= url('/projetos/comentar') ?>" enctype="multipart/form-data" id="formComentarProjeto">
+        <?php
+            // Quem pode ser marcado no campo da Linha do tempo: "" = nota geral (pessoas do projeto), ID = a tarefa escolhida.
+            $semEu = fn (array $lista) => array_values(array_map(
+                fn ($pp) => ['chave' => $pp['tipo'] . ':' . (int)$pp['id'], 'nome' => $pp['nome'], 'tipo' => $pp['tipo']],
+                array_filter($lista, fn ($pp) => !($pp['tipo'] === 'interno' && (int)$pp['id'] === (int)$usuarioLogadoId))
+            ));
+            $mapaMarcaveis = ['' => $semEu($marcaveisProjeto)];
+            $comentariosSvc = new \App\Services\ProjetoComentarioService();
+            foreach ($quadro as $colunaTarefas) {
+                foreach ($colunaTarefas as $t) {
+                    $mapaMarcaveis[(string)$t['id']] = $semEu($comentariosSvc->marcaveisDaTarefa((int)$t['id']));
+                }
+            }
+        ?>
+        <form method="post" action="<?= url('/projetos/comentar') ?>" enctype="multipart/form-data" id="formComentarProjeto" class="position-relative"
+              data-marcaveis-mapa="<?= htmlspecialchars(json_encode($mapaMarcaveis, JSON_UNESCAPED_UNICODE)) ?>">
+            <div class="list-group position-absolute shadow-sm d-none lista-mencoes" style="z-index:30; bottom:100%; min-width:260px; max-height:220px; overflow-y:auto"></div>
             <input type="hidden" name="projeto_id" value="<?= (int)$projeto['id'] ?>">
             <input type="hidden" name="latitude" id="comentarioLatitude">
             <input type="hidden" name="longitude" id="comentarioLongitude">
@@ -382,7 +416,7 @@ $colunaLabels = [
                     <?php endforeach; endforeach; ?>
                 </select>
             </div>
-            <textarea name="conteudo" class="form-control mb-2" rows="2" placeholder="Escreva um comentário..." required></textarea>
+            <textarea name="conteudo" class="form-control mb-2" rows="2" placeholder="Escreva um comentário... Use @ para marcar alguém." required></textarea>
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <div class="d-flex gap-2 align-items-center">
                     <label class="btn btn-outline-secondary btn-sm mb-0">
@@ -831,6 +865,11 @@ $colunaLabels = [
 .conversa-autor { font-size: 11px; font-weight: 600; margin-bottom: 2px; }
 .conversa-texto { white-space: pre-wrap; word-break: break-word; }
 .mencao { color: #0a58ca; font-weight: 600; }
+.campo-mencoes { position: relative; }
+.campo-mencoes-espelho { position: absolute; inset: 0; color: transparent; white-space: pre-wrap; word-wrap: break-word; overflow: hidden; pointer-events: none; }
+.campo-mencoes textarea { position: relative; z-index: 1; background: transparent !important; }
+mark.mencao-campo { background: #cfe2ff; color: transparent; border-radius: 3px; padding: 0; box-shadow: 0 0 0 1px #9ec5fe; }
+.nota-mencao-nova { background: #fff8e1; border-left: 4px solid #dc3545 !important; padding-left: .75rem; border-radius: 6px; }
 .mencao-eu { background: #fff3cd; color: #842029; border-radius: 4px; padding: 0 2px; }
 .badge-mencao { animation: pulsoMencaoCard 1.4s ease-in-out infinite; }
 @keyframes pulsoMencaoCard { 50% { box-shadow: 0 0 0 .3rem rgba(220, 53, 69, .3); } }
@@ -863,23 +902,53 @@ $colunaLabels = [
         });
     });
 
-    // Ctrl+Enter envia; nome do anexo escolhido aparece ao lado do botão.
-    document.querySelectorAll('.form-conversa-tarefa').forEach(function (form) {
-        const texto = form.querySelector('textarea');
-        texto.addEventListener('keydown', function (ev) {
-            if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey) && texto.value.trim() !== '') {
-                ev.preventDefault();
-                form.requestSubmit();
-            }
-        });
-        form.querySelector('.campo-anexo-conversa').addEventListener('change', function () {
-            form.querySelector('.nome-anexo-conversa').textContent = this.files[0] ? this.files[0].name : '';
-        });
-        const marcaveis = JSON.parse(form.dataset.marcaveis || '[]');
-        const lista = form.querySelector('.lista-mencoes');
+    /**
+     * @menção num campo de texto: "@" abre a lista de quem pode ser marcado
+     * (setas/Enter/Tab/Esc ou clique); no envio manda mencoes[] só de quem
+     * continua com "@Nome" no texto.
+     */
+    function ativarMencoes(form, texto, lista, obterMarcaveis) {
         const escolhidas = new Map(); // chave -> nome
         let opcoes = [];
         let ativa = 0;
+
+        // Espelho atrás do campo: textarea não colore parte do texto, então uma
+        // camada com o mesmo texto (invisível) pinta o fundo de cada @Nome marcado.
+        const envoltorio = document.createElement('div');
+        envoltorio.className = 'campo-mencoes';
+        ['mb-1', 'mb-2'].forEach(function (classe) {
+            if (texto.classList.contains(classe)) { texto.classList.remove(classe); envoltorio.classList.add(classe); }
+        });
+        texto.parentNode.insertBefore(envoltorio, texto);
+        const espelho = document.createElement('div');
+        espelho.className = 'form-control campo-mencoes-espelho' + (texto.classList.contains('form-control-sm') ? ' form-control-sm' : '');
+        espelho.setAttribute('aria-hidden', 'true');
+        envoltorio.appendChild(espelho);
+        envoltorio.appendChild(texto);
+        const aviso = document.createElement('div');
+        aviso.className = 'small text-primary mb-1 d-none';
+        envoltorio.after(aviso);
+
+        function escaparHtml(t) {
+            return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        function pintar() {
+            let html = escaparHtml(texto.value);
+            const marcados = [];
+            escolhidas.forEach(function (nome) {
+                const marca = escaparHtml('@' + nome);
+                if (!html.toLowerCase().includes(marca.toLowerCase())) return;
+                marcados.push(nome);
+                html = html.split(marca).join('<mark class="mencao-campo">' + marca + '</mark>');
+            });
+            espelho.innerHTML = html + '\n ';
+            espelho.scrollTop = texto.scrollTop;
+            aviso.innerHTML = marcados.length ? '<i class="bi bi-bell"></i> Será avisado: <strong>' + escaparHtml(marcados.join(', ')) + '</strong>' : '';
+            aviso.classList.toggle('d-none', marcados.length === 0);
+        }
+        texto.addEventListener('input', pintar);
+        texto.addEventListener('scroll', function () { espelho.scrollTop = texto.scrollTop; });
 
         function termoAtual() {
             const antes = texto.value.slice(0, texto.selectionStart);
@@ -905,44 +974,43 @@ $colunaLabels = [
             texto.selectionStart = texto.selectionEnd = antes.length;
             escolhidas.set(p.chave, p.nome);
             fecharLista();
+            pintar();
             texto.focus();
         }
 
-        if (marcaveis.length) {
-            texto.addEventListener('input', function () {
-                const termo = termoAtual();
-                if (termo === null) return fecharLista();
-                const t = termo.toLowerCase();
-                opcoes = marcaveis.filter((p) => p.nome.toLowerCase().includes(t)).slice(0, 8);
-                ativa = 0;
-                desenharLista();
-            });
-            texto.addEventListener('keydown', function (ev) {
-                if (lista.classList.contains('d-none')) return;
-                if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
-                    ev.preventDefault();
-                    ativa = (ativa + (ev.key === 'ArrowDown' ? 1 : opcoes.length - 1)) % opcoes.length;
-                    desenharLista();
-                } else if (ev.key === 'Enter' || ev.key === 'Tab') {
-                    ev.preventDefault();
-                    ev.stopImmediatePropagation();
-                    escolher(opcoes[ativa]);
-                } else if (ev.key === 'Escape') {
-                    ev.stopPropagation();
-                    fecharLista();
-                }
-            });
-            lista.addEventListener('mousedown', function (ev) {
-                const item = ev.target.closest('[data-i]');
-                if (!item) return;
+        texto.addEventListener('input', function () {
+            const termo = termoAtual();
+            const marcaveis = obterMarcaveis();
+            if (termo === null || !marcaveis.length) return fecharLista();
+            const t = termo.toLowerCase();
+            opcoes = marcaveis.filter((p) => p.nome.toLowerCase().includes(t)).slice(0, 8);
+            ativa = 0;
+            desenharLista();
+        });
+        texto.addEventListener('keydown', function (ev) {
+            if (lista.classList.contains('d-none')) return;
+            if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
                 ev.preventDefault();
-                escolher(opcoes[parseInt(item.dataset.i, 10)]);
-            });
-            texto.addEventListener('blur', function () { setTimeout(fecharLista, 150); });
-        }
+                ativa = (ativa + (ev.key === 'ArrowDown' ? 1 : opcoes.length - 1)) % opcoes.length;
+                desenharLista();
+            } else if (ev.key === 'Enter' || ev.key === 'Tab') {
+                ev.preventDefault();
+                ev.stopImmediatePropagation();
+                escolher(opcoes[ativa]);
+            } else if (ev.key === 'Escape') {
+                ev.stopPropagation();
+                fecharLista();
+            }
+        });
+        lista.addEventListener('mousedown', function (ev) {
+            const item = ev.target.closest('[data-i]');
+            if (!item) return;
+            ev.preventDefault();
+            escolher(opcoes[parseInt(item.dataset.i, 10)]);
+        });
+        texto.addEventListener('blur', function () { setTimeout(fecharLista, 150); });
 
         form.addEventListener('submit', function () {
-            // Só manda quem continua marcado no texto (apagou o @Nome = não marca).
             form.querySelectorAll('input[name="mencoes[]"]').forEach((i) => i.remove());
             escolhidas.forEach(function (nome, chave) {
                 if (!texto.value.toLowerCase().includes('@' + nome.toLowerCase())) return;
@@ -952,9 +1020,33 @@ $colunaLabels = [
                 campo.value = chave;
                 form.appendChild(campo);
             });
-            form.querySelector('button[type="submit"]').disabled = true;
+            const botao = form.querySelector('button[type="submit"]');
+            if (botao) botao.disabled = true;
         });
+    }
+
+    // Ctrl+Enter envia; nome do anexo escolhido aparece ao lado do botão.
+    document.querySelectorAll('.form-conversa-tarefa').forEach(function (form) {
+        const texto = form.querySelector('textarea');
+        texto.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey) && texto.value.trim() !== '') {
+                ev.preventDefault();
+                form.requestSubmit();
+            }
+        });
+        form.querySelector('.campo-anexo-conversa').addEventListener('change', function () {
+            form.querySelector('.nome-anexo-conversa').textContent = this.files[0] ? this.files[0].name : '';
+        });
+        ativarMencoes(form, texto, form.querySelector('.lista-mencoes'), () => JSON.parse(form.dataset.marcaveis || '[]'));
     });
+
+    // Nota da Linha do tempo: quem pode ser marcado depende da tarefa escolhida (ou do projeto todo).
+    const formGeral = document.getElementById('formComentarProjeto');
+    if (formGeral) {
+        const mapa = JSON.parse(formGeral.dataset.marcaveisMapa || '{}');
+        const seletor = formGeral.querySelector('select[name="tarefa_id"]');
+        ativarMencoes(formGeral, formGeral.querySelector('textarea'), formGeral.querySelector('.lista-mencoes'), () => mapa[seletor.value] || []);
+    }
 
     // Link de e-mail/aviso e volta depois de enviar: ?tarefa=ID abre a janela da tarefa.
     // O bootstrap.bundle carrega depois do conteúdo (layout) -- espera a página terminar.
