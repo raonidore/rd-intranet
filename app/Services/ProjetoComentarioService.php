@@ -138,7 +138,7 @@ class ProjetoComentarioService
     public function salvarMencoes(int $comentarioId, int $tarefaId, string $conteudo, array $marcados): array
     {
         $pessoas = [];
-        foreach ((new ProjetoTarefaService())->pessoas($tarefaId) as $pessoa) {
+        foreach ($this->marcaveisDaTarefa($tarefaId) as $pessoa) {
             $pessoas[$pessoa['tipo'] . ':' . (int)$pessoa['id']] = $pessoa;
         }
 
@@ -155,6 +155,32 @@ class ProjetoComentarioService
         }
 
         return $salvos;
+    }
+
+    /**
+     * Quem pode ser marcado com @ na tarefa: as pessoas dela + quem já
+     * escreveu na conversa (ex.: o gestor que puxou o assunto sem ser
+     * responsável -- sem isso, quem respondia não conseguia marcá-lo de volta).
+     *
+     * @return array<int, array{tipo: string, id: int, nome: string, email: ?string}>
+     */
+    public function marcaveisDaTarefa(int $tarefaId): array
+    {
+        $lista = [];
+        foreach ((new ProjetoTarefaService())->pessoas($tarefaId) as $pessoa) {
+            $lista[$pessoa['tipo'] . ':' . (int)$pessoa['id']] = $pessoa;
+        }
+
+        $stmt = $this->pdo->prepare(
+            "SELECT DISTINCT u.id, u.nome, u.email FROM projetos_comentarios c JOIN usuarios u ON u.id = c.usuario_id
+             WHERE c.tarefa_id = ? AND c.tipo = 'nota' AND u.ativo = 1"
+        );
+        $stmt->execute([$tarefaId]);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $autor) {
+            $lista['interno:' . (int)$autor['id']] ??= ['id' => (int)$autor['id'], 'nome' => $autor['nome'], 'email' => $autor['email'], 'tipo' => 'interno'];
+        }
+
+        return array_values($lista);
     }
 
     /** @return string[] chaves "interno:ID"/"externo:ID" marcadas na mensagem */

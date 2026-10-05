@@ -651,6 +651,7 @@ $colunaLabels = [
 
 <?php foreach ($quadro as $colunaTarefas): foreach ($colunaTarefas as $tarefa):
     $pessoas = $tarefaService->pessoas((int)$tarefa['id']);
+    $marcaveisTarefa = (new \App\Services\ProjetoComentarioService())->marcaveisDaTarefa((int)$tarefa['id']);
     $comentariosTarefa = array_values(array_filter($timeline, fn ($c) => (int)($c['tarefa_id'] ?? 0) === (int)$tarefa['id']));
     $anexosTarefa = array_values(array_filter($anexos, fn ($a) => (int)($a['tarefa_id'] ?? 0) === (int)$tarefa['id']));
 ?>
@@ -764,7 +765,7 @@ $colunaLabels = [
                                 </div>
                                 <?php
                                     $textoMsg = htmlspecialchars($c['conteudo']);
-                                    foreach ($pessoas as $pp) {
+                                    foreach (array_merge($pessoas, $marcaveisTarefa) as $pp) {
                                         $ehEu = $pp['tipo'] === 'interno' && (int)$pp['id'] === (int)$usuarioLogadoId;
                                         $marca = '@' . htmlspecialchars($pp['nome']);
                                         $textoMsg = str_ireplace($marca, '<span class="mencao' . ($ehEu ? ' mencao-eu' : '') . '">' . $marca . '</span>', $textoMsg);
@@ -783,7 +784,7 @@ $colunaLabels = [
                 <?php
                     $marcaveis = array_values(array_map(
                         fn ($pp) => ['chave' => $pp['tipo'] . ':' . (int)$pp['id'], 'nome' => $pp['nome'], 'tipo' => $pp['tipo']],
-                        array_filter($pessoas, fn ($pp) => !($pp['tipo'] === 'interno' && (int)$pp['id'] === (int)$usuarioLogadoId))
+                        array_filter($marcaveisTarefa, fn ($pp) => !($pp['tipo'] === 'interno' && (int)$pp['id'] === (int)$usuarioLogadoId))
                     ));
                 ?>
                 <form method="post" action="<?= url('/projetos/comentar') ?>" enctype="multipart/form-data" class="mb-3 form-conversa-tarefa position-relative"
