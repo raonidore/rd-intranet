@@ -51,11 +51,44 @@ class ProjetoComentarioController extends Controller
         }
 
         if ($resultado['success'] && $tarefaId !== null) {
+            (new ProjetoComentarioService())->marcarLido($tarefaId, $usuarioId);
             (new ProjetoNotificacaoService())->notificarComentario((int)$resultado['id']);
+        }
+
+        // Comentou de dentro da janela da tarefa: volta com ela aberta, no fim da conversa.
+        if ($tarefaId !== null && !empty($_POST['voltar_tarefa'])) {
+            if (!$resultado['success']) {
+                NotificationService::error($resultado['message']);
+            }
+            header('Location: ' . url('/projetos/ver?id=' . $projetoId . '&tarefa=' . $tarefaId));
+            exit;
         }
 
         $resultado['success'] ? NotificationService::success($resultado['message']) : NotificationService::error($resultado['message']);
         header('Location: ' . url('/projetos/ver?id=' . $projetoId));
         exit;
+    }
+
+    /** A janela da tarefa foi aberta: as mensagens dela deixam de contar como novas. */
+    public function marcarLido(): void
+    {
+        AuthMiddleware::checkModulo('projetos_atendimentos');
+        header('Content-Type: application/json');
+
+        $tarefaId = (int)($_POST['tarefa_id'] ?? 0);
+        $usuarioId = (int)$_SESSION['usuario']['id'];
+        $tarefa = (new \App\Services\ProjetoTarefaService())->buscar($tarefaId);
+        $projeto = $tarefa ? $this->projetoService->buscar((int)$tarefa['projeto_id']) : null;
+        $ehAdmin = PermissionService::ehAdmin() || PermissionService::temAcesso('projetos_gerenciar');
+
+        if (!$projeto || !$this->projetoService->ehVisivelPara($projeto, $usuarioId, $ehAdmin)) {
+            echo json_encode(['success' => false]);
+            return;
+        }
+
+        $comentarios = new ProjetoComentarioService();
+        $comentarios->marcarLido($tarefaId, $usuarioId);
+
+        echo json_encode(['success' => true, 'total_nao_lidas' => $comentarios->totalNaoLidas($usuarioId)]);
     }
 }

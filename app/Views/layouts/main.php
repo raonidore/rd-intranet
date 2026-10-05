@@ -448,17 +448,27 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
     $temProjetos = PermissionService::temAcesso('projetos_atendimentos')
         || PermissionService::temAcesso('projetos_gerenciar')
         || PermissionService::temAcesso('projetos_estatisticas');
+    // Mensagens novas nas conversas das tarefas em que a pessoa está envolvida.
+    $projetosNaoLidas = 0;
+    if (PermissionService::temAcesso('projetos_atendimentos')) {
+        try {
+            $projetosNaoLidas = (new \App\Services\ProjetoComentarioService())->totalNaoLidas((int)$_SESSION['usuario']['id']);
+        } catch (\Throwable $e) {
+            $projetosNaoLidas = 0; // tabela de leituras ainda não migrada
+        }
+    }
     ?>
     <?php if ($temProjetos): ?>
     <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuProjetos"
             aria-expanded="<?= $abrirProjetos ? 'true' : 'false' ?>">
-        <span><i class="bi bi-kanban me-2"></i>Projetos</span>
+        <span><i class="bi bi-kanban me-2"></i>Projetos<?php if ($projetosNaoLidas > 0): ?> <span class="rd-menu-badge" title="Mensagens novas nas suas tarefas"><?= $projetosNaoLidas ?></span><?php endif; ?></span>
         <i class="bi bi-chevron-right chevron"></i>
     </button>
     <div class="collapse <?= $abrirProjetos ? 'show' : '' ?>" id="menuProjetos">
         <?php if (PermissionService::temAcesso('projetos_atendimentos')): ?>
         <a href="<?= url('/projetos') ?>" class="<?= $uriAtual === '/projetos' || str_starts_with($uriAtual, '/projetos/ver') || str_starts_with($uriAtual, '/projetos/novo') ? 'active' : '' ?>">
             <i class="bi bi-kanban me-2"></i> Projetos
+            <span class="rd-menu-badge" id="rdProjetosBadge" title="Mensagens novas nas suas tarefas" style="<?= $projetosNaoLidas > 0 ? '' : 'display:none' ?>"><?= $projetosNaoLidas ?></span>
         </a>
         <?php endif; ?>
         <?php if (PermissionService::temAcesso('projetos_gerenciar')): ?>

@@ -826,6 +826,7 @@ $router->post('/projetos/tarefas/externo-adicionar', [ProjetoTarefaController::c
 $router->post('/projetos/tarefas/externo-remover', [ProjetoTarefaController::class, 'externoRemover']);
 
 $router->post('/projetos/comentar', [ProjetoComentarioController::class, 'comentar']);
+$router->post('/projetos/tarefas/marcar-lido', [ProjetoComentarioController::class, 'marcarLido']);
 $router->post('/projetos/anexo-upload', [ProjetoAnexoController::class, 'upload']);
 $router->post('/projetos/anexo-samba', [ProjetoAnexoController::class, 'samba']);
 $router->post('/projetos/anexo-excluir', [ProjetoAnexoController::class, 'excluir']);

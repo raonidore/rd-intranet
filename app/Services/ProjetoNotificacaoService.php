@@ -124,6 +124,30 @@ class ProjetoNotificacaoService
             return;
         }
 
+        // Sem e-mail configurado o aviso fica só dentro do sistema (badge no card
+        // da tarefa e no menu Projetos -- ProjetoComentarioService::totalNaoLidas()).
+        $email = new EmailService();
+        if (!$email->configurado()) {
+            return;
+        }
+
+        $autor = '';
+        if (!empty($comentario['usuario_id'])) {
+            $stmt = $this->pdo->prepare('SELECT nome FROM usuarios WHERE id = ?');
+            $stmt->execute([$comentario['usuario_id']]);
+            $autor = (string)$stmt->fetchColumn();
+        } elseif (!empty($comentario['participante_externo_id'])) {
+            $stmt = $this->pdo->prepare('SELECT nome FROM projetos_participantes_externos WHERE id = ?');
+            $stmt->execute([$comentario['participante_externo_id']]);
+            $autor = (string)$stmt->fetchColumn();
+        }
+
+        $urlBase = (($_SERVER['HTTPS'] ?? 'off') !== 'off' ? 'https://' : 'http://') . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+        $assunto = 'Nova mensagem: ' . $tarefa['titulo'];
+        $corpo = '<p><strong>' . htmlspecialchars($autor ?: 'Alguém') . '</strong> escreveu na tarefa <strong>' . htmlspecialchars($tarefa['titulo']) . '</strong>'
+            . ' (' . htmlspecialchars($tarefa['projeto_titulo'] ?? '') . '):</p>'
+            . '<blockquote style="border-left:3px solid #ccc;margin:0;padding:4px 12px;color:#333">' . nl2br(htmlspecialchars($comentario['conteudo'])) . '</blockquote>';
+
         foreach ((new ProjetoTarefaService())->pessoas((int)$comentario['tarefa_id']) as $pessoa) {
             // não avisa quem acabou de comentar
             if ($pessoa['tipo'] === 'interno' && (int)$pessoa['id'] === (int)($comentario['usuario_id'] ?? 0)) {
@@ -132,18 +156,22 @@ class ProjetoNotificacaoService
             if ($pessoa['tipo'] === 'externo' && (int)$pessoa['id'] === (int)($comentario['participante_externo_id'] ?? 0)) {
                 continue;
             }
-
-            if ($pessoa['tipo'] === 'interno' && !empty($pessoa['email'])) {
-                $email = new EmailService();
-                if ($email->configurado()) {
-                    $email->enviar(
-                        $pessoa['email'],
-                        'Novo comentário: ' . $tarefa['titulo'],
-                        '<p>Novo comentário na tarefa <strong>' . htmlspecialchars($tarefa['titulo']) . '</strong>:</p>'
-                        . '<p>' . nl2br(htmlspecialchars($comentario['conteudo'])) . '</p>'
-                    );
-                }
+            if (empty($pessoa['email'])) {
+                continue;
             }
+
+            if ($pessoa['tipo'] === 'interno') {
+                $link = $urlBase . url('/projetos/ver?id=' . $tarefa['projeto_id'] . '&tarefa=' . $tarefa['id']);
+            } else {
+                // Externo entra pelo portal (link de acesso de uso único, mesmo do convite).
+                $link = (new ProjetoParticipanteTokenService())->emitirLink((int)$pessoa['id'], $urlBase);
+            }
+
+            $email->enviar(
+                $pessoa['email'],
+                $assunto,
+                $corpo . ($link ? '<p><a href="' . htmlspecialchars($link) . '">Abrir a tarefa e responder</a></p>' : '')
+            );
         }
     }
 }

@@ -77,6 +77,7 @@ class ProjetoController extends Controller
 
         $this->view('projetos/index', [
             'projetos' => $this->service->visivelPara($usuarioId, $this->ehAdmin(), $filtros),
+            'naoLidasPorProjeto' => (new ProjetoComentarioService())->naoLidasPorProjeto($usuarioId),
             'areas' => (new ProjetoAreaService())->listarAtivas(),
             'filtros' => $filtros,
         ]);
@@ -129,6 +130,8 @@ class ProjetoController extends Controller
             'gantt' => $tarefaService->gantt($id),
             'resumo' => $tarefaService->resumo($id),
             'timeline' => (new ProjetoComentarioService())->timeline($id),
+            'naoLidasPorTarefa' => (new ProjetoComentarioService())->naoLidasPorTarefa($id, $usuarioId),
+            'usuarioLogadoId' => $usuarioId,
             'anexos' => (new ProjetoAnexoService())->porProjeto($id),
             'tarefaService' => $tarefaService,
         ]);

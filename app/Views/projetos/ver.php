@@ -217,9 +217,18 @@ $colunaLabels = [
                                                 <span class="small <?= $atrasada ? 'text-danger fw-semibold' : 'text-muted' ?>">
                                                     <?= $tarefa['prazo'] ? date('d/m', strtotime($tarefa['prazo'])) : '' ?>
                                                 </span>
-                                                <span class="small text-muted">
+                                                <span class="small text-muted d-flex align-items-center gap-2">
+                                                    <?php
+                                                        $mensagensCard = count(array_filter($timeline, fn ($c) => (int)($c['tarefa_id'] ?? 0) === (int)$tarefa['id'] && $c['tipo'] === 'nota'));
+                                                        $novasCard = $naoLidasPorTarefa[(int)$tarefa['id']] ?? 0;
+                                                    ?>
+                                                    <?php if ($novasCard): ?>
+                                                        <span class="badge text-bg-danger badge-novas-tarefa" data-tarefa-id="<?= (int)$tarefa['id'] ?>" title="Mensagens novas para você"><i class="bi bi-chat-dots-fill"></i> <?= $novasCard ?></span>
+                                                    <?php elseif ($mensagensCard): ?>
+                                                        <span title="Mensagens na conversa"><i class="bi bi-chat-dots"></i> <?= $mensagensCard ?></span>
+                                                    <?php endif; ?>
                                                     <?php if ($tarefa['total_responsaveis'] || $tarefa['total_externos']): ?>
-                                                        <i class="bi bi-people"></i> <?= (int)$tarefa['total_responsaveis'] + (int)$tarefa['total_externos'] ?>
+                                                        <span><i class="bi bi-people"></i> <?= (int)$tarefa['total_responsaveis'] + (int)$tarefa['total_externos'] ?></span>
                                                     <?php endif; ?>
                                                 </span>
                                             </div>
@@ -734,19 +743,47 @@ $colunaLabels = [
                     </div>
                 </form>
 
-                <h6 class="small text-uppercase text-muted">Comentários</h6>
-                <ul class="list-unstyled mb-2">
+                <h6 class="small text-uppercase text-muted">Conversa</h6>
+                <div class="conversa-tarefa mb-2" data-tarefa-id="<?= (int)$tarefa['id'] ?>">
                     <?php if (empty($comentariosTarefa)): ?>
-                        <li class="text-muted small">Nenhum comentário nesta tarefa ainda.</li>
+                        <div class="text-muted small text-center py-2">Nenhuma mensagem ainda. Escreva abaixo para conversar com quem está na tarefa.</div>
                     <?php endif; ?>
                     <?php foreach ($comentariosTarefa as $c): ?>
-                        <li class="mb-2 pb-2 border-bottom small">
-                            <strong><?= htmlspecialchars($c['usuario_nome'] ?? $c['participante_nome'] ?? 'Alguém') ?></strong>
-                            <span class="text-muted">· <?= date('d/m/Y H:i', strtotime($c['criado_em'])) ?></span>
-                            <div style="white-space:pre-wrap"><?= htmlspecialchars($c['conteudo']) ?></div>
-                        </li>
+                        <?php if ($c['tipo'] === 'sistema'): ?>
+                            <div class="conversa-evento"><i class="bi bi-gear"></i> <?= htmlspecialchars($c['conteudo']) ?> · <?= date('d/m H:i', strtotime($c['criado_em'])) ?></div>
+                        <?php else: ?>
+                            <?php $minha = (int)($c['usuario_id'] ?? 0) === (int)$usuarioLogadoId; ?>
+                            <div class="conversa-msg <?= $minha ? 'minha' : '' ?>">
+                                <div class="conversa-autor">
+                                    <?= $minha ? 'Você' : htmlspecialchars($c['usuario_nome'] ?? $c['participante_nome'] ?? 'Alguém') ?>
+                                    <?php if (!empty($c['participante_externo_id'])): ?><span class="badge text-bg-light border">externo</span><?php endif; ?>
+                                    <span class="text-muted">· <?= date('d/m/Y H:i', strtotime($c['criado_em'])) ?></span>
+                                </div>
+                                <div class="conversa-texto"><?= htmlspecialchars($c['conteudo']) ?></div>
+                                <?php foreach ($anexosTarefa as $a): ?>
+                                    <?php if ((int)($a['comentario_id'] ?? 0) === (int)$c['id']): ?>
+                                        <a class="small d-block" href="<?= url('/projetos/anexo?anexo_id=' . (int)$a['id']) ?>"><i class="bi bi-paperclip"></i> <?= htmlspecialchars($a['anexo_nome_original']) ?></a>
+                                    <?php endif; ?>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
                     <?php endforeach; ?>
-                </ul>
+                </div>
+                <form method="post" action="<?= url('/projetos/comentar') ?>" enctype="multipart/form-data" class="mb-3 form-conversa-tarefa">
+                    <input type="hidden" name="projeto_id" value="<?= (int)$projeto['id'] ?>">
+                    <input type="hidden" name="tarefa_id" value="<?= (int)$tarefa['id'] ?>">
+                    <input type="hidden" name="voltar_tarefa" value="1">
+                    <textarea name="conteudo" class="form-control form-control-sm mb-1" rows="2" required
+                              placeholder="Escreva para <?= htmlspecialchars(implode(', ', array_column(array_filter($pessoas, fn ($pp) => !($pp['tipo'] === 'interno' && (int)$pp['id'] === (int)$usuarioLogadoId)), 'nome')) ?: 'a equipe') ?>... (Ctrl+Enter envia)"></textarea>
+                    <div class="d-flex justify-content-between align-items-center gap-2">
+                        <label class="btn btn-outline-secondary btn-sm mb-0">
+                            <i class="bi bi-paperclip"></i> Anexar
+                            <input type="file" name="arquivo" class="d-none campo-anexo-conversa">
+                        </label>
+                        <span class="small text-muted me-auto nome-anexo-conversa"></span>
+                        <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-send"></i> Enviar</button>
+                    </div>
+                </form>
 
                 <h6 class="small text-uppercase text-muted">Anexos</h6>
                 <ul class="list-unstyled mb-0">
@@ -765,6 +802,77 @@ $colunaLabels = [
     </div>
 </div>
 <?php endforeach; endforeach; ?>
+
+<style>
+.conversa-tarefa { max-height: 340px; overflow-y: auto; background: #f6f8fa; border-radius: 8px; padding: 8px; }
+.conversa-evento { font-size: 11px; color: #8a929a; text-align: center; margin: 4px 0; }
+.conversa-msg { background: #fff; border: 1px solid #e3e7eb; border-radius: 10px; padding: 6px 10px; margin: 6px 0; max-width: 85%; font-size: .875rem; }
+.conversa-msg.minha { background: #e7f1ff; border-color: #b6d4fe; margin-left: auto; }
+.conversa-autor { font-size: 11px; font-weight: 600; margin-bottom: 2px; }
+.conversa-texto { white-space: pre-wrap; word-break: break-word; }
+</style>
+
+<script>
+(function () {
+    const URL_MARCAR_LIDO = <?= json_encode(url('/projetos/tarefas/marcar-lido')) ?>;
+
+    document.querySelectorAll('[id^="modalTarefa"]').forEach(function (modal) {
+        modal.addEventListener('shown.bs.modal', function () {
+            const conversa = modal.querySelector('.conversa-tarefa');
+            if (!conversa) return;
+            conversa.scrollTop = conversa.scrollHeight;
+
+            const tarefaId = conversa.dataset.tarefaId;
+            const badge = document.querySelector('.badge-novas-tarefa[data-tarefa-id="' + tarefaId + '"]');
+            if (!badge) return;
+            fetch(URL_MARCAR_LIDO, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ tarefa_id: tarefaId }),
+            }).then((r) => r.json()).then(function (dados) {
+                if (!dados.success) return;
+                badge.remove();
+                const menu = document.getElementById('rdProjetosBadge');
+                if (menu) {
+                    menu.textContent = dados.total_nao_lidas;
+                    menu.style.display = dados.total_nao_lidas > 0 ? '' : 'none';
+                }
+            }).catch(function () {});
+        });
+    });
+
+    // Ctrl+Enter envia; nome do anexo escolhido aparece ao lado do botão.
+    document.querySelectorAll('.form-conversa-tarefa').forEach(function (form) {
+        const texto = form.querySelector('textarea');
+        texto.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey) && texto.value.trim() !== '') {
+                ev.preventDefault();
+                form.requestSubmit();
+            }
+        });
+        form.querySelector('.campo-anexo-conversa').addEventListener('change', function () {
+            form.querySelector('.nome-anexo-conversa').textContent = this.files[0] ? this.files[0].name : '';
+        });
+        form.addEventListener('submit', function () {
+            form.querySelector('button[type="submit"]').disabled = true;
+        });
+    });
+
+    // Link de e-mail/aviso e volta depois de enviar: ?tarefa=ID abre a janela da tarefa.
+    // O bootstrap.bundle carrega depois do conteúdo (layout) -- espera a página terminar.
+    document.addEventListener('DOMContentLoaded', function () {
+        const tarefaUrl = new URLSearchParams(location.search).get('tarefa');
+        const modalUrl = tarefaUrl ? document.getElementById('modalTarefa' + parseInt(tarefaUrl, 10)) : null;
+        if (!modalUrl) return;
+        bootstrap.Modal.getOrCreateInstance(modalUrl).show();
+        modalUrl.addEventListener('hidden.bs.modal', function () {
+            const url = new URL(location.href);
+            url.searchParams.delete('tarefa');
+            history.replaceState(null, '', url);
+        }, { once: true });
+    });
+})();
+</script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
 <script>

@@ -88,7 +88,7 @@ $prioridadeClasses = [
                                 <span class="badge text-bg-light border"><?= htmlspecialchars($projeto['area_nome']) ?></span>
                                 <span class="badge <?= $prioridadeClasses[$projeto['prioridade']] ?? '' ?>"><?= ucfirst($projeto['prioridade']) ?></span>
                             </div>
-                            <h6 class="mb-1"><?= htmlspecialchars($projeto['titulo']) ?></h6>
+                            <h6 class="mb-1"><?= htmlspecialchars($projeto['titulo']) ?><?php if (!empty($naoLidasPorProjeto[(int)$projeto['id']])): ?> <span class="badge text-bg-danger" title="Mensagens novas nas suas tarefas"><i class="bi bi-chat-dots-fill"></i> <?= (int)$naoLidasPorProjeto[(int)$projeto['id']] ?></span><?php endif; ?></h6>
                             <?php if (!empty($projeto['cliente'])): ?>
                                 <p class="text-muted small mb-2"><i class="bi bi-building"></i> <?= htmlspecialchars($projeto['cliente']) ?></p>
                             <?php endif; ?>
