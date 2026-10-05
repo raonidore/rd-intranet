@@ -675,6 +675,23 @@ class IntelbrasDvrService
             }
         }
 
+        // getCameraAll não traz o firmware da câmera; a config clássica RemoteDevice traz (chave = MAC).
+        $firmwarePorMac = [];
+        if ($todas) {
+            $remotos = $this->chamarApi($ip, '/cgi-bin/configManager.cgi?action=getConfig&name=RemoteDevice');
+            $macPorIndice = [];
+            foreach ($remotos['dados'] as $chave => $valor) {
+                if (preg_match('/INFO_(\d+)\.(Mac|Version)$/', $chave, $m)) {
+                    $macPorIndice[$m[1]][$m[2]] = $valor;
+                }
+            }
+            foreach ($macPorIndice as $par) {
+                if (!empty($par['Mac'])) {
+                    $firmwarePorMac[strtolower($par['Mac'])] = explode(',', (string)($par['Version'] ?? ''))[0];
+                }
+            }
+        }
+
         $cameras = [];
         foreach (is_array($todas) ? $todas : [] as $c) {
             $info = $c['DeviceInfo'] ?? [];
@@ -687,7 +704,7 @@ class IntelbrasDvrService
                 'ip' => $info['Address'],
                 'modelo' => $info['DeviceType'] ?? '',
                 'serial' => $info['SerialNo'] ?? '',
-                'firmware' => explode(',', (string)($info['Version'] ?? ''))[0],
+                'firmware' => $firmwarePorMac[strtolower((string)($info['Mac'] ?? ''))] ?? '',
                 'mac' => $info['Mac'] ?? '',
                 'porta_poe' => !empty($info['PoE']) ? (int)($info['PoEPort'] ?? 0) : null,
                 'conectada' => isset($estados[$canal]) ? $estados[$canal] === 'Connected' : null,

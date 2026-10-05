@@ -2317,7 +2317,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     <!-- Segurança (Fase 1 -- deteção de ameaças) -->
     <div class="tab-pane fade" id="abaSeguranca">
         <div class="row g-3">
-            <?php if ($maquinaIsolada): ?>
+            <?php if (!empty($maquinaIsolada)): ?>
                 <div class="col-12">
                     <div class="alert alert-danger d-flex flex-wrap justify-content-between align-items-center gap-2 mb-0">
                         <div>
@@ -2336,7 +2336,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                 <div class="card border-0 shadow-sm">
                     <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
                         <strong><i class="bi bi-shield-lock"></i> Módulo anti-ransomware</strong>
-                        <?php if ($podeEditarAtivo && !$maquinaIsolada): ?>
+                        <?php if ($podeEditarAtivo && empty($maquinaIsolada)): ?>
                             <button type="button" class="btn btn-sm btn-outline-danger js-seguranca-acao" data-acao="isolar"
                                     data-confirmar="Isolar esta máquina da rede AGORA? Só o agente continuará se comunicando com o portal.">
                                 <i class="bi bi-ethernet"></i> Isolar rede agora
