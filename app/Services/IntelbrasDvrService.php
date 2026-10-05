@@ -398,8 +398,31 @@ class IntelbrasDvrService
             }
         }
 
+        // RPC2 (quando o firmware tem): o evento clássico StorageNotExist
+        // responde "No Events" mesmo SEM HD (NVR do enzilab, 04/10/2026) --
+        // aqui "nenhum disco" e o S.M.A.R.T. falhando viram problema de HD.
+        $rpc2 = $this->coletarRpc2($ip);
+        if ($rpc2 !== null) {
+            if ($rpc2['sem_hd']) {
+                $hdProblema = 'Sem HD instalado -- nada está sendo gravado';
+            } elseif ($hdProblema === null) {
+                foreach ($rpc2['discos'] as $disco) {
+                    if (($disco['smart']['status'] ?? '') === 'falhando') {
+                        $hdProblema = 'HD falhando (S.M.A.R.T.): ' . trim($disco['modelo'] . ' ' . $disco['serial']) . ' -- ' . implode('; ', $disco['smart']['alertas']);
+                        break;
+                    }
+                }
+            }
+            foreach ($canais as &$canal) {
+                $canal['gravando'] = $rpc2['gravando'][$canal['numero']] ?? null;
+            }
+            unset($canal);
+        }
+
         return [
             'success' => true,
+            'rpc2' => $rpc2,
+            'exposicao' => $this->configuracaoExposicao($ip),
             'modelo' => $tipo['dados']['type'] ?? null,
             'serial' => $sysInfo['dados']['serialNumber'] ?? null,
             // getSoftwareVersion vem como "4.002.00IB000.0.T,build:2024-04-17 15:10:54" -- só a versão interessa aqui.
@@ -411,6 +434,308 @@ class IntelbrasDvrService
             'disco_usado_gb' => $temDisco ? round($discoUsadoBytes / 1_000_000_000, 1) : null,
             'hd_problema' => $hdProblema,
             'canais' => $canais,
+        ];
+    }
+
+    /*
+     |---------------------------------------------------------
+     | RPC2 -- JSON-RPC que a própria interface web do equipamento usa.
+     | Confirmado ao vivo (04/10/2026) num NVD 1408 P (fw 4.001) e nos
+     | XVR4232AN-X / MHDX 1116-C da Patrimonial: dá o que a CGI clássica
+     | não dá (gravando de verdade por canal, HDs com S.M.A.R.T., câmeras
+     | IP, relatório de segurança do próprio equipamento). A REST
+     | "/cgi-bin/api/..." do manual continua inexistente nesses firmwares.
+     | Tudo aqui é leitura.
+     |---------------------------------------------------------
+     */
+
+    /** IDs S.M.A.R.T. que, com valor bruto > 0, indicam setor ruim/erro não corrigido -- disco começando a falhar. */
+    private const SMART_ATENCAO = [
+        5 => 'setores realocados',
+        187 => 'erros não corrigidos',
+        196 => 'eventos de realocação',
+        197 => 'setores pendentes',
+        198 => 'setores irrecuperáveis',
+    ];
+
+    /** Nome legível dos itens do relatório SecurityScan do equipamento. */
+    private const ITENS_VERIFICACAO = [
+        'RTSPLoginMode' => 'Autenticação no RTSP',
+        'AnonLoginMode' => 'Login anônimo',
+        'PriPwdStat' => 'Senha do usuário admin',
+        'OnvifPwdStat' => 'Senha ONVIF',
+        'SNMP' => 'SNMP',
+        'SMTP' => 'E-mail (SMTP)',
+        'FTP' => 'FTP',
+        'HTTPS' => 'HTTPS',
+        'PriVideoEncTrans' => 'Criptografia do vídeo',
+        'RTSP-TLS' => 'RTSP com TLS',
+        'SecureBoot' => 'Boot seguro',
+        'TrustEnv' => 'Ambiente confiável',
+        'TrustUpdate' => 'Atualização confiável',
+        'SecWarn' => 'Alerta de segurança',
+        'BruteWarn' => 'Alerta de força bruta',
+        'SyncFlood' => 'Proteção SYN flood',
+        'ICMPFlood' => 'Proteção ICMP flood',
+        'Firewall' => 'Firewall',
+        'AccountLock' => 'Bloqueio de conta',
+        'FirmwareEnc' => 'Firmware criptografado',
+    ];
+
+    private function postJson(string $url, array $corpo): ?array
+    {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode($corpo),
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+            CURLOPT_TIMEOUT => 10,
+            CURLOPT_CONNECTTIMEOUT => 4,
+        ]);
+        $resposta = curl_exec($ch);
+        curl_close($ch);
+
+        $dados = is_string($resposta) ? json_decode($resposta, true) : null;
+
+        return is_array($dados) ? $dados : null;
+    }
+
+    /**
+     * Login em 2 passos: o 1º (sem senha) devolve realm/random; a senha vai
+     * como MD5("user:random:" . MD5("user:realm:senha")), maiúsculo. Devolve
+     * a sessão ou null (equipamento sem RPC2, ou credencial recusada).
+     */
+    private function rpcLogin(string $ip): ?string
+    {
+        $credencial = $this->credencialParaIp($ip);
+        if ($credencial === null) {
+            return null;
+        }
+        $usuario = $credencial['usuario'];
+
+        $desafio = $this->postJson("http://{$ip}/RPC2_Login", [
+            'method' => 'global.login',
+            'params' => ['userName' => $usuario, 'password' => '', 'clientType' => 'Web3.0'],
+            'id' => 1,
+        ]);
+        if (!isset($desafio['session'], $desafio['params']['realm'], $desafio['params']['random'])) {
+            return null;
+        }
+
+        $ha1 = strtoupper(md5("{$usuario}:{$desafio['params']['realm']}:{$credencial['senha']}"));
+        $login = $this->postJson("http://{$ip}/RPC2_Login", [
+            'method' => 'global.login',
+            'params' => [
+                'userName' => $usuario,
+                'password' => strtoupper(md5("{$usuario}:{$desafio['params']['random']}:{$ha1}")),
+                'clientType' => 'Web3.0',
+                'authorityType' => 'Default',
+                'passwordType' => 'Default',
+            ],
+            'id' => 2,
+            'session' => $desafio['session'],
+        ]);
+
+        return !empty($login['result']) && !empty($login['session']) ? (string)$login['session'] : null;
+    }
+
+    /** @return array|null a resposta inteira ({result, params}) ou null se falhou */
+    private function rpc(string $ip, string $sessao, string $metodo, ?array $params = null, ?int $objeto = null): ?array
+    {
+        static $id = 10;
+        $corpo = ['method' => $metodo, 'id' => $id++, 'session' => $sessao];
+        if ($params !== null) {
+            $corpo['params'] = $params;
+        }
+        if ($objeto !== null) {
+            $corpo['object'] = $objeto;
+        }
+
+        $resposta = $this->postJson("http://{$ip}/RPC2", $corpo);
+
+        return $resposta !== null && !empty($resposta['result']) ? $resposta : null;
+    }
+
+    /**
+     * Coleta extra via RPC2. null = equipamento sem RPC2 (ou login recusado)
+     * -- quem chama segue só com a CGI clássica, como sempre foi.
+     *
+     * @return array{gravando: array<int,bool>, sem_hd: bool, discos: array, cameras: array, verificacao: ?array}|null
+     */
+    public function coletarRpc2(string $ip): ?array
+    {
+        $sessao = $this->rpcLogin($ip);
+        if ($sessao === null) {
+            return null;
+        }
+
+        try {
+            // Gravando agora, por canal. O NVR aninha em state.state, os DVRs
+            // não; canal sem câmera vem null.
+            $gravando = [];
+            $estado = $this->rpc($ip, $sessao, 'recordManager.getStateAll');
+            $lista = $estado['params']['state']['state'] ?? $estado['params']['state'] ?? [];
+            foreach (is_array($lista) ? $lista : [] as $i => $canal) {
+                if (is_array($canal)) {
+                    $gravando[$i + 1] = !empty($canal['Main']['State']) || !empty($canal['Extra1']['State']);
+                }
+            }
+
+            // HDs + S.M.A.R.T. "device": null = nenhum disco instalado.
+            $infos = $this->rpc($ip, $sessao, 'StorageDeviceManager.getDeviceInfos');
+            $discos = [];
+            foreach (($infos['params']['device'] ?? null) ?: [] as $disco) {
+                $total = 0;
+                $livre = 0;
+                foreach ($disco['Partitions'] ?? [] as $particao) {
+                    $total += (float)($particao['Total'] ?? 0);
+                    $livre += (float)($particao['Remain'] ?? 0);
+                }
+                $discos[] = [
+                    'nome' => $disco['Name'] ?? '',
+                    'modelo' => trim((string)($disco['Module'] ?? '')),
+                    'serial' => trim((string)($disco['SerialNo'] ?? '')),
+                    'capacidade_gb' => round((float)($disco['Capacity'] ?? 0) / 1_000_000_000),
+                    'estado' => $disco['State'] ?? '',
+                    'smart' => $this->smartDoDisco($ip, $sessao, (string)($disco['Name'] ?? '')),
+                ];
+            }
+
+            return [
+                'gravando' => $gravando,
+                'sem_hd' => $infos !== null && empty($infos['params']['device']),
+                'discos' => $discos,
+                'cameras' => $this->camerasIp($ip, $sessao),
+                'verificacao' => $this->verificacaoSeguranca($ip, $sessao),
+            ];
+        } finally {
+            $this->rpc($ip, $sessao, 'global.logout');
+        }
+    }
+
+    /** @return array{status: string, horas_ligado: ?int, alertas: string[]}|null */
+    private function smartDoDisco(string $ip, string $sessao, string $nome): ?array
+    {
+        if ($nome === '') {
+            return null;
+        }
+
+        $instancia = $this->rpc($ip, $sessao, 'devStorage.factory.instance', ['name' => $nome]);
+        $objeto = is_int($instancia['result'] ?? null) ? $instancia['result'] : null;
+        if ($objeto === null) {
+            return null;
+        }
+
+        try {
+            $valores = $this->rpc($ip, $sessao, 'devStorage.getSmartValue', null, $objeto)['params']['values'] ?? null;
+        } finally {
+            $this->rpc($ip, $sessao, 'devStorage.destroy', null, $objeto);
+        }
+
+        if (!is_array($valores) || !$valores) {
+            return null;
+        }
+
+        $status = 'ok';
+        $alertas = [];
+        $horas = null;
+        foreach ($valores as $v) {
+            $idAtributo = (int)($v['ID'] ?? 0);
+            $bruto = is_numeric($v['Raw'] ?? null) ? (int)$v['Raw'] : 0;
+            $limite = (int)($v['Threshold'] ?? 0);
+            $atual = (int)($v['Current'] ?? 0);
+
+            if ($idAtributo === 9) {
+                $horas = $bruto;
+            }
+            // Abaixo do limite do fabricante = o próprio disco se declara falhando.
+            if ($limite > 0 && $atual > 0 && $atual <= $limite) {
+                $status = 'falhando';
+                $alertas[] = ($v['Name'] ?? "Atributo {$idAtributo}") . " abaixo do limite do fabricante ({$atual} ≤ {$limite})";
+            } elseif (isset(self::SMART_ATENCAO[$idAtributo]) && $bruto > 0) {
+                if ($status === 'ok') {
+                    $status = 'atencao';
+                }
+                $alertas[] = "{$bruto} " . self::SMART_ATENCAO[$idAtributo];
+            }
+        }
+
+        return ['status' => $status, 'horas_ligado' => $horas, 'alertas' => $alertas];
+    }
+
+    /** Câmeras IP ligadas ao NVR, com o estado de conexão de cada uma. DVR analógico devolve lista vazia. */
+    private function camerasIp(string $ip, string $sessao): array
+    {
+        $todas = $this->rpc($ip, $sessao, 'LogicDeviceManager.getCameraAll')['params']['camera'] ?? [];
+        $estados = [];
+        foreach ($this->rpc($ip, $sessao, 'LogicDeviceManager.getCameraState', ['uniqueChannels' => [-1]])['params']['states'] ?? [] as $e) {
+            if (isset($e['channel'])) {
+                $estados[(int)$e['channel']] = $e['connectionState'] ?? null;
+            }
+        }
+
+        $cameras = [];
+        foreach (is_array($todas) ? $todas : [] as $c) {
+            $info = $c['DeviceInfo'] ?? [];
+            if (($c['Type'] ?? '') !== 'Remote' || empty($info['Enable']) || empty($info['Address']) || ($info['Mac'] ?? '') === 'ff:ff:ff:ff:ff:ff') {
+                continue;
+            }
+            $canal = (int)($c['UniqueChannel'] ?? $c['Channel'] ?? 0);
+            $cameras[] = [
+                'canal' => $canal + 1,
+                'ip' => $info['Address'],
+                'modelo' => $info['DeviceType'] ?? '',
+                'serial' => $info['SerialNo'] ?? '',
+                'firmware' => explode(',', (string)($info['Version'] ?? ''))[0],
+                'mac' => $info['Mac'] ?? '',
+                'porta_poe' => !empty($info['PoE']) ? (int)($info['PoEPort'] ?? 0) : null,
+                'conectada' => isset($estados[$canal]) ? $estados[$canal] === 'Connected' : null,
+            ];
+        }
+
+        return $cameras;
+    }
+
+    /** Último relatório do "Verificar segurança" do próprio equipamento (não dispara uma verificação nova). */
+    private function verificacaoSeguranca(string $ip, string $sessao): ?array
+    {
+        $relatorio = $this->rpc($ip, $sessao, 'SecurityScan.getReport')['params'] ?? null;
+        if (!is_array($relatorio) || empty($relatorio['SecItemState'])) {
+            return null;
+        }
+
+        $itens = [];
+        foreach ($relatorio['SecItemState'] as $item) {
+            $nome = (string)($item['Name'] ?? '');
+            $itens[] = [
+                'nome' => self::ITENS_VERIFICACAO[$nome] ?? $nome,
+                'atencao' => !empty($item['ErrCode']),
+            ];
+        }
+
+        return ['gerado_em' => $relatorio['ModifyTime'] ?? $relatorio['CreateTime'] ?? null, 'itens' => $itens];
+    }
+
+    /**
+     * Exposição do equipamento, pela CGI clássica (vale também pra quem não
+     * tem RPC2): acesso pela nuvem Intelbras (P2P), UPnP abrindo porta no
+     * roteador, Telnet e HTTPS.
+     *
+     * @return array<string, ?bool> null = o equipamento não informou
+     */
+    public function configuracaoExposicao(string $ip): array
+    {
+        $valor = function (string $nome, string $chave) use ($ip): ?bool {
+            $r = $this->chamarApi($ip, "/cgi-bin/configManager.cgi?action=getConfig&name={$nome}");
+            return $r['sucesso'] && isset($r['dados'][$chave]) ? $r['dados'][$chave] === 'true' : null;
+        };
+
+        return [
+            'p2p' => $valor('T2UServer', 'table.T2UServer[0].Enable'),
+            'upnp' => $valor('UPnP', 'table.UPnP.Enable'),
+            'telnet' => $valor('Telnet', 'table.Telnet.Enable'),
+            'https' => $valor('Https', 'table.Https.Enable'),
         ];
     }
 

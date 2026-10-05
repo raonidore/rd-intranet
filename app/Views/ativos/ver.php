@@ -304,6 +304,36 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     </button>
 </div>
 
+<?php if (($ativo['tipo_slug'] ?? '') === 'dvr_nvr'): ?>
+    <?php
+        $discosAtencaoDvr = array_filter($detalhes['dvr_discos'] ?? [], fn ($d) => ($d['smart']['status'] ?? '') === 'atencao');
+        $canaisSemGravarDvr = array_filter($detalhes['dvr_canais'] ?? [], fn ($c) => ($c['em_uso'] ?? true) && !empty($c['com_sinal']) && ($c['gravando'] ?? null) === false);
+    ?>
+    <?php if (!empty($detalhes['dvr_hd_problema'])): ?>
+        <div class="alert alert-danger d-flex align-items-center gap-2">
+            <i class="bi bi-hdd-fill fs-4"></i>
+            <div>
+                <strong><?= htmlspecialchars($detalhes['dvr_hd_problema']) ?></strong>
+                <?php if (!empty($detalhes['dvr_hd_chamado_aberto_id'])): ?>
+                    -- <a href="<?= url('/chamados/atendimentos/ver?id=' . (int)$detalhes['dvr_hd_chamado_aberto_id']) ?>">ver chamado aberto</a>
+                <?php endif; ?>
+                <div class="small">Enquanto isso não for resolvido, as câmeras deste equipamento não têm gravação para consultar depois.</div>
+            </div>
+        </div>
+    <?php elseif ($canaisSemGravarDvr): ?>
+        <div class="alert alert-danger d-flex align-items-center gap-2">
+            <i class="bi bi-record-circle fs-4"></i>
+            <div><strong><?= count($canaisSemGravarDvr) ?> canal(is) com imagem, mas sem gravar agora</strong> -- veja a aba Canais.</div>
+        </div>
+    <?php endif; ?>
+    <?php if ($discosAtencaoDvr && empty($detalhes['dvr_hd_problema'])): ?>
+        <div class="alert alert-warning d-flex align-items-center gap-2">
+            <i class="bi bi-hdd fs-4"></i>
+            <div><strong>HD com sinais de desgaste</strong> (S.M.A.R.T.): <?= htmlspecialchars(implode(' | ', array_map(fn ($d) => trim($d['modelo'] . ' ' . $d['serial']) . ': ' . implode(', ', $d['smart']['alertas'] ?? []), $discosAtencaoDvr))) ?>. Ainda grava, mas vale planejar a troca -- detalhes na aba HD e câmeras.</div>
+        </div>
+    <?php endif; ?>
+<?php endif; ?>
+
 <ul class="nav nav-tabs mb-3" id="abasAtivo" role="tablist">
     <li class="nav-item" role="presentation">
         <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#abaGeral" type="button">Visão Geral</button>
@@ -398,6 +428,16 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             <i class="bi bi-camera-video"></i> Canais <?= !empty($canaisDvr) ? '<span class="badge text-bg-secondary ms-1">' . count($canaisDvr) . '</span>' : '' ?>
         </button>
     </li>
+    <?php if (!empty($detalhes['dvr_rpc2'])): ?>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaHdCamerasDvr" type="button">
+            <i class="bi bi-hdd-stack"></i> HD e câmeras
+            <?php if (!empty($detalhes['dvr_sem_hd']) || array_filter($detalhes['dvr_discos'] ?? [], fn ($d) => in_array($d['smart']['status'] ?? '', ['atencao', 'falhando'], true))): ?>
+                <span class="badge text-bg-danger ms-1">!</span>
+            <?php endif; ?>
+        </button>
+    </li>
+    <?php endif; ?>
     <li class="nav-item" role="presentation">
         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaUsuariosDvr" type="button">
             <i class="bi bi-people"></i> Usuários
@@ -1681,6 +1721,14 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                             $corGravacao = $modoGravacaoCanal === 'parado' ? 'danger' : ($modoGravacaoCanal ? 'success' : 'secondary');
                                         ?>
                                         <?= Badge::make($rotuloGravacao, $corGravacao) ?>
+                                        <?php if (($canal['gravando'] ?? null) === true): ?>
+                                            <span class="badge text-bg-success" title="O equipamento informa que este canal está gravando agora"><i class="bi bi-record-circle"></i> Gravando</span>
+                                        <?php elseif (($canal['gravando'] ?? null) === false): ?>
+                                            <span class="badge text-bg-danger" title="O equipamento informa que este canal NÃO está gravando agora"><i class="bi bi-stop-circle"></i> Não grava</span>
+                                            <?php if (!empty($canal['chamado_sem_gravar_id'])): ?>
+                                                <a href="<?= url('/chamados/atendimentos/ver?id=' . (int)$canal['chamado_sem_gravar_id']) ?>" class="small ms-1" title="Ver chamado automático aberto"><i class="bi bi-ticket-perforated"></i></a>
+                                            <?php endif; ?>
+                                        <?php endif; ?>
                                         <?php if ($modoGravacaoCanal === 'parado' && !empty($canal['chamado_gravacao_parada_id'])): ?>
                                             <a href="<?= url('/chamados/atendimentos/ver?id=' . (int)$canal['chamado_gravacao_parada_id']) ?>" class="small ms-1" title="Ver chamado automático aberto"><i class="bi bi-ticket-perforated"></i></a>
                                         <?php endif; ?>
@@ -1802,6 +1850,77 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             </div>
         </div>
     </div>
+
+    <?php if (!empty($detalhes['dvr_rpc2'])): ?>
+    <!-- HD e câmeras (DVR/NVR com RPC2) -->
+    <div class="tab-pane fade" id="abaHdCamerasDvr">
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <strong><i class="bi bi-hdd"></i> HDs</strong>
+                <small class="text-muted">Coletado em <?= htmlspecialchars(data_br($detalhes['dvr_rpc2_coletado_em'] ?? '')) ?></small>
+            </div>
+            <div class="card-body p-0">
+                <?php if (!empty($detalhes['dvr_sem_hd'])): ?>
+                    <p class="text-danger p-3 mb-0"><i class="bi bi-exclamation-octagon"></i> <strong>Nenhum HD instalado.</strong> O equipamento mostra as câmeras ao vivo, mas não grava nada.</p>
+                <?php else: ?>
+                    <table class="table table-sm align-middle mb-0">
+                        <thead><tr><th>Disco</th><th>Modelo</th><th>Nº de série</th><th>Capacidade</th><th>Estado</th><th>Tempo ligado</th><th>Saúde (S.M.A.R.T.)</th></tr></thead>
+                        <tbody>
+                            <?php foreach ($detalhes['dvr_discos'] ?? [] as $disco): ?>
+                                <?php
+                                    $smart = $disco['smart'] ?? null;
+                                    $corSmart = ['ok' => 'success', 'atencao' => 'warning', 'falhando' => 'danger'][$smart['status'] ?? ''] ?? 'secondary';
+                                    $rotuloSmart = ['ok' => 'Boa', 'atencao' => 'Atenção', 'falhando' => 'Falhando'][$smart['status'] ?? ''] ?? 'Sem leitura';
+                                    $horas = $smart['horas_ligado'] ?? null;
+                                ?>
+                                <tr>
+                                    <td class="font-monospace small"><?= htmlspecialchars($disco['nome'] ?? '') ?></td>
+                                    <td><?= htmlspecialchars($disco['modelo'] ?? '') ?></td>
+                                    <td class="font-monospace small"><?= htmlspecialchars($disco['serial'] ?? '') ?></td>
+                                    <td><?= $disco['capacidade_gb'] >= 1000 ? round($disco['capacidade_gb'] / 1000, 1) . ' TB' : (int)$disco['capacidade_gb'] . ' GB' ?></td>
+                                    <td><?= Badge::make(htmlspecialchars($disco['estado'] === 'Running' ? 'Em uso' : ($disco['estado'] ?: '—')), $disco['estado'] === 'Running' ? 'success' : 'secondary') ?></td>
+                                    <td><?= $horas !== null ? number_format($horas, 0, ',', '.') . ' h <span class="text-muted small">(~' . round($horas / 8760, 1) . ' anos)</span>' : '—' ?></td>
+                                    <td>
+                                        <?= Badge::make($rotuloSmart, $corSmart) ?>
+                                        <?php if (!empty($smart['alertas'])): ?>
+                                            <div class="small text-muted"><?= htmlspecialchars(implode('; ', $smart['alertas'])) ?></div>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                    <p class="small text-muted px-3 py-2 mb-0">"Atenção" = o disco já registrou setores ruins ou erros de leitura não corrigidos: continua gravando, mas costuma piorar. "Falhando" abre chamado automático.</p>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <?php if (!empty($detalhes['dvr_cameras_ip'])): ?>
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white"><strong><i class="bi bi-camera-video"></i> Câmeras IP</strong> <small class="text-muted">-- informadas pelo próprio NVR</small></div>
+            <div class="card-body p-0">
+                <table class="table table-sm align-middle mb-0">
+                    <thead><tr><th>Canal</th><th>Conexão</th><th>IP</th><th>Modelo</th><th>Firmware</th><th>Nº de série</th><th>MAC</th><th>Porta PoE</th></tr></thead>
+                    <tbody>
+                        <?php foreach ($detalhes['dvr_cameras_ip'] as $camera): ?>
+                            <tr>
+                                <td>Canal <?= (int)$camera['canal'] ?></td>
+                                <td><?= $camera['conectada'] === null ? '—' : ($camera['conectada'] ? Badge::make('Conectada', 'success') : Badge::make('Desconectada', 'danger')) ?></td>
+                                <td class="font-monospace small"><?= htmlspecialchars($camera['ip']) ?></td>
+                                <td><?= htmlspecialchars($camera['modelo']) ?></td>
+                                <td class="font-monospace small"><?= htmlspecialchars($camera['firmware']) ?></td>
+                                <td class="font-monospace small"><?= htmlspecialchars($camera['serial']) ?></td>
+                                <td class="font-monospace small"><?= htmlspecialchars($camera['mac']) ?></td>
+                                <td><?= $camera['porta_poe'] ? 'Porta ' . (int)$camera['porta_poe'] : '<span class="text-muted">—</span>' ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <?php endif; ?>
+    </div>
+    <?php endif; ?>
 
     <!-- Usuários (DVR/NVR Intelbras) -->
     <div class="tab-pane fade" id="abaUsuariosDvr">
@@ -1939,6 +2058,65 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
 
     <!-- Segurança de acesso (DVR/NVR Intelbras) -->
     <div class="tab-pane fade" id="abaSegurancaDvr">
+        <?php
+            $exposicaoDvr = $detalhes['dvr_exposicao'] ?? [];
+            $verificacaoDvr = $detalhes['dvr_verificacao_seguranca'] ?? null;
+            // [rótulo, ligado é bom?, explicação]
+            $itensExposicao = [
+                'p2p' => ['Acesso pela nuvem Intelbras (P2P)', false, 'Permite ver as câmeras pela internet via app Intelbras, sem VPN. Se ninguém usa, desligar reduz a exposição.'],
+                'upnp' => ['UPnP', false, 'Abre portas no roteador sozinho, expondo o equipamento na internet.'],
+                'telnet' => ['Telnet', false, 'Acesso remoto sem criptografia.'],
+                'https' => ['HTTPS', true, 'Sem HTTPS, a senha trafega sem criptografia na rede.'],
+            ];
+        ?>
+        <?php if ($exposicaoDvr || $verificacaoDvr): ?>
+        <div class="row g-3 mb-3">
+            <?php if ($exposicaoDvr): ?>
+            <div class="col-lg-6">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-white"><strong>Exposição do equipamento</strong></div>
+                    <ul class="list-group list-group-flush">
+                        <?php foreach ($itensExposicao as $chave => [$rotulo, $bomLigado, $explicacao]): ?>
+                            <?php $ligado = $exposicaoDvr[$chave] ?? null; ?>
+                            <?php if ($ligado === null) continue; ?>
+                            <?php $ok = $ligado === $bomLigado; ?>
+                            <li class="list-group-item d-flex justify-content-between align-items-start gap-2">
+                                <div>
+                                    <i class="bi <?= $ok ? 'bi-check-circle-fill text-success' : 'bi-exclamation-triangle-fill text-warning' ?>"></i>
+                                    <?= htmlspecialchars($rotulo) ?>
+                                    <?php if (!$ok): ?><div class="small text-muted"><?= htmlspecialchars($explicacao) ?></div><?php endif; ?>
+                                </div>
+                                <?= Badge::make($ligado ? 'Ligado' : 'Desligado', $ok ? 'success' : 'warning') ?>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
+            </div>
+            <?php endif; ?>
+            <?php if ($verificacaoDvr): ?>
+            <?php $pontosAtencao = array_filter($verificacaoDvr['itens'], fn ($i) => $i['atencao']); ?>
+            <div class="col-lg-6">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-white d-flex justify-content-between">
+                        <strong>Verificação de segurança do próprio equipamento</strong>
+                        <small class="text-muted"><?= $verificacaoDvr['gerado_em'] ? 'feita em ' . htmlspecialchars(data_br($verificacaoDvr['gerado_em'])) : '' ?></small>
+                    </div>
+                    <div class="card-body">
+                        <?php if ($pontosAtencao): ?>
+                            <p class="small mb-2">O equipamento aponta <strong><?= count($pontosAtencao) ?> ponto(s) de atenção</strong>:</p>
+                            <ul class="small mb-2">
+                                <?php foreach ($pontosAtencao as $item): ?><li><?= htmlspecialchars($item['nome']) ?></li><?php endforeach; ?>
+                            </ul>
+                        <?php else: ?>
+                            <p class="small text-success mb-2"><i class="bi bi-check-circle-fill"></i> Nenhum ponto de atenção na última verificação.</p>
+                        <?php endif; ?>
+                        <p class="small text-muted mb-0"><?= count($verificacaoDvr['itens']) - count($pontosAtencao) ?> outros itens sem problema. Para refazer a verificação, use "Segurança" na interface web do equipamento.</p>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
+        </div>
+        <?php endif; ?>
         <div class="card border-0 shadow-sm">
             <div class="card-header bg-white"><strong>Política de acesso do equipamento</strong></div>
             <div class="card-body">

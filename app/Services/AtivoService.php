@@ -1930,12 +1930,25 @@ class AtivoService
                 'dvr_disco_usado_gb' => $resultado['disco_usado_gb'] ?? null,
                 'dvr_hd_problema' => $hdProblemaAtual,
                 'dvr_hd_chamado_aberto_id' => $hdChamadoId,
-                'dvr_canais' => $this->mesclarCanaisDvr($ativo, $detalhesAtuais['dvr_canais'] ?? [], $resultado['canais'] ?? []),
+                'dvr_canais' => $this->mesclarCanaisDvr($ativo, $detalhesAtuais['dvr_canais'] ?? [], $resultado['canais'] ?? [], $hdProblemaAtual !== null),
                 'dvr_usuarios_ativos' => $usuariosAtivos['success'] ? $usuariosAtivos['usuarios'] : ($detalhesAtuais['dvr_usuarios_ativos'] ?? []),
                 'dvr_eventos_conta_recentes' => $eventosConta['success'] ? array_slice($eventosConta['eventos'], 0, 15) : ($detalhesAtuais['dvr_eventos_conta_recentes'] ?? []),
                 'dvr_ultimo_ts_conta_verificado' => $maiorTs,
                 'dvr_seguranca_chamado_aberto_id' => $segurancaChamadoId,
+                'dvr_exposicao' => $resultado['exposicao'] ?? ($detalhesAtuais['dvr_exposicao'] ?? []),
             ];
+
+            // RPC2 (firmware que tem): sem resposta nesta coleta, mantém o último
+            // retrato em vez de apagar -- a data diz de quando é.
+            $rpc2 = $resultado['rpc2'] ?? null;
+            if ($rpc2 !== null) {
+                $coletado['dvr_rpc2'] = true;
+                $coletado['dvr_rpc2_coletado_em'] = date('Y-m-d H:i:s');
+                $coletado['dvr_sem_hd'] = $rpc2['sem_hd'];
+                $coletado['dvr_discos'] = $rpc2['discos'];
+                $coletado['dvr_cameras_ip'] = $rpc2['cameras'];
+                $coletado['dvr_verificacao_seguranca'] = $rpc2['verificacao'];
+            }
 
             return ['ok' => true, 'detalhes' => array_merge($detalhesAtuais, $coletado)];
         });
@@ -1973,7 +1986,7 @@ class AtivoService
      * na aba "Canais") pra o operador conferir o snapshot e decidir, igual
      * ao processo manual que já vinha sendo feito.
      */
-    private function mesclarCanaisDvr(array $ativo, array $canaisAnteriores, array $canaisNovos): array
+    private function mesclarCanaisDvr(array $ativo, array $canaisAnteriores, array $canaisNovos, bool $hdComProblema = false): array
     {
         $porNumero = [];
         foreach ($canaisAnteriores as $c) {
@@ -1996,6 +2009,7 @@ class AtivoService
             $canal['deteccao_tampada_canal_ativa'] = $anterior['deteccao_tampada_canal_ativa'] ?? true;
             $canal['tampada'] = $canal['deteccao_tampada_canal_ativa'] && ($canal['tampada'] ?? false);
             $canal['chamado_gravacao_parada_id'] = $anterior['chamado_gravacao_parada_id'] ?? null;
+            $canal['chamado_sem_gravar_id'] = $anterior['chamado_sem_gravar_id'] ?? null;
 
             $temSinalAgora = (bool)($canal['com_sinal'] ?? true);
 
@@ -2012,6 +2026,14 @@ class AtivoService
             // não existe nesse firmware).
             if ($canal['em_uso'] && ($canal['modo_gravacao'] ?? null) === 'parado' && !$this->chamadoDvrAindaAberto($canal['chamado_gravacao_parada_id'])) {
                 $canal['chamado_gravacao_parada_id'] = $this->abrirChamadoGravacaoParadaDvr($ativo, $numero, $canal['nome'] ?? "Canal {$numero}");
+            }
+
+            // Gravando de verdade (RPC2): canal em uso, com sinal, configurado pra
+            // gravar e mesmo assim parado. Sem HD/HD falhando já tem o chamado do
+            // HD -- não abre um por canal repetindo a mesma causa.
+            if ($canal['em_uso'] && $temSinalAgora && ($canal['gravando'] ?? null) === false && !$hdComProblema
+                && ($canal['modo_gravacao'] ?? null) !== 'parado' && !$this->chamadoDvrAindaAberto($canal['chamado_sem_gravar_id'])) {
+                $canal['chamado_sem_gravar_id'] = $this->abrirChamadoCanalSemGravarDvr($ativo, $numero, $canal['nome'] ?? "Canal {$numero}");
             }
 
             $mesclados[] = $canal;
@@ -2091,6 +2113,32 @@ class AtivoService
             'titulo' => "{$ativo['codigo_patrimonio']} -- Canal {$numeroCanal} ({$nomeCanal}) configurado pra NÃO gravar",
             'descricao' => "Detecção automática: o canal {$numeroCanal} (\"{$nomeCanal}\") do DVR/NVR {$ativo['codigo_patrimonio']} ({$ativo['nome']}, IP {$ativo['ip']}) está com o modo de gravação configurado como \"Parado\" -- mesmo com sinal de vídeo normal na tela, nada está sendo gravado nesse canal.\n\n"
                 . "Verifique se isso foi intencional; se não foi, ajuste o modo de gravação de volta pra \"Automático\" ou \"Manual\" na configuração do DVR.",
+            'categoria_id' => $categoriaId,
+            'unidade_id' => $ativo['unidade_id'],
+            'ativo_id' => $ativo['id'],
+            'prioridade' => 'alta',
+            'solicitante_nome' => 'RD.Intranet - Robô',
+            'solicitante_email' => 'robo@rd.intranet',
+        ], 'sistema');
+
+        return $resultado['success'] ? (int)$resultado['id'] : null;
+    }
+
+    /** @return int|null id do chamado aberto, ou null se não conseguiu abrir */
+    private function abrirChamadoCanalSemGravarDvr(array $ativo, int $numeroCanal, string $nomeCanal): ?int
+    {
+        $categoriaId = $this->categoriaChamadoDvrNvrId();
+
+        if ($categoriaId === null) {
+            return null;
+        }
+
+        $resultado = (new ChamadoService())->abrir([
+            'titulo' => "{$ativo['codigo_patrimonio']} -- Canal {$numeroCanal} ({$nomeCanal}) não está gravando",
+            'descricao' => "Detecção automática: o canal {$numeroCanal} (\"{$nomeCanal}\") do DVR/NVR {$ativo['codigo_patrimonio']} ({$ativo['nome']}, IP {$ativo['ip']}) tem imagem, está configurado pra gravar, mas o próprio equipamento informa que NÃO está gravando agora.
+
+"
+                . "Confira a agenda de gravação e o HD do equipamento. Se a câmera desse canal não precisa ser gravada, desmarque \"Em uso\" na aba \"Canais\" do ativo.",
             'categoria_id' => $categoriaId,
             'unidade_id' => $ativo['unidade_id'],
             'ativo_id' => $ativo['id'],
