@@ -962,9 +962,18 @@ class IntelbrasDvrService
                 break;
             }
         }
-        proc_terminate($processo);
+        // Fecha os tubos antes (ffmpeg recebe SIGPIPE e sai) e espera o processo
+        // terminar de fato: só proc_terminate + proc_close deixava "ffmpeg
+        // <defunct>" pendurado no processo do Apache a cada janela fechada.
         fclose($tubos[1]);
         fclose($tubos[2]);
+        proc_terminate($processo);
+        for ($i = 0; $i < 30 && proc_get_status($processo)['running']; $i++) {
+            usleep(100000);
+        }
+        if (proc_get_status($processo)['running']) {
+            proc_terminate($processo, 9);
+        }
         proc_close($processo);
 
         return $comecou ? null : $this->transmitirViaSnapshots($ip, $canal, $maxSegundos);
