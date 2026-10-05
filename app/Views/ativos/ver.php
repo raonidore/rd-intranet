@@ -1827,7 +1827,14 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                     <img id="aoVivoDvrImagem" class="img-fluid rounded" alt="" style="display:none; width:100%">
                 </div>
                 <div class="modal-footer border-secondary">
-                    <span class="small text-secondary me-auto">Qualidade reduzida (sub-stream), até 3 minutos por vez.</span>
+                    <div class="d-flex align-items-center gap-2 me-auto">
+                        <label for="aoVivoDvrQualidade" class="small text-secondary mb-0">Qualidade</label>
+                        <select id="aoVivoDvrQualidade" class="form-select form-select-sm bg-dark text-light border-secondary" style="width:auto">
+                            <option value="normal">Normal (mais leve)</option>
+                            <option value="alta">Alta (HD)</option>
+                        </select>
+                        <span class="small text-secondary" id="aoVivoDvrDica">até 3 min por vez</span>
+                    </div>
                     <button type="button" class="btn btn-sm btn-outline-light" id="botaoAoVivoDvrTelaCheia"><i class="bi bi-arrows-fullscreen"></i> Tela cheia</button>
                     <button type="button" class="btn btn-sm btn-outline-light" id="botaoAoVivoDvrReiniciar"><i class="bi bi-arrow-repeat"></i> Reproduzir de novo</button>
                 </div>
@@ -4015,6 +4022,13 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
     let modalAoVivo = null;
     let aoVivoAberto = null;
     let timerFimAoVivo = null;
+    const seletorQualidade = document.getElementById('aoVivoDvrQualidade');
+    const dicaQualidade = document.getElementById('aoVivoDvrDica');
+    try { if (localStorage.getItem('rdAoVivoDvrQualidade') === 'alta') seletorQualidade.value = 'alta'; } catch (e) { /* sem storage: fica Normal */ }
+    seletorQualidade.addEventListener('change', function () {
+        try { localStorage.setItem('rdAoVivoDvrQualidade', seletorQualidade.value); } catch (e) { /* sem storage */ }
+        if (aoVivoAberto) iniciarAoVivo();
+    });
 
     function iniciarAoVivo() {
         clearTimeout(timerFimAoVivo);
@@ -4022,7 +4036,8 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
         statusAoVivo.style.display = '';
         statusAoVivo.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Conectando ao equipamento...';
         imagemAoVivo.src = <?= json_encode(url('/ativos/intelbras-dvr/ao-vivo')) ?> + '?id=' + encodeURIComponent(aoVivoAberto.id)
-            + '&canal=' + encodeURIComponent(aoVivoAberto.canal) + '&_=' + Date.now();
+            + '&canal=' + encodeURIComponent(aoVivoAberto.canal) + '&qualidade=' + seletorQualidade.value + '&_=' + Date.now();
+        dicaQualidade.textContent = seletorQualidade.value === 'alta' ? 'mais pesada, até 3 min por vez' : 'até 3 min por vez';
         // Nem todo navegador dispara "load" no stream MJPEG: o 1º quadro também é detectado pelo tamanho.
         const verificarPrimeiroQuadro = setInterval(function () {
             if (!aoVivoAberto) return clearInterval(verificarPrimeiroQuadro);
@@ -4054,6 +4069,13 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
     imagemAoVivo.addEventListener('error', function () {
         if (!aoVivoAberto || imagemAoVivo.src.startsWith('data:')) return;
         statusAoVivo.style.display = '';
+        // Alta recusada (ex.: DVR MHDX só entrega o sub-stream): volta sozinho pra Normal.
+        if (seletorQualidade.value === 'alta') {
+            statusAoVivo.innerHTML = '<span class="badge text-bg-warning">Este equipamento não entrega a qualidade alta -- voltando para Normal</span>';
+            seletorQualidade.value = 'normal';
+            setTimeout(function () { if (aoVivoAberto) iniciarAoVivo(); }, 1500);
+            return;
+        }
         statusAoVivo.innerHTML = '<div class="alert alert-danger mb-0 small">Não consegui abrir a imagem em tempo real deste canal.</div>';
     });
 

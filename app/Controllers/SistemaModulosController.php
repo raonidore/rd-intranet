@@ -25,9 +25,19 @@ class SistemaModulosController extends Controller
     {
         AuthMiddleware::checkAdmin();
 
+        $antes = ModuloCatalogo::gruposHabilitados();
         ModuloCatalogo::salvarGruposHabilitados($_POST['grupos'] ?? []);
+        $depois = ModuloCatalogo::gruposHabilitados();
 
-        AuditService::registrar('Sistema', 'Módulos', 'Grupos de módulos habilitados atualizados.');
+        // Registra O QUE mudou: um grupo desligado some até pro admin, e sem
+        // isso não dava pra saber quando/quem desligou (caso do Backup no enzilab).
+        $ligados = array_diff($depois, $antes);
+        $desligados = array_diff($antes, $depois);
+        $mudancas = array_filter([
+            $ligados ? 'Ligado: ' . implode(', ', $ligados) : '',
+            $desligados ? 'Desligado: ' . implode(', ', $desligados) : '',
+        ]);
+        AuditService::registrar('Sistema', 'Módulos', $mudancas ? implode('. ', $mudancas) . '.' : 'Grupos de módulos salvos sem alteração.');
         NotificationService::success('Módulos atualizados.');
 
         header('Location: ' . url('/administracao/modulos'));

@@ -819,16 +819,17 @@ class IntelbrasDvrService
     }
 
     /**
-     * Imagem em tempo real: repassa o MJPEG do sub-stream do equipamento
-     * (cgi-bin/mjpg/video.cgi, subtype=1) direto pra saída -- o navegador
-     * mostra "multipart/x-mixed-replace" num <img> sem plugin. Confirmado
-     * no NVD 1408 P (~8 quadros/s) e no MHDX 1116-C; o stream principal
-     * (subtype=0) é pesado demais ou recusado. Para quando o navegador
-     * fecha, ou em $maxSegundos (não prende processo do Apache pra sempre).
+     * Imagem em tempo real: repassa o MJPEG do equipamento
+     * (cgi-bin/mjpg/video.cgi) direto pra saída -- o navegador mostra
+     * "multipart/x-mixed-replace" num <img> sem plugin. "normal" = sub-stream
+     * (subtype=1: NVD 1408 P 10 quadros/s 704x480 ~200 KB/s; MHDX 1116-C
+     * ~7 quadros/s); "alta" = stream principal (subtype=0: NVD 1408 P
+     * ~500 KB/s; o MHDX recusa com 401). Para quando o navegador fecha, ou
+     * em $maxSegundos (não prende processo do Apache pra sempre).
      *
      * @return string|null mensagem de erro se não conseguiu começar; null = transmitiu
      */
-    public function transmitirAoVivo(string $ip, int $canal, int $maxSegundos = 180): ?string
+    public function transmitirAoVivo(string $ip, int $canal, string $qualidade = 'normal', int $maxSegundos = 180): ?string
     {
         $credencial = $this->credencialParaIp($ip);
         if ($credencial === null) {
@@ -838,7 +839,8 @@ class IntelbrasDvrService
         $tipoConteudo = '';
         $codigo = 0;
         $comecou = false;
-        $ch = curl_init("http://{$ip}/cgi-bin/mjpg/video.cgi?channel={$canal}&subtype=1");
+        $subtipo = $qualidade === 'alta' ? 0 : 1;
+        $ch = curl_init("http://{$ip}/cgi-bin/mjpg/video.cgi?channel={$canal}&subtype={$subtipo}");
         curl_setopt_array($ch, [
             CURLOPT_HTTPAUTH => CURLAUTH_DIGEST,
             CURLOPT_USERPWD => $credencial['usuario'] . ':' . $credencial['senha'],
@@ -874,6 +876,10 @@ class IntelbrasDvrService
 
         if ($comecou) {
             return null;
+        }
+
+        if ($subtipo === 0 && $codigo !== 200) {
+            return 'Este equipamento não entrega a qualidade alta em tempo real.';
         }
 
         return $codigo === 401 ? 'Usuário/senha recusados pelo DVR/NVR.' : 'O equipamento não entregou a imagem em tempo real' . ($erro !== '' ? ": {$erro}" : '.');

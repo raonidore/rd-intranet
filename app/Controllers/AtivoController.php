@@ -973,7 +973,8 @@ class AtivoController extends Controller
             ob_end_clean();
         }
 
-        $erro = (new IntelbrasDvrService())->transmitirAoVivo($ativo['ip'], $canal);
+        $qualidade = ($_GET['qualidade'] ?? '') === 'alta' ? 'alta' : 'normal';
+        $erro = (new IntelbrasDvrService())->transmitirAoVivo($ativo['ip'], $canal, $qualidade);
         if ($erro !== null && !headers_sent()) {
             http_response_code(502);
             header('Content-Type: text/plain; charset=utf-8');
