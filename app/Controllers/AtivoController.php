@@ -969,6 +969,10 @@ class AtivoController extends Controller
         // até o vídeo acabar) e desliga os buffers de saída.
         session_write_close();
         set_time_limit(200);
+        // Sem isso o PHP mata o script assim que o navegador fecha a janela --
+        // antes da limpeza que espera o ffmpeg sair (ficava "ffmpeg <defunct>"
+        // a cada troca de canal). O próprio laço confere connection_aborted().
+        ignore_user_abort(true);
         while (ob_get_level() > 0) {
             ob_end_clean();
         }

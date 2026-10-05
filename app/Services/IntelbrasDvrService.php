@@ -876,6 +876,7 @@ class IntelbrasDvrService
             CURLOPT_USERPWD => $credencial['usuario'] . ':' . $credencial['senha'],
             CURLOPT_CONNECTTIMEOUT => 5,
             CURLOPT_TIMEOUT => $maxSegundos,
+            CURLOPT_FORBID_REUSE => true, // stream longo: conexão nunca volta pro cache do curl
             CURLOPT_HEADERFUNCTION => function ($ch, $linha) use (&$tipoConteudo, &$codigo) {
                 if (preg_match('#^HTTP/\S+\s+(\d+)#', $linha, $m)) {
                     $codigo = (int)$m[1];
