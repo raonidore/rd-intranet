@@ -47,16 +47,33 @@ class ChamadoController extends Controller
         }
 
         $encerrados = [];
+        $filtrosEncerrados = [];
+        $opcoesFiltro = [];
+        $limiteEncerrados = 200;
         if ($aba === 'encerrados') {
+            $filtrosEncerrados = array_filter(
+                array_intersect_key($_GET, array_flip(['q', 'categoria_id', 'setor_id', 'setor_solicitante_id', 'unidade_id', 'usuario_id', 'prioridade', 'status', 'de', 'ate'])),
+                fn ($v) => is_string($v) && trim($v) !== ''
+            );
             $encerrados = $podeVerEquipe
-                ? $service->listarEncerradosDaEquipe($setorIds, $usuarioId)
-                : $service->listarEncerradosDoUsuario($usuarioId);
+                ? $service->listarEncerradosDaEquipe($setorIds, $usuarioId, $limiteEncerrados, $filtrosEncerrados)
+                : $service->listarEncerradosDoUsuario($usuarioId, $limiteEncerrados, $filtrosEncerrados);
+            $opcoesFiltro = [
+                'categorias' => (new ChamadoCategoriaService())->listarAtivas(),
+                'setores' => (new ChamadoSetorService())->listar(),
+                'setoresSolicitantes' => (new ChamadoSetorSolicitanteService())->listar(),
+                'unidades' => (new UnidadeService())->listarAtivas(),
+                'atendentes' => $podeVerEquipe ? $service->atendentesDisponiveis() : [],
+            ];
         }
 
         $this->view('chamados/atendimentos', [
             'aba' => $aba,
             'chamados' => $service->listarDoUsuario($usuarioId),
             'encerrados' => $encerrados,
+            'filtrosEncerrados' => $filtrosEncerrados,
+            'opcoesFiltro' => $opcoesFiltro,
+            'limiteEncerrados' => $limiteEncerrados,
             'podeVerEquipe' => $podeVerEquipe,
             'equipe' => $equipe,
             'semSetor' => $semSetor,

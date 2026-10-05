@@ -342,16 +342,60 @@ class ChamadoService
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public function listarEncerradosDoUsuario(int $usuarioId, int $limite = 100): array
+    public function listarEncerradosDoUsuario(int $usuarioId, int $limite = 100, array $filtros = []): array
     {
-        $stmt = $this->pdo->prepare(
-            self::SELECT_ENRIQUECIDO . " WHERE c.usuario_id = ? AND c.status IN ('resolvido','fechado') ORDER BY c.fechado_em DESC, c.resolvido_em DESC LIMIT ?"
-        );
-        $stmt->bindValue(1, $usuarioId, PDO::PARAM_INT);
-        $stmt->bindValue(2, $limite, PDO::PARAM_INT);
-        $stmt->execute();
+        $params = [$usuarioId];
+        $sql = self::SELECT_ENRIQUECIDO . " WHERE c.usuario_id = ? AND c.status IN ('resolvido','fechado')"
+            . $this->condicoesFiltroEncerrados($filtros, $params)
+            . ' ORDER BY COALESCE(c.fechado_em, c.resolvido_em) DESC LIMIT ' . max(1, $limite);
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Filtros da aba Encerrados (todos opcionais). "q" procura ao mesmo tempo
+     * em nº, título, descrição, solicitante (nome/e-mail) e equipamento;
+     * categoria inclui as subcategorias dela; período é a data de encerramento.
+     */
+    private function condicoesFiltroEncerrados(array $f, array &$params): string
+    {
+        $sql = '';
+
+        $q = trim((string)($f['q'] ?? ''));
+        if ($q !== '') {
+            $termo = '%' . addcslashes(mb_substr($q, 0, 100), '%_\\') . '%'; // % e _ digitados são texto, não curinga
+            $sql .= ' AND (c.numero_controle LIKE ? OR c.titulo LIKE ? OR c.descricao LIKE ? OR sol.nome LIKE ? OR sol.email LIKE ? OR a.codigo_patrimonio LIKE ? OR a.nome LIKE ?)';
+            array_push($params, $termo, $termo, $termo, $termo, $termo, $termo, $termo);
+        }
+
+        foreach (['categoria_id' => 'c.categoria_id', 'setor_id' => 'c.setor_id', 'setor_solicitante_id' => 'c.setor_solicitante_id', 'unidade_id' => 'c.unidade_id', 'usuario_id' => 'c.usuario_id'] as $chave => $coluna) {
+            if (!empty($f[$chave])) {
+                $sql .= " AND {$coluna} = ?";
+                $params[] = (int)$f[$chave];
+            }
+        }
+
+        if (isset(self::PRIORIDADES[$f['prioridade'] ?? ''])) {
+            $sql .= ' AND c.prioridade = ?';
+            $params[] = $f['prioridade'];
+        }
+        if (in_array($f['status'] ?? '', ['resolvido', 'fechado'], true)) {
+            $sql .= ' AND c.status = ?';
+            $params[] = $f['status'];
+        }
+
+        foreach (['de' => '>=', 'ate' => '<='] as $chave => $operador) {
+            $data = (string)($f[$chave] ?? '');
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $data)) {
+                $sql .= " AND COALESCE(c.fechado_em, c.resolvido_em) {$operador} ?";
+                $params[] = $data . ($chave === 'de' ? ' 00:00:00' : ' 23:59:59');
+            }
+        }
+
+        return $sql;
     }
 
     /**
@@ -362,7 +406,7 @@ class ChamadoService
      *
      * @param int[]|null $setorIds null = vê tudo (admin).
      */
-    public function listarEncerradosDaEquipe(?array $setorIds, int $usuarioId, int $limite = 200): array
+    public function listarEncerradosDaEquipe(?array $setorIds, int $usuarioId, int $limite = 200, array $filtros = []): array
     {
         $sql = self::SELECT_ENRIQUECIDO . " WHERE c.status IN ('resolvido','fechado')";
         $params = [];
@@ -377,6 +421,7 @@ class ChamadoService
             $sql .= " AND ({$condicao})";
         }
 
+        $sql .= $this->condicoesFiltroEncerrados($filtros, $params);
         $sql .= ' ORDER BY COALESCE(c.fechado_em, c.resolvido_em) DESC LIMIT ' . max(1, $limite);
 
         $stmt = $this->pdo->prepare($sql);

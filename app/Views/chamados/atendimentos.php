@@ -162,13 +162,17 @@ $corStatus = ['fila' => 'secondary', 'em_atendimento' => 'primary', 'aguardando_
     </p>
 <?php endif; ?>
 
+<?php if ($aba === 'encerrados'): ?>
+    <?php require __DIR__ . '/_filtros_encerrados.php'; ?>
+<?php endif; ?>
+
 <?php $lista = $aba === 'encerrados' ? $encerrados : ($aba === 'equipe' ? $equipe : $chamados); ?>
 
 <?php if (empty($lista)): ?>
     <div class="card border-0 shadow-sm">
         <div class="card-body text-center text-muted py-4">
             <i class="bi bi-ticket" style="font-size:2rem;"></i>
-            <p class="mb-0 mt-2"><?= $aba === 'encerrados' ? 'Nenhum chamado encerrado ainda.' : ($aba === 'equipe' ? 'Nenhum chamado em andamento com colegas dos seus setores.' : 'Você não tem nenhum chamado em andamento.') ?></p>
+            <p class="mb-0 mt-2"><?= $aba === 'encerrados' ? ($filtrosEncerrados ? 'Nenhum chamado encerrado com essa pesquisa.' : 'Nenhum chamado encerrado ainda.') : ($aba === 'equipe' ? 'Nenhum chamado em andamento com colegas dos seus setores.' : 'Você não tem nenhum chamado em andamento.') ?></p>
         </div>
     </div>
 <?php else: ?>
@@ -191,7 +195,7 @@ $corStatus = ['fila' => 'secondary', 'em_atendimento' => 'primary', 'aguardando_
                             <?php endif; ?>
                         </div>
                     </div>
-                    <small class="text-muted text-nowrap"><?= data_br($item['ultima_mensagem_em']) ?></small>
+                    <small class="text-muted text-nowrap"><?= $aba === 'encerrados' ? 'Encerrado em ' . data_br($item['fechado_em'] ?? $item['resolvido_em'] ?? null, 'd/m/Y H:i') : data_br($item['ultima_mensagem_em']) ?></small>
                 </div>
             </div>
         </a>
