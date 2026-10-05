@@ -133,6 +133,8 @@ class ProjetoController extends Controller
             'podeGerenciar' => $this->service->podeGerenciar($projeto, $usuarioId, $this->ehAdmin()),
             'fases' => (new ProjetoFaseService())->listar($id),
             'quadro' => $tarefaService->quadro($id),
+            'colunas' => (new \App\Services\ProjetoColunaService())->listar($id),
+            'coresPersonalizadas' => $tarefaService->coresPersonalizadas($id),
             'gantt' => $tarefaService->gantt($id),
             'resumo' => $tarefaService->resumo($id),
             'timeline' => (new ProjetoComentarioService())->timeline($id),

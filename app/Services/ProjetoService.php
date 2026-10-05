@@ -188,6 +188,7 @@ class ProjetoService
 
         $id = (int)$this->pdo->lastInsertId();
 
+        (new ProjetoColunaService())->criarPadrao($id);
         (new ProjetoComentarioService())->registrarSistema($id, null, 'Projeto criado.', $usuarioId, null);
 
         return ['success' => true, 'message' => 'Projeto criado.', 'id' => $id];
@@ -357,6 +358,7 @@ class ProjetoService
         foreach ($faseService->listar($id) as $fase) {
             $faseService->criar($novoId, $fase['nome'], (int)$fase['ordem']);
         }
+        (new ProjetoColunaService())->copiar($id, $novoId);
 
         (new ProjetoComentarioService())->registrarSistema($novoId, null, 'Projeto duplicado a partir de "' . $original['titulo'] . '".', $usuarioId, null);
 

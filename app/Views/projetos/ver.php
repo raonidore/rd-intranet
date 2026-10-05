@@ -13,13 +13,6 @@ $statusClasses = [
     'cancelado' => 'text-bg-secondary',
 ];
 
-$colunaLabels = [
-    'a_fazer' => 'A fazer',
-    'em_andamento' => 'Em andamento',
-    'aguardando_terceiro' => 'Aguardando terceiro',
-    'concluido' => 'Concluído',
-];
-
 /** @var ProjetoTarefaService $tarefaService */
 ?>
 
@@ -161,6 +154,10 @@ $colunaLabels = [
 .cor-swatch.selecionada { border-color: #212529; box-shadow: 0 0 0 2px #fff inset; }
 .cor-swatch.cor-nenhuma { background: #fff; border: 2px dashed #ced4da; position: relative; }
 .cor-swatch.cor-nenhuma.selecionada { border-color: #212529; border-style: solid; }
+.cor-swatch.cor-livre { background: #fff; border: 2px dashed #adb5bd; display: inline-flex; align-items: center; justify-content: center; color: #6c757d; position: relative; overflow: hidden; }
+.cor-swatch.cor-livre input[type="color"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.card-pintado .text-muted, .card-pintado .text-danger { color: inherit !important; opacity: .85; }
+.card-pintado .badge.text-bg-light { background: rgba(255,255,255,.55) !important; }
 </style>
 
 <div class="card border-0 shadow-sm mb-4">
@@ -182,6 +179,9 @@ $colunaLabels = [
                 </button>
             </li>
             <li class="nav-item ms-auto">
+                <button type="button" class="btn btn-outline-secondary btn-sm mt-1 me-1" data-bs-toggle="modal" data-bs-target="#modalNovaColuna" title="Adicionar uma coluna ao quadro">
+                    <i class="bi bi-layout-three-columns"></i> Coluna
+                </button>
                 <button type="button" class="btn btn-primary btn-sm mt-1" data-bs-toggle="modal" data-bs-target="#modalNovaTarefa">
                     <i class="bi bi-plus-lg"></i> Nova tarefa
                 </button>
@@ -191,19 +191,46 @@ $colunaLabels = [
         <div class="tab-content">
             <div class="tab-pane fade show active" id="painelQuadro">
                 <div class="kanban-board d-flex gap-3" style="overflow-x:auto">
-                    <?php foreach ($colunaLabels as $colunaChave => $colunaLabel): ?>
+                    <?php foreach ($colunas as $indiceColuna => $colunaQuadro): $colunaChave = $colunaQuadro['id']; ?>
                         <div class="kanban-col flex-shrink-0" style="width:270px">
                             <div class="d-flex justify-content-between align-items-center mb-2 small text-uppercase text-muted fw-semibold">
-                                <span><?= $colunaLabel ?></span>
-                                <span class="badge text-bg-light border"><?= count($quadro[$colunaChave]) ?></span>
+                                <span class="text-truncate" title="Situação: <?= htmlspecialchars(\App\Services\ProjetoColunaService::SITUACOES[$colunaQuadro['situacao']]) ?>"><?= htmlspecialchars($colunaQuadro['nome']) ?></span>
+                                <span class="d-flex align-items-center gap-1">
+                                    <span class="badge text-bg-light border"><?= count($quadro[$colunaChave]) ?></span>
+                                    <span class="dropdown">
+                                        <button type="button" class="btn btn-sm btn-link text-muted p-0 px-1" data-bs-toggle="dropdown" title="Opções da coluna"><i class="bi bi-three-dots-vertical"></i></button>
+                                        <ul class="dropdown-menu dropdown-menu-end small text-none" style="text-transform:none">
+                                            <li><button type="button" class="dropdown-item btn-editar-coluna" data-id="<?= (int)$colunaChave ?>" data-nome="<?= htmlspecialchars($colunaQuadro['nome']) ?>" data-situacao="<?= $colunaQuadro['situacao'] ?>"><i class="bi bi-pencil"></i> Renomear / situação</button></li>
+                                            <?php foreach ([-1 => ['bi-arrow-left', 'Mover para a esquerda', $indiceColuna > 0], 1 => ['bi-arrow-right', 'Mover para a direita', $indiceColuna < count($colunas) - 1]] as $direcao => [$iconeDirecao, $rotuloDirecao, $podeMover]): ?>
+                                                <?php if ($podeMover): ?>
+                                                <li>
+                                                    <form method="post" action="<?= url('/projetos/colunas/mover') ?>">
+                                                        <input type="hidden" name="id" value="<?= (int)$colunaChave ?>">
+                                                        <input type="hidden" name="direcao" value="<?= $direcao ?>">
+                                                        <button type="submit" class="dropdown-item"><i class="bi <?= $iconeDirecao ?>"></i> <?= $rotuloDirecao ?></button>
+                                                    </form>
+                                                </li>
+                                                <?php endif; ?>
+                                            <?php endforeach; ?>
+                                            <?php if (count($colunas) > 1): ?>
+                                                <li><hr class="dropdown-divider"></li>
+                                                <li><button type="button" class="dropdown-item text-danger btn-excluir-coluna" data-id="<?= (int)$colunaChave ?>" data-nome="<?= htmlspecialchars($colunaQuadro['nome']) ?>" data-total="<?= count($quadro[$colunaChave]) ?>"><i class="bi bi-trash"></i> Excluir coluna</button></li>
+                                            <?php endif; ?>
+                                        </ul>
+                                    </span>
+                                </span>
                             </div>
-                            <div class="kanban-lista d-flex flex-column gap-2 p-2 rounded" style="min-height:80px; background:#f4f6f9" data-coluna="<?= $colunaChave ?>">
+                            <div class="kanban-lista d-flex flex-column gap-2 p-2 rounded" style="min-height:80px; background:#f4f6f9" data-coluna="<?= (int)$colunaChave ?>">
                                 <?php foreach ($quadro[$colunaChave] as $tarefa):
                                     $atrasada = $tarefa['coluna'] !== 'concluido' && !empty($tarefa['prazo']) && strtotime($tarefa['prazo']) < strtotime(date('Y-m-d'));
                                     $corCartao = ProjetoTarefaService::corHex($tarefa['cor'] ?? null);
+                                    $cartaoInteiro = $corCartao && ($tarefa['cor_estilo'] ?? 'lateral') === 'inteiro';
+                                    $estiloCartao = $corCartao
+                                        ? ($cartaoInteiro ? "; background:{$corCartao}; color:" . ProjetoTarefaService::corTexto($corCartao) . '; border:0' : "; border-left:4px solid {$corCartao}")
+                                        : '';
                                 ?>
-                                    <div class="card shadow-sm kanban-card" data-id="<?= (int)$tarefa['id'] ?>"
-                                        style="cursor:pointer<?= $corCartao ? "; border-left:4px solid {$corCartao}" : '' ?>"
+                                    <div class="card shadow-sm kanban-card <?= $cartaoInteiro ? 'card-pintado' : '' ?>" data-id="<?= (int)$tarefa['id'] ?>"
+                                        style="cursor:pointer<?= $estiloCartao ?>"
                                         data-bs-toggle="modal" data-bs-target="#modalTarefa<?= (int)$tarefa['id'] ?>">
                                         <div class="card-body p-2">
                                             <?php if ($tarefa['tag']): ?>
@@ -241,6 +268,11 @@ $colunaLabels = [
                             </div>
                         </div>
                     <?php endforeach; ?>
+                    <div class="flex-shrink-0" style="width:180px">
+                        <button type="button" class="btn btn-outline-secondary w-100 mt-4" data-bs-toggle="modal" data-bs-target="#modalNovaColuna" style="border-style:dashed">
+                            <i class="bi bi-plus-lg"></i> Coluna
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -306,7 +338,7 @@ $colunaLabels = [
                         </thead>
                         <tbody>
                             <?php $totalListado = 0; ?>
-                            <?php foreach ($colunaLabels as $colunaChave => $colunaLabel): foreach ($quadro[$colunaChave] as $tarefa): $totalListado++;
+                            <?php foreach ($colunas as $colunaQuadro): $colunaLabel = htmlspecialchars($colunaQuadro['nome']); foreach ($quadro[$colunaQuadro['id']] as $tarefa): $totalListado++;
                                 $atrasadaLista = $tarefa['coluna'] !== 'concluido' && !empty($tarefa['prazo']) && strtotime($tarefa['prazo']) < strtotime(date('Y-m-d'));
                                 $corLista = ProjetoTarefaService::corHex($tarefa['cor'] ?? null);
                             ?>
@@ -374,6 +406,7 @@ $colunaLabels = [
                     <?php if ($item['tipo'] === 'sistema'): ?>
                         <div class="small text-muted">
                             <i class="bi bi-gear"></i> <?= htmlspecialchars($item['conteudo']) ?>
+                            <?php if (!empty($item['usuario_nome']) || !empty($item['participante_nome'])): ?> · por <strong><?= htmlspecialchars($item['usuario_nome'] ?? $item['participante_nome']) ?></strong><?php endif; ?>
                             <?php if ($item['tarefa_titulo']): ?> · <span class="fst-italic"><?= htmlspecialchars($item['tarefa_titulo']) ?></span><?php endif; ?>
                             · <?= date('d/m/Y H:i', strtotime($item['criado_em'])) ?>
                         </div>
@@ -660,13 +693,7 @@ $colunaLabels = [
                         </div>
                         <div class="col-12">
                             <label class="form-label">Cor do cartão <span class="text-muted fw-normal">(opcional)</span></label>
-                            <input type="hidden" name="cor" class="campo-cor-tarefa">
-                            <div class="cor-swatches">
-                                <span class="cor-swatch cor-nenhuma selecionada" data-cor="" title="Sem cor"></span>
-                                <?php foreach (ProjetoTarefaService::CORES as $corChave => $corHex): ?>
-                                    <span class="cor-swatch" data-cor="<?= $corChave ?>" style="background:<?= $corHex ?>" title="<?= ucfirst($corChave) ?>"></span>
-                                <?php endforeach; ?>
-                            </div>
+                            <?php $corAtual = ''; $estiloAtual = 'lateral'; require __DIR__ . '/_paleta_cor.php'; ?>
                         </div>
                         <div class="col-12">
                             <label class="form-label">Descrição</label>
@@ -680,6 +707,68 @@ $colunaLabels = [
                 </div>
             </form>
         </div>
+    </div>
+</div>
+
+<?php $situacoesColuna = \App\Services\ProjetoColunaService::SITUACOES; ?>
+<!-- Colunas do quadro: nova / editar / excluir -->
+<div class="modal fade" id="modalNovaColuna" tabindex="-1">
+    <div class="modal-dialog">
+        <form method="post" action="<?= url('/projetos/colunas/criar') ?>" class="modal-content">
+            <input type="hidden" name="projeto_id" value="<?= (int)$projeto['id'] ?>">
+            <div class="modal-header"><h5 class="modal-title">Nova coluna</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <label class="form-label">Nome</label>
+                <input type="text" name="nome" class="form-control mb-3" maxlength="60" required placeholder="Ex: Instalação, Testes, Validação do cliente">
+                <label class="form-label">Os cartões nessa coluna contam como</label>
+                <select name="situacao" class="form-select">
+                    <?php foreach ($situacoesColuna as $valor => $rotulo): ?>
+                        <option value="<?= $valor ?>" <?= $valor === 'em_andamento' ? 'selected' : '' ?>><?= $rotulo ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <div class="form-text">É o que vale para estatísticas, "Atrasadas", "Aguardando terceiro" e o progresso das fases. Ela entra no fim do quadro; use o menu ⋮ para mudar de lugar.</div>
+            </div>
+            <div class="modal-footer"><button type="submit" class="btn btn-primary">Adicionar coluna</button></div>
+        </form>
+    </div>
+</div>
+
+<div class="modal fade" id="modalEditarColuna" tabindex="-1">
+    <div class="modal-dialog">
+        <form method="post" action="<?= url('/projetos/colunas/atualizar') ?>" class="modal-content">
+            <input type="hidden" name="id" id="editarColunaId">
+            <div class="modal-header"><h5 class="modal-title">Coluna</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <label class="form-label">Nome</label>
+                <input type="text" name="nome" id="editarColunaNome" class="form-control mb-3" maxlength="60" required>
+                <label class="form-label">Os cartões nessa coluna contam como</label>
+                <select name="situacao" id="editarColunaSituacao" class="form-select">
+                    <?php foreach ($situacoesColuna as $valor => $rotulo): ?>
+                        <option value="<?= $valor ?>"><?= $rotulo ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <div class="form-text">Mudar a situação vale também para os cartões que já estão na coluna.</div>
+            </div>
+            <div class="modal-footer"><button type="submit" class="btn btn-primary">Salvar</button></div>
+        </form>
+    </div>
+</div>
+
+<div class="modal fade" id="modalExcluirColuna" tabindex="-1">
+    <div class="modal-dialog">
+        <form method="post" action="<?= url('/projetos/colunas/excluir') ?>" class="modal-content">
+            <input type="hidden" name="id" id="excluirColunaId">
+            <div class="modal-header"><h5 class="modal-title">Excluir a coluna "<span id="excluirColunaNome"></span>"</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <p class="mb-2">Os <strong id="excluirColunaTotal">0</strong> cartão(ões) dela vão para:</p>
+                <select name="destino_id" id="excluirColunaDestino" class="form-select" required>
+                    <?php foreach ($colunas as $c): ?>
+                        <option value="<?= (int)$c['id'] ?>"><?= htmlspecialchars($c['nome']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="modal-footer"><button type="submit" class="btn btn-danger">Excluir coluna</button></div>
+        </form>
     </div>
 </div>
 
@@ -717,13 +806,7 @@ $colunaLabels = [
                             <input type="text" name="tag" class="form-control form-control-sm" value="<?= htmlspecialchars($tarefa['tag'] ?? '') ?>" placeholder="Tag" maxlength="60">
                         </div>
                         <div class="col-12">
-                            <input type="hidden" name="cor" class="campo-cor-tarefa" value="<?= htmlspecialchars($tarefa['cor'] ?? '') ?>">
-                            <div class="cor-swatches">
-                                <span class="cor-swatch cor-nenhuma <?= empty($tarefa['cor']) ? 'selecionada' : '' ?>" data-cor="" title="Sem cor"></span>
-                                <?php foreach (ProjetoTarefaService::CORES as $corChave => $corHex): ?>
-                                    <span class="cor-swatch <?= ($tarefa['cor'] ?? '') === $corChave ? 'selecionada' : '' ?>" data-cor="<?= $corChave ?>" style="background:<?= $corHex ?>" title="<?= ucfirst($corChave) ?>"></span>
-                                <?php endforeach; ?>
-                            </div>
+                            <?php $corAtual = (string)($tarefa['cor'] ?? ''); $estiloAtual = (string)($tarefa['cor_estilo'] ?? 'lateral'); require __DIR__ . '/_paleta_cor.php'; ?>
                         </div>
                         <?php if (!empty($fases)): ?>
                         <div class="col-12">
@@ -788,7 +871,7 @@ $colunaLabels = [
                     <?php endif; ?>
                     <?php foreach ($comentariosTarefa as $c): ?>
                         <?php if ($c['tipo'] === 'sistema'): ?>
-                            <div class="conversa-evento"><i class="bi bi-gear"></i> <?= htmlspecialchars($c['conteudo']) ?> · <?= date('d/m H:i', strtotime($c['criado_em'])) ?></div>
+                            <div class="conversa-evento"><i class="bi bi-gear"></i> <?= htmlspecialchars($c['conteudo']) ?><?php if (!empty($c['usuario_nome']) || !empty($c['participante_nome'])): ?> · por <?= htmlspecialchars($c['usuario_nome'] ?? $c['participante_nome']) ?><?php endif; ?> · <?= date('d/m H:i', strtotime($c['criado_em'])) ?></div>
                         <?php else: ?>
                             <?php $minha = (int)($c['usuario_id'] ?? 0) === (int)$usuarioLogadoId; ?>
                             <div class="conversa-msg <?= $minha ? 'minha' : '' ?>">
@@ -1098,14 +1181,59 @@ mark.mencao-campo { background: #cfe2ff; color: transparent; border-radius: 3px;
     window.mudarStatusProjeto = mudarStatusProjeto;
 
     // --- Cor do cartão: clicar num swatch marca ele e guarda no campo escondido ---
-    document.querySelectorAll('.cor-swatches').forEach(function (grupo) {
-        const campo = grupo.parentElement.querySelector('.campo-cor-tarefa');
-        grupo.querySelectorAll('.cor-swatch').forEach(function (swatch) {
-            swatch.addEventListener('click', function () {
-                grupo.querySelectorAll('.cor-swatch').forEach(function (s) { s.classList.remove('selecionada'); });
-                swatch.classList.add('selecionada');
-                campo.value = swatch.dataset.cor;
+    document.querySelectorAll('.paleta-cor').forEach(function (paleta) {
+        const campo = paleta.querySelector('.campo-cor-tarefa');
+        const grupo = paleta.querySelector('.cor-swatches');
+        const livre = paleta.querySelector('.cor-livre');
+
+        function marcar(swatch) {
+            grupo.querySelectorAll('.cor-swatch').forEach(function (s) { s.classList.remove('selecionada'); });
+            swatch.classList.add('selecionada');
+        }
+        grupo.addEventListener('click', function (ev) {
+            const swatch = ev.target.closest('.cor-swatch[data-cor]');
+            if (!swatch) return;
+            marcar(swatch);
+            campo.value = swatch.dataset.cor;
+        });
+        // "+": escolhe qualquer cor; vira uma bolinha nova antes do "+".
+        paleta.querySelector('.seletor-cor-livre').addEventListener('input', function () {
+            const hex = this.value.toLowerCase();
+            let swatch = grupo.querySelector('.cor-swatch[data-cor="' + hex + '"]');
+            if (!swatch) {
+                swatch = document.createElement('span');
+                swatch.className = 'cor-swatch';
+                swatch.dataset.cor = hex;
+                swatch.title = 'Cor personalizada ' + hex;
+                swatch.style.background = hex;
+                grupo.insertBefore(swatch, livre);
+            }
+            marcar(swatch);
+            campo.value = hex;
+        });
+    });
+
+    // --- Colunas do quadro: editar e excluir abrem as janelas já preenchidas ---
+    document.querySelectorAll('.btn-editar-coluna').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+            document.getElementById('editarColunaId').value = botao.dataset.id;
+            document.getElementById('editarColunaNome').value = botao.dataset.nome;
+            document.getElementById('editarColunaSituacao').value = botao.dataset.situacao;
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('modalEditarColuna')).show();
+        });
+    });
+    document.querySelectorAll('.btn-excluir-coluna').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+            document.getElementById('excluirColunaId').value = botao.dataset.id;
+            document.getElementById('excluirColunaNome').textContent = botao.dataset.nome;
+            document.getElementById('excluirColunaTotal').textContent = botao.dataset.total;
+            const destino = document.getElementById('excluirColunaDestino');
+            Array.from(destino.options).forEach(function (op) {
+                op.disabled = op.value === botao.dataset.id;
+                op.hidden = op.value === botao.dataset.id;
             });
+            destino.value = Array.from(destino.options).find((op) => !op.disabled)?.value || '';
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('modalExcluirColuna')).show();
         });
     });
 

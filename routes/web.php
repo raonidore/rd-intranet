@@ -813,6 +813,10 @@ $router->get('/projetos/areas/usuarios-buscar', [ProjetoAreaController::class, '
 $router->post('/projetos/fases/criar', [ProjetoFaseController::class, 'criar']);
 $router->post('/projetos/fases/atualizar', [ProjetoFaseController::class, 'atualizar']);
 $router->post('/projetos/fases/excluir', [ProjetoFaseController::class, 'excluir']);
+$router->post('/projetos/colunas/criar', [\App\Controllers\ProjetoColunaController::class, 'criar']);
+$router->post('/projetos/colunas/atualizar', [\App\Controllers\ProjetoColunaController::class, 'atualizar']);
+$router->post('/projetos/colunas/mover', [\App\Controllers\ProjetoColunaController::class, 'mover']);
+$router->post('/projetos/colunas/excluir', [\App\Controllers\ProjetoColunaController::class, 'excluir']);
 
 $router->post('/projetos/tarefas/criar', [ProjetoTarefaController::class, 'criar']);
 $router->post('/projetos/tarefas/atualizar', [ProjetoTarefaController::class, 'atualizar']);

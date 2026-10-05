@@ -20,15 +20,26 @@ class ProjetoTarefaService
         'concluido' => 'Concluído',
     ];
 
-    /** Cor do cartão -- etiqueta puramente visual (tipo Trello), não interfere em status/coluna/fase. */
+    /**
+     * Cor do cartão -- etiqueta puramente visual (tipo Trello), não interfere
+     * em status/coluna/fase. Além destas, aceita qualquer cor "#rrggbb"
+     * escolhida no seletor livre.
+     */
     public const CORES = [
         'rosa' => '#f4a6c1',
-        'azul' => '#8ec9f0',
-        'verde' => '#8fd4ac',
-        'amarelo' => '#f0d878',
+        'vermelho' => '#f28b82',
         'laranja' => '#f0b06e',
+        'amarelo' => '#f0d878',
+        'verde' => '#8fd4ac',
+        'turquesa' => '#7fd3c9',
+        'azul' => '#8ec9f0',
+        'anil' => '#9fb4f0',
         'roxo' => '#c3a6e8',
+        'cinza' => '#c4c9d0',
     ];
+
+    /** Pinta só a faixa da lateral (como sempre foi) ou o cartão inteiro. */
+    public const ESTILOS_COR = ['lateral' => 'Só a lateral', 'inteiro' => 'Card inteiro'];
 
     private PDO $pdo;
 
@@ -44,12 +55,49 @@ class ProjetoTarefaService
 
     public static function corHex(?string $cor): ?string
     {
+        if ($cor !== null && preg_match('/^#[0-9a-f]{6}$/i', $cor)) {
+            return strtolower($cor);
+        }
+
         return self::CORES[$cor] ?? null;
     }
 
-    /** @return array<string, array> tarefas do projeto já agrupadas por coluna, prontas pro Kanban renderizar. */
+    /** Valor aceito pro campo cor: chave pronta, "#rrggbb" ou nada. */
+    public static function normalizarCor(?string $cor): ?string
+    {
+        $cor = trim((string)$cor);
+        if (isset(self::CORES[$cor])) {
+            return $cor;
+        }
+
+        return preg_match('/^#[0-9a-f]{6}$/i', $cor) ? strtolower($cor) : null;
+    }
+
+    /** Texto legível sobre o fundo (card pintado inteiro): escuro em cor clara, branco em cor escura. */
+    public static function corTexto(string $hex): string
+    {
+        [$r, $g, $b] = array_map('hexdec', str_split(ltrim($hex, '#'), 2));
+
+        return (0.299 * $r + 0.587 * $g + 0.114 * $b) > 150 ? '#1f2328' : '#ffffff';
+    }
+
+    /** @return string[] cores livres (#rrggbb) já usadas no projeto -- aparecem na paleta pra reaproveitar */
+    public function coresPersonalizadas(int $projetoId): array
+    {
+        $stmt = $this->pdo->prepare("SELECT DISTINCT LOWER(cor) FROM projetos_tarefas WHERE projeto_id = ? AND cor LIKE '#%' ORDER BY id DESC LIMIT 12");
+        $stmt->execute([$projetoId]);
+
+        return array_values(array_unique($stmt->fetchAll(PDO::FETCH_COLUMN)));
+    }
+
+    /**
+     * @return array<int, array> tarefas do projeto agrupadas pelo id da coluna
+     * do quadro (ProjetoColunaService), na ordem das colunas -- tarefa sem
+     * coluna válida cai na primeira coluna de mesma situação.
+     */
     public function quadro(int $projetoId): array
     {
+        $colunas = (new ProjetoColunaService())->listar($projetoId);
         $stmt = $this->pdo->prepare(
             'SELECT t.*,
                     f.nome AS fase_nome,
@@ -58,14 +106,22 @@ class ProjetoTarefaService
              FROM projetos_tarefas t
              LEFT JOIN projetos_fases f ON f.id = t.fase_id
              WHERE t.projeto_id = ?
-             ORDER BY t.coluna, t.posicao, t.id'
+             ORDER BY t.posicao, t.id'
         );
         $stmt->execute([$projetoId]);
         $tarefas = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        $quadro = array_fill_keys(self::COLUNAS, []);
+        $quadro = array_fill_keys(array_column($colunas, 'id'), []);
+        $primeiraPorSituacao = [];
+        foreach ($colunas as $c) {
+            $primeiraPorSituacao[$c['situacao']] ??= $c['id'];
+        }
         foreach ($tarefas as $tarefa) {
-            $quadro[$tarefa['coluna']][] = $tarefa;
+            $colunaId = (int)($tarefa['coluna_id'] ?? 0);
+            if (!isset($quadro[$colunaId])) {
+                $colunaId = $primeiraPorSituacao[$tarefa['coluna']] ?? $colunas[0]['id'];
+            }
+            $quadro[$colunaId][] = $tarefa;
         }
 
         return $quadro;
@@ -117,15 +173,18 @@ class ProjetoTarefaService
         }
 
         $faseId = !empty($dados['fase_id']) ? (int)$dados['fase_id'] : null;
-        $cor = array_key_exists($dados['cor'] ?? '', self::CORES) ? $dados['cor'] : null;
+        $cor = self::normalizarCor($dados['cor'] ?? null);
+        $estilo = isset(self::ESTILOS_COR[$dados['cor_estilo'] ?? '']) ? $dados['cor_estilo'] : 'lateral';
 
-        $stmt = $this->pdo->prepare('SELECT COALESCE(MAX(posicao), -1) + 1 FROM projetos_tarefas WHERE projeto_id = ? AND coluna = "a_fazer"');
-        $stmt->execute([$projetoId]);
+        // Tarefa nova entra no fim da primeira coluna do quadro.
+        $primeira = (new ProjetoColunaService())->listar($projetoId)[0];
+        $stmt = $this->pdo->prepare('SELECT COALESCE(MAX(posicao), -1) + 1 FROM projetos_tarefas WHERE projeto_id = ? AND coluna_id = ?');
+        $stmt->execute([$projetoId, $primeira['id']]);
         $posicao = (int)$stmt->fetchColumn();
 
         $ins = $this->pdo->prepare(
-            'INSERT INTO projetos_tarefas (projeto_id, fase_id, titulo, descricao, tag, cor, posicao, data_inicio, prazo, criado_por)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            'INSERT INTO projetos_tarefas (projeto_id, fase_id, titulo, descricao, tag, cor, cor_estilo, coluna, coluna_id, posicao, data_inicio, prazo, criado_por)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $ins->execute([
             $projetoId,
@@ -134,6 +193,9 @@ class ProjetoTarefaService
             trim($dados['descricao'] ?? '') ?: null,
             trim($dados['tag'] ?? '') ?: null,
             $cor,
+            $estilo,
+            $primeira['situacao'],
+            $primeira['id'],
             $posicao,
             trim($dados['data_inicio'] ?? '') ?: null,
             trim($dados['prazo'] ?? '') ?: null,
@@ -156,16 +218,18 @@ class ProjetoTarefaService
         }
 
         $faseId = !empty($dados['fase_id']) ? (int)$dados['fase_id'] : null;
-        $cor = array_key_exists($dados['cor'] ?? '', self::CORES) ? $dados['cor'] : null;
+        $cor = self::normalizarCor($dados['cor'] ?? null);
+        $estilo = isset(self::ESTILOS_COR[$dados['cor_estilo'] ?? '']) ? $dados['cor_estilo'] : 'lateral';
 
         $stmt = $this->pdo->prepare(
-            'UPDATE projetos_tarefas SET titulo = ?, descricao = ?, tag = ?, cor = ?, fase_id = ?, data_inicio = ?, prazo = ? WHERE id = ?'
+            'UPDATE projetos_tarefas SET titulo = ?, descricao = ?, tag = ?, cor = ?, cor_estilo = ?, fase_id = ?, data_inicio = ?, prazo = ? WHERE id = ?'
         );
         $stmt->execute([
             $titulo,
             trim($dados['descricao'] ?? '') ?: null,
             trim($dados['tag'] ?? '') ?: null,
             $cor,
+            $estilo,
             $faseId,
             trim($dados['data_inicio'] ?? '') ?: null,
             trim($dados['prazo'] ?? '') ?: null,
@@ -184,34 +248,37 @@ class ProjetoTarefaService
      *
      * @return array{success: bool, message: string}
      */
-    public function mover(int $id, string $novaColuna, int $novaPosicao, ?int $usuarioId): array
+    public function mover(int $id, int $colunaId, int $novaPosicao, ?int $usuarioId): array
     {
-        if (!in_array($novaColuna, self::COLUNAS, true)) {
-            return ['success' => false, 'message' => 'Coluna inválida.'];
-        }
-
         $tarefa = $this->buscar($id);
         if (!$tarefa) {
             return ['success' => false, 'message' => 'Tarefa não encontrada.'];
         }
 
-        $colunaAnterior = $tarefa['coluna'];
-        $concluidaEm = $tarefa['concluida_em'];
+        $colunas = new ProjetoColunaService();
+        $destino = $colunas->buscar($colunaId);
+        if (!$destino || (int)$destino['projeto_id'] !== (int)$tarefa['projeto_id']) {
+            return ['success' => false, 'message' => 'Coluna inválida.'];
+        }
 
-        if ($novaColuna === 'concluido' && $colunaAnterior !== 'concluido') {
+        // A situação (o que estatísticas/atrasadas leem) vem da coluna de destino.
+        $novaSituacao = $destino['situacao'];
+        $concluidaEm = $tarefa['concluida_em'];
+        if ($novaSituacao === 'concluido' && $tarefa['coluna'] !== 'concluido') {
             $concluidaEm = date('Y-m-d H:i:s');
-        } elseif ($novaColuna !== 'concluido') {
+        } elseif ($novaSituacao !== 'concluido') {
             $concluidaEm = null;
         }
 
-        $stmt = $this->pdo->prepare('UPDATE projetos_tarefas SET coluna = ?, posicao = ?, concluida_em = ? WHERE id = ?');
-        $stmt->execute([$novaColuna, $novaPosicao, $concluidaEm, $id]);
+        $stmt = $this->pdo->prepare('UPDATE projetos_tarefas SET coluna = ?, coluna_id = ?, posicao = ?, concluida_em = ? WHERE id = ?');
+        $stmt->execute([$novaSituacao, $colunaId, $novaPosicao, $concluidaEm, $id]);
 
-        if ($colunaAnterior !== $novaColuna) {
+        if ((int)($tarefa['coluna_id'] ?? 0) !== $colunaId) {
+            $origem = $tarefa['coluna_id'] ? $colunas->buscar((int)$tarefa['coluna_id']) : null;
             (new ProjetoComentarioService())->registrarSistema(
                 (int)$tarefa['projeto_id'],
                 $id,
-                sprintf('Tarefa "%s" movida de %s para %s.', $tarefa['titulo'], self::colunaLabel($colunaAnterior), self::colunaLabel($novaColuna)),
+                sprintf('Tarefa "%s" movida de %s para %s.', $tarefa['titulo'], $origem['nome'] ?? self::colunaLabel($tarefa['coluna']), $destino['nome']),
                 $usuarioId,
                 null
             );

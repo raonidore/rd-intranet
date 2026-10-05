@@ -90,7 +90,7 @@ class ProjetoTarefaController extends Controller
         AuthMiddleware::checkModulo('projetos_atendimentos');
 
         $id = (int)($_POST['id'] ?? 0);
-        $coluna = (string)($_POST['coluna'] ?? '');
+        $coluna = (int)($_POST['coluna'] ?? 0); // id da coluna do quadro
         $posicao = (int)($_POST['posicao'] ?? 0);
 
         $tarefa = $this->service->buscar($id);

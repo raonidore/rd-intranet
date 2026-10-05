@@ -95,7 +95,7 @@ $colunaLabels = [
     <div class="col-lg-6">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-body">
-                <h6 class="card-title mb-3">Tarefas por coluna do Kanban</h6>
+                <h6 class="card-title mb-3">Tarefas por situação</h6>
                 <canvas id="graficoColunas" height="180"></canvas>
             </div>
         </div>
