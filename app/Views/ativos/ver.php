@@ -1837,6 +1837,13 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                     </div>
                     <button type="button" class="btn btn-sm btn-outline-light" id="botaoAoVivoDvrTelaCheia"><i class="bi bi-arrows-fullscreen"></i> Tela cheia</button>
                     <button type="button" class="btn btn-sm btn-outline-light" id="botaoAoVivoDvrReiniciar"><i class="bi bi-arrow-repeat"></i> Reproduzir de novo</button>
+                    <?php if (!\App\Services\IntelbrasDvrService::ffmpegDisponivel()): ?>
+                        <div class="w-100 small text-secondary border-top border-secondary pt-2 mt-1">
+                            <i class="bi bi-info-circle"></i> Equipamentos que só entregam vídeo H.264 (a maioria dos DVRs, e o HD dos NVRs) aparecem aqui como fotos em sequência, 1 a 3 por segundo.
+                            Para vídeo fluido, instale o <strong>ffmpeg</strong> no servidor em
+                            <a href="<?= url('/infraestrutura/dependencias') ?>" class="link-light">Infraestrutura &gt; Dependências</a>.
+                        </div>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>

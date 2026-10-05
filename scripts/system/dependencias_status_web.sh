@@ -34,6 +34,7 @@ declare -A COMANDOS=(
   [mtr]="mtr"
   [bind9-dnsutils]="dig"
   [isc-dhcp-server]="dhcpd"
+  [ffmpeg]="ffmpeg"
 )
 
 for CHAVE in "${!COMANDOS[@]}"; do

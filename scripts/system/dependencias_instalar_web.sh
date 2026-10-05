@@ -40,6 +40,7 @@ declare -A PACOTES=(
   [snmp]="snmp"
   [rclone]="rclone"
   [php-xml]="php-xml"
+  [ffmpeg]="ffmpeg"
 )
 
 PACOTE="${PACOTES[$CHAVE]:-}"

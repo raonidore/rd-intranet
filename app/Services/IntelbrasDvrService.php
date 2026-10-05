@@ -855,7 +855,7 @@ class IntelbrasDvrService
         }
 
         $restante = max(10, $maxSegundos - (int)(microtime(true) - $inicio));
-        if ($this->ffmpegDisponivel()) {
+        if (self::ffmpegDisponivel()) {
             return $this->transmitirViaFfmpeg($ip, $canal, $qualidade, $restante, $credencial);
         }
 
@@ -922,7 +922,8 @@ class IntelbrasDvrService
         return $codigo === 401 && $qualidade !== 'alta' && !$naoEhJpeg ? 'senha' : 'indisponivel';
     }
 
-    private function ffmpegDisponivel(): bool
+    /** Usado também na ficha do ativo, pra avisar quando o tempo real em HD fica em fotos por falta dele. */
+    public static function ffmpegDisponivel(): bool
     {
         return is_executable('/usr/bin/ffmpeg');
     }

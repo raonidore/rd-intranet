@@ -262,6 +262,14 @@ class DependenciaCatalogo
                 'usado_em' => 'Infraestrutura > Servidor DHCP',
                 'obrigatorio' => false,
             ],
+            [
+                'chave' => 'ffmpeg',
+                'nome' => 'ffmpeg',
+                'pacote' => 'ffmpeg',
+                'descricao' => 'Converte o vídeo H.264 das câmeras em imagem para o navegador -- deixa a "Imagem em tempo real" do DVR/NVR fluida (cerca de 10 quadros/s), inclusive em HD. Sem ele, os equipamentos que só entregam H.264 aparecem como fotos em sequência (1 a 3 por segundo). Cada janela aberta usa parte de um núcleo do servidor enquanto estiver aberta.',
+                'usado_em' => 'Ativos > DVR/NVR > Canais (Imagem em tempo real)',
+                'obrigatorio' => false,
+            ],
         ];
     }
 
