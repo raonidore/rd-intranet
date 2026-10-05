@@ -4034,7 +4034,7 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
         clearTimeout(timerFimAoVivo);
         imagemAoVivo.style.display = 'none';
         statusAoVivo.style.display = '';
-        statusAoVivo.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Conectando ao equipamento...';
+        statusAoVivo.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Conectando ao equipamento...' + (seletorQualidade.value === 'alta' ? '<div class="small text-secondary mt-1">Em HD a primeira imagem pode levar alguns segundos.</div>' : '');
         imagemAoVivo.src = <?= json_encode(url('/ativos/intelbras-dvr/ao-vivo')) ?> + '?id=' + encodeURIComponent(aoVivoAberto.id)
             + '&canal=' + encodeURIComponent(aoVivoAberto.canal) + '&qualidade=' + seletorQualidade.value + '&_=' + Date.now();
         dicaQualidade.textContent = seletorQualidade.value === 'alta' ? 'mais pesada, até 3 min por vez' : 'até 3 min por vez';
