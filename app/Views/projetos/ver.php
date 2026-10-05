@@ -340,6 +340,20 @@ $colunaLabels = [
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">
         <h6 class="card-title mb-3"><i class="bi bi-clock-history"></i> Linha do tempo</h6>
+        <?php
+            // Quem pode ser marcado no campo da Linha do tempo: "" = nota geral (pessoas do projeto), ID = a tarefa escolhida.
+            $semEu = fn (array $lista) => array_values(array_map(
+                fn ($pp) => ['chave' => $pp['tipo'] . ':' . (int)$pp['id'], 'nome' => $pp['nome'], 'tipo' => $pp['tipo']],
+                array_filter($lista, fn ($pp) => !($pp['tipo'] === 'interno' && (int)$pp['id'] === (int)$usuarioLogadoId))
+            ));
+            $mapaMarcaveis = ['' => $semEu($marcaveisProjeto)];
+            $comentariosSvc = new \App\Services\ProjetoComentarioService();
+            foreach ($quadro as $colunaTarefas) {
+                foreach ($colunaTarefas as $t) {
+                    $mapaMarcaveis[(string)$t['id']] = $semEu($comentariosSvc->marcaveisDaTarefa((int)$t['id']));
+                }
+            }
+        ?>
         <ul class="list-unstyled mb-3">
             <?php if (empty($timeline)): ?>
                 <li class="text-muted small">Nada por aqui ainda.</li>
@@ -388,20 +402,6 @@ $colunaLabels = [
             <?php endforeach; ?>
         </ul>
 
-        <?php
-            // Quem pode ser marcado no campo da Linha do tempo: "" = nota geral (pessoas do projeto), ID = a tarefa escolhida.
-            $semEu = fn (array $lista) => array_values(array_map(
-                fn ($pp) => ['chave' => $pp['tipo'] . ':' . (int)$pp['id'], 'nome' => $pp['nome'], 'tipo' => $pp['tipo']],
-                array_filter($lista, fn ($pp) => !($pp['tipo'] === 'interno' && (int)$pp['id'] === (int)$usuarioLogadoId))
-            ));
-            $mapaMarcaveis = ['' => $semEu($marcaveisProjeto)];
-            $comentariosSvc = new \App\Services\ProjetoComentarioService();
-            foreach ($quadro as $colunaTarefas) {
-                foreach ($colunaTarefas as $t) {
-                    $mapaMarcaveis[(string)$t['id']] = $semEu($comentariosSvc->marcaveisDaTarefa((int)$t['id']));
-                }
-            }
-        ?>
         <form method="post" action="<?= url('/projetos/comentar') ?>" enctype="multipart/form-data" id="formComentarProjeto" class="position-relative"
               data-marcaveis-mapa="<?= htmlspecialchars(json_encode($mapaMarcaveis, JSON_UNESCAPED_UNICODE)) ?>">
             <div class="list-group position-absolute shadow-sm d-none lista-mencoes" style="z-index:30; bottom:100%; min-width:260px; max-height:220px; overflow-y:auto"></div>
