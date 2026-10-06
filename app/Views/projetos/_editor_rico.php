@@ -60,5 +60,5 @@ $coresMarca = ['#fff3cd' => 'Amarelo', '#d1e7dd' => 'Verde', '#cfe2ff' => 'Azul'
          data-placeholder="<?= htmlspecialchars($placeholderEditor ?? 'Descrição') ?>"><?= $valorHtml ?></div>
     <div class="list-group position-absolute shadow-sm d-none editor-rico-mencoes" style="z-index:40; min-width:240px; max-height:200px; overflow-y:auto"></div>
     <input type="hidden" name="<?= htmlspecialchars($nomeCampo) ?>" class="editor-rico-campo">
-    <div class="form-text mt-0">Selecione um trecho e use a barra acima. Ctrl+clique abre um link.<?= !empty($marcaveisEditor) ? ' Use @ para mencionar alguém da tarefa (avisado ao salvar).' : '' ?></div>
+    <div class="form-text mt-0">Selecione um trecho e use a barra acima. Ctrl+clique abre um link.<?= !empty($marcaveisEditor) ? (!empty($editorObrigatorio) ? ' Use @ para mencionar alguém (avisado ao enviar).' : ' Use @ para mencionar alguém da tarefa (avisado ao salvar).') : '' ?></div>
 </div>
