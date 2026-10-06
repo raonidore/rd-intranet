@@ -150,6 +150,20 @@ $statusClasses = [
 .gantt-hoje { position: absolute; top: 0; bottom: 0; width: 2px; background: #dc3545; opacity: .5; z-index: 2; }
 .gantt-wrap { overflow-x: auto; }
 .cor-swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+.editor-rico-barra { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 3px; border: 1px solid #dee2e6; border-bottom: 0; border-radius: 6px 6px 0 0; background: #f8f9fa; }
+.editor-rico-barra .btn { padding: 2px 7px; }
+.editor-rico-sep { width: 1px; height: 18px; background: #dee2e6; margin: 0 4px; }
+.editor-rico-area { border-radius: 0 0 6px 6px; overflow-wrap: anywhere; max-height: 360px; overflow-y: auto; }
+.editor-rico-area:empty::before { content: attr(data-placeholder); color: #6c757d; }
+.editor-rico-area a { cursor: pointer; }
+.editor-rico-area ul, .editor-rico-area ol, .texto-rico ul, .texto-rico ol { margin-bottom: .25rem; padding-left: 1.4rem; }
+.editor-rico-area h5, .texto-rico h5 { font-size: 1rem; font-weight: 600; margin: .4rem 0 .2rem; }
+.editor-rico-area hr, .texto-rico hr { margin: .5rem 0; opacity: .35; }
+.editor-rico-area blockquote, .texto-rico blockquote { margin: 0 0 0 1.5rem; }
+.editor-rico-paleta { min-width: 176px; }
+.editor-rico-cor { width: 24px; height: 24px; border-radius: 50%; border: 1px solid rgba(0,0,0,.15); margin: 2px; padding: 0; display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; position: relative; overflow: hidden; cursor: pointer; }
+.editor-rico-cor-livre { background: #fff; color: #6c757d; border-style: dashed; }
+.editor-rico-cor-livre input[type="color"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 .cor-swatch { width: 26px; height: 26px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; display: inline-block; }
 .cor-swatch.selecionada { border-color: #212529; box-shadow: 0 0 0 2px #fff inset; }
 .cor-swatch.cor-nenhuma { background: #fff; border: 2px dashed #ced4da; position: relative; }
@@ -697,7 +711,7 @@ $statusClasses = [
                         </div>
                         <div class="col-12">
                             <label class="form-label">Descrição</label>
-                            <textarea name="descricao" class="form-control" rows="3"></textarea>
+                            <?php $nomeCampo = 'descricao'; $valorHtml = ''; $placeholderEditor = 'O que precisa ser feito...'; $alturaEditor = 90; require __DIR__ . '/_editor_rico.php'; ?>
                         </div>
                     </div>
                 </div>
@@ -819,7 +833,7 @@ $statusClasses = [
                         </div>
                         <?php endif; ?>
                         <div class="col-12">
-                            <textarea name="descricao" class="form-control form-control-sm" rows="2" placeholder="Descrição"><?= htmlspecialchars($tarefa['descricao'] ?? '') ?></textarea>
+                            <?php $nomeCampo = 'descricao'; $valorHtml = (new \App\Services\TextoRicoService())->paraHtml($tarefa['descricao'] ?? ''); $placeholderEditor = 'Descrição'; $alturaEditor = 70; require __DIR__ . '/_editor_rico.php'; ?>
                         </div>
                         <div class="col-12 text-end">
                             <button type="submit" class="btn btn-outline-primary btn-sm">Salvar</button>
@@ -1210,6 +1224,75 @@ mark.mencao-campo { background: #cfe2ff; color: transparent; border-radius: 3px;
             }
             marcar(swatch);
             campo.value = hex;
+        });
+    });
+
+    // --- Editor de texto com formatação (descrição da tarefa) ---
+    document.querySelectorAll('.editor-rico').forEach(function (editor) {
+        const area = editor.querySelector('.editor-rico-area');
+        const campo = editor.querySelector('.editor-rico-campo');
+        let selecao = null;
+
+        // Guarda a seleção do texto: clicar na paleta/seletor de cor tira o foco do editor.
+        document.addEventListener('selectionchange', function () {
+            const sel = window.getSelection();
+            if (sel.rangeCount && area.contains(sel.anchorNode)) selecao = sel.getRangeAt(0).cloneRange();
+        });
+        function restaurarSelecao() {
+            area.focus();
+            if (!selecao) return;
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(selecao);
+        }
+        function aplicar(comando, valor) {
+            restaurarSelecao();
+            // style só pra cor/marca-texto; negrito/itálico etc. saem como <b>/<i>/<u>/<s>.
+            document.execCommand('styleWithCSS', false, comando === 'foreColor' || comando === 'hiliteColor');
+            if (comando === 'createLink') {
+                const atual = window.getSelection().toString().trim();
+                let url = prompt('Endereço do link (http:// ou https://):', /^https?:\/\//i.test(atual) ? atual : 'https://');
+                if (!url || url === 'https://') return;
+                if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+                if (window.getSelection().isCollapsed) {
+                    document.execCommand('insertHTML', false, '<a href="' + url.replace(/"/g, '&quot;') + '">' + url.replace(/</g, '&lt;') + '</a>');
+                } else {
+                    document.execCommand('createLink', false, url);
+                }
+            } else if (comando === 'removeFormat') {
+                document.execCommand('removeFormat');
+                document.execCommand('unlink');
+            } else {
+                document.execCommand(comando, false, valor);
+            }
+            area.dispatchEvent(new Event('input'));
+        }
+
+        editor.querySelectorAll('[data-comando]').forEach(function (botao) {
+            if (botao.tagName === 'INPUT') {
+                botao.addEventListener('input', function () { aplicar(botao.dataset.comando, botao.value); });
+                return;
+            }
+            botao.addEventListener('mousedown', function (ev) { ev.preventDefault(); }); // não tira a seleção
+            botao.addEventListener('click', function () { aplicar(botao.dataset.comando, botao.dataset.valor); });
+        });
+
+        // Ctrl/Cmd+clique abre o link (clique simples continua editando o texto).
+        area.addEventListener('click', function (ev) {
+            const link = ev.target.closest('a');
+            if (link && (ev.ctrlKey || ev.metaKey)) {
+                ev.preventDefault();
+                window.open(link.href, '_blank', 'noopener');
+            }
+        });
+
+        // Editor vazio de verdade (o navegador deixa um <br> sobrando) mostra o placeholder.
+        area.addEventListener('input', function () {
+            if (area.innerText.trim() === '' && !area.querySelector('li')) area.innerHTML = '';
+        });
+
+        editor.closest('form').addEventListener('submit', function () {
+            campo.value = area.innerHTML;
         });
     });
 

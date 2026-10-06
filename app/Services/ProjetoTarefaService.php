@@ -190,7 +190,7 @@ class ProjetoTarefaService
             $projetoId,
             $faseId,
             $titulo,
-            trim($dados['descricao'] ?? '') ?: null,
+            (new TextoRicoService())->sanitizar($dados['descricao'] ?? ''),
             trim($dados['tag'] ?? '') ?: null,
             $cor,
             $estilo,
@@ -226,7 +226,7 @@ class ProjetoTarefaService
         );
         $stmt->execute([
             $titulo,
-            trim($dados['descricao'] ?? '') ?: null,
+            (new TextoRicoService())->sanitizar($dados['descricao'] ?? ''),
             trim($dados['tag'] ?? '') ?: null,
             $cor,
             $estilo,

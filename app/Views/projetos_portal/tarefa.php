@@ -35,7 +35,7 @@ unset($_SESSION['flash_msg'], $_SESSION['flash_tipo']);
     <?php if (!empty($tarefa['descricao'])): ?>
         <div class="card border-0 shadow-sm mb-3">
             <div class="card-body">
-                <div style="white-space:pre-wrap"><?= htmlspecialchars($tarefa['descricao']) ?></div>
+                <div class="texto-rico" style="overflow-wrap:anywhere"><?= (new \App\Services\TextoRicoService())->paraHtml($tarefa['descricao']) ?></div>
             </div>
         </div>
     <?php endif; ?>
