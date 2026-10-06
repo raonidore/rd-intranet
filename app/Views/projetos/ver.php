@@ -423,7 +423,7 @@ $statusClasses = [
                                     $textoNota = str_ireplace($marca, '<span class="mencao' . ($nomeMarcado === $meuNome ? ' mencao-eu' : '') . '">' . $marca . '</span>', $textoNota);
                                 }
                             ?>
-                            <p class="mb-0 mt-1" style="white-space:pre-wrap"><?= $textoNota ?></p>
+                            <p class="mb-0 mt-1" style="white-space:pre-wrap; word-break:break-word"><?= linkificar($textoNota) ?></p>
                             <?php if (!empty($item['latitude'])): ?>
                                 <a class="small" target="_blank" rel="noopener" href="https://www.google.com/maps?q=<?= $item['latitude'] ?>,<?= $item['longitude'] ?>">
                                     <i class="bi bi-geo-alt"></i> Ver no mapa
@@ -888,7 +888,7 @@ $statusClasses = [
                                         $textoMsg = str_ireplace($marca, '<span class="mencao' . ($ehEu ? ' mencao-eu' : '') . '">' . $marca . '</span>', $textoMsg);
                                     }
                                 ?>
-                                <div class="conversa-texto"><?= $textoMsg ?></div>
+                                <div class="conversa-texto"><?= linkificar($textoMsg) ?></div>
                                 <?php foreach ($anexosTarefa as $a): ?>
                                     <?php if ((int)($a['comentario_id'] ?? 0) === (int)$c['id']): ?>
                                         <a class="small d-block" href="<?= url('/projetos/anexo?anexo_id=' . (int)$a['id']) ?>"><i class="bi bi-paperclip"></i> <?= htmlspecialchars($a['anexo_nome_original']) ?></a>

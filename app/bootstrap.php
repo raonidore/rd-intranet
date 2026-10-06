@@ -9,6 +9,7 @@ require_once __DIR__ . '/Helpers/url.php';
 require_once __DIR__ . '/Helpers/data.php';
 require_once __DIR__ . '/Helpers/kb.php';
 require_once __DIR__ . '/Helpers/telefone.php';
+require_once __DIR__ . '/Helpers/texto.php';
 
 function auth_required()
 {
