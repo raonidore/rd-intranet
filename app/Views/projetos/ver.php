@@ -156,6 +156,7 @@ $statusClasses = [
 .editor-rico-area { border-radius: 0 0 6px 6px; overflow-wrap: anywhere; max-height: 360px; overflow-y: auto; }
 .editor-rico-area:empty::before { content: attr(data-placeholder); color: #6c757d; }
 .editor-rico-area a { cursor: pointer; }
+.editor-rico-area .mencao, .texto-rico .mencao { color: #0a58ca; font-weight: 600; background: #e7f1ff; border-radius: 3px; padding: 0 2px; }
 .editor-rico-area ul, .editor-rico-area ol, .texto-rico ul, .texto-rico ol { margin-bottom: .25rem; padding-left: 1.4rem; }
 .editor-rico-area h5, .texto-rico h5 { font-size: 1rem; font-weight: 600; margin: .4rem 0 .2rem; }
 .editor-rico-area hr, .texto-rico hr { margin: .5rem 0; opacity: .35; }
@@ -833,7 +834,18 @@ $statusClasses = [
                         </div>
                         <?php endif; ?>
                         <div class="col-12">
-                            <?php $nomeCampo = 'descricao'; $valorHtml = (new \App\Services\TextoRicoService())->paraHtml($tarefa['descricao'] ?? ''); $placeholderEditor = 'Descrição'; $alturaEditor = 70; require __DIR__ . '/_editor_rico.php'; ?>
+                            <?php
+                                $nomeCampo = 'descricao';
+                                $valorHtml = (new \App\Services\TextoRicoService())->paraHtml($tarefa['descricao'] ?? '');
+                                $placeholderEditor = 'Descrição';
+                                $alturaEditor = 70;
+                                $marcaveisEditor = array_values(array_map(
+                                    fn ($pp) => ['chave' => $pp['tipo'] . ':' . (int)$pp['id'], 'nome' => $pp['nome'], 'tipo' => $pp['tipo']],
+                                    array_filter($marcaveisTarefa, fn ($pp) => !($pp['tipo'] === 'interno' && (int)$pp['id'] === (int)$usuarioLogadoId))
+                                ));
+                                require __DIR__ . '/_editor_rico.php';
+                                $marcaveisEditor = [];
+                            ?>
                         </div>
                         <div class="col-12 text-end">
                             <button type="submit" class="btn btn-outline-primary btn-sm">Salvar</button>
@@ -1303,7 +1315,92 @@ mark.mencao-campo { background: #cfe2ff; color: transparent; border-radius: 3px;
             if (area.innerText.trim() === '' && !area.querySelector('li')) area.innerHTML = '';
         });
 
+        // @menção dentro da descrição: "@" + letras abre a lista das pessoas da tarefa.
+        const marcaveis = JSON.parse(editor.dataset.marcaveis || '[]');
+        const listaMencoes = editor.querySelector('.editor-rico-mencoes');
+        let opcoesMencao = [];
+        let ativaMencao = 0;
+
+        function termoMencao() {
+            const sel = window.getSelection();
+            if (!sel.rangeCount || !sel.isCollapsed) return null;
+            const r = sel.getRangeAt(0);
+            const no = r.startContainer;
+            if (no.nodeType !== 3 || !area.contains(no) || no.parentElement.closest('.mencao')) return null;
+            const m = no.data.slice(0, r.startOffset).match(/(?:^|[\s\u00a0])@([^@\n\u00a0]{0,30})$/);
+            return m ? { no: no, fim: r.startOffset, inicio: r.startOffset - m[1].length - 1, termo: m[1] } : null;
+        }
+        function fecharMencoes() { listaMencoes.classList.add('d-none'); opcoesMencao = []; }
+        function desenharMencoes() {
+            listaMencoes.innerHTML = opcoesMencao.map((p, i) =>
+                '<button type="button" class="list-group-item list-group-item-action py-1 small' + (i === ativaMencao ? ' active' : '') + '" data-i="' + i + '">'
+                + '<i class="bi ' + (p.tipo === 'interno' ? 'bi-person' : 'bi-person-badge') + '"></i> ' + p.nome.replace(/</g, '&lt;') + '</button>'
+            ).join('');
+            listaMencoes.style.top = (area.offsetTop + area.offsetHeight) + 'px';
+            listaMencoes.classList.toggle('d-none', opcoesMencao.length === 0);
+        }
+        function escolherMencao(p) {
+            const t = termoMencao();
+            if (!t) return fecharMencoes();
+            const r = document.createRange();
+            r.setStart(t.no, t.inicio);
+            r.setEnd(t.no, t.fim);
+            r.deleteContents();
+            const marca = document.createElement('span');
+            marca.className = 'mencao';
+            marca.dataset.mencao = p.chave;
+            marca.textContent = '@' + p.nome;
+            const espaco = document.createTextNode('\u00a0');
+            r.insertNode(espaco);
+            r.insertNode(marca);
+            const depois = document.createRange();
+            depois.setStartAfter(espaco);
+            depois.collapse(true);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(depois);
+            fecharMencoes();
+        }
+        if (marcaveis.length) {
+            area.addEventListener('input', function () {
+                const t = termoMencao();
+                if (!t) return fecharMencoes();
+                const termo = t.termo.toLowerCase();
+                opcoesMencao = marcaveis.filter((p) => p.nome.toLowerCase().includes(termo)).slice(0, 8);
+                ativaMencao = 0;
+                desenharMencoes();
+            });
+            area.addEventListener('keydown', function (ev) {
+                if (listaMencoes.classList.contains('d-none')) return;
+                if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+                    ev.preventDefault();
+                    ativaMencao = (ativaMencao + (ev.key === 'ArrowDown' ? 1 : opcoesMencao.length - 1)) % opcoesMencao.length;
+                    desenharMencoes();
+                } else if (ev.key === 'Enter' || ev.key === 'Tab') {
+                    ev.preventDefault();
+                    escolherMencao(opcoesMencao[ativaMencao]);
+                } else if (ev.key === 'Escape') {
+                    ev.stopPropagation();
+                    fecharMencoes();
+                }
+            });
+            listaMencoes.addEventListener('mousedown', function (ev) {
+                const item = ev.target.closest('[data-i]');
+                if (!item) return;
+                ev.preventDefault();
+                escolherMencao(opcoesMencao[parseInt(item.dataset.i, 10)]);
+            });
+            area.addEventListener('blur', function () { setTimeout(fecharMencoes, 150); });
+        }
+
         editor.closest('form').addEventListener('submit', function () {
+            // Menção cujo nome foi apagado/alterado deixa de ser menção.
+            area.querySelectorAll('.mencao[data-mencao]').forEach(function (m) {
+                const p = marcaveis.find((x) => x.chave === m.dataset.mencao);
+                if (!p || m.textContent.trim() !== '@' + p.nome) {
+                    m.replaceWith(document.createTextNode(m.textContent));
+                }
+            });
             campo.value = area.innerHTML;
         });
     });

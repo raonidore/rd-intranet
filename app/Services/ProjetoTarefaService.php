@@ -221,12 +221,15 @@ class ProjetoTarefaService
         $cor = self::normalizarCor($dados['cor'] ?? null);
         $estilo = isset(self::ESTILOS_COR[$dados['cor_estilo'] ?? '']) ? $dados['cor_estilo'] : 'lateral';
 
+        $anterior = $this->buscar($id);
+        $descricao = (new TextoRicoService())->sanitizar($dados['descricao'] ?? '');
+
         $stmt = $this->pdo->prepare(
             'UPDATE projetos_tarefas SET titulo = ?, descricao = ?, tag = ?, cor = ?, cor_estilo = ?, fase_id = ?, data_inicio = ?, prazo = ? WHERE id = ?'
         );
         $stmt->execute([
             $titulo,
-            (new TextoRicoService())->sanitizar($dados['descricao'] ?? ''),
+            $descricao,
             trim($dados['tag'] ?? '') ?: null,
             $cor,
             $estilo,
@@ -235,6 +238,13 @@ class ProjetoTarefaService
             trim($dados['prazo'] ?? '') ?: null,
             $id,
         ]);
+
+        // @menção na descrição: avisa só quem passou a ser mencionado agora
+        // (salvar de novo não reavisa quem já estava).
+        $novas = array_diff(TextoRicoService::mencoes($descricao), TextoRicoService::mencoes($anterior['descricao'] ?? null));
+        if ($anterior && $novas) {
+            (new ProjetoComentarioService())->avisarMencaoNaDescricao((int)$anterior['projeto_id'], $id, $novas, (int)($_SESSION['usuario']['id'] ?? 0) ?: null);
+        }
 
         return ['success' => true, 'message' => 'Tarefa atualizada.'];
     }

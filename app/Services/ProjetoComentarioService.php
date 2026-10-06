@@ -250,6 +250,38 @@ class ProjetoComentarioService
         return array_values($lista);
     }
 
+    /**
+     * Quem foi @mencionado na DESCRIÇÃO da tarefa: vira uma mensagem na
+     * conversa ("Mencionou @Fulano na descrição da tarefa.") com as menções --
+     * aí entra no mesmo aviso de sempre (menu, card, lista, e-mail).
+     *
+     * @param string[] $chaves "interno:ID"/"externo:ID"
+     */
+    public function avisarMencaoNaDescricao(int $projetoId, int $tarefaId, array $chaves, ?int $usuarioId): void
+    {
+        $nomes = [];
+        foreach ($this->marcaveisDaTarefa($tarefaId) as $pessoa) {
+            $chave = $pessoa['tipo'] . ':' . (int)$pessoa['id'];
+            if (in_array($chave, $chaves, true) && !($pessoa['tipo'] === 'interno' && (int)$pessoa['id'] === (int)$usuarioId)) {
+                $nomes[$chave] = $pessoa['nome'];
+            }
+        }
+        if (!$nomes) {
+            return;
+        }
+
+        $conteudo = 'Mencionou ' . implode(', ', array_map(fn ($n) => '@' . $n, $nomes)) . ' na descrição da tarefa.';
+        $resultado = $this->comentar($projetoId, $tarefaId, $conteudo, $usuarioId, null);
+        if (!$resultado['success']) {
+            return;
+        }
+        $this->salvarMencoes((int)$resultado['id'], $tarefaId, $conteudo, array_keys($nomes));
+        if ($usuarioId !== null) {
+            $this->marcarLido($tarefaId, $usuarioId);
+        }
+        (new ProjetoNotificacaoService())->notificarComentario((int)$resultado['id']);
+    }
+
     /** @return string[] chaves "interno:ID"/"externo:ID" marcadas na mensagem */
     public function mencoesDoComentario(int $comentarioId): array
     {

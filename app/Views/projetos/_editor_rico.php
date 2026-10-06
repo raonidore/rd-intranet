@@ -8,7 +8,7 @@
 $coresTexto = ['#1f2328' => 'Preto', '#dc3545' => 'Vermelho', '#fd7e14' => 'Laranja', '#b58100' => 'Amarelo escuro', '#198754' => 'Verde', '#0d6efd' => 'Azul', '#6f42c1' => 'Roxo', '#6c757d' => 'Cinza'];
 $coresMarca = ['#fff3cd' => 'Amarelo', '#d1e7dd' => 'Verde', '#cfe2ff' => 'Azul', '#f8d7da' => 'Vermelho', '#e2d9f3' => 'Roxo'];
 ?>
-<div class="editor-rico">
+<div class="editor-rico position-relative" data-marcaveis="<?= htmlspecialchars(json_encode($marcaveisEditor ?? [], JSON_UNESCAPED_UNICODE)) ?>">
     <div class="editor-rico-barra" role="toolbar" aria-label="Formatação do texto">
         <button type="button" class="btn btn-sm btn-light" data-comando="bold" title="Negrito (Ctrl+B)"><i class="bi bi-type-bold"></i></button>
         <button type="button" class="btn btn-sm btn-light" data-comando="italic" title="Itálico (Ctrl+I)"><i class="bi bi-type-italic"></i></button>
@@ -58,6 +58,7 @@ $coresMarca = ['#fff3cd' => 'Amarelo', '#d1e7dd' => 'Verde', '#cfe2ff' => 'Azul'
     <div class="form-control form-control-sm editor-rico-area" contenteditable="true" spellcheck="true"
          style="min-height:<?= (int)($alturaEditor ?? 90) ?>px"
          data-placeholder="<?= htmlspecialchars($placeholderEditor ?? 'Descrição') ?>"><?= $valorHtml ?></div>
+    <div class="list-group position-absolute shadow-sm d-none editor-rico-mencoes" style="z-index:40; min-width:240px; max-height:200px; overflow-y:auto"></div>
     <input type="hidden" name="<?= htmlspecialchars($nomeCampo) ?>" class="editor-rico-campo">
-    <div class="form-text mt-0">Selecione um trecho e use a barra acima. Ctrl+clique abre um link.</div>
+    <div class="form-text mt-0">Selecione um trecho e use a barra acima. Ctrl+clique abre um link.<?= !empty($marcaveisEditor) ? ' Use @ para mencionar alguém da tarefa (avisado ao salvar).' : '' ?></div>
 </div>

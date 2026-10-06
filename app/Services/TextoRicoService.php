@@ -108,6 +108,9 @@ class TextoRicoService
             $estilos = [];
             $marcas = [];
             $href = null;
+            // @menção feita no editor: <span class="mencao" data-mencao="interno:5">@Nome</span>
+            $mencao = $tag === 'span' && preg_match('/^(?:interno|externo):\d+$/', $filho->getAttribute('data-mencao'))
+                ? $filho->getAttribute('data-mencao') : null;
             if (in_array($tag, ['span', 'font', 'div', 'p'], true)) {
                 $estilos = $this->estilosPermitidos($filho->getAttribute('style'));
                 $marcas = $this->marcasDoEstilo($filho->getAttribute('style'));
@@ -137,6 +140,10 @@ class TextoRicoService
                 $filho = $span;
             }
 
+            if ($mencao !== null) {
+                $filho->setAttribute('class', 'mencao');
+                $filho->setAttribute('data-mencao', $mencao);
+            }
             if ($estilos) {
                 $filho->setAttribute('style', implode(';', array_map(fn ($k, $v) => "{$k}:{$v}", array_keys($estilos), $estilos)));
             }
@@ -185,6 +192,14 @@ class TextoRicoService
         }
 
         return $marcas;
+    }
+
+    /** @return string[] pessoas marcadas com @ no texto ("interno:5", "externo:3"), sem repetir */
+    public static function mencoes(?string $html): array
+    {
+        preg_match_all('/data-mencao="((?:interno|externo):\d+)"/', (string)$html, $m);
+
+        return array_values(array_unique($m[1]));
     }
 
     /** <font size="1..7"> (comando nativo/colado de fora) -> px. */
