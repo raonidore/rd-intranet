@@ -132,7 +132,7 @@ class ProjetoNotificacaoService
                 $pessoa['email'],
                 ($info['autor'] ?: 'Alguém') . ' mencionou você: ' . $info['titulo'],
                 '<p><strong>' . htmlspecialchars($info['autor'] ?: 'Alguém') . '</strong> mencionou você numa nota do projeto <strong>' . htmlspecialchars($info['titulo']) . '</strong>:</p>'
-                . '<blockquote style="border-left:3px solid #ccc;margin:0;padding:4px 12px;color:#333">' . nl2br(htmlspecialchars($comentario['conteudo'])) . '</blockquote>'
+                . '<blockquote style="border-left:3px solid #ccc;margin:0;padding:4px 12px;color:#333">' . (new TextoRicoService())->paraHtml($comentario['conteudo']) . '</blockquote>'
                 . '<p><a href="' . htmlspecialchars($link) . '">Abrir o projeto</a></p>'
             );
         }
@@ -180,7 +180,7 @@ class ProjetoNotificacaoService
         $assunto = 'Nova mensagem: ' . $tarefa['titulo'];
         $corpo = '<p><strong>' . htmlspecialchars($autor ?: 'Alguém') . '</strong> escreveu na tarefa <strong>' . htmlspecialchars($tarefa['titulo']) . '</strong>'
             . ' (' . htmlspecialchars($tarefa['projeto_titulo'] ?? '') . '):</p>'
-            . '<blockquote style="border-left:3px solid #ccc;margin:0;padding:4px 12px;color:#333">' . nl2br(htmlspecialchars($comentario['conteudo'])) . '</blockquote>';
+            . '<blockquote style="border-left:3px solid #ccc;margin:0;padding:4px 12px;color:#333">' . (new TextoRicoService())->paraHtml($comentario['conteudo']) . '</blockquote>';
 
         foreach ((new ProjetoTarefaService())->pessoas((int)$comentario['tarefa_id']) as $pessoa) {
             // não avisa quem acabou de comentar

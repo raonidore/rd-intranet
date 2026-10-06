@@ -40,7 +40,7 @@ class ProjetoComentarioService
     /** @return array{success: bool, message: string, id?: int} */
     public function comentar(int $projetoId, ?int $tarefaId, string $conteudo, ?int $usuarioId, ?int $participanteExternoId, ?float $latitude = null, ?float $longitude = null): array
     {
-        $conteudo = trim($conteudo);
+        $conteudo = (string)(new TextoRicoService())->sanitizar($conteudo); // formatação do editor; texto puro vira HTML escapado
         if ($conteudo === '') {
             return ['success' => false, 'message' => 'Escreva algo antes de salvar.'];
         }

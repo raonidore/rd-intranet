@@ -8,7 +8,7 @@
 $coresTexto = ['#1f2328' => 'Preto', '#dc3545' => 'Vermelho', '#fd7e14' => 'Laranja', '#b58100' => 'Amarelo escuro', '#198754' => 'Verde', '#0d6efd' => 'Azul', '#6f42c1' => 'Roxo', '#6c757d' => 'Cinza'];
 $coresMarca = ['#fff3cd' => 'Amarelo', '#d1e7dd' => 'Verde', '#cfe2ff' => 'Azul', '#f8d7da' => 'Vermelho', '#e2d9f3' => 'Roxo'];
 ?>
-<div class="editor-rico position-relative" data-marcaveis="<?= htmlspecialchars(json_encode($marcaveisEditor ?? [], JSON_UNESCAPED_UNICODE)) ?>">
+<div class="editor-rico position-relative" data-obrigatorio="<?= !empty($editorObrigatorio) ? '1' : '0' ?>" data-marcaveis="<?= htmlspecialchars(json_encode($marcaveisEditor ?? [], JSON_UNESCAPED_UNICODE)) ?>">
     <div class="editor-rico-barra" role="toolbar" aria-label="Formatação do texto">
         <button type="button" class="btn btn-sm btn-light" data-comando="bold" title="Negrito (Ctrl+B)"><i class="bi bi-type-bold"></i></button>
         <button type="button" class="btn btn-sm btn-light" data-comando="italic" title="Itálico (Ctrl+I)"><i class="bi bi-type-italic"></i></button>

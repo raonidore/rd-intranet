@@ -52,8 +52,11 @@ class ProjetoComentarioController extends Controller
 
         if ($resultado['success']) {
             $comentarios = new ProjetoComentarioService();
-            $marcados = $_POST['mencoes'] ?? [];
-            if (is_array($marcados) && $marcados) {
+            $marcados = array_merge(
+                is_array($_POST['mencoes'] ?? null) ? $_POST['mencoes'] : [],
+                \App\Services\TextoRicoService::mencoes((string)($_POST['conteudo'] ?? ''))
+            );
+            if ($marcados) {
                 $comentarios->salvarMencoes((int)$resultado['id'], $tarefaId, (string)($_POST['conteudo'] ?? ''), $marcados, $projetoId);
             }
             $tarefaId !== null ? $comentarios->marcarLido($tarefaId, $usuarioId) : $comentarios->marcarLidoProjeto($projetoId, $usuarioId);

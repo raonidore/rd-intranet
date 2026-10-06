@@ -92,7 +92,10 @@ class ProjetoPainelTvController extends Controller
                 return $fase;
             }, $faseService->listar((int)$projeto['id']));
 
-            $timeline = array_slice(array_reverse($comentarioService->timeline((int)$projeto['id'])), 0, 3);
+            $timeline = array_map(
+                fn (array $item) => ['conteudo' => \App\Services\TextoRicoService::paraTextoPuro($item['conteudo'])] + $item,
+                array_slice(array_reverse($comentarioService->timeline((int)$projeto['id'])), 0, 3)
+            );
 
             return [
                 'id' => (int)$projeto['id'],

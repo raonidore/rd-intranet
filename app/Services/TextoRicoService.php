@@ -194,6 +194,14 @@ class TextoRicoService
         return $marcas;
     }
 
+    /** Versão sem formatação (painel de TV, prévias): quebras de bloco viram linha. */
+    public static function paraTextoPuro(?string $valor): string
+    {
+        $texto = preg_replace('~<(?:br|/div|/p|/li|/h5|hr)[^>]*>~i', "\n", (string)$valor);
+
+        return trim(preg_replace("/\n{3,}/", "\n\n", html_entity_decode(strip_tags($texto), ENT_QUOTES | ENT_HTML5, 'UTF-8')));
+    }
+
     /** @return string[] pessoas marcadas com @ no texto ("interno:5", "externo:3"), sem repetir */
     public static function mencoes(?string $html): array
     {

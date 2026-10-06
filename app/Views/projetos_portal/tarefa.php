@@ -67,7 +67,7 @@ unset($_SESSION['flash_msg'], $_SESSION['flash_tipo']);
                             <strong><?= $c['usuario_nome'] ? htmlspecialchars($c['usuario_nome']) . ' (equipe)' : htmlspecialchars($c['participante_nome'] ?? 'Você') ?></strong>
                             <small class="text-muted"><?= date('d/m/Y H:i', strtotime($c['criado_em'])) ?></small>
                         </div>
-                        <div class="mt-1" style="white-space:pre-wrap; word-break:break-word"><?= linkificar(htmlspecialchars($c['conteudo'])) ?></div>
+                        <div class="mt-1" style="white-space:pre-wrap; word-break:break-word"><?= (new \App\Services\TextoRicoService())->paraHtml($c['conteudo']) ?></div>
                         <?php if (!empty($c['latitude'])): ?>
                             <a class="small" target="_blank" rel="noopener" href="https://www.google.com/maps?q=<?= $c['latitude'] ?>,<?= $c['longitude'] ?>">
                                 <i class="bi bi-geo-alt"></i> Ver no mapa
