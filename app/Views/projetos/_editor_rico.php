@@ -36,6 +36,14 @@ $coresMarca = ['#fff3cd' => 'Amarelo', '#d1e7dd' => 'Verde', '#cfe2ff' => 'Azul'
             </div>
         </span>
         <span class="editor-rico-sep"></span>
+        <span class="dropdown">
+            <button type="button" class="btn btn-sm btn-light" data-bs-toggle="dropdown" title="Tamanho da fonte"><i class="bi bi-type"></i><i class="bi bi-caret-down-fill" style="font-size:9px"></i></button>
+            <div class="dropdown-menu py-1">
+                <?php foreach ([12 => 'Pequeno', 14 => 'Normal', 16 => 'Médio', 20 => 'Grande', 24 => 'Muito grande', 32 => 'Enorme'] as $px => $nome): ?>
+                    <button type="button" class="dropdown-item py-1" data-comando="tamanhoFonte" data-valor="<?= $px ?>" style="font-size:<?= $px ?>px; line-height:1.2"><?= $nome ?></button>
+                <?php endforeach; ?>
+            </div>
+        </span>
         <button type="button" class="btn btn-sm btn-light" data-comando="formatBlock" data-valor="h5" title="Título"><i class="bi bi-type-h3"></i></button>
         <button type="button" class="btn btn-sm btn-light" data-comando="formatBlock" data-valor="div" title="Texto normal"><i class="bi bi-paragraph"></i></button>
         <span class="editor-rico-sep"></span>

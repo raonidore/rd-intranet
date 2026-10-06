@@ -1259,6 +1259,18 @@ mark.mencao-campo { background: #cfe2ff; color: transparent; border-radius: 3px;
                 } else {
                     document.execCommand('createLink', false, url);
                 }
+            } else if (comando === 'tamanhoFonte') {
+                // O comando nativo só tem 7 tamanhos genéricos: marca com o 7 e troca pelo px escolhido.
+                document.execCommand('styleWithCSS', false, false);
+                document.execCommand('fontSize', false, '7');
+                area.querySelectorAll('font[size="7"]').forEach(function (font) {
+                    const span = document.createElement('span');
+                    span.style.fontSize = valor + 'px';
+                    while (font.firstChild) span.appendChild(font.firstChild);
+                    font.replaceWith(span);
+                    // tamanho novo vale para o trecho todo (tira tamanhos antigos de dentro)
+                    span.querySelectorAll('span[style*="font-size"]').forEach(function (interno) { interno.style.fontSize = ''; });
+                });
             } else if (comando === 'removeFormat') {
                 document.execCommand('removeFormat');
                 document.execCommand('unlink');

@@ -114,6 +114,9 @@ class TextoRicoService
                 if ($tag === 'font' && preg_match('/^#[0-9a-f]{6}$/i', trim($filho->getAttribute('color')))) {
                     $estilos['color'] = strtolower(trim($filho->getAttribute('color')));
                 }
+                if ($tag === 'font' && isset(self::TAMANHO_FONT[(int)$filho->getAttribute('size')])) {
+                    $estilos['font-size'] = self::TAMANHO_FONT[(int)$filho->getAttribute('size')] . 'px';
+                }
             }
             if ($tag === 'a') {
                 $alvo = trim($filho->getAttribute('href'));
@@ -184,13 +187,26 @@ class TextoRicoService
         return $marcas;
     }
 
-    /** Só cor do texto e marca-texto, em #rrggbb ou rgb() (o navegador costuma mandar rgb). */
+    /** <font size="1..7"> (comando nativo/colado de fora) -> px. */
+    private const TAMANHO_FONT = [1 => 10, 2 => 12, 3 => 14, 4 => 16, 5 => 20, 6 => 24, 7 => 32];
+
+    /**
+     * Só cor do texto e marca-texto (#rrggbb ou rgb(), o navegador costuma
+     * mandar rgb) e tamanho da fonte (px de 10 a 36; pt/em/palavras viram px).
+     */
     private function estilosPermitidos(string $estilo): array
     {
         $saida = [];
         foreach (explode(';', $estilo) as $declaracao) {
             [$prop, $valor] = array_map('trim', array_pad(explode(':', $declaracao, 2), 2, ''));
             $prop = strtolower($prop);
+            if ($prop === 'font-size') {
+                $px = $this->tamanhoPx($valor);
+                if ($px !== null) {
+                    $saida['font-size'] = $px . 'px';
+                }
+                continue;
+            }
             if (!in_array($prop, ['color', 'background-color'], true)) {
                 continue;
             }
@@ -201,6 +217,25 @@ class TextoRicoService
         }
 
         return $saida;
+    }
+
+    private function tamanhoPx(string $valor): ?int
+    {
+        $valor = strtolower(trim($valor));
+        $palavras = ['x-small' => 10, 'small' => 12, 'medium' => 14, 'large' => 18, 'x-large' => 24, 'xx-large' => 32, 'xxx-large' => 36];
+        if (isset($palavras[$valor])) {
+            $px = $palavras[$valor];
+        } elseif (preg_match('/^(\d+(?:\.\d+)?)(px|pt|em|rem)$/', $valor, $m)) {
+            $px = match ($m[2]) {
+                'pt' => (float)$m[1] * 4 / 3,
+                'em', 'rem' => (float)$m[1] * 14,
+                default => (float)$m[1],
+            };
+        } else {
+            return null;
+        }
+
+        return (int)round(max(10, min(36, $px)));
     }
 
     private function corHex(string $valor): ?string
