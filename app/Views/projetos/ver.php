@@ -15,6 +15,20 @@ $statusClasses = [
 
 /** @var ProjetoTarefaService $tarefaService */
 $textoRico = new \App\Services\TextoRicoService();
+
+/** Botão "Visualizar" (pop-up) pra PDF e imagem; os outros tipos só têm download. */
+$botaoVerAnexo = function (array $anexo, string $classe = 'btn btn-link btn-sm p-0'): string {
+    $extensao = strtolower(pathinfo((string)$anexo['anexo_nome_original'], PATHINFO_EXTENSION));
+    $tipo = $extensao === 'pdf' ? 'pdf' : (in_array($extensao, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'], true) ? 'imagem' : null);
+    if ($tipo === null) {
+        return '';
+    }
+    $base = url('/projetos/anexo?anexo_id=' . (int)$anexo['id']);
+
+    return '<button type="button" class="' . $classe . ' btn-ver-anexo" title="Visualizar"'
+        . ' data-url="' . htmlspecialchars($base . '&modo=inline') . '" data-download="' . htmlspecialchars($base) . '"'
+        . ' data-nome="' . htmlspecialchars((string)$anexo['anexo_nome_original']) . '" data-tipo="' . $tipo . '"><i class="bi bi-eye"></i></button>';
+};
 ?>
 
 <?= Alert::flash() ?>
@@ -509,7 +523,10 @@ $textoRico = new \App\Services\TextoRicoService();
                             <?= htmlspecialchars($anexo['anexo_nome_original']) ?>
                             <?php if ($anexo['tarefa_titulo']): ?><span class="text-muted small">(<?= htmlspecialchars($anexo['tarefa_titulo']) ?>)</span><?php endif; ?>
                         </span>
-                        <a href="<?= url('/projetos/anexo?anexo_id=' . (int)$anexo['id']) ?>" class="btn btn-link btn-sm p-0"><i class="bi bi-download"></i></a>
+                        <span class="d-flex gap-2">
+                            <?= $botaoVerAnexo($anexo) ?>
+                            <a href="<?= url('/projetos/anexo?anexo_id=' . (int)$anexo['id']) ?>" class="btn btn-link btn-sm p-0" title="Baixar"><i class="bi bi-download"></i></a>
+                        </span>
                     </li>
                 <?php endforeach; ?>
             </ul>
@@ -932,7 +949,12 @@ $textoRico = new \App\Services\TextoRicoService();
                                 <div class="conversa-texto texto-rico"><?= $textoMsg ?></div>
                                 <?php foreach ($anexosTarefa as $a): ?>
                                     <?php if ((int)($a['comentario_id'] ?? 0) === (int)$c['id']): ?>
-                                        <a class="small d-block" href="<?= url('/projetos/anexo?anexo_id=' . (int)$a['id']) ?>"><i class="bi bi-paperclip"></i> <?= htmlspecialchars($a['anexo_nome_original']) ?></a>
+                                        <div class="small d-flex align-items-center gap-2 mt-1">
+                                            <i class="bi bi-paperclip"></i>
+                                            <span><?= htmlspecialchars($a['anexo_nome_original']) ?></span>
+                                            <?= $botaoVerAnexo($a) ?>
+                                            <a href="<?= url('/projetos/anexo?anexo_id=' . (int)$a['id']) ?>" class="btn btn-link btn-sm p-0" title="Baixar"><i class="bi bi-download"></i></a>
+                                        </div>
                                     <?php endif; ?>
                                 <?php endforeach; ?>
                             </div>
@@ -976,7 +998,10 @@ $textoRico = new \App\Services\TextoRicoService();
                     <?php foreach ($anexosTarefa as $a): ?>
                         <li class="small d-flex justify-content-between">
                             <span><?= htmlspecialchars($a['anexo_nome_original']) ?></span>
-                            <a href="<?= url('/projetos/anexo?anexo_id=' . (int)$a['id']) ?>"><i class="bi bi-download"></i></a>
+                            <span class="d-flex gap-2">
+                                <?= $botaoVerAnexo($a) ?>
+                                <a href="<?= url('/projetos/anexo?anexo_id=' . (int)$a['id']) ?>" class="btn btn-link btn-sm p-0" title="Baixar"><i class="bi bi-download"></i></a>
+                            </span>
                         </li>
                     <?php endforeach; ?>
                 </ul>
@@ -986,7 +1011,24 @@ $textoRico = new \App\Services\TextoRicoService();
 </div>
 <?php endforeach; endforeach; ?>
 
+<div id="visualizadorAnexo" class="visualizador-anexo d-none" role="dialog" aria-modal="true" aria-label="Visualizar anexo">
+    <div class="visualizador-anexo-barra">
+        <span class="text-truncate"><i class="bi bi-paperclip"></i> <span id="visualizadorAnexoNome"></span></span>
+        <span class="d-flex gap-2 flex-shrink-0">
+            <a href="#" target="_blank" rel="noopener" class="btn btn-sm btn-outline-light" id="visualizadorAnexoAba"><i class="bi bi-box-arrow-up-right"></i> Abrir em nova aba</a>
+            <a href="#" class="btn btn-sm btn-outline-light" id="visualizadorAnexoBaixar"><i class="bi bi-download"></i> Baixar</a>
+            <button type="button" class="btn btn-sm btn-light" id="visualizadorAnexoFechar" title="Fechar (Esc)"><i class="bi bi-x-lg"></i></button>
+        </span>
+    </div>
+    <div class="visualizador-anexo-corpo" id="visualizadorAnexoCorpo"></div>
+</div>
+
 <style>
+.visualizador-anexo { position: fixed; inset: 0; z-index: 2000; background: rgba(15, 18, 22, .88); display: flex; flex-direction: column; }
+.visualizador-anexo-barra { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 16px; color: #fff; background: rgba(0, 0, 0, .35); }
+.visualizador-anexo-corpo { flex: 1; display: flex; align-items: center; justify-content: center; padding: 12px; min-height: 0; }
+.visualizador-anexo-corpo iframe { width: min(1100px, 100%); height: 100%; border: 0; border-radius: 6px; background: #fff; }
+.visualizador-anexo-corpo img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; box-shadow: 0 6px 30px rgba(0, 0, 0, .5); }
 .conversa-tarefa { max-height: 340px; overflow-y: auto; background: #f6f8fa; border-radius: 8px; padding: 8px; }
 .conversa-evento { font-size: 11px; color: #8a929a; text-align: center; margin: 4px 0; }
 .conversa-msg { background: #fff; border: 1px solid #e3e7eb; border-radius: 10px; padding: 6px 10px; margin: 6px 0; max-width: 85%; font-size: .875rem; }
@@ -1027,6 +1069,38 @@ $textoRico = new \App\Services\TextoRicoService();
             }).catch(function () {});
         });
     });
+
+    // --- Visualizador de anexo (PDF/imagem) em tela cheia ---
+    const visualizador = document.getElementById('visualizadorAnexo');
+    const corpoVisualizador = document.getElementById('visualizadorAnexoCorpo');
+    function fecharVisualizador() {
+        visualizador.classList.add('d-none');
+        corpoVisualizador.innerHTML = ''; // solta o PDF/imagem da memória
+    }
+    document.addEventListener('click', function (ev) {
+        const botao = ev.target.closest('.btn-ver-anexo');
+        if (!botao) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        document.getElementById('visualizadorAnexoNome').textContent = botao.dataset.nome;
+        document.getElementById('visualizadorAnexoAba').href = botao.dataset.url;
+        document.getElementById('visualizadorAnexoBaixar').href = botao.dataset.download;
+        corpoVisualizador.innerHTML = '';
+        const conteudo = document.createElement(botao.dataset.tipo === 'pdf' ? 'iframe' : 'img');
+        conteudo.src = botao.dataset.url;
+        if (botao.dataset.tipo === 'pdf') conteudo.title = botao.dataset.nome; else conteudo.alt = botao.dataset.nome;
+        corpoVisualizador.appendChild(conteudo);
+        visualizador.classList.remove('d-none');
+        document.getElementById('visualizadorAnexoFechar').focus();
+    });
+    document.getElementById('visualizadorAnexoFechar').addEventListener('click', fecharVisualizador);
+    corpoVisualizador.addEventListener('click', function (ev) { if (ev.target === corpoVisualizador) fecharVisualizador(); });
+    document.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Escape' && !visualizador.classList.contains('d-none')) {
+            ev.stopImmediatePropagation(); // fecha só o visualizador, não a janela da tarefa por baixo
+            fecharVisualizador();
+        }
+    }, true);
 
     // Nome do anexo escolhido aparece ao lado do botão (conversa da tarefa).
     document.querySelectorAll('.form-conversa-tarefa').forEach(function (form) {
