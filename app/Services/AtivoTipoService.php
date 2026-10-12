@@ -30,9 +30,13 @@ class AtivoTipoService
      * Tipos que o próprio sistema usa pelo slug (agente registra máquina
      * como 'computador', coletas UniFi/Omada/SNMP/Intelbras/USR, campos
      * técnicos de AtivoService::CAMPOS_DETALHES etc.) -- sem eles essas
-     * integrações quebram em silêncio. Garantidos na instalação e a cada
-     * atualização (garantirPadrao()) e protegidos contra exclusão.
-     * Valores iguais aos das migrations que criaram cada um.
+     * integrações quebram em silêncio. IGUAIS em todos os servidores: nome,
+     * sigla, ícone e SNMP são fixos aqui, garantidos/corrigidos na instalação
+     * e a cada atualização (garantirPadrao()) e travados na tela de Cadastros
+     * (não editam nem excluem). Valores iguais aos das migrations.
+     * Visto no enzilabprime: "Access Point" criado à mão minutos antes da
+     * migration do tipo padrão -- ela adotou o cadastro manual (mesma sigla)
+     * e o tipo ficou com nome/ícone/SNMP diferentes dos outros servidores.
      *
      * slug => [nome, sigla, ícone, elegível a SNMP]
      */
@@ -53,20 +57,41 @@ class AtivoTipoService
         $this->repository = new AtivoTipoRepository();
     }
 
+    public static function ehPadrao(?string $slug): bool
+    {
+        return isset(self::TIPOS_PADRAO[$slug ?? '']);
+    }
+
     /**
-     * Recria qualquer tipo padrão que esteja faltando (instalação nova,
-     * exclusão antiga feita antes da proteção existir). Idempotente.
+     * Recria o tipo padrão que faltar e devolve nome/sigla/ícone/SNMP aos
+     * valores oficiais quando alguém mudou (instalação nova, edição feita
+     * antes da trava existir). Idempotente.
      *
-     * @return string[] slugs que foram criados/adotados agora
+     * @return string[] slugs criados ou corrigidos agora
      */
     public function garantirPadrao(): array
     {
         $alterados = [];
+        $conflitos = [];
 
         foreach (self::TIPOS_PADRAO as $slug => [$nome, $sigla, $icone, $snmp]) {
-            if ($this->repository->garantirPadrao($slug, $nome, $sigla, $icone, $snmp)) {
+            $criado = $this->repository->garantirPadrao($slug, $nome, $sigla, $icone, $snmp);
+            $resultado = $this->repository->padronizar($slug, $nome, $sigla, $icone, $snmp);
+
+            if ($criado || $resultado === 'corrigido') {
                 $alterados[] = $slug;
             }
+            if ($resultado === 'conflito') {
+                $conflitos[] = "{$nome} ({$sigla})";
+            }
+        }
+
+        if ($alterados) {
+            AuditService::registrar('Ativos', 'Cadastro', 'Tipos de ativo padrão criados/corrigidos para os valores oficiais: ' . implode(', ', $alterados) . '.');
+        }
+        if ($conflitos) {
+            // Tipo criado pelo cliente ocupa o nome/sigla oficial -- não renomeia nada sozinho.
+            error_log('Tipos de ativo padrão não corrigidos (nome/sigla já usados por outro tipo): ' . implode(', ', $conflitos));
         }
 
         return $alterados;
@@ -148,6 +173,11 @@ class AtivoTipoService
             return false;
         }
 
+        if (self::ehPadrao($item['slug'] ?? null)) {
+            NotificationService::error('O tipo "' . $item['nome'] . '" é padrão do sistema e é igual em todas as instalações (as integrações dependem dele) -- não pode ser editado.');
+            return false;
+        }
+
         $nome = trim($nome);
         $sigla = strtoupper(trim($sigla));
 
@@ -182,8 +212,8 @@ class AtivoTipoService
             return false;
         }
 
-        if (isset(self::TIPOS_PADRAO[$item['slug'] ?? ''])) {
-            NotificationService::error('O tipo "' . $item['nome'] . '" é padrão do sistema (usado pelas integrações) e não pode ser excluído -- nome, sigla e ícone podem ser editados.');
+        if (self::ehPadrao($item['slug'] ?? null)) {
+            NotificationService::error('O tipo "' . $item['nome'] . '" é padrão do sistema (usado pelas integrações) e não pode ser excluído.');
             return false;
         }
 

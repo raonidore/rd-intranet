@@ -146,6 +146,9 @@ use App\Components\Alert;
                                             <span class="badge text-bg-light border ms-1">SNMP</span>
                                         <?php endif; ?>
                                     </span>
+                                    <?php if (\App\Services\AtivoTipoService::ehPadrao($t['slug'] ?? null)): ?>
+                                        <span class="badge text-bg-light border text-muted" title="Tipo padrão do sistema: igual em todas as instalações, usado pelas integrações. Não pode ser editado nem excluído."><i class="bi bi-lock-fill"></i> Padrão</span>
+                                    <?php else: ?>
                                     <div class="d-flex gap-1">
                                         <button type="button" class="btn btn-sm btn-outline-secondary botao-editar-cadastro"><i class="bi bi-pencil"></i></button>
                                         <form method="post" action="<?= url('/ativos/cadastros/tipo-excluir') ?>"
@@ -154,7 +157,9 @@ use App\Components\Alert;
                                             <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
                                         </form>
                                     </div>
+                                    <?php endif; ?>
                                 </div>
+                                <?php if (!\App\Services\AtivoTipoService::ehPadrao($t['slug'] ?? null)): ?>
                                 <form method="post" action="<?= url('/ativos/cadastros/tipo-editar') ?>" class="linha-edit d-none row g-2 align-items-end mt-1">
                                     <input type="hidden" name="id" value="<?= (int)$t['id'] ?>">
                                     <div class="col-md-3">
@@ -181,6 +186,7 @@ use App\Components\Alert;
                                         <button type="button" class="btn btn-sm btn-outline-secondary botao-cancelar-edicao">Cancelar</button>
                                     </div>
                                 </form>
+                                <?php endif; ?>
                             </li>
                         <?php endforeach; ?>
                     </ul>

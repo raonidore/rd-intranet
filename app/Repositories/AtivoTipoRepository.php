@@ -113,6 +113,34 @@ class AtivoTipoRepository
         return $stmt->rowCount() > 0;
     }
 
+    /**
+     * Força nome/sigla/ícone/SNMP do tipo padrão (pelo slug) para os valores
+     * oficiais do código. Se outro tipo (criado pelo cliente) já usa o nome
+     * ou a sigla oficial, o banco recusa (UNIQUE) e o tipo fica como está --
+     * quem chama registra o conflito.
+     *
+     * @return string 'corrigido' | 'igual' | 'conflito'
+     */
+    public function padronizar(string $slug, string $nome, string $sigla, string $icone, bool $snmpElegivel): string
+    {
+        $stmt = $this->pdo->prepare(
+            "UPDATE ativos_tipos SET nome = ?, sigla = ?, icone = ?, snmp_elegivel = ?
+             WHERE slug = ? AND (nome <> ? OR sigla <> ? OR icone <> ? OR snmp_elegivel <> ?)"
+        );
+
+        try {
+            $snmp = $snmpElegivel ? 1 : 0;
+            $stmt->execute([$nome, $sigla, $icone, $snmp, $slug, $nome, $sigla, $icone, $snmp]);
+        } catch (\PDOException $e) {
+            if ((int)($e->errorInfo[1] ?? 0) === 1062) {
+                return 'conflito';
+            }
+            throw $e;
+        }
+
+        return $stmt->rowCount() > 0 ? 'corrigido' : 'igual';
+    }
+
     public function atualizar(int $id, string $nome, string $sigla, string $icone, bool $snmpElegivel): bool
     {
         $stmt = $this->pdo->prepare(

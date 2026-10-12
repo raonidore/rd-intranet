@@ -138,7 +138,7 @@ switch ($comando) {
         }
 
         $tipos = (new \App\Services\AtivoTipoService())->garantirPadrao();
-        echo 'Tipos de ativo padrão: ' . ($tipos ? 'criados ' . implode(', ', $tipos) : 'todos presentes') . ".\n";
+        echo 'Tipos de ativo padrão: ' . ($tipos ? 'criados/corrigidos ' . implode(', ', $tipos) : 'todos presentes e iguais ao padrão') . ".\n";
 
         break;
 
