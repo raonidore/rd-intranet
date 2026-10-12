@@ -142,7 +142,7 @@ $faixasAgenda = !empty($agenda['faixas']) ? $agenda['faixas'] : array_filter([$f
                 <div class="ipauto-modos" id="ipautoModos">
                     <button type="button" class="ipauto-modo" data-modo="diario"><i class="bi bi-sun"></i><b>Diário</b><small>Todo dia</small></button>
                     <button type="button" class="ipauto-modo" data-modo="semanal"><i class="bi bi-calendar-week"></i><b>Semanal</b><small>Dias da semana</small></button>
-                    <button type="button" class="ipauto-modo" data-modo="mensal"><i class="bi bi-calendar-month"></i><b>Mensal</b><small>Um dia do mês</small></button>
+                    <button type="button" class="ipauto-modo" data-modo="mensal"><i class="bi bi-calendar-event"></i><b>Mensal</b><small>Um dia do mês</small></button>
                     <button type="button" class="ipauto-modo" data-modo="personalizado"><i class="bi bi-calendar3"></i><b>Personalizado</b><small>Vários dias no calendário</small></button>
                 </div>
             </div>
