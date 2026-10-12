@@ -47,26 +47,56 @@ class OmadaService
 
     public const MODO_CONTROLLER = 'controller';
     public const MODO_SSH = 'ssh';
+    /** Os dois juntos: Controller (status) + SSH (portas, MACs, VLANs, CPU) -- switch adotado com SSH liberado. */
+    public const MODO_AMBOS = 'ambos';
 
     /**
      * Qual caminho a integração usa: Open API do Controller (padrão,
-     * histórico) ou SSH direto no switch (OmadaSshService, sem Controller).
+     * histórico), SSH direto no switch (OmadaSshService) ou os dois juntos.
+     * A Open API só dá modelo/firmware/status/uptime -- portas, MACs e VLANs
+     * vêm só pelo SSH, inclusive de switch adotado pelo Controller.
      */
     public function modoAtual(): string
     {
         $modo = (string)(ConfigService::get(self::CHAVE_MODO, '') ?: '');
 
-        return $modo === self::MODO_SSH ? self::MODO_SSH : self::MODO_CONTROLLER;
+        return in_array($modo, [self::MODO_SSH, self::MODO_AMBOS], true) ? $modo : self::MODO_CONTROLLER;
     }
 
-    public function modoSsh(): bool
+    public function usaController(): bool
     {
-        return $this->modoAtual() === self::MODO_SSH;
+        return $this->modoAtual() !== self::MODO_SSH;
+    }
+
+    public function usaSsh(): bool
+    {
+        return $this->modoAtual() !== self::MODO_CONTROLLER;
+    }
+
+    /** Coleta por SSH utilizável agora (modo inclui SSH e há credencial). */
+    public function sshAtivo(): bool
+    {
+        return $this->usaSsh() && (new OmadaSshService())->configurado();
+    }
+
+    /** Coleta pelo Controller utilizável agora (modo inclui Controller e há credencial). */
+    public function controllerAtivo(): bool
+    {
+        return $this->usaController() && $this->controllerConfigurado();
+    }
+
+    public static function rotuloModo(string $modo): string
+    {
+        return match ($modo) {
+            self::MODO_SSH => 'SSH direto no switch',
+            self::MODO_AMBOS => 'Omada Controller + SSH',
+            default => 'Omada Controller (Open API)',
+        };
     }
 
     public function salvarModo(string $modo): void
     {
-        $modo = $modo === self::MODO_SSH ? self::MODO_SSH : self::MODO_CONTROLLER;
+        $modo = in_array($modo, [self::MODO_SSH, self::MODO_AMBOS], true) ? $modo : self::MODO_CONTROLLER;
 
         if ($modo === $this->modoAtual()) {
             return;
@@ -74,14 +104,13 @@ class OmadaService
 
         ConfigService::set(self::CHAVE_MODO, $modo);
 
-        $rotulo = $modo === self::MODO_SSH ? 'SSH direto no switch' : 'Omada Controller (Open API)';
-        AuditService::registrar('Omada Controller', 'Configuração', "Modo de integração alterado para: {$rotulo}.");
+        AuditService::registrar('Omada Controller', 'Configuração', 'Modo de integração alterado para: ' . self::rotuloModo($modo) . '.');
     }
 
-    /** Integração utilizável no modo escolhido -- é o que Ativos consulta. */
+    /** Integração utilizável no modo escolhido -- é o que Ativos consulta. No combinado basta um dos dois. */
     public function configurado(): bool
     {
-        return $this->modoSsh() ? (new OmadaSshService())->configurado() : $this->controllerConfigurado();
+        return $this->sshAtivo() || $this->controllerAtivo();
     }
 
     public function controllerConfigurado(): bool

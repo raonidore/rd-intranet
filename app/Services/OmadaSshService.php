@@ -186,6 +186,12 @@ class OmadaSshService
 
             $ssh->disconnect();
         } catch (\Throwable $e) {
+            // Porta 22 aberta que fecha antes do "SSH-2.0-..." = SSH desligado
+            // pelo Omada Controller no switch adotado (visto no enzilabprime).
+            if (str_contains($e->getMessage(), 'identification string')) {
+                return ['success' => false, 'message' => "O switch {$ip} fechou a conexão SSH antes do login -- se ele está adotado no Omada Controller, ligue o SSH em Configurações do site > Serviços > SSH."];
+            }
+
             return ['success' => false, 'message' => "Falha ao conectar via SSH em {$ip}: " . $e->getMessage()];
         }
 

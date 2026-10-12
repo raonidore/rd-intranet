@@ -2068,10 +2068,58 @@ class AtivoService
             return ['success' => false, 'message' => 'Integração TP-Link/Omada ainda não configurada -- veja Integrações.'];
         }
 
-        if ($omada->modoSsh()) {
-            return $this->coletarOmadaSsh($ativo);
+        // Modo combinado: Controller primeiro (status), SSH por cima (portas,
+        // MACs, VLANs, CPU...). Basta um dar certo; o outro vira só um aviso.
+        $coletado = [];
+        $fontes = [];
+        $falhas = [];
+
+        $tentativas = [];
+        if ($omada->controllerAtivo()) {
+            $tentativas['Omada Controller'] = fn () => $this->coletarOmadaController($ativo, $omada);
+        }
+        if ($omada->sshAtivo()) {
+            $tentativas['SSH (direto no switch)'] = fn () => $this->coletarOmadaSsh($ativo);
         }
 
+        foreach ($tentativas as $fonte => $coletar) {
+            $resultado = $coletar();
+            if ($resultado['success']) {
+                $fontes[] = $fonte;
+                $coletado = array_merge($coletado, $resultado['dados']);
+            } else {
+                $falhas[] = $resultado['message'];
+            }
+        }
+
+        if (!$fontes) {
+            return ['success' => false, 'message' => implode(' ', $falhas)];
+        }
+
+        $coletado['omada_coleta_via'] = implode(' + ', $fontes);
+
+        $detalhesAtuais = json_decode($ativo['detalhes'] ?? '', true) ?: [];
+        $this->repository->atualizarDetalhesApi($id, json_encode(array_merge($detalhesAtuais, $coletado), JSON_UNESCAPED_UNICODE));
+
+        AuditService::registrar('Ativos', 'Coleta Omada', 'Dados coletados via ' . $coletado['omada_coleta_via'] . ' para ' . $ativo['codigo_patrimonio'] . '.');
+
+        return [
+            'success' => true,
+            'message' => 'Dados coletados com sucesso via ' . $coletado['omada_coleta_via'] . '.'
+                . ($falhas ? ' Atenção: ' . implode(' ', $falhas) : ''),
+        ];
+    }
+
+    /**
+     * Open API do Omada Controller -- casa o ativo por IP (o Controller já
+     * reporta o IP de gerenciamento, sem o problema de WAN/LAN da UniFi).
+     * Só modelo/firmware/status/uptime: a Open API não expõe portas/clientes
+     * do switch (confirmado no Controller 6.2 do enzilabprime).
+     *
+     * @return array{success: bool, message?: string, dados?: array}
+     */
+    private function coletarOmadaController(array $ativo, OmadaService $omada): array
+    {
         $dispositivo = null;
         foreach ($omada->listarDispositivos() as $d) {
             if (($d['ip'] ?? '') === $ativo['ip']) {
@@ -2084,30 +2132,23 @@ class AtivoService
             return ['success' => false, 'message' => 'Nenhum dispositivo com esse IP foi encontrado no Omada Controller.'];
         }
 
-        $coletado = [
-            'omada_coleta_via' => 'Omada Controller',
+        return ['success' => true, 'dados' => [
             'omada_model' => $dispositivo['modelName'] ?? ($dispositivo['model'] ?? ''),
             'omada_firmware' => $dispositivo['firmwareVersion'] ?? '',
             // status 2 = conectado (confirmado ao vivo) -- qualquer outro valor mostra o código cru em vez de arriscar um rótulo errado.
             'omada_status' => (int)($dispositivo['status'] ?? -1) === 2 ? 'Online' : ('Status ' . ($dispositivo['status'] ?? '?')),
             // já vem pronto como texto ("42day(s) 18h 52m 21s") -- sem conversão nenhuma.
             'omada_uptime' => $dispositivo['uptime'] ?? '',
-        ];
-
-        $detalhesAtuais = json_decode($ativo['detalhes'] ?? '', true) ?: [];
-        $detalhesNovos = array_merge($detalhesAtuais, $coletado);
-
-        $this->repository->atualizarDetalhesApi($id, json_encode($detalhesNovos, JSON_UNESCAPED_UNICODE));
-
-        AuditService::registrar('Ativos', 'Coleta Omada', 'Dados coletados via API do Omada Controller para ' . $ativo['codigo_patrimonio'] . '.');
-
-        return ['success' => true, 'message' => 'Dados coletados com sucesso via Omada Controller.'];
+        ]];
     }
 
     /**
-     * Modo SSH da integração Omada: lê direto do switch (só comandos
-     * `show`, ver OmadaSshService) e grava nos mesmos campos omada_* do
-     * modo Controller, mais os que só a CLI entrega (serial, CPU, portas...).
+     * SSH direto no switch: lê a CLI (só comandos `show`, ver
+     * OmadaSshService) -- portas, MACs por porta, VLANs, CPU, serial...
+     * Funciona também em switch adotado pelo Controller, desde que o SSH
+     * esteja liberado nele (usuário = Conta do Dispositivo do Controller).
+     *
+     * @return array{success: bool, message?: string, dados?: array}
      */
     private function coletarOmadaSsh(array $ativo): array
     {
@@ -2118,8 +2159,8 @@ class AtivoService
         }
 
         $d = $resultado['dados'];
-        $coletado = [
-            'omada_coleta_via' => 'SSH (direto no switch)',
+
+        return ['success' => true, 'dados' => [
             'omada_model' => $d['modelo'],
             'omada_firmware' => $d['firmware'],
             // Respondeu ao SSH agora -- diferente do Controller, não existe um "status" pra ler.
@@ -2135,16 +2176,7 @@ class AtivoService
             'omada_portas' => $this->enriquecerDispositivosPortas($d['portas']),
             'omada_vlans' => $d['vlans'],
             'omada_coletado_em' => date('Y-m-d H:i:s'),
-        ];
-
-        $detalhesAtuais = json_decode($ativo['detalhes'] ?? '', true) ?: [];
-        $detalhesNovos = array_merge($detalhesAtuais, $coletado);
-
-        $this->repository->atualizarDetalhesApi((int)$ativo['id'], json_encode($detalhesNovos, JSON_UNESCAPED_UNICODE));
-
-        AuditService::registrar('Ativos', 'Coleta Omada', 'Dados coletados via SSH direto no switch para ' . $ativo['codigo_patrimonio'] . '.');
-
-        return ['success' => true, 'message' => 'Dados coletados com sucesso via SSH direto no switch.'];
+        ]];
     }
 
     /**
@@ -3463,7 +3495,7 @@ class AtivoService
         }
 
         $omada = new OmadaService();
-        if ($omada->configurado() && $omada->modoSsh()) {
+        if ($omada->sshAtivo()) {
             $integracoesTentadas[] = 'TP-Link (SSH)';
             $resultado = (new OmadaSshService())->coletar($ip);
 
@@ -3480,7 +3512,9 @@ class AtivoService
                     'message' => 'Switch TP-Link encontrado via SSH: ' . ($d['nome'] ?: $d['modelo']) . '.',
                 ];
             }
-        } elseif ($omada->configurado()) {
+        }
+        // Modo combinado: switch que não respondeu ao SSH ainda pode estar no Controller.
+        if ($omada->controllerAtivo()) {
             $integracoesTentadas[] = 'Omada';
 
             foreach ($omada->listarDispositivos() as $d) {

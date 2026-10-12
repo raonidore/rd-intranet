@@ -300,7 +300,7 @@ class IpScannerAgendamentoService
 
         // A varredura acabou de encher a ARP do servidor e o histórico -- é a
         // hora em que a coleta dos switches mais acerta "quem está em cada porta".
-        if ((new OmadaService())->configurado() && (new OmadaService())->modoSsh()) {
+        if ((new OmadaService())->sshAtivo()) {
             try {
                 (new AtivoService())->coletarOmadaTodos();
             } catch (\Throwable $e) {

@@ -20,7 +20,7 @@ ob_start();
         <div class="d-flex justify-content-between align-items-center mb-3">
             <strong>Status</strong>
             <?php if ($configurado): ?>
-                <?= Badge::make($modo === 'ssh' ? 'Configurado -- SSH direto no switch' : 'Configurado -- Omada Controller', 'success') ?>
+                <?= Badge::make('Configurado -- ' . \App\Services\OmadaService::rotuloModo($modo), 'success') ?>
             <?php else: ?>
                 <?= Badge::make('Não configurado', 'secondary') ?>
             <?php endif; ?>
@@ -28,38 +28,47 @@ ob_start();
 
         <p class="text-muted small mb-3">
             Usada pela Ficha do Ativo ("Detectar e coletar automaticamente") e pela coleta periódica pra buscar
-            modelo, firmware, status e uptime dos switches TP-Link cadastrados em Ativos. Escolha abaixo
-            <strong>como</strong> o sistema fala com eles.
+            dados dos switches TP-Link cadastrados em Ativos. Escolha abaixo <strong>como</strong> o sistema fala
+            com eles: o Controller informa modelo, firmware, status e uptime; o SSH traz também as portas
+            (quem está em cada uma), VLANs, CPU e memória -- dá pra usar os dois juntos.
         </p>
 
         <form method="post" action="<?= url('/administracao/integracoes/omada/salvar') ?>" class="row g-3">
             <div class="col-12">
                 <label class="form-label">Tipo de integração</label>
                 <div class="row g-2">
-                    <div class="col-md-6">
-                        <input type="radio" class="btn-check" name="modo" id="modoController" value="controller" <?= $modo !== 'ssh' ? 'checked' : '' ?>>
+                    <div class="col-md-4">
+                        <input type="radio" class="btn-check" name="modo" id="modoController" value="controller" <?= $modo === 'controller' ? 'checked' : '' ?>>
                         <label class="btn btn-outline-primary w-100 h-100 text-start p-3" for="modoController">
                             <strong><i class="bi bi-diagram-3"></i> Omada Controller</strong>
-                            <div class="small mt-1">Open API de um Omada Controller com os switches adotados.</div>
+                            <div class="small mt-1">Open API de um Omada Controller com os switches adotados. Só status, modelo, firmware e uptime.</div>
                         </label>
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                         <input type="radio" class="btn-check" name="modo" id="modoSsh" value="ssh" <?= $modo === 'ssh' ? 'checked' : '' ?>>
                         <label class="btn btn-outline-primary w-100 h-100 text-start p-3" for="modoSsh">
                             <strong><i class="bi bi-terminal"></i> SSH direto no switch</strong>
                             <div class="small mt-1">Sem Controller: lê os dados pela linha de comando do switch, só com comandos de consulta.</div>
                         </label>
                     </div>
+                    <div class="col-md-4">
+                        <input type="radio" class="btn-check" name="modo" id="modoAmbos" value="ambos" <?= $modo === 'ambos' ? 'checked' : '' ?>>
+                        <label class="btn btn-outline-primary w-100 h-100 text-start p-3" for="modoAmbos">
+                            <strong><i class="bi bi-layers"></i> Controller + SSH</strong>
+                            <div class="small mt-1">Switches adotados no Controller e com SSH liberado: status pelo Controller, portas/VLANs pelo SSH.</div>
+                        </label>
+                    </div>
                 </div>
                 <?php if ($modo === 'ssh' && $controllerConfigurado): ?>
                     <div class="form-text">A configuração do Controller continua salva -- volta a valer se você trocar o tipo de novo.</div>
-                <?php elseif ($modo !== 'ssh' && $sshConfigurado): ?>
+                <?php elseif ($modo === 'controller' && $sshConfigurado): ?>
                     <div class="form-text">A credencial SSH continua salva -- volta a valer se você trocar o tipo de novo.</div>
                 <?php endif; ?>
             </div>
 
             <div class="col-12 bloco-modo" data-modo="controller">
                 <div class="row g-3">
+                    <div class="col-12 bloco-titulo-ambos"><strong class="small text-uppercase text-muted"><i class="bi bi-diagram-3"></i> Omada Controller</strong></div>
                     <div class="col-12">
                         <label class="form-label">URL do Controller</label>
                         <input type="text" name="url" class="form-control font-monospace"
@@ -86,11 +95,13 @@ ob_start();
 
             <div class="col-12 bloco-modo" data-modo="ssh">
                 <div class="row g-3">
+                    <div class="col-12 bloco-titulo-ambos"><strong class="small text-uppercase text-muted"><i class="bi bi-terminal"></i> SSH nos switches</strong></div>
                     <div class="col-md-8">
                         <label class="form-label">Usuário SSH</label>
                         <input type="text" name="ssh_usuario" class="form-control font-monospace" autocomplete="off"
                                value="<?= htmlspecialchars($sshUsuarioAtual) ?>" placeholder="ex: rdcoleta">
-                        <div class="form-text">Use um usuário de privilégio <strong>user</strong> (só leitura) criado no switch -- não o admin.</div>
+                        <div class="form-text">Use um usuário de privilégio <strong>user</strong> (só leitura) criado no switch -- não o admin.
+                            <span class="bloco-titulo-ambos">Em switch <strong>adotado pelo Controller</strong>, o login é o da <strong>Conta do Dispositivo</strong> do Controller.</span></div>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label">Porta</label>
@@ -118,9 +129,9 @@ ob_start();
         <?php if ($configurado): ?>
             <hr>
             <div class="d-flex align-items-end gap-2 flex-wrap">
-                <?php if ($modo === 'ssh'): ?>
+                <?php if ($modo !== 'controller'): ?>
                     <div>
-                        <label class="form-label small mb-1" for="campoIpTesteOmada">IP de um switch pra testar</label>
+                        <label class="form-label small mb-1" for="campoIpTesteOmada">IP de um switch pra testar<?= $modo === 'ambos' ? ' (SSH, opcional)' : '' ?></label>
                         <input type="text" id="campoIpTesteOmada" class="form-control form-control-sm font-monospace" placeholder="192.168.0.245" style="width:180px">
                     </div>
                 <?php endif; ?>
@@ -231,6 +242,13 @@ HTML;
             </li>
             <?= $passosAtivos ?>
         </ol>
+        <div class="alert alert-light border small mt-3 mb-0 bloco-titulo-ambos">
+            <i class="bi bi-layers"></i> <strong>Switch adotado pelo Omada Controller</strong> -- o Controller assume o
+            SSH do switch: a porta 22 até aceita a conexão, mas fecha na hora enquanto o SSH estiver desligado no
+            Controller. Ligue em <strong>Configurações do site &gt; Serviços &gt; SSH</strong> (SSH Login) e use como
+            usuário/senha a <strong>Conta do Dispositivo</strong> (Configurações do site &gt; Conta do Dispositivo).
+            Os comandos de criar usuário acima não se aplicam: quem manda na configuração é o Controller.
+        </div>
         <p class="small text-muted mt-3 mb-0">
             <i class="bi bi-shield-check"></i> O rd.intranet só sabe mandar uma lista fixa de comandos de consulta
             (<code>show system-info</code>, <code>show interface status</code>, <code>show cpu-utilization</code>,
@@ -244,9 +262,12 @@ HTML;
 (function () {
     // Mostra só os campos e o passo a passo do tipo escolhido.
     function mostrarModo() {
-        const modo = document.getElementById('modoSsh').checked ? 'ssh' : 'controller';
+        const modo = document.querySelector('input[name="modo"]:checked').value;
         document.querySelectorAll('.bloco-modo').forEach(function (bloco) {
-            bloco.classList.toggle('d-none', bloco.dataset.modo !== modo);
+            bloco.classList.toggle('d-none', modo !== 'ambos' && bloco.dataset.modo !== modo);
+        });
+        document.querySelectorAll('.bloco-titulo-ambos').forEach(function (el) {
+            el.classList.toggle('d-none', modo !== 'ambos');
         });
     }
     document.querySelectorAll('input[name="modo"]').forEach(r => r.addEventListener('change', mostrarModo));
@@ -273,8 +294,8 @@ HTML;
                 if (resultado.success) {
                     okBox.textContent = resultado.message;
                     okBox.classList.remove('d-none');
-                    // No modo Controller o teste grava o site -- recarrega pra mostrar.
-                    if (!campoIp) setTimeout(() => location.reload(), 1200);
+                    // Com Controller o teste grava o site -- recarrega pra mostrar.
+                    if (!campoIp || <?= json_encode($modo === 'ambos') ?>) setTimeout(() => location.reload(), 1500);
                 } else {
                     erroBox.textContent = resultado.message;
                     erroBox.classList.remove('d-none');

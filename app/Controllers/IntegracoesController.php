@@ -125,11 +125,16 @@ class IntegracoesController extends Controller
         AuthMiddleware::checkAdmin();
 
         $service = new OmadaService();
-        $modo = ($_POST['modo'] ?? '') === OmadaService::MODO_SSH ? OmadaService::MODO_SSH : OmadaService::MODO_CONTROLLER;
+        $modo = in_array($_POST['modo'] ?? '', [OmadaService::MODO_SSH, OmadaService::MODO_AMBOS], true) ? $_POST['modo'] : OmadaService::MODO_CONTROLLER;
 
-        $salvou = $modo === OmadaService::MODO_SSH
-            ? (new OmadaSshService())->salvarConfiguracao($_POST['ssh_usuario'] ?? '', $_POST['ssh_senha'] ?? '', $_POST['ssh_porta'] ?? '')
-            : $service->salvarConfiguracao($_POST['url'] ?? '', $_POST['omadac_id'] ?? '', $_POST['client_id'] ?? '', $_POST['client_secret'] ?? '');
+        // Combinado: salva os dois blocos; só vale se os dois forem aceitos.
+        $salvou = true;
+        if ($modo !== OmadaService::MODO_SSH) {
+            $salvou = $service->salvarConfiguracao($_POST['url'] ?? '', $_POST['omadac_id'] ?? '', $_POST['client_id'] ?? '', $_POST['client_secret'] ?? '');
+        }
+        if ($salvou && $modo !== OmadaService::MODO_CONTROLLER) {
+            $salvou = (new OmadaSshService())->salvarConfiguracao($_POST['ssh_usuario'] ?? '', $_POST['ssh_senha'] ?? '', $_POST['ssh_porta'] ?? '');
+        }
 
         // Só troca o modo quando a credencial dele foi aceita -- senão um
         // formulário incompleto derrubaria a coleta que já funcionava no outro modo.
@@ -159,10 +164,30 @@ class IntegracoesController extends Controller
         set_time_limit(30);
 
         $service = new OmadaService();
+        $ip = trim((string)($_POST['ip'] ?? ''));
 
-        echo json_encode($service->modoSsh()
-            ? (new OmadaSshService())->testarConexao($_POST['ip'] ?? '')
-            : $service->testarConexao());
+        $resultados = [];
+        if ($service->usaController() && $service->controllerConfigurado()) {
+            $resultados['Controller'] = $service->testarConexao();
+        }
+        // No combinado o IP é opcional: sem ele, testa só o Controller.
+        if ($service->usaSsh() && ($ip !== '' || !$resultados)) {
+            $resultados['SSH'] = (new OmadaSshService())->testarConexao($ip);
+        }
+
+        if (count($resultados) === 1) {
+            echo json_encode(reset($resultados));
+            return;
+        }
+
+        $mensagens = [];
+        foreach ($resultados as $fonte => $r) {
+            $mensagens[] = "{$fonte}: " . $r['message'];
+        }
+        echo json_encode([
+            'success' => !in_array(false, array_column($resultados, 'success'), true),
+            'message' => implode(' | ', $mensagens),
+        ]);
     }
 
     public function intelbrasDvrForm(): void
