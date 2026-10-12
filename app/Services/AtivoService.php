@@ -111,6 +111,12 @@ class AtivoService
             'tipo_conexao' => 'Tipo de conexão',
             'contador_paginas' => 'Contador de páginas',
             'nivel_toner' => 'Nível de toner',
+            // vida_* -- só Brother (MIB próprio, ver SnmpService::manutencaoBrother()).
+            'vida_cilindro' => 'Vida restante do cilindro',
+            'vida_fusor' => 'Vida restante do fusor',
+            'vida_laser' => 'Vida restante da unidade laser',
+            'snmp_modelo' => 'Modelo (SNMP)',
+            'snmp_serial' => 'Número de série (SNMP)',
             'snmp_uptime' => 'Uptime (SNMP)',
         ],
         // 'dvr_canais' (array) fica FORA daqui de propósito -- mesmo motivo de
