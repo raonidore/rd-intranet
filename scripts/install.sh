@@ -174,6 +174,12 @@ foreach (glob("database/migrations/*.sql") as $f) { $stmt->execute([basename($f)
 
 php "$REPO_DIR/rd" migrate
 
+# schema.sql e so ESTRUTURA -- os dados padrao (tipos de ativo usados pelas
+# integracoes, categorias/setores/SLAs de chamados, configuracoes, unidade
+# padrao...) so existem nos INSERTs das migrations, que acabaram de ser
+# marcadas como aplicadas sem rodar. Reaplica esses INSERTs aqui.
+php "$REPO_DIR/rd" dados-iniciais
+
 # ---------------------------------------------------------------------
 # 6.1) Usuario admin padrao, so se ainda nao existir nenhum admin (idempotente
 #      em instalacao retomada). Senha fixa e conhecida de proposito -- e

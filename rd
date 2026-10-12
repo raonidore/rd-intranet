@@ -20,6 +20,7 @@ if (!$comando) {
     echo "  make:job NomeJob\n";
     echo "  make:module NomeModulo\n";
     echo "  migrate                 Aplica as migrations pendentes em database/migrations/\n";
+    echo "  dados-iniciais          Reaplica os dados padrão das migrations (tipos de ativo, categorias...) -- instalação nova\n";
     echo "  atualizacao:verificar   Busca origin/main e atualiza o cache de 'há atualização?'\n";
     echo "  antivirus:verificar     Escaneia os compartilhamentos do Samba em busca de ameaças\n";
     echo "  backup:executar <id>    Roda o backup em nuvem do destino <id> (Backup > Configuração)\n";
@@ -125,6 +126,19 @@ switch ($comando) {
         if (empty($resultado['aplicadas'])) {
             echo "Nada a aplicar, banco já está em dia.\n";
         }
+
+        break;
+
+    case 'dados-iniciais':
+        $resultado = (new \App\Services\MigrationService())->aplicarDadosIniciais();
+        echo "Dados iniciais: {$resultado['inseridas']} linha(s) inserida(s), {$resultado['ignoradas']} já existente(s)/obsoleta(s).\n";
+
+        foreach ($resultado['erros'] as $erro) {
+            echo "Aviso: {$erro}\n";
+        }
+
+        $tipos = (new \App\Services\AtivoTipoService())->garantirPadrao();
+        echo 'Tipos de ativo padrão: ' . ($tipos ? 'criados ' . implode(', ', $tipos) : 'todos presentes') . ".\n";
 
         break;
 

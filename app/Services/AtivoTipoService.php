@@ -26,9 +26,50 @@ class AtivoTipoService
         'bi-box-seam' => 'Genérico',
     ];
 
+    /**
+     * Tipos que o próprio sistema usa pelo slug (agente registra máquina
+     * como 'computador', coletas UniFi/Omada/SNMP/Intelbras/USR, campos
+     * técnicos de AtivoService::CAMPOS_DETALHES etc.) -- sem eles essas
+     * integrações quebram em silêncio. Garantidos na instalação e a cada
+     * atualização (garantirPadrao()) e protegidos contra exclusão.
+     * Valores iguais aos das migrations que criaram cada um.
+     *
+     * slug => [nome, sigla, ícone, elegível a SNMP]
+     */
+    public const TIPOS_PADRAO = [
+        'computador' => ['Computador', 'PC', 'bi-pc-display', true],
+        'servidor' => ['Servidor', 'SRV', 'bi-hdd-rack', true],
+        'monitor' => ['Monitor', 'MON', 'bi-display', false],
+        'impressora' => ['Impressora', 'IMP', 'bi-printer', true],
+        'switch' => ['Switch', 'SW', 'bi-hdd-network', true],
+        'ponto_acesso' => ['Ponto de Acesso', 'AP', 'bi-wifi', false],
+        'roteador' => ['Roteador/Gateway', 'GW', 'bi-router', false],
+        'dvr_nvr' => ['DVR/NVR', 'DVR', 'bi-camera-video', true],
+        'periferico' => ['Periféricos', 'PER', 'bi-usb-plug', true],
+    ];
+
     public function __construct()
     {
         $this->repository = new AtivoTipoRepository();
+    }
+
+    /**
+     * Recria qualquer tipo padrão que esteja faltando (instalação nova,
+     * exclusão antiga feita antes da proteção existir). Idempotente.
+     *
+     * @return string[] slugs que foram criados/adotados agora
+     */
+    public function garantirPadrao(): array
+    {
+        $alterados = [];
+
+        foreach (self::TIPOS_PADRAO as $slug => [$nome, $sigla, $icone, $snmp]) {
+            if ($this->repository->garantirPadrao($slug, $nome, $sigla, $icone, $snmp)) {
+                $alterados[] = $slug;
+            }
+        }
+
+        return $alterados;
     }
 
     public function listar(): array
@@ -138,6 +179,11 @@ class AtivoTipoService
         $item = $this->repository->buscarPorId($id);
         if (!$item) {
             NotificationService::error('Tipo de ativo não encontrado.');
+            return false;
+        }
+
+        if (isset(self::TIPOS_PADRAO[$item['slug'] ?? ''])) {
+            NotificationService::error('O tipo "' . $item['nome'] . '" é padrão do sistema (usado pelas integrações) e não pode ser excluído -- nome, sigla e ícone podem ser editados.');
             return false;
         }
 

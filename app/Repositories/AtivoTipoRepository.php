@@ -94,6 +94,25 @@ class AtivoTipoRepository
         return (int)$this->pdo->lastInsertId();
     }
 
+    /**
+     * Cria o tipo padrão se ainda não existir -- mesmo ON DUPLICATE KEY das
+     * migrations que criaram cada tipo: se já houver um tipo com o mesmo
+     * nome/sigla sem slug (cadastrado à mão antes), só adota o slug nele.
+     * Nunca mexe em nome/sigla/ícone que o admin tenha personalizado.
+     *
+     * @return bool true se inseriu ou adotou o slug (algo mudou)
+     */
+    public function garantirPadrao(string $slug, string $nome, string $sigla, string $icone, bool $snmpElegivel): bool
+    {
+        $stmt = $this->pdo->prepare(
+            "INSERT INTO ativos_tipos (slug, nome, sigla, icone, snmp_elegivel) VALUES (?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE slug = COALESCE(slug, VALUES(slug))"
+        );
+        $stmt->execute([$slug, $nome, $sigla, $icone, $snmpElegivel ? 1 : 0]);
+
+        return $stmt->rowCount() > 0;
+    }
+
     public function atualizar(int $id, string $nome, string $sigla, string $icone, bool $snmpElegivel): bool
     {
         $stmt = $this->pdo->prepare(

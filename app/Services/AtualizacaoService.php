@@ -178,6 +178,10 @@ class AtualizacaoService
         }
 
         if ($sucesso) {
+            // Tipos de ativo usados pelas integrações -- recria o que faltar
+            // em qualquer servidor (ex: instalado antes do install.sh
+            // reaplicar os dados iniciais).
+            (new AtivoTipoService())->garantirPadrao();
             $this->garantirCronsColeta();
             $this->garantirCronCertificado();
             $this->garantirCronBaseConhecimento();

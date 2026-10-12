@@ -112,6 +112,64 @@ class MigrationService
     }
 
     /**
+     * Erros esperados ao reaplicar INSERTs antigos sobre o schema final:
+     * linha já existe, ou o INSERT referencia coluna/tabela que uma
+     * migration posterior removeu/renomeou (ex: o INSERT ... SELECT de
+     * ativos_contadores usa a coluna antiga ativos.tipo).
+     */
+    private const CODIGOS_MYSQL_DADO_INICIAL_IGNORAVEL = [
+        1062, // ER_DUP_ENTRY
+        1054, // ER_BAD_FIELD_ERROR (coluna não existe mais)
+        1146, // ER_NO_SUCH_TABLE
+    ];
+
+    /**
+     * Reaplica só os INSERTs (dados iniciais: tipos de ativo, categorias/
+     * setores/SLAs de chamados, configurações padrão, unidade padrão...)
+     * de TODAS as migrations. Usado pelo install.sh logo depois de carregar
+     * o schema.sql e marcar as migrations como aplicadas -- o schema.sql é
+     * só estrutura, então sem isto um servidor novo nasce sem esses dados
+     * (visto no enzilabnto, 12/10/2026: Ativos sem nenhum tipo além de
+     * Periféricos). Idempotente o bastante pra rodar de novo: duplicado é
+     * ignorado.
+     *
+     * @return array{inseridas: int, ignoradas: int, erros: string[]}
+     */
+    public function aplicarDadosIniciais(): array
+    {
+        $inseridas = 0;
+        $ignoradas = 0;
+        $erros = [];
+
+        $arquivos = glob(self::DIRETORIO . '/*.sql');
+        sort($arquivos);
+
+        foreach ($arquivos as $arquivo) {
+            foreach ($this->comandos(file_get_contents($arquivo)) as $comando) {
+                if (!preg_match('/^INSERT\b/i', $comando)) {
+                    continue;
+                }
+
+                try {
+                    $inseridas += (int)$this->pdo->exec($comando);
+                } catch (\PDOException $e) {
+                    $codigo = (int)($e->errorInfo[1] ?? 0);
+
+                    if (in_array($codigo, self::CODIGOS_MYSQL_DADO_INICIAL_IGNORAVEL, true)
+                        || in_array($codigo, self::CODIGOS_MYSQL_JA_EXISTE, true)) {
+                        $ignoradas++;
+                        continue;
+                    }
+
+                    $erros[] = basename($arquivo) . ': ' . $e->getMessage();
+                }
+            }
+        }
+
+        return ['inseridas' => $inseridas, 'ignoradas' => $ignoradas, 'erros' => $erros];
+    }
+
+    /**
      * Divide o arquivo .sql em comandos individuais, ignorando linhas de
      * comentario (--). Suficiente para as migrations deste projeto, que nao
      * usam stored procedures/triggers com ';' interno.

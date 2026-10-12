@@ -114,7 +114,10 @@ O script (`scripts/install.sh`) faz, nessa ordem:
    compartilhamento existindo no banco. Carrega `database/schema.sql` (o
    estado atual completo do banco — não é o histórico de
    `database/migrations/`, que tem `ALTER TABLE`s não seguros de reaplicar
-   do zero), marca essas migrations como já aplicadas, cria o usuário
+   do zero), marca essas migrations como já aplicadas, reaplica só os
+   `INSERT`s delas (`php rd dados-iniciais` — tipos de ativo, categorias/
+   setores/SLAs de chamados, unidade e configurações padrão; o `schema.sql`
+   é só estrutura, sem isso o servidor nasce sem esses dados), cria o usuário
    admin padrão (login `admin`, senha `rd.intranet` — só se ainda não
    existir nenhum admin) e cadastra o cron nativo de coleta de tráfego de
    rede (`*/5 * * * *`, roda como `www-data`) — sem ele,
