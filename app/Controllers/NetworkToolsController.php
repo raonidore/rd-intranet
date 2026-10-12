@@ -5,6 +5,7 @@ namespace App\Controllers;
 use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
 use App\Services\NetworkToolsService;
+use App\Services\IpScannerAgendamentoService;
 use App\Services\TrafegoHistoricoService;
 use App\Services\AuditService;
 
@@ -170,10 +171,33 @@ class NetworkToolsController extends Controller
     {
         AuthMiddleware::checkModulo('infra_rede');
 
+        $agendamento = new IpScannerAgendamentoService();
+        $agenda = $agendamento->obter();
+
         $this->view('infrastructure/rede_scanner', [
             'faixaSugerida' => $this->service->sugerirFaixaPadrao(),
             'recentes' => $this->service->listarExecucoesRecentes(),
+            'agenda' => $agenda,
+            'agendaProximas' => $agenda['ativo'] ? $agendamento->proximasExecucoes(5) : [],
+            'agendaDescricao' => $agendamento->descrever($agenda),
         ]);
+    }
+
+    /** Salva a agenda da varredura automática (corpo JSON). */
+    public function scannerAgendamentoSalvar(): void
+    {
+        AuthMiddleware::checkModulo('infra_rede');
+        header('Content-Type: application/json');
+
+        $dados = json_decode((string)file_get_contents('php://input'), true);
+        $servico = new IpScannerAgendamentoService();
+        $resultado = $servico->salvar(is_array($dados) ? $dados : []);
+
+        if ($resultado['success']) {
+            $resultado['descricao'] = $servico->descrever($resultado['agenda']);
+        }
+
+        echo json_encode($resultado);
     }
 
     public function scannerHistorico(): void

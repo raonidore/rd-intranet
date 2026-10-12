@@ -113,6 +113,8 @@ use App\Components\Alert;
     </div>
 </div>
 
+<?php require __DIR__ . '/rede_scanner_agendamento.php'; ?>
+
 <div class="card ipscan-card mb-4" id="painel-recentes" style="<?= empty($recentes) ? 'display:none' : '' ?>">
     <div class="card-header bg-white d-flex justify-content-between align-items-center py-2">
         <span class="small text-muted text-uppercase" style="letter-spacing:.04em"><i class="bi bi-clock-history me-1"></i>Varreduras recentes</span>
@@ -439,6 +441,7 @@ use App\Components\Alert;
             const chip = document.createElement('div');
             chip.className = 'ipscan-chip';
             chip.innerHTML =
+                (+item.automatica ? '<i class="bi bi-clock-history text-primary" title="Varredura automática"></i>' : '') +
                 '<span class="chip-cidr">' + item.cidr + '</span>' +
                 '<span class="chip-meta">' + item.total_hosts + ' host(s) &middot; ' + tempoRelativo(item.executado_em) + '</span>' +
                 '<button type="button" data-acao="ver" title="Ver esta varredura"><i class="bi bi-eye"></i></button>' +

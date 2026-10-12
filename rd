@@ -4,6 +4,10 @@
 require_once __DIR__ . '/vendor/autoload.php';
 require_once __DIR__ . '/app/Helpers/url.php';
 
+// Mesmo fuso de Application::boot() -- sem isso o CLI roda em UTC e tudo que
+// o cron grava/agenda com date() fica 3h fora do que a tela mostra.
+date_default_timezone_set('America/Recife');
+
 $comando = $argv[1] ?? null;
 $nome = $argv[2] ?? null;
 
@@ -350,6 +354,14 @@ switch ($comando) {
     case 'ativos:coletar-omada':
         $resultado = (new \App\Services\AtivoService())->coletarOmadaTodos();
         echo "OK: Omada coletado em {$resultado['sucesso']}/{$resultado['total']} ativo(s).\n";
+
+        break;
+
+    case 'rede:scanner-agendado':
+        $mensagem = (new \App\Services\IpScannerAgendamentoService())->executarSeDevido();
+        if ($mensagem !== '') {
+            echo date('d/m/Y H:i') . ' ' . $mensagem . PHP_EOL;
+        }
 
         break;
 

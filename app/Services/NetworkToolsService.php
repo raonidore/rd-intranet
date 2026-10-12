@@ -501,7 +501,7 @@ class NetworkToolsService
     {
         $pdo = Database::connection();
         $stmt = $pdo->prepare("
-            SELECT e.id, e.cidr, e.executado_em, e.total_hosts
+            SELECT e.id, e.cidr, e.executado_em, e.total_hosts, (e.executado_por IS NULL) AS automatica
             FROM ip_scanner_execucoes e
             INNER JOIN (
                 SELECT cidr, MAX(executado_em) AS ultima

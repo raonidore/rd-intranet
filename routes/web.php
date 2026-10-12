@@ -267,6 +267,7 @@ $router->get('/infraestrutura/rede/scanner/execucao', [NetworkToolsController::c
 $router->post('/infraestrutura/rede/scanner/finalizar', [NetworkToolsController::class, 'scannerFinalizar']);
 $router->post('/infraestrutura/rede/scanner/portas', [NetworkToolsController::class, 'scannerPortas']);
 $router->post('/infraestrutura/rede/scanner/wol', [NetworkToolsController::class, 'scannerWol']);
+$router->post('/infraestrutura/rede/scanner/agendamento', [NetworkToolsController::class, 'scannerAgendamentoSalvar']);
 
 $router->get('/infraestrutura/rede/mapa', [MapaRedeController::class, 'index']);
 $router->get('/infraestrutura/rede/mapa/novo', [MapaRedeController::class, 'novoForm']);

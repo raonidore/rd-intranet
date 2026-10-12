@@ -1887,6 +1887,7 @@ const DADOS = <?= json_encode([
     'omada_portas' => $detalhes['omada_portas'],
 ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?>;
 const URL_ATIVO = <?= json_encode(url('/ativos/ver?id=')) ?>;
+const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
 
 (function () {
     const portas = DADOS.omada_portas || [];
@@ -2000,6 +2001,9 @@ const URL_ATIVO = <?= json_encode(url('/ativos/ver?id=')) ?>;
                         ${d.ativo_id ? '<span class="badge text-bg-primary ms-1">Ativo cadastrado</span>' : ''}</div>
                     <div class="small text-muted font-monospace">${esc(d.mac)}${d.fabricante ? ' · ' + esc(d.fabricante) : ''}</div>
                 </div>
+                ${!d.ativo_id && d.ip ? `<a class="btn btn-sm btn-outline-primary flex-shrink-0 align-self-center" target="_blank"
+                    href="${URL_ATIVO_NOVO}?ip=${encodeURIComponent(d.ip)}&nome=${encodeURIComponent(d.hostname || '')}"
+                    title="Abre o Novo Ativo com IP e nome já preenchidos -- use 'Detectar' lá pra completar tipo/marca/modelo"><i class="bi bi-plus-lg"></i> Cadastrar ativo</a>` : ''}
             </div>`).join('') : `<p class="text-muted mb-0">${p.link ? 'Com link, mas nenhum MAC aprendido ainda.' : 'Porta livre.'}</p>`;
         detalhe.classList.remove('d-none');
     }
