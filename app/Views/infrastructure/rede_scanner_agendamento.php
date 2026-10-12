@@ -197,6 +197,25 @@ $faixasAgenda = !empty($agenda['faixas']) ? $agenda['faixas'] : array_filter([$f
                     <?= htmlspecialchars(date('d/m H:i', strtotime($ultimo['em']))) ?> --
                     <?php if (!empty($ultimo['success'])): ?>
                         <?= (int)$ultimo['total'] ?> dispositivo(s)<?= isset($ultimo['novos']) ? ', ' . (int)$ultimo['novos'] . ' novo(s), ' . (int)$ultimo['sumiram'] . ' sumiram' : '' ?>
+                        <?php
+                            $mudancaUltima = null;
+                            foreach ($mudancas ?? [] as $m) {
+                                if ((int)$m['id'] === (int)($ultimo['execucao_id'] ?? 0)) {
+                                    $mudancaUltima = $m;
+                                }
+                            }
+                        ?>
+                        <?php if ($mudancaUltima): ?>
+                            <div class="mt-2">
+                                <?php foreach (array_slice($mudancaUltima['novos'], 0, 5) as $h): ?>
+                                    <div class="font-monospace small" style="color:#3ddc84">+ <?= htmlspecialchars($h['ip']) ?> <span style="color:#9fb2c8"><?= htmlspecialchars($h['ativo']['nome'] ?? (($h['hostname'] ?? '') ?: ($h['vendor'] ?? ''))) ?></span></div>
+                                <?php endforeach; ?>
+                                <?php foreach (array_slice($mudancaUltima['sumiram'], 0, 5) as $h): ?>
+                                    <div class="font-monospace small" style="color:#ff7b7b">− <?= htmlspecialchars($h['ip']) ?> <span style="color:#9fb2c8"><?= htmlspecialchars($h['ativo']['nome'] ?? (($h['hostname'] ?? '') ?: ($h['vendor'] ?? ''))) ?></span></div>
+                                <?php endforeach; ?>
+                                <a href="#mudancasRede" class="small" style="color:#7cc4ff">ver todas as mudanças</a>
+                            </div>
+                        <?php endif; ?>
                     <?php else: ?>
                         <?= htmlspecialchars($ultimo['mensagem'] ?? 'falhou') ?>
                     <?php endif; ?>

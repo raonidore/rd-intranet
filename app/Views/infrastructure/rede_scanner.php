@@ -124,6 +124,8 @@ use App\Components\Alert;
     </div>
 </div>
 
+<?php require __DIR__ . '/rede_scanner_mudancas.php'; ?>
+
 <div class="card ipscan-card mb-4 d-none" id="painel-radar">
     <div class="card-body">
         <div class="ipscan-radar-wrap">
@@ -565,6 +567,9 @@ use App\Components\Alert;
         renderizarResultado(cidr);
         atualizarRecentes();
     }
+
+    // Usado pela "linha do tempo" de Mudanças na rede (outro script/partial).
+    window.ipscanVerExecucao = id => carregarExecucaoSalva(id);
 
     async function carregarExecucaoSalva(id) {
         try {

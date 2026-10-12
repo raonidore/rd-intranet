@@ -180,6 +180,7 @@ class NetworkToolsController extends Controller
             'agenda' => $agenda,
             'agendaProximas' => $agenda['ativo'] ? $agendamento->proximasExecucoes(5) : [],
             'agendaDescricao' => $agendamento->descrever($agenda),
+            'mudancas' => $this->service->listarMudancasRecentes(10),
         ]);
     }
 

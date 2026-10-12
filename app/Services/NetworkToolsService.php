@@ -457,9 +457,35 @@ class NetworkToolsService
     public function registrarResultadoEComparar(string $cidr, array $hosts, ?int $usuarioId): array
     {
         $comparacao = $this->compararComUltimaExecucao($cidr, $hosts);
-        $this->salvarExecucao($cidr, $hosts, $usuarioId);
+        $comparacao['execucao_id'] = $this->salvarExecucao($cidr, $hosts, $usuarioId, $comparacao);
 
         return $comparacao;
+    }
+
+    /**
+     * Varreduras em que alguém entrou ou saiu da rede, mais recentes
+     * primeiro -- a "linha do tempo" de quem passou pela rede. Cada host
+     * já vem casado com o cadastro de Ativos.
+     */
+    public function listarMudancasRecentes(int $limite = 10): array
+    {
+        $stmt = Database::connection()->prepare("
+            SELECT id, cidr, executado_em, total_hosts, (executado_por IS NULL) AS automatica, novos, sumiram
+            FROM ip_scanner_execucoes
+            WHERE (novos IS NOT NULL AND novos <> '[]') OR (sumiram IS NOT NULL AND sumiram <> '[]')
+            ORDER BY executado_em DESC
+            LIMIT ?
+        ");
+        $stmt->bindValue(1, $limite, \PDO::PARAM_INT);
+        $stmt->execute();
+
+        return array_map(function (array $linha) {
+            $linha['automatica'] = (bool)$linha['automatica'];
+            $linha['novos'] = $this->relacionarComAtivos(json_decode((string)$linha['novos'], true) ?: []);
+            $linha['sumiram'] = $this->relacionarComAtivos(json_decode((string)$linha['sumiram'], true) ?: []);
+
+            return $linha;
+        }, $stmt->fetchAll(\PDO::FETCH_ASSOC));
     }
 
     private function compararComUltimaExecucao(string $cidr, array $hostsAtual): array
@@ -483,11 +509,17 @@ class NetworkToolsService
         return ['novos' => $novos, 'sumiram' => $sumiram, 'primeira_execucao' => false];
     }
 
-    private function salvarExecucao(string $cidr, array $hosts, ?int $usuarioId): void
+    private function salvarExecucao(string $cidr, array $hosts, ?int $usuarioId, array $comparacao): int
     {
         $pdo = Database::connection();
-        $stmt = $pdo->prepare("INSERT INTO ip_scanner_execucoes (cidr, executado_em, executado_por, total_hosts, hosts) VALUES (?, NOW(), ?, ?, ?)");
-        $stmt->execute([$cidr, $usuarioId, count($hosts), json_encode($hosts)]);
+        $stmt = $pdo->prepare("INSERT INTO ip_scanner_execucoes (cidr, executado_em, executado_por, total_hosts, hosts, novos, sumiram) VALUES (?, NOW(), ?, ?, ?, ?, ?)");
+        $stmt->execute([
+            $cidr, $usuarioId, count($hosts), json_encode($hosts),
+            $comparacao['primeira_execucao'] ? null : json_encode($comparacao['novos']),
+            $comparacao['primeira_execucao'] ? null : json_encode($comparacao['sumiram']),
+        ]);
+
+        return (int)$pdo->lastInsertId();
     }
 
     /**

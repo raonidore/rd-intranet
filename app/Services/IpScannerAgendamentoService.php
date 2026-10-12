@@ -314,6 +314,7 @@ class IpScannerAgendamentoService
             'total' => count($hosts),
             'novos' => count($comparacao['novos']),
             'sumiram' => count($comparacao['sumiram']),
+            'execucao_id' => $comparacao['execucao_id'],
         ];
     }
 }

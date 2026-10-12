@@ -1412,6 +1412,8 @@ CREATE TABLE IF NOT EXISTS `ip_scanner_execucoes` (
   `executado_por` int(11) DEFAULT NULL,
   `total_hosts` int(11) NOT NULL DEFAULT 0,
   `hosts` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (json_valid(`hosts`)),
+  `novos` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
+  `sumiram` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `fk_ip_scanner_execucoes_usuario` (`executado_por`),
   KEY `idx_ip_scanner_execucoes_cidr` (`cidr`,`executado_em`),
