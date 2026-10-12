@@ -1683,16 +1683,53 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             </div>
             <div class="card-body p-0">
                 <table class="table table-sm align-middle mb-0">
-                    <thead><tr><th>Porta</th><th>Link</th><th>Velocidade</th><th>Duplex</th><th>Meio</th><th>Descrição</th></tr></thead>
+                    <thead><tr><th>Porta</th><th>Link</th><th>Velocidade</th><th>Meio</th><th>Dispositivos (IP / nome / MAC)</th><th>Descrição</th></tr></thead>
                     <tbody>
                         <?php foreach ($detalhes['omada_portas'] as $porta): ?>
+                            <?php $dispositivosPorta = $porta['dispositivos'] ?? []; ?>
                             <tr class="<?= $porta['link'] ? '' : 'text-muted' ?>">
-                                <td class="font-monospace small"><?= htmlspecialchars($porta['porta']) ?></td>
-                                <td><?= $porta['link'] ? Badge::make('Com link', 'success') : Badge::make('Sem link', 'secondary') ?></td>
-                                <td><?= htmlspecialchars($porta['velocidade'] ?: '—') ?></td>
-                                <td><?= htmlspecialchars($porta['duplex'] ?: '—') ?></td>
-                                <td><?= htmlspecialchars($porta['meio']) ?></td>
-                                <td class="small"><?= htmlspecialchars($porta['descricao'] ?: '') ?></td>
+                                <td class="font-monospace small align-top"><?= htmlspecialchars($porta['porta']) ?></td>
+                                <td class="align-top"><?= $porta['link'] ? Badge::make('Com link', 'success') : Badge::make('Sem link', 'secondary') ?></td>
+                                <td class="align-top"><?= htmlspecialchars(trim(($porta['velocidade'] ?: '—') . ' ' . ($porta['duplex'] ?? ''))) ?></td>
+                                <td class="align-top"><?= htmlspecialchars($porta['meio']) ?></td>
+                                <td class="small">
+                                    <?php if (empty($dispositivosPorta)): ?>
+                                        <span class="text-muted">—</span>
+                                    <?php else: ?>
+                                        <?php if (count($dispositivosPorta) > 3): ?>
+                                            <details>
+                                                <summary><?= count($dispositivosPorta) ?> dispositivos <span class="text-muted">(provável outro switch, AP ou servidor de VMs)</span></summary>
+                                        <?php endif; ?>
+                                        <?php foreach ($dispositivosPorta as $disp): ?>
+                                            <div class="py-1">
+                                                <?php if ($disp['ip'] !== ''): ?>
+                                                    <?php if (!empty($disp['ativo_id'])): ?>
+                                                        <a href="<?= url('/ativos/ver?id=' . (int)$disp['ativo_id']) ?>" class="font-monospace fw-semibold" title="<?= htmlspecialchars($disp['ativo_nome']) ?>"><?= htmlspecialchars($disp['ip']) ?></a>
+                                                    <?php else: ?>
+                                                        <span class="font-monospace fw-semibold"><?= htmlspecialchars($disp['ip']) ?></span>
+                                                    <?php endif; ?>
+                                                    <?php if (($disp['ip_origem'] ?? '') === 'scanner'): ?>
+                                                        <span class="text-muted" title="IP tirado da última varredura do IP Scanner -- pode ter mudado desde então">(varredura<?= !empty($disp['scanner_em']) ? ' de ' . htmlspecialchars(date('d/m', strtotime($disp['scanner_em']))) : '' ?>)</span>
+                                                    <?php endif; ?>
+                                                <?php else: ?>
+                                                    <span class="text-muted" title="Nenhuma tabela ARP (switch, servidor ou IP Scanner) conhece esse MAC ainda">IP desconhecido</span>
+                                                <?php endif; ?>
+                                                <?php if (!empty($disp['ativo_nome'])): ?>
+                                                    · <?= htmlspecialchars($disp['ativo_nome']) ?>
+                                                <?php elseif (!empty($disp['hostname'])): ?>
+                                                    · <?= htmlspecialchars($disp['hostname']) ?>
+                                                <?php endif; ?>
+                                                <div class="text-muted font-monospace" style="font-size:.75rem">
+                                                    <?= htmlspecialchars($disp['mac']) ?><?= !empty($disp['fabricante']) ? ' · ' . htmlspecialchars($disp['fabricante']) : '' ?>
+                                                </div>
+                                            </div>
+                                        <?php endforeach; ?>
+                                        <?php if (count($dispositivosPorta) > 3): ?>
+                                            </details>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="small align-top"><?= htmlspecialchars($porta['descricao'] ?: '') ?></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>

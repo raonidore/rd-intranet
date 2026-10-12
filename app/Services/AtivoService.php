@@ -1811,7 +1811,7 @@ class AtivoService
             'omada_mem_pct' => $d['mem_pct'] !== null ? $d['mem_pct'] . '%' : '',
             'omada_portas_resumo' => "{$d['portas_ativas']} de {$d['portas_total']}",
             'omada_mac_total' => $d['mac_total'] !== null ? (string)$d['mac_total'] : '',
-            'omada_portas' => $d['portas'],
+            'omada_portas' => $this->enriquecerDispositivosPortas($d['portas']),
             'omada_vlans' => $d['vlans'],
             'omada_coletado_em' => date('Y-m-d H:i:s'),
         ];
@@ -1824,6 +1824,70 @@ class AtivoService
         AuditService::registrar('Ativos', 'Coleta Omada', 'Dados coletados via SSH direto no switch para ' . $ativo['codigo_patrimonio'] . '.');
 
         return ['success' => true, 'message' => 'Dados coletados com sucesso via SSH direto no switch.'];
+    }
+
+    /**
+     * Completa o "quem está em cada porta" do switch: a ARP do próprio
+     * switch só conhece quem falou com ele, então o IP que faltar vem da
+     * ARP deste servidor (mesma LAN, dado de agora) e, por último, da
+     * varredura mais recente do IP Scanner (pode estar velha -- por isso a
+     * origem fica gravada). Hostname/fabricante vêm do IP Scanner, e o IP
+     * é casado com o cadastro de Ativos pra virar link na ficha.
+     */
+    private function enriquecerDispositivosPortas(array $portas): array
+    {
+        $arpServidor = [];
+        foreach (explode("\n", (string)@shell_exec('ip neigh show 2>/dev/null')) as $linha) {
+            if (preg_match('/^(\d{1,3}(?:\.\d{1,3}){3})\s.*lladdr\s+(\S+)/', $linha, $m)) {
+                $arpServidor[OmadaSshService::normalizarMac($m[2])] = $m[1];
+            }
+        }
+
+        $scanner = [];
+        $scannerEm = null;
+        $linhaScan = Database::connection()->query('SELECT executado_em, hosts FROM ip_scanner_execucoes ORDER BY executado_em DESC LIMIT 1')->fetch(\PDO::FETCH_ASSOC);
+        if ($linhaScan) {
+            $scannerEm = $linhaScan['executado_em'];
+            foreach (json_decode($linhaScan['hosts'], true) ?: [] as $h) {
+                $mac = OmadaSshService::normalizarMac($h['mac'] ?? '');
+                if ($mac !== '') {
+                    $scanner[$mac] = $h;
+                }
+            }
+        }
+
+        $ativosPorIp = [];
+        foreach (Database::connection()->query("SELECT id, codigo_patrimonio, nome, ip FROM ativos WHERE ip IS NOT NULL AND ip <> ''") as $a) {
+            $ativosPorIp[$a['ip']] = $a;
+        }
+
+        foreach ($portas as &$porta) {
+            foreach ($porta['dispositivos'] as &$disp) {
+                $mac = $disp['mac'];
+                $doScan = $scanner[$mac] ?? null;
+
+                if ($disp['ip'] === '' && isset($arpServidor[$mac])) {
+                    $disp['ip'] = $arpServidor[$mac];
+                    $disp['ip_origem'] = 'servidor';
+                }
+                if ($disp['ip'] === '' && $doScan && !empty($doScan['ip'])) {
+                    $disp['ip'] = $doScan['ip'];
+                    $disp['ip_origem'] = 'scanner';
+                }
+
+                $disp['hostname'] = $doScan['hostname'] ?? '';
+                $disp['fabricante'] = $doScan['vendor'] ?? '';
+                $disp['scanner_em'] = $disp['ip_origem'] === 'scanner' ? $scannerEm : null;
+
+                $ativo = $disp['ip'] !== '' ? ($ativosPorIp[$disp['ip']] ?? null) : null;
+                $disp['ativo_id'] = $ativo ? (int)$ativo['id'] : null;
+                $disp['ativo_nome'] = $ativo ? $ativo['codigo_patrimonio'] . ' - ' . $ativo['nome'] : '';
+            }
+            unset($disp);
+        }
+        unset($porta);
+
+        return $portas;
     }
 
     /**

@@ -41,6 +41,8 @@ class OmadaSshService
         'show memory-utilization',
         'show mac address-table count',
         'show vlan brief',
+        'show mac address-table dynamic',
+        'show arp',
     ];
 
     private const MARCA_PAGINACAO = 'Press any key to continue (Q to quit)';
@@ -194,6 +196,19 @@ class OmadaSshService
         }
 
         $portas = $this->interpretarPortas($saidas['show interface status']);
+        $arp = $this->interpretarArp($saidas['show arp']);
+
+        // Cada porta ganha a lista de MACs aprendidos nela, já com o IP quando
+        // a ARP do próprio switch conhece -- o resto é completado por
+        // AtivoService (ARP do servidor, IP Scanner, cadastro de Ativos).
+        $macsPorPorta = $this->interpretarTabelaMac($saidas['show mac address-table dynamic']);
+        foreach ($portas as &$porta) {
+            $porta['dispositivos'] = array_map(
+                fn ($mac) => ['mac' => $mac, 'ip' => $arp[$mac] ?? '', 'ip_origem' => isset($arp[$mac]) ? 'switch' : ''],
+                $macsPorPorta[$porta['porta']] ?? []
+            );
+        }
+        unset($porta);
 
         return [
             'success' => true,
@@ -296,6 +311,42 @@ class OmadaSshService
         }
 
         return $portas;
+    }
+
+    /** MAC normalizado (minúsculo, com ":") -- mesmo formato em todas as fontes que cruzam com ele. */
+    public static function normalizarMac(string $mac): string
+    {
+        $hex = strtolower(preg_replace('/[^0-9a-fA-F]/', '', $mac));
+
+        return strlen($hex) === 12 ? implode(':', str_split($hex, 2)) : '';
+    }
+
+    /** "MAC  VLAN  Porta  Tipo  Aging" -> [porta => [mac, ...]] */
+    private function interpretarTabelaMac(string $saida): array
+    {
+        $porPorta = [];
+
+        foreach (explode("\n", $saida) as $linha) {
+            if (preg_match('/^\s*([0-9a-f]{2}(?::[0-9a-f]{2}){5})\s+\d+\s+(\S+)\s+/i', $linha, $m)) {
+                $porPorta[$m[2]][] = self::normalizarMac($m[1]);
+            }
+        }
+
+        return $porPorta;
+    }
+
+    /** "VLAN1  192.168.0.10  00:e0:4c:fa:01:43  DYNAMIC" -> [mac => ip] */
+    private function interpretarArp(string $saida): array
+    {
+        $arp = [];
+
+        foreach (explode("\n", $saida) as $linha) {
+            if (preg_match('/\s(\d{1,3}(?:\.\d{1,3}){3})\s+([0-9a-f]{2}(?::[0-9a-f]{2}){5})\s/i', $linha, $m)) {
+                $arp[self::normalizarMac($m[2])] = $m[1];
+            }
+        }
+
+        return $arp;
     }
 
     /** @return list<array{id:int, nome:string}> */

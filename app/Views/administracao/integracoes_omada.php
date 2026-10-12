@@ -235,7 +235,7 @@ HTML;
             <i class="bi bi-shield-check"></i> O rd.intranet só sabe mandar uma lista fixa de comandos de consulta
             (<code>show system-info</code>, <code>show interface status</code>, <code>show cpu-utilization</code>,
             <code>show memory-utilization</code>, <code>show mac address-table count</code>,
-            <code>show vlan brief</code>) -- não existe caminho no código pra mandar outro comando.
+            <code>show vlan brief</code>, <code>show mac address-table dynamic</code>, <code>show arp</code>) -- não existe caminho no código pra mandar outro comando.
         </p>
     </div>
 </div>
