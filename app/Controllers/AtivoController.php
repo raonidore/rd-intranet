@@ -21,6 +21,7 @@ use App\Services\SegurancaEventoService;
 use App\Services\SegurancaIsolamentoService;
 use App\Services\SegurancaModuloService;
 use App\Services\UnidadeService;
+use App\Services\UnifiService;
 
 class AtivoController extends Controller
 {
@@ -1024,6 +1025,73 @@ class AtivoController extends Controller
 
         $qualidade = ($_GET['qualidade'] ?? '') === 'alta' ? 'alta' : 'normal';
         $erro = (new IntelbrasDvrService())->transmitirAoVivo($ativo['ip'], $canal, $qualidade);
+        if ($erro !== null && !headers_sent()) {
+            http_response_code(502);
+            header('Content-Type: text/plain; charset=utf-8');
+            echo $erro;
+        }
+        exit;
+    }
+
+    /** Câmera do UniFi Protect vinculada ao ativo, ou null (404 já enviado). */
+    private function cameraProtectDoAtivo(): ?string
+    {
+        $ativo = $this->service->buscar((int)($_GET['id'] ?? 0));
+        $detalhes = $ativo['detalhes'] ?? []; // buscar() já devolve decodificado
+        if (!$ativo || ($ativo['tipo_slug'] ?? '') !== 'dvr_nvr' || empty($detalhes['protect_camera_id'])) {
+            http_response_code(404);
+            return null;
+        }
+
+        return (string)$detalhes['protect_camera_id'];
+    }
+
+    /** Foto atual da câmera do UniFi Protect -- usado como src de um <img>. */
+    public function snapshotCameraProtect(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+
+        $cameraId = $this->cameraProtectDoAtivo();
+        if ($cameraId === null) {
+            exit;
+        }
+        session_write_close();
+
+        $resultado = (new UnifiService())->snapshotCameraProtect($cameraId, ($_GET['qualidade'] ?? '') === 'alta');
+        if (!$resultado['success']) {
+            http_response_code(502);
+            header('Content-Type: text/plain; charset=utf-8');
+            echo $resultado['message'];
+            exit;
+        }
+
+        header('Content-Type: ' . $resultado['content_type']);
+        header('Cache-Control: no-store');
+        echo $resultado['imagem'];
+        exit;
+    }
+
+    /** Vídeo em tempo real da câmera do UniFi Protect (RTSPS → MJPEG no servidor). */
+    public function aoVivoCameraProtect(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+
+        $cameraId = $this->cameraProtectDoAtivo();
+        if ($cameraId === null) {
+            exit;
+        }
+
+        // Mesmo cuidado do ao vivo do DVR Intelbras: solta a sessão, deixa o
+        // laço tratar o fechamento da janela e desliga os buffers de saída.
+        session_write_close();
+        set_time_limit(200);
+        ignore_user_abort(true);
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+
+        $qualidade = ($_GET['qualidade'] ?? '') === 'alta' ? 'alta' : 'normal';
+        $erro = (new UnifiService())->transmitirAoVivoProtect($cameraId, $qualidade);
         if ($erro !== null && !headers_sent()) {
             http_response_code(502);
             header('Content-Type: text/plain; charset=utf-8');

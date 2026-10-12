@@ -1068,6 +1068,8 @@ $router->post('/ativos/perifericos/ativar-coleta', [AtivoController::class, 'ati
 $router->post('/ativos/credencial-web/salvar', [AtivoController::class, 'salvarCredencialWeb']);
 $router->post('/ativos/intelbras-dvr/snapshot-canal', [AtivoController::class, 'snapshotCanalDvr']);
 $router->get('/ativos/intelbras-dvr/ao-vivo', [AtivoController::class, 'aoVivoCanalDvr']);
+$router->get('/ativos/unifi-protect/snapshot', [AtivoController::class, 'snapshotCameraProtect']);
+$router->get('/ativos/unifi-protect/ao-vivo', [AtivoController::class, 'aoVivoCameraProtect']);
 $router->post('/ativos/intelbras-dvr/renomear-canal', [AtivoController::class, 'renomearCanalDvr']);
 $router->post('/ativos/intelbras-dvr/canal-em-uso', [AtivoController::class, 'definirCanalEmUsoDvr']);
 $router->post('/ativos/intelbras-dvr/canal-sensibilidade', [AtivoController::class, 'definirSensibilidadeCanalDvr']);

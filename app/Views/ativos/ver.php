@@ -18,6 +18,12 @@ $statusCores = [
 
 $detalhes = $ativo['detalhes'] ?? [];
 $camposTipo = AtivoService::CAMPOS_DETALHES[$ativo['tipo_slug'] ?? ''] ?? [];
+// Câmera avulsa do UniFi Protect cadastrada como DVR/NVR: tem aba própria
+// ("Câmera") no lugar das abas do DVR Intelbras (canais, usuários, rede...).
+$ehCameraProtect = ($ativo['tipo_slug'] ?? '') === 'dvr_nvr' && !empty($detalhes['protect_camera_id']);
+// Painel de portas: switch TP-Link (omada_portas) ou UniFi (unifi_portas), mesmo layout.
+$fontePortasSwitch = ($ativo['tipo_slug'] ?? '') !== 'switch' ? null : (!empty($detalhes['omada_portas']) ? 'omada' : (!empty($detalhes['unifi_portas']) ? 'unifi' : null));
+$portasSwitch = $fontePortasSwitch !== null ? $detalhes[$fontePortasSwitch . '_portas'] : [];
 
 // Explorador de arquivos/processos depende do heartbeat (poucos segundos
 // de ida e volta) -- o script .ps1 roda como Tarefa Agendada (sem
@@ -317,7 +323,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     </div>
 <?php endif; ?>
 
-<?php if (($ativo['tipo_slug'] ?? '') === 'dvr_nvr'): ?>
+<?php if (($ativo['tipo_slug'] ?? '') === 'dvr_nvr' && !$ehCameraProtect): ?>
     <?php
         $discosAtencaoDvr = array_filter($detalhes['dvr_discos'] ?? [], fn ($d) => ($d['smart']['status'] ?? '') === 'atencao');
         $canaisSemGravarDvr = array_filter($detalhes['dvr_canais'] ?? [], fn ($c) => ($c['em_uso'] ?? true) && !empty($c['com_sinal']) && ($c['gravando'] ?? null) === false);
@@ -434,14 +440,22 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     </li>
     <?php endif; ?>
     <?php endif; ?>
-    <?php if (($ativo['tipo_slug'] ?? '') === 'switch' && !empty($detalhes['omada_portas'])): ?>
+    <?php if ($fontePortasSwitch !== null): ?>
     <li class="nav-item" role="presentation">
         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaPortasSwitch" type="button">
-            <i class="bi bi-ethernet"></i> Portas do switch <span class="badge text-bg-secondary ms-1"><?= count(array_filter($detalhes['omada_portas'], fn ($p) => $p['link'])) ?>/<?= count($detalhes['omada_portas']) ?></span>
+            <i class="bi bi-ethernet"></i> Portas do switch <span class="badge text-bg-secondary ms-1"><?= count(array_filter($portasSwitch, fn ($p) => $p['link'])) ?>/<?= count($portasSwitch) ?></span>
         </button>
     </li>
     <?php endif; ?>
-    <?php if (($ativo['tipo_slug'] ?? '') === 'dvr_nvr'): ?>
+    <?php if ($ehCameraProtect): ?>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaCameraProtect" type="button" id="navCameraProtect">
+            <i class="bi bi-camera-video"></i> Câmera
+            <?php if (($detalhes['protect_status'] ?? '') !== 'Conectada'): ?><span class="badge text-bg-danger ms-1">!</span><?php endif; ?>
+        </button>
+    </li>
+    <?php endif; ?>
+    <?php if (($ativo['tipo_slug'] ?? '') === 'dvr_nvr' && !$ehCameraProtect): ?>
     <?php $canaisDvr = $detalhes['dvr_canais'] ?? []; ?>
     <li class="nav-item" role="presentation">
         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaCanaisDvr" type="button">
@@ -1716,8 +1730,8 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     <?php endif; ?>
     <?php endif; ?>
 
-    <?php if (($ativo['tipo_slug'] ?? '') === 'switch' && !empty($detalhes['omada_portas'])): ?>
-    <!-- Portas do switch (TP-Link via SSH) -->
+    <?php if ($fontePortasSwitch !== null): ?>
+    <!-- Portas do switch (TP-Link via SSH ou UniFi via Controller) -->
     <div class="tab-pane fade" id="abaPortasSwitch">
 <style>
 /* ---------- Painel do switch ---------- */
@@ -1788,6 +1802,8 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
 
 /* LED */
 .sw-led { width:8px; height:4px; border-radius:2px; background:#3b4047; }
+.sw-poe { position:absolute; bottom:-7px; left:-7px; font-size:.62rem; color:#ffc107; text-shadow:0 0 4px rgba(255,193,7,.8); z-index:1; }
+.sw-porta.uplink-rede .sw-rj45, .sw-porta.uplink-rede .sw-sfp { box-shadow:0 0 0 2px #20c997; }
 .sw-led.v1000 { background:#3ddc84; box-shadow:0 0 6px #3ddc84; }
 .sw-led.v100  { background:#ffb020; box-shadow:0 0 6px #ffb020; }
 .sw-led.v10   { background:#ff6b3d; box-shadow:0 0 6px #ff6b3d; }
@@ -1862,11 +1878,11 @@ tr.linha-selecionada > td { background:#e7f1ff !important; }
     <div class="card border-0 shadow-sm">
         <div class="card-header bg-white d-flex justify-content-between">
             <strong>Todas as portas</strong>
-            <small class="text-muted"><span id="swVlans"></span><?php if (!empty($detalhes['omada_coletado_em'])): ?> · coletado em <?= htmlspecialchars(data_br($detalhes['omada_coletado_em'])) ?><?php endif; ?></small>
+            <small class="text-muted"><span id="swVlans"></span><?php if (!empty($detalhes[$fontePortasSwitch . '_coletado_em'])): ?> · coletado em <?= htmlspecialchars(data_br($detalhes[$fontePortasSwitch . '_coletado_em'])) ?><?php endif; ?></small>
         </div>
         <div class="card-body p-0">
             <table class="table table-sm align-middle mb-0">
-                <thead><tr><th>Porta</th><th>Link</th><th>Velocidade</th><th>Meio</th><th>Dispositivos</th></tr></thead>
+                <thead><tr><th>Porta</th><th>Link</th><th>Velocidade</th><th>Meio</th><?php if ($fontePortasSwitch === 'unifi'): ?><th>PoE</th><th>Tráfego (↓/↑)</th><?php endif; ?><th>Dispositivos</th></tr></thead>
                 <tbody id="swTabela"></tbody>
             </table>
         </div>
@@ -1874,26 +1890,33 @@ tr.linha-selecionada > td { background:#e7f1ff !important; }
 
         <div class="sw-tooltip" id="swTooltip"></div>
 <script>
+<?php $f = $fontePortasSwitch; ?>
 const DADOS = <?= json_encode([
-    'omada_nome' => $detalhes['omada_nome'] ?? ($ativo['nome'] ?? ''),
-    'omada_status' => $detalhes['omada_status'] ?? '',
-    'omada_model' => $detalhes['omada_model'] ?? '',
-    'omada_firmware' => $detalhes['omada_firmware'] ?? '',
-    'omada_mac_total' => $detalhes['omada_mac_total'] ?? '',
-    'omada_cpu_pct' => $detalhes['omada_cpu_pct'] ?? '',
-    'omada_mem_pct' => $detalhes['omada_mem_pct'] ?? '',
-    'omada_uptime' => $detalhes['omada_uptime'] ?? '',
-    'omada_vlans' => $detalhes['omada_vlans'] ?? [],
-    'omada_portas' => $detalhes['omada_portas'],
+    'fonte' => $f,
+    'marca' => $f === 'unifi' ? 'UniFi' : 'TP-Link',
+    'nome' => $detalhes[$f . '_nome'] ?? ($ativo['nome'] ?? ''),
+    'status' => $detalhes[$f . '_status'] ?? '',
+    'modelo' => $f === 'unifi' ? (($ativo['modelo'] ?? '') ?: ($detalhes['unifi_model'] ?? '')) : ($detalhes['omada_model'] ?? ''),
+    'firmware' => $detalhes[$f . '_firmware'] ?? '',
+    'mac_total' => $detalhes[$f . '_mac_total'] ?? '',
+    'cpu_pct' => $detalhes[$f . '_cpu_pct'] ?? '',
+    'mem_pct' => $detalhes[$f . '_mem_pct'] ?? '',
+    'uptime' => $detalhes[$f . '_uptime'] ?? '',
+    'poe_consumo' => $detalhes['unifi_poe_consumo'] ?? '',
+    'uplink' => $detalhes['unifi_uplink'] ?? '',
+    'vlans' => $detalhes[$f . '_vlans'] ?? [],
+    'portas' => $portasSwitch,
 ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?>;
 const URL_ATIVO = <?= json_encode(url('/ativos/ver?id=')) ?>;
 const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
 
 (function () {
-    const portas = DADOS.omada_portas || [];
+    const portas = DADOS.portas || [];
     const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-    const numero = p => parseInt(String(p.porta).split('/').pop(), 10);
-    const classeVel = v => v === '1000M' ? 'v1000' : (v === '100M' ? 'v100' : (v === '10M' ? 'v10' : ''));
+    // TP-Link: "1/0/12"; UniFi já manda o número separado ("Port 12" é só o nome).
+    const numero = p => p.numero ?? parseInt(String(p.porta).split('/').pop(), 10);
+    const classeVel = v => ['1000M', '2500M', '10000M'].includes(v) ? 'v1000' : (v === '100M' ? 'v100' : (v === '10M' ? 'v10' : ''));
+    const htmlPoe = p => p.poe ? (p.poe.potencia_w > 0 ? `<span class="badge text-bg-warning"><i class="bi bi-lightning-charge-fill"></i> ${p.poe.potencia_w} W</span>` : `<span class="text-muted small">${p.poe.modo === 'off' ? 'desligado' : 'disponível'}</span>`) : '<span class="text-muted">—</span>';
     const nomeDisp = d => d.ativo_nome || d.hostname || '';
 
     // ---------- resumo ----------
@@ -1903,17 +1926,19 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
         <div class="d-flex align-items-center gap-3 me-3">
             <div class="rounded-3 d-flex align-items-center justify-content-center" style="width:48px;height:48px;background:#e7f1ff;color:#0d6efd;font-size:1.4rem"><i class="bi bi-hdd-network"></i></div>
             <div>
-                <div class="fw-semibold">${esc(DADOS.omada_nome)} <span class="badge ${DADOS.omada_status === 'Online' ? 'text-bg-success' : 'text-bg-secondary'} ms-1">${esc(DADOS.omada_status || '—')}</span></div>
-                <div class="small text-muted">${esc(DADOS.omada_model)} · fw ${esc((DADOS.omada_firmware || '').split(' ')[0])}</div>
+                <div class="fw-semibold">${esc(DADOS.nome)} <span class="badge ${DADOS.status === 'Online' ? 'text-bg-success' : 'text-bg-secondary'} ms-1">${esc(DADOS.status || '—')}</span></div>
+                <div class="small text-muted">${esc(DADOS.modelo)} · fw ${esc((DADOS.firmware || '').split(' ')[0])}</div>
             </div>
         </div>
         <div class="sw-metrica"><div class="valor">${ativas}<span class="text-muted fs-6">/${portas.length}</span></div><div class="rotulo">portas com link</div></div>
-        <div class="sw-metrica"><div class="valor">${esc(DADOS.omada_mac_total)}</div><div class="rotulo">dispositivos (MACs)</div></div>
-        <div class="sw-metrica"><div class="valor">${esc(DADOS.omada_cpu_pct)}</div><div class="rotulo">CPU</div><div class="sw-barra"><span style="width:${pct(DADOS.omada_cpu_pct)}%"></span></div></div>
-        <div class="sw-metrica"><div class="valor">${esc(DADOS.omada_mem_pct)}</div><div class="rotulo">Memória</div><div class="sw-barra"><span style="width:${pct(DADOS.omada_mem_pct)}%"></span></div></div>
-        <div class="sw-metrica"><div class="valor fs-6">${esc(DADOS.omada_uptime)}</div><div class="rotulo">ligado há</div></div>`;
+        <div class="sw-metrica"><div class="valor">${esc(DADOS.mac_total)}</div><div class="rotulo">dispositivos (MACs)</div></div>
+        <div class="sw-metrica"><div class="valor">${esc(DADOS.cpu_pct)}</div><div class="rotulo">CPU</div><div class="sw-barra"><span style="width:${pct(DADOS.cpu_pct)}%"></span></div></div>
+        <div class="sw-metrica"><div class="valor">${esc(DADOS.mem_pct)}</div><div class="rotulo">Memória</div><div class="sw-barra"><span style="width:${pct(DADOS.mem_pct)}%"></span></div></div>
+        ${DADOS.poe_consumo ? `<div class="sw-metrica"><div class="valor fs-6"><i class="bi bi-lightning-charge-fill text-warning"></i> ${esc(DADOS.poe_consumo)}</div><div class="rotulo">consumo PoE</div></div>` : ''}
+        <div class="sw-metrica"><div class="valor fs-6">${esc(DADOS.uptime)}</div><div class="rotulo">ligado há</div></div>
+        ${DADOS.uplink ? `<div class="sw-metrica"><div class="valor fs-6"><i class="bi bi-arrow-up-circle text-success"></i> ${esc(DADOS.uplink)}</div><div class="rotulo">uplink</div></div>` : ''}`;
 
-    document.getElementById('swVlans').textContent = 'VLANs: ' + (DADOS.omada_vlans || []).map(v => v.id + ' (' + v.nome + ')').join(', ');
+    document.getElementById('swVlans').textContent = 'VLANs: ' + (DADOS.vlans || []).map(v => v.id + ' (' + v.nome + ')').join(', ');
 
     // ---------- painel ----------
     const cobre = portas.filter(p => p.meio !== 'Fibra').sort((a, b) => numero(a) - numero(b));
@@ -1922,16 +1947,17 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
     function htmlPorta(p, linha, sfp) {
         const n = numero(p);
         const qtd = (p.dispositivos || []).length;
-        const classes = ['sw-porta', 'linha-' + linha, p.link ? 'com-link' : '', qtd > 1 ? 'uplink' : ''].join(' ');
+        const classes = ['sw-porta', 'linha-' + linha, p.link ? 'com-link' : '', qtd > 1 ? 'uplink' : '', p.uplink ? 'uplink-rede' : ''].join(' ');
+        const raio = p.poe && p.poe.potencia_w > 0 ? '<i class="bi bi-lightning-charge-fill sw-poe"></i>' : '';
         const led = `<i class="sw-led ${p.link ? classeVel(p.velocidade) : ''}"></i>`;
         const corpo = sfp
             ? `<div class="sw-sfp"></div>`
-            : `<div class="sw-rj45"><span class="pinos"></span>${p.link ? '<span class="cabo"></span>' : ''}${qtd > 1 ? `<span class="sw-qtd">${qtd}</span>` : ''}</div>`;
+            : `<div class="sw-rj45"><span class="pinos"></span>${p.link ? '<span class="cabo"></span>' : ''}${qtd > 1 ? `<span class="sw-qtd">${qtd}</span>` : ''}${raio}</div>`;
         return `<div class="${classes}" data-porta="${esc(p.porta)}"><span class="sw-num">${n}</span>${led}${corpo}</div>`;
     }
 
     // RJ45 em pares (ímpar em cima, par embaixo), grupos de 8 como no SG3428.
-    let html = `<div class="sw-marca"><div class="nome">${esc(DADOS.omada_nome)}</div><div class="modelo">TP-Link ${esc(DADOS.omada_model)}</div>
+    let html = `<div class="sw-marca"><div class="nome">${esc(DADOS.nome)}</div><div class="modelo">${esc(DADOS.marca)} ${esc(DADOS.modelo)}</div>
         <div class="sys-leds"><span><i class="sw-led v1000"></i>PWR</span><span><i class="sw-led v1000"></i>SYS</span></div></div>`;
     for (let g = 0; g < cobre.length; g += 8) {
         html += '<div class="sw-sep"></div><div class="sw-grupo">';
@@ -1966,7 +1992,7 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
             const p = porNome[el.dataset.porta];
             const ds = p.dispositivos || [];
             tip.innerHTML = `<div class="titulo">Porta ${numero(p)} <span class="text-secondary fw-normal">${esc(p.porta)}</span></div>
-                <div class="sub">${p.link ? `<i class="bi bi-circle-fill text-success" style="font-size:.5rem"></i> Com link · ${esc(p.velocidade)} ${esc(p.duplex)}` : '<i class="bi bi-circle text-secondary" style="font-size:.5rem"></i> Sem link'} · ${esc(p.meio)}${p.descricao ? ' · ' + esc(p.descricao) : ''}</div>
+                <div class="sub">${p.link ? `<i class="bi bi-circle-fill text-success" style="font-size:.5rem"></i> Com link · ${esc(p.velocidade)} ${esc(p.duplex)}` : '<i class="bi bi-circle text-secondary" style="font-size:.5rem"></i> Sem link'} · ${esc(p.meio)}${p.descricao ? ' · ' + esc(p.descricao) : ''}${p.uplink ? ' · <span class="text-success">uplink</span>' : ''}${p.poe && p.poe.potencia_w > 0 ? ` · <span class="text-warning">PoE ${p.poe.potencia_w} W</span>` : ''}</div>
                 ${ds.slice(0, 6).map(htmlDisp).join('')}
                 ${ds.length > 6 ? `<div class="disp text-secondary">+ ${ds.length - 6} dispositivo(s) -- clique para ver todos</div>` : ''}
                 ${!ds.length && p.link ? '<div class="disp text-secondary">Nenhum MAC aprendido ainda</div>' : ''}`;
@@ -1991,7 +2017,16 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
         const p = porNome[nome];
         const ds = p.dispositivos || [];
         document.getElementById('swDetalheTitulo').innerHTML = `<i class="bi bi-ethernet"></i> Porta ${numero(p)} <small class="text-muted fw-normal">${esc(p.porta)} · ${p.link ? esc(p.velocidade + ' ' + p.duplex) : 'sem link'} · ${esc(p.meio)}</small>`;
-        document.getElementById('swDetalheCorpo').innerHTML = ds.length ? ds.map(d => `
+        // Só a UniFi informa PoE/tráfego/erros/STP por porta.
+        const extrasUnifi = DADOS.fonte !== 'unifi' ? '' : `<div class="d-flex flex-wrap gap-3 small mb-2 pb-2 border-bottom">
+                <span><span class="text-muted">PoE:</span> ${htmlPoe(p)}${p.poe && p.poe.classe && p.poe.classe !== 'Unknown' ? ' <span class="text-muted">' + esc(p.poe.classe) + '</span>' : ''}</span>
+                <span><span class="text-muted">Tráfego:</span> ↓ ${esc(p.trafego_rx)} / ↑ ${esc(p.trafego_tx)}</span>
+                <span><span class="text-muted">Erros:</span> ${p.erros > 0 ? `<span class="text-danger fw-semibold">${p.erros}</span>` : '0'}</span>
+                ${p.stp ? `<span><span class="text-muted">STP:</span> ${esc(p.stp)}</span>` : ''}
+                ${p.uplink ? '<span class="badge text-bg-success">Uplink</span>' : ''}
+                ${p.habilitada === false ? '<span class="badge text-bg-danger">Porta desabilitada</span>' : ''}
+            </div>`;
+        document.getElementById('swDetalheCorpo').innerHTML = extrasUnifi + (ds.length ? ds.map(d => `
             <div class="sw-detalhe-disp">
                 <div class="icone"><i class="bi ${d.ativo_id ? 'bi-pc-display' : 'bi-question-circle'}"></i></div>
                 <div class="flex-grow-1">
@@ -2004,7 +2039,7 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
                 ${!d.ativo_id && d.ip ? `<a class="btn btn-sm btn-outline-primary flex-shrink-0 align-self-center" target="_blank"
                     href="${URL_ATIVO_NOVO}?ip=${encodeURIComponent(d.ip)}&nome=${encodeURIComponent(d.hostname || '')}"
                     title="Abre o Novo Ativo com IP e nome já preenchidos -- use 'Detectar' lá pra completar tipo/marca/modelo"><i class="bi bi-plus-lg"></i> Cadastrar ativo</a>` : ''}
-            </div>`).join('') : `<p class="text-muted mb-0">${p.link ? 'Com link, mas nenhum MAC aprendido ainda.' : 'Porta livre.'}</p>`;
+            </div>`).join('') : `<p class="text-muted mb-0">${p.link ? 'Com link, mas nenhum MAC aprendido ainda.' : 'Porta livre.'}</p>`);
         detalhe.classList.remove('d-none');
     }
     document.getElementById('swDetalheFechar').addEventListener('click', () => {
@@ -2020,6 +2055,7 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
             <td class="font-monospace small">${esc(p.porta)}</td>
             <td>${p.link ? '<span class="badge text-bg-success">Com link</span>' : '<span class="badge text-bg-secondary">Sem link</span>'}</td>
             <td>${esc(p.velocidade || '—')}</td><td>${esc(p.meio)}</td>
+            ${DADOS.fonte === 'unifi' ? `<td>${htmlPoe(p)}</td><td class="small text-nowrap">${p.link ? esc(p.trafego_rx) + ' / ' + esc(p.trafego_tx) : '—'}</td>` : ''}
             <td class="small">${ds.length ? ds.slice(0, 2).map(d => `<span class="font-monospace">${esc(d.ip || '?')}</span>${nomeDisp(d) ? ' ' + esc(nomeDisp(d)) : ''}`).join(', ') + (ds.length > 2 ? ` <span class="text-muted">+${ds.length - 2}</span>` : '') : '<span class="text-muted">—</span>'}</td>
         </tr>`;
     }).join('');
@@ -2049,7 +2085,169 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
     </div>
     <?php endif; ?>
 
-    <?php if (($ativo['tipo_slug'] ?? '') === 'dvr_nvr'): ?>
+    <?php if ($ehCameraProtect): ?>
+    <!-- Câmera do UniFi Protect: vídeo ao vivo (RTSPS -> MJPEG no servidor) + dados da câmera -->
+    <div class="tab-pane fade" id="abaCameraProtect">
+        <div class="row g-3">
+            <div class="col-lg-8">
+                <div class="card border-0 shadow-sm bg-dark text-light">
+                    <div class="card-header border-secondary d-flex align-items-center flex-wrap gap-2">
+                        <span class="badge text-bg-danger d-none" id="protectSeloAoVivo"><i class="bi bi-broadcast"></i> AO VIVO</span>
+                        <span class="badge text-bg-secondary" id="protectSeloFoto"><i class="bi bi-image"></i> FOTO</span>
+                        <strong class="me-auto"><?= htmlspecialchars($detalhes['protect_nome'] ?? $ativo['nome']) ?></strong>
+                        <select id="protectQualidade" class="form-select form-select-sm bg-dark text-light border-secondary" style="width:auto" title="Qualidade do vídeo ao vivo">
+                            <option value="normal">Normal (mais leve)</option>
+                            <option value="alta">Alta (HD)</option>
+                        </select>
+                        <button type="button" class="btn btn-sm btn-danger" id="protectBotaoAoVivo"><i class="bi bi-play-fill"></i> Assistir ao vivo</button>
+                        <button type="button" class="btn btn-sm btn-outline-light d-none" id="protectBotaoParar"><i class="bi bi-stop-fill"></i> Parar</button>
+                        <button type="button" class="btn btn-sm btn-outline-light" id="protectBotaoFoto" title="Atualizar a foto"><i class="bi bi-camera"></i></button>
+                        <button type="button" class="btn btn-sm btn-outline-light" id="protectBotaoTelaCheia" title="Tela cheia"><i class="bi bi-arrows-fullscreen"></i></button>
+                    </div>
+                    <div class="card-body p-1 position-relative text-center" style="min-height:240px">
+                        <div id="protectStatus" class="position-absolute top-50 start-50 translate-middle small"><div class="spinner-border spinner-border-sm"></div> Carregando imagem...</div>
+                        <img id="protectImagem" class="img-fluid rounded" alt="" style="display:none; width:100%">
+                    </div>
+                    <div class="card-footer border-secondary small text-secondary d-flex justify-content-between flex-wrap gap-2">
+                        <span><i class="bi bi-info-circle"></i> O vídeo passa pelo servidor do RD.Intranet (até 3 min por vez); a gravação continua no Protect.</span>
+                        <a href="#" class="link-light" id="protectBaixarFoto" download="<?= htmlspecialchars(($ativo['codigo_patrimonio'] ?? 'camera') . '.jpg') ?>"><i class="bi bi-download"></i> Baixar foto em alta</a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                        <strong><i class="bi bi-camera-video"></i> UniFi Protect</strong>
+                        <span class="badge <?= ($detalhes['protect_status'] ?? '') === 'Conectada' ? 'text-bg-success' : 'text-bg-danger' ?>"><?= htmlspecialchars($detalhes['protect_status'] ?? '—') ?></span>
+                    </div>
+                    <div class="card-body p-0">
+                        <table class="table table-sm mb-0 small">
+                            <?php foreach ([
+                                'protect_modelo' => 'Modelo',
+                                'protect_nome' => 'Nome no Protect',
+                                'protect_nvr' => 'Gravando em',
+                                'protect_versao' => 'Versão do Protect',
+                                'protect_conexao' => 'Conectada em',
+                                'protect_rede' => 'Rede',
+                                'protect_uptime' => 'Ligada há',
+                                'protect_mac' => 'MAC',
+                                'protect_dados_enviados' => 'Vídeo enviado (sessão)',
+                                'protect_microfone' => 'Microfone',
+                                'protect_hdr' => 'HDR',
+                                'protect_modo_video' => 'Modo de vídeo',
+                                'protect_deteccao' => 'Detecção inteligente',
+                                'protect_led' => 'LED de status',
+                            ] as $chave => $rotulo): ?>
+                                <?php if (($detalhes[$chave] ?? '') === '') continue; ?>
+                                <tr><th class="text-muted fw-normal ps-3" style="width:45%"><?= $rotulo ?></th><td class="<?= $chave === 'protect_mac' ? 'font-monospace' : '' ?>"><?= htmlspecialchars((string)$detalhes[$chave]) ?></td></tr>
+                            <?php endforeach; ?>
+                        </table>
+                    </div>
+                    <?php if (!empty($detalhes['protect_coletado_em'])): ?>
+                        <div class="card-footer bg-white small text-muted">Coletado em <?= htmlspecialchars(data_br($detalhes['protect_coletado_em'])) ?> -- atualiza a cada 30 min</div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+<script>
+(function () {
+    const id = <?= (int)$ativo['id'] ?>;
+    const URL_FOTO = <?= json_encode(url('/ativos/unifi-protect/snapshot')) ?>;
+    const URL_AO_VIVO = <?= json_encode(url('/ativos/unifi-protect/ao-vivo')) ?>;
+    const imagem = document.getElementById('protectImagem');
+    const status = document.getElementById('protectStatus');
+    const qualidade = document.getElementById('protectQualidade');
+    const botaoAoVivo = document.getElementById('protectBotaoAoVivo');
+    const botaoParar = document.getElementById('protectBotaoParar');
+    const seloAoVivo = document.getElementById('protectSeloAoVivo');
+    const seloFoto = document.getElementById('protectSeloFoto');
+    let aoVivo = false;
+    let timerFim = null;
+    let timerPrimeiroQuadro = null;
+
+    try { if (localStorage.getItem('rdAoVivoProtectQualidade') === 'alta') qualidade.value = 'alta'; } catch (e) { /* sem storage: fica Normal */ }
+    document.getElementById('protectBaixarFoto').href = URL_FOTO + '?id=' + id + '&qualidade=alta';
+
+    function mostrarStatus(html) { status.style.display = ''; status.innerHTML = html; }
+    function modo(vivo) {
+        aoVivo = vivo;
+        seloAoVivo.classList.toggle('d-none', !vivo);
+        seloFoto.classList.toggle('d-none', vivo);
+        botaoAoVivo.classList.toggle('d-none', vivo);
+        botaoParar.classList.toggle('d-none', !vivo);
+    }
+
+    function carregarFoto() {
+        pararTransmissao();
+        mostrarStatus('<div class="spinner-border spinner-border-sm"></div> Carregando imagem...');
+        imagem.src = URL_FOTO + '?id=' + id + '&_=' + Date.now();
+    }
+
+    function iniciarAoVivo() {
+        clearTimeout(timerFim);
+        clearInterval(timerPrimeiroQuadro);
+        modo(true);
+        mostrarStatus('<div class="spinner-border spinner-border-sm"></div> Conectando à câmera...<div class="small text-secondary mt-1">A primeira imagem leva alguns segundos.</div>');
+        imagem.src = URL_AO_VIVO + '?id=' + id + '&qualidade=' + qualidade.value + '&_=' + Date.now();
+        // Nem todo navegador dispara "load" no MJPEG: detecta o 1º quadro pelo tamanho.
+        timerPrimeiroQuadro = setInterval(function () {
+            if (!aoVivo) return clearInterval(timerPrimeiroQuadro);
+            if (imagem.naturalWidth > 1) {
+                clearInterval(timerPrimeiroQuadro);
+                status.style.display = 'none';
+                imagem.style.display = '';
+            }
+        }, 300);
+        // O servidor encerra em 3 min.
+        timerFim = setTimeout(function () {
+            modo(false);
+            mostrarStatus('<span class="badge text-bg-secondary">Transmissão encerrada -- clique em "Assistir ao vivo" para continuar</span>');
+        }, 178000);
+    }
+
+    function pararTransmissao() {
+        clearTimeout(timerFim);
+        clearInterval(timerPrimeiroQuadro);
+        if (aoVivo) {
+            imagem.src = 'data:image/gif;base64,R0lGODlhAQABAAAAACw='; // solta a conexão (o servidor encerra o ffmpeg)
+        }
+        modo(false);
+    }
+
+    imagem.addEventListener('load', function () {
+        if (imagem.src.startsWith('data:')) return;
+        status.style.display = 'none';
+        imagem.style.display = '';
+    });
+    imagem.addEventListener('error', function () {
+        if (imagem.src.startsWith('data:')) return;
+        const eraAoVivo = aoVivo;
+        modo(false);
+        mostrarStatus('<div class="alert alert-danger mb-0 small">' + (eraAoVivo ? 'Não consegui abrir o vídeo ao vivo desta câmera.' : 'Não consegui buscar a imagem da câmera no Protect.') + '</div>');
+    });
+
+    botaoAoVivo.addEventListener('click', iniciarAoVivo);
+    botaoParar.addEventListener('click', carregarFoto);
+    document.getElementById('protectBotaoFoto').addEventListener('click', carregarFoto);
+    document.getElementById('protectBotaoTelaCheia').addEventListener('click', function () {
+        if (imagem.requestFullscreen) imagem.requestFullscreen();
+    });
+    qualidade.addEventListener('change', function () {
+        try { localStorage.setItem('rdAoVivoProtectQualidade', qualidade.value); } catch (e) { /* sem storage */ }
+        if (aoVivo) iniciarAoVivo();
+    });
+
+    // Abrir a aba já começa o ao vivo; sair dela corta a transmissão (não deixa ffmpeg rodando à toa).
+    const nav = document.getElementById('navCameraProtect');
+    nav.addEventListener('shown.bs.tab', iniciarAoVivo);
+    nav.addEventListener('hidden.bs.tab', function () { pararTransmissao(); imagem.removeAttribute('src'); imagem.style.display = 'none'; });
+    window.addEventListener('pagehide', pararTransmissao);
+})();
+</script>
+    </div>
+    <?php endif; ?>
+
+    <?php if (($ativo['tipo_slug'] ?? '') === 'dvr_nvr' && !$ehCameraProtect): ?>
     <!-- Canais (DVR/NVR Intelbras) -->
     <div class="tab-pane fade" id="abaCanaisDvr">
         <?php if (!empty($detalhes['dvr_hd_problema'])): ?>

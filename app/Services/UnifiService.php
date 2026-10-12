@@ -1081,6 +1081,153 @@ class UnifiService
      *
      * @return array{sucesso:bool, dados:mixed, mensagem:string}
      */
+    /*
+     * ---------------------------------------------------------------
+     * UniFi Protect (câmeras) -- mesma API Key do Network, mas só a API
+     * de integração (/proxy/protect/integration/v1) aceita a chave; a
+     * privada (/proxy/protect/api) responde 401 (confirmado no UDM Pro
+     * do enzilab NTO, Protect 7.2). Por isso firmware/uptime/gravação da
+     * câmera não vêm daqui -- uptime e porta do switch saem do registro
+     * de cliente cabeado do Network (ver AtivoService::coletarProtect()).
+     * ---------------------------------------------------------------
+     */
+
+    /** @return array<int, array> câmeras adotadas no Protect (id, name, type, mac sem ':' em maiúsculas, state...) */
+    public function listarCamerasProtect(): array
+    {
+        $resultado = $this->chamarApi('GET', '/proxy/protect/integration/v1/cameras');
+
+        return $resultado['sucesso'] && is_array($resultado['dados']) ? $resultado['dados'] : [];
+    }
+
+    /** @return array{versao: string, nvr: string, nvr_modelo: string}|null */
+    public function infoProtect(): ?array
+    {
+        $info = $this->chamarApi('GET', '/proxy/protect/integration/v1/meta/info');
+        if (!$info['sucesso']) {
+            return null;
+        }
+
+        $nvr = $this->chamarApi('GET', '/proxy/protect/integration/v1/nvrs');
+
+        return [
+            'versao' => (string)($info['dados']['applicationVersion'] ?? ''),
+            'nvr' => (string)($nvr['dados']['name'] ?? ''),
+            'nvr_modelo' => (string)($nvr['dados']['type'] ?? ''),
+        ];
+    }
+
+    /** @return array{success: bool, message?: string, imagem?: string, content_type?: string} */
+    public function snapshotCameraProtect(string $cameraId, bool $altaResolucao = false): array
+    {
+        $apiKey = $this->configurado() ? $this->apiKeyAtual() : null;
+        if ($apiKey === null) {
+            return ['success' => false, 'message' => 'Integração com o UniFi Controller ainda não configurada -- veja Integrações.'];
+        }
+
+        $ch = curl_init($this->urlAtual() . '/proxy/protect/integration/v1/cameras/' . rawurlencode($cameraId) . '/snapshot' . ($altaResolucao ? '?highQuality=true' : ''));
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => ['X-API-KEY: ' . $apiKey],
+            CURLOPT_TIMEOUT => 15,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => false,
+        ]);
+        $imagem = curl_exec($ch);
+        $codigo = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $tipo = (string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+        curl_close($ch);
+
+        if ($imagem === false || $codigo !== 200 || stripos($tipo, 'image/') !== 0) {
+            return ['success' => false, 'message' => "O Protect não devolveu a imagem da câmera (HTTP {$codigo})."];
+        }
+
+        return ['success' => true, 'imagem' => $imagem, 'content_type' => $tipo];
+    }
+
+    /**
+     * URL RTSPS da câmera na qualidade pedida ('medium'/'high'). O Protect
+     * só cria o stream sob demanda -- se ainda não existir, liga (é o mesmo
+     * "Enable RTSP" da tela da câmera, não mexe em gravação). O sufixo
+     * "?enableSrtp" que o Protect devolve faz o ffmpeg falhar: é removido.
+     */
+    public function urlStreamCameraProtect(string $cameraId, string $qualidade): ?string
+    {
+        $caminho = '/proxy/protect/integration/v1/cameras/' . rawurlencode($cameraId) . '/rtsps-stream';
+
+        $atual = $this->chamarApi('GET', $caminho);
+        $url = $atual['sucesso'] ? ($atual['dados'][$qualidade] ?? null) : null;
+
+        if ($url === null) {
+            $criado = $this->chamarApi('POST', $caminho, ['qualities' => [$qualidade]]);
+            $url = $criado['sucesso'] ? ($criado['dados'][$qualidade] ?? null) : null;
+        }
+
+        return $url !== null ? strtok((string)$url, '?') : null;
+    }
+
+    /**
+     * RTSPS da câmera → MJPEG pelo ffmpeg, direto pro navegador (<img>).
+     * Mesmo esquema de IntelbrasDvrService::transmitirViaFfmpeg(): a URL do
+     * stream (que funciona como senha) nunca sai do servidor.
+     *
+     * @return string|null mensagem de erro, ou null se transmitiu
+     */
+    public function transmitirAoVivoProtect(string $cameraId, string $qualidade = 'normal', int $maxSegundos = 180): ?string
+    {
+        if (!IntelbrasDvrService::ffmpegDisponivel()) {
+            return 'O ffmpeg não está instalado no servidor (Infraestrutura > Dependências).';
+        }
+
+        $url = $this->urlStreamCameraProtect($cameraId, $qualidade === 'alta' ? 'high' : 'medium');
+        if ($url === null) {
+            return 'O Protect não liberou o stream desta câmera.';
+        }
+
+        $comando = ['/usr/bin/ffmpeg', '-loglevel', 'error', '-rtsp_transport', 'tcp', '-i', $url, '-an',
+            '-t', (string)$maxSegundos, '-r', '10',
+            ...($qualidade === 'alta' ? ['-vf', 'scale=1280:-2', '-q:v', '6'] : ['-q:v', '7']),
+            '-f', 'mpjpeg', 'pipe:1'];
+
+        $processo = proc_open($comando, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $tubos);
+        if (!is_resource($processo)) {
+            return 'Não consegui iniciar o ffmpeg.';
+        }
+
+        $comecou = false;
+        while (!feof($tubos[1])) {
+            $dados = fread($tubos[1], 65536);
+            if ($dados === '' || $dados === false) {
+                continue;
+            }
+            if (!$comecou) {
+                $comecou = true;
+                header('Content-Type: multipart/x-mixed-replace; boundary=ffmpeg');
+                header('Cache-Control: no-store');
+                header('X-Accel-Buffering: no');
+            }
+            echo $dados;
+            flush();
+            if (connection_aborted()) {
+                break;
+            }
+        }
+        $erroFfmpeg = $comecou ? '' : trim((string)stream_get_contents($tubos[2]));
+        // Mesmo cuidado do DVR: fecha os tubos e espera o ffmpeg sair de verdade (senão fica <defunct>).
+        fclose($tubos[1]);
+        fclose($tubos[2]);
+        proc_terminate($processo);
+        for ($i = 0; $i < 30 && proc_get_status($processo)['running']; $i++) {
+            usleep(100000);
+        }
+        if (proc_get_status($processo)['running']) {
+            proc_terminate($processo, 9);
+        }
+        proc_close($processo);
+
+        return $comecou ? null : ('A câmera não enviou vídeo.' . ($erroFfmpeg !== '' ? ' ' . $erroFfmpeg : ''));
+    }
+
     private function chamarApi(string $metodo, string $caminho, ?array $corpo = null): array
     {
         if (!$this->configurado()) {

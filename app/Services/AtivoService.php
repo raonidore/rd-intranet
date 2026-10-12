@@ -136,6 +136,15 @@ class AtivoService
             'dvr_hd_problema' => 'Problema no HD (Intelbras)',
             'snmp_sys_descr' => 'Descrição (SNMP)',
             'snmp_uptime' => 'Uptime (SNMP)',
+            // protect_* -- câmera UniFi avulsa, gravada pelo UniFi Protect
+            // (UDM/UNVR), coletada pela API do Protect (coletarProtect()).
+            // 'protect_camera_id' fica FORA daqui (só identificador interno).
+            'protect_nome' => 'Nome no Protect',
+            'protect_modelo' => 'Modelo (Protect)',
+            'protect_status' => 'Status no Protect',
+            'protect_nvr' => 'Gravando em (NVR)',
+            'protect_conexao' => 'Conectada em',
+            'protect_uptime' => 'Ligada há',
         ],
         'switch' => [
             'numero_portas' => 'Número de portas',
@@ -161,6 +170,18 @@ class AtivoService
             'omada_portas_resumo' => 'Portas com link',
             'omada_mac_total' => 'Endereços MAC aprendidos',
             'omada_coleta_via' => 'Coletado via',
+            // unifi_* -- switch UniFi, coletado pelo UniFi Controller
+            // (coletarUnifi()). 'unifi_portas'/'unifi_vlans' (arrays) ficam
+            // FORA daqui, igual omada_portas -- aba "Portas do switch".
+            'unifi_model' => 'Modelo (UniFi)',
+            'unifi_firmware' => 'Versão de firmware (UniFi)',
+            'unifi_status' => 'Status no Controller',
+            'unifi_uptime' => 'Uptime (UniFi)',
+            'unifi_serial' => 'Número de série (UniFi)',
+            'unifi_cpu_pct' => 'Uso de CPU (UniFi)',
+            'unifi_mem_pct' => 'Uso de memória (UniFi)',
+            'unifi_poe_consumo' => 'Consumo PoE',
+            'unifi_uplink' => 'Uplink',
         ],
         // 'unifi_radios', 'unifi_clientes' (arrays) e 'unifi_adotado_em'
         // (formatado com data_br() só na view, nunca no coletor -- data_br()
@@ -539,7 +560,7 @@ class AtivoService
             'snmp_habilitado' => isset($post['snmp_habilitado']) ? 1 : 0,
             'snmp_community' => trim($post['snmp_community'] ?? '') ?: null,
             'observacoes' => trim($post['observacoes'] ?? '') ?: null,
-            'detalhes' => json_encode($this->extrairDetalhes($ativo['tipo_slug'] ?? '', $post), JSON_UNESCAPED_UNICODE),
+            'detalhes' => json_encode($this->detalhesAposEdicao($ativo, $post), JSON_UNESCAPED_UNICODE),
             'machine_guid' => $ativo['machine_guid'] ?? null,
         ];
 
@@ -1121,6 +1142,21 @@ class AtivoService
         return $ok;
     }
 
+    /**
+     * Campos do formulário (CAMPOS_DETALHES) vêm do POST; todo o resto que
+     * já estava em `detalhes` é dado de coleta (portas do switch, canais do
+     * DVR, vínculo com a câmera do Protect, rádios do AP...) e é mantido --
+     * antes, editar o ativo apagava tudo isso até a próxima coleta.
+     */
+    private function detalhesAposEdicao(array $ativo, array $post): array
+    {
+        $tipo = $ativo['tipo_slug'] ?? '';
+        $atuais = json_decode($ativo['detalhes'] ?? '', true) ?: [];
+        $coletados = array_diff_key($atuais, self::CAMPOS_DETALHES[$tipo] ?? []);
+
+        return array_merge($coletados, $this->extrairDetalhes($tipo, $post));
+    }
+
     private function extrairDetalhes(string $tipo, array $post): array
     {
         $campos = self::CAMPOS_DETALHES[$tipo] ?? [];
@@ -1336,8 +1372,9 @@ class AtivoService
         // oficial mostra na ficha do cliente (confirmei campo a campo contra
         // um cliente real) -- guarda tudo junto, exibido num detalhe/modal na
         // view em vez de aba nova, pra não pedir outro endpoint.
+        $clientesLegado = $unifi->listarClientesLegado();
         $clientesWifi = [];
-        foreach ($unifi->listarClientesLegado() as $c) {
+        foreach ($clientesLegado as $c) {
             if (($c['ap_mac'] ?? '') === ($dispositivo['macAddress'] ?? '') && empty($c['is_wired'])) {
                 $clientesWifi[] = [
                     'nome' => $c['hostname'] ?? ($c['name'] ?? ($c['mac'] ?? '')),
@@ -1509,6 +1546,12 @@ class AtivoService
                 }
                 $coletado['unifi_redes_lan'] = $redesLan;
             }
+
+            // Switch UniFi: painel de portas no mesmo formato do Omada
+            // (omada_portas), pra reaproveitar a aba "Portas do switch".
+            if (!empty($legadoDispositivo['port_table']) && ($ativo['tipo_slug'] ?? '') === 'switch') {
+                $coletado = array_merge($coletado, $this->coletarPortasSwitchUnifi($unifi, $legadoDispositivo, $clientesLegado));
+            }
         }
 
         $detalhesAtuais = json_decode($ativo['detalhes'] ?? '', true) ?: [];
@@ -1519,6 +1562,247 @@ class AtivoService
         AuditService::registrar('Ativos', 'Coleta UniFi', 'Dados coletados via API do UniFi Controller para ' . $ativo['codigo_patrimonio'] . '.');
 
         return ['success' => true, 'message' => 'Dados coletados com sucesso via UniFi Controller.'];
+    }
+
+    /**
+     * Portas do switch UniFi no MESMO formato de omada_portas (porta, link,
+     * velocidade, duplex, meio, descricao, dispositivos[]), mais o que só a
+     * UniFi entrega por porta: PoE, tráfego, erros, STP e uplink. Quem está
+     * em cada porta vem dos clientes cabeados do Controller (sw_mac/sw_port,
+     * já com nome, IP e fabricante) e do LLDP (AP, gateway, outro switch --
+     * dispositivos UniFi não aparecem como cliente).
+     */
+    private function coletarPortasSwitchUnifi(UnifiService $unifi, array $legado, array $clientesLegado): array
+    {
+        $macSwitch = OmadaSshService::normalizarMac($legado['mac'] ?? '');
+
+        $porPorta = [];
+        $adicionar = function (int $porta, array $disp) use (&$porPorta) {
+            if ($disp['mac'] === '' || isset($porPorta[$porta][$disp['mac']])) {
+                return;
+            }
+            $porPorta[$porta][$disp['mac']] = $disp;
+        };
+
+        foreach ($clientesLegado as $c) {
+            if (empty($c['is_wired']) || OmadaSshService::normalizarMac($c['sw_mac'] ?? '') !== $macSwitch || !isset($c['sw_port'])) {
+                continue;
+            }
+            $ip = (string)($c['ip'] ?? ($c['last_ip'] ?? ''));
+            $adicionar((int)$c['sw_port'], [
+                'mac' => OmadaSshService::normalizarMac($c['mac'] ?? ''),
+                'ip' => $ip,
+                'ip_origem' => $ip !== '' ? 'controller' : '',
+                'hostname' => (string)($c['name'] ?? ($c['hostname'] ?? '')),
+                'fabricante' => (string)($c['oui'] ?? ''),
+                'rede' => (string)($c['network'] ?? ''),
+            ]);
+        }
+
+        $dispositivosUnifi = [];
+        foreach ($unifi->listarDispositivosLegado() as $d) {
+            $dispositivosUnifi[OmadaSshService::normalizarMac($d['mac'] ?? '')] = $d;
+        }
+        foreach ($legado['lldp_table'] ?? [] as $vizinho) {
+            $mac = OmadaSshService::normalizarMac($vizinho['chassis_id'] ?? '');
+            $dispositivo = $dispositivosUnifi[$mac] ?? null;
+            $ipv4 = '';
+            foreach ($vizinho['mgmt_ips'] ?? [] as $ipVizinho) {
+                if (filter_var($ipVizinho, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+                    $ipv4 = $ipVizinho;
+                    break;
+                }
+            }
+            $adicionar((int)($vizinho['local_port_idx'] ?? 0), [
+                'mac' => $mac,
+                'ip' => $ipv4,
+                'ip_origem' => $ipv4 !== '' ? 'controller' : '',
+                'hostname' => (string)($dispositivo['name'] ?? ''),
+                'fabricante' => $dispositivo ? 'Ubiquiti' : '',
+                'unifi_dispositivo' => (string)($dispositivo['model'] ?? ''),
+            ]);
+        }
+
+        $portas = [];
+        $comLink = 0;
+        foreach ($legado['port_table'] as $p) {
+            $numero = (int)($p['port_idx'] ?? 0);
+            $link = !empty($p['up']);
+            $comLink += $link ? 1 : 0;
+            $nome = (string)($p['name'] ?? "Port {$numero}");
+            $dispositivos = array_values($porPorta[$numero] ?? []);
+
+            // Equipamento que o Controller não lista como cliente (ex.: sem IP
+            // na rede) mas que a própria porta lembra como último conectado.
+            $ultimo = $p['last_connection'] ?? [];
+            if ($link && !$dispositivos && !empty($ultimo['connected']) && !empty($ultimo['mac'])) {
+                $dispositivos[] = [
+                    'mac' => OmadaSshService::normalizarMac($ultimo['mac']),
+                    'ip' => (string)($ultimo['ip'] ?? ''),
+                    'ip_origem' => !empty($ultimo['ip']) ? 'controller' : '',
+                    'hostname' => '',
+                    'fabricante' => '',
+                ];
+            }
+
+            $portas[] = [
+                'porta' => $nome,
+                'numero' => $numero,
+                'link' => $link,
+                'velocidade' => $link && !empty($p['speed']) ? $p['speed'] . 'M' : '',
+                'duplex' => $link ? (!empty($p['full_duplex']) ? 'Full' : 'Half') : '',
+                'meio' => str_starts_with((string)($p['media'] ?? ''), 'SFP') ? 'Fibra' : 'Cobre',
+                // Nome padrão ("Port 3", "SFP 1") não é descrição -- só o que alguém renomeou.
+                'descricao' => preg_match('/^(Port|SFP\+?) \d+$/', $nome) ? '' : $nome,
+                'habilitada' => ($p['enable'] ?? true) !== false,
+                'uplink' => !empty($p['is_uplink']),
+                'poe' => !empty($p['port_poe']) ? [
+                    'ligado' => !empty($p['poe_enable']),
+                    'potencia_w' => round((float)($p['poe_power'] ?? 0), 2),
+                    'classe' => (string)($p['poe_class'] ?? ''),
+                    'modo' => (string)($p['poe_mode'] ?? ''),
+                ] : null,
+                'trafego_rx' => self::tamanhoLegivel((int)($p['rx_bytes'] ?? 0)),
+                'trafego_tx' => self::tamanhoLegivel((int)($p['tx_bytes'] ?? 0)),
+                'erros' => (int)($p['rx_errors'] ?? 0) + (int)($p['tx_errors'] ?? 0),
+                'stp' => (string)($p['stp_state'] ?? ''),
+                'dispositivos' => $dispositivos,
+            ];
+        }
+
+        $vlans = [];
+        foreach ($unifi->listarRedesConfiguradas() as $rede) {
+            if (in_array($rede['purpose'] ?? '', ['corporate', 'guest', 'vlan-only'], true)) {
+                $vlans[] = ['id' => (int)($rede['vlan'] ?? 1) ?: 1, 'nome' => (string)($rede['name'] ?? '')];
+            }
+        }
+
+        $uplink = $legado['uplink'] ?? [];
+        $coletado = [
+            'unifi_nome' => (string)($legado['name'] ?? ''),
+            'unifi_serial' => (string)($legado['serial'] ?? ''),
+            'unifi_portas' => $this->enriquecerDispositivosPortas($portas),
+            'unifi_vlans' => $vlans,
+            'unifi_portas_resumo' => "{$comLink} de " . count($portas),
+            'unifi_mac_total' => (string)array_sum(array_map(fn ($p) => count($p['dispositivos']), $portas)),
+            'unifi_coletado_em' => date('Y-m-d H:i:s'),
+        ];
+        if (isset($legado['total_used_power'], $legado['total_max_power'])) {
+            $coletado['unifi_poe_consumo'] = round((float)$legado['total_used_power'], 1) . ' W de ' . round((float)$legado['total_max_power']) . ' W';
+        }
+        if (!empty($uplink['uplink_device_name'])) {
+            $coletado['unifi_uplink'] = 'Porta ' . ($uplink['port_idx'] ?? '?') . ' → ' . $uplink['uplink_device_name']
+                . (isset($uplink['uplink_remote_port']) ? ' (porta ' . $uplink['uplink_remote_port'] . ')' : '');
+        }
+
+        return $coletado;
+    }
+
+    /**
+     * Câmera avulsa do UniFi Protect (G3/G4/G5...) cadastrada como DVR/NVR.
+     * Acha a câmera pelo id já vinculado ou, na primeira vez, pelo MAC do
+     * cliente da rede com o IP do ativo (a API de integração do Protect não
+     * informa IP). Uptime, porta do switch e rede vêm desse mesmo cliente.
+     */
+    public function coletarProtect(int $id): array
+    {
+        $ativo = $this->repository->buscarPorId($id);
+
+        if (!$ativo || ($ativo['tipo_slug'] ?? '') !== 'dvr_nvr') {
+            return ['success' => false, 'message' => 'Ativo não encontrado ou não é do tipo DVR/NVR.'];
+        }
+
+        $unifi = new UnifiService();
+
+        if (!$unifi->configurado()) {
+            return ['success' => false, 'message' => 'Integração com o UniFi Controller ainda não configurada -- veja Integrações.'];
+        }
+
+        $cameras = $unifi->listarCamerasProtect();
+        if (!$cameras) {
+            return ['success' => false, 'message' => 'Nenhuma câmera encontrada no UniFi Protect (ou o Protect não está disponível neste console).'];
+        }
+
+        $detalhes = json_decode($ativo['detalhes'] ?? '', true) ?: [];
+        $clientes = $unifi->listarClientesLegado();
+
+        $camera = null;
+        foreach ($cameras as $c) {
+            if (!empty($detalhes['protect_camera_id']) && ($c['id'] ?? '') === $detalhes['protect_camera_id']) {
+                $camera = $c;
+            }
+        }
+
+        $cliente = null;
+        foreach ($clientes as $c) {
+            if (!empty($ativo['ip']) && ($c['ip'] ?? '') === $ativo['ip']) {
+                $cliente = $c;
+                break;
+            }
+        }
+
+        if ($camera === null && $cliente !== null) {
+            $macCliente = OmadaSshService::normalizarMac($cliente['mac'] ?? '');
+            foreach ($cameras as $c) {
+                if (OmadaSshService::normalizarMac($c['mac'] ?? '') === $macCliente) {
+                    $camera = $c;
+                }
+            }
+        }
+
+        if ($camera === null) {
+            return ['success' => false, 'message' => 'Nenhuma câmera do UniFi Protect com esse IP.'];
+        }
+
+        $macCamera = OmadaSshService::normalizarMac($camera['mac'] ?? '');
+        if ($cliente === null || OmadaSshService::normalizarMac($cliente['mac'] ?? '') !== $macCamera) {
+            $cliente = null;
+            foreach ($clientes as $c) {
+                if (OmadaSshService::normalizarMac($c['mac'] ?? '') === $macCamera) {
+                    $cliente = $c;
+                    break;
+                }
+            }
+        }
+
+        $recursos = $camera['featureFlags'] ?? [];
+        $info = $unifi->infoProtect();
+        $estado = (string)($camera['state'] ?? '');
+
+        $coletado = [
+            'protect_camera_id' => (string)$camera['id'],
+            'protect_nome' => (string)($camera['name'] ?? ''),
+            'protect_modelo' => (string)($camera['type'] ?? ''),
+            'protect_status' => $estado === 'CONNECTED' ? 'Conectada' : ($estado === 'DISCONNECTED' ? 'Desconectada' : ucfirst(strtolower($estado))),
+            'protect_mac' => $macCamera,
+            'protect_nvr' => $info ? trim($info['nvr'] . ($info['nvr_modelo'] !== '' ? " ({$info['nvr_modelo']})" : '')) : '',
+            'protect_versao' => $info['versao'] ?? '',
+            'protect_microfone' => empty($recursos['hasMic']) ? 'Não tem' : (!empty($camera['isMicEnabled']) ? 'Ligado (volume ' . (int)($camera['micVolume'] ?? 0) . '%)' : 'Desligado'),
+            'protect_hdr' => empty($recursos['hasHdr']) ? 'Não suporta' : (($camera['hdrType'] ?? 'off') === 'off' ? 'Desligado' : (string)$camera['hdrType']),
+            'protect_modo_video' => (string)($camera['videoMode'] ?? ''),
+            'protect_deteccao' => implode(', ', $camera['smartDetectSettings']['objectTypes'] ?? []) ?: 'Nenhuma',
+            'protect_led' => !empty($camera['ledSettings']['isEnabled']) ? 'Ligado' : 'Desligado',
+            'protect_coletado_em' => date('Y-m-d H:i:s'),
+        ];
+
+        if ($cliente !== null) {
+            $coletado['protect_conexao'] = trim(($cliente['last_uplink_name'] ?? '') . (isset($cliente['sw_port']) ? ' · porta ' . $cliente['sw_port'] : '')
+                . (!empty($cliente['wired_rate_mbps']) ? ' · ' . $cliente['wired_rate_mbps'] . ' Mbps' : ''), ' ·');
+            $coletado['protect_rede'] = (string)($cliente['network'] ?? '');
+            if (!empty($cliente['uptime'])) {
+                $coletado['protect_uptime'] = self::duracaoLegivel((int)$cliente['uptime']);
+            }
+            // Do ponto de vista do cliente: "rx" é o que a câmera mandou pra rede (o vídeo).
+            if (isset($cliente['wired-rx_bytes'])) {
+                $coletado['protect_dados_enviados'] = self::tamanhoLegivel((int)$cliente['wired-rx_bytes']);
+            }
+        }
+
+        $this->repository->atualizarDetalhesApi($id, json_encode(array_merge($detalhes, $coletado), JSON_UNESCAPED_UNICODE));
+
+        AuditService::registrar('Ativos', 'Coleta UniFi Protect', 'Dados da câmera coletados via UniFi Protect para ' . $ativo['codigo_patrimonio'] . '.');
+
+        return ['success' => true, 'message' => 'Dados da câmera coletados via UniFi Protect.'];
     }
 
     /**
@@ -1719,7 +2003,7 @@ class AtivoService
      * padrão de coletarSnmpTodos().
      */
     /** @var string[] Tipos de ativo gerenciados pelo UniFi Controller (pontos de acesso + o gateway/roteador). */
-    private const TIPOS_UNIFI = ['ponto_acesso', 'roteador'];
+    private const TIPOS_UNIFI = ['ponto_acesso', 'roteador', 'switch'];
 
     public function coletarUnifiTodos(): array
     {
@@ -1733,6 +2017,19 @@ class AtivoService
         foreach ($ativos as $ativo) {
             $resultado = $this->coletarUnifi((int)$ativo['id']);
             if ($resultado['success']) {
+                $sucesso++;
+            }
+        }
+
+        // Câmeras do UniFi Protect -- só as já vinculadas (protect_camera_id),
+        // pra não ficar batendo no Protect por todo DVR Intelbras.
+        foreach ($this->repository->listarPorTipoSlugComIp('dvr_nvr') as $ativo) {
+            $detalhes = json_decode($ativo['detalhes'] ?? '', true) ?: [];
+            if (empty($detalhes['protect_camera_id'])) {
+                continue;
+            }
+            $ativos[] = $ativo;
+            if ($this->coletarProtect((int)$ativo['id'])['success']) {
                 $sucesso++;
             }
         }
@@ -2070,8 +2367,9 @@ class AtivoService
                     $disp['ip_origem'] = 'scanner';
                 }
 
-                $disp['hostname'] = $doScan['hostname'] ?? '';
-                $disp['fabricante'] = $doScan['vendor'] ?? '';
+                // Controller UniFi já traz nome/fabricante -- o IP Scanner só completa o que faltar.
+                $disp['hostname'] = ($disp['hostname'] ?? '') !== '' ? $disp['hostname'] : ($doScan['hostname'] ?? '');
+                $disp['fabricante'] = ($disp['fabricante'] ?? '') !== '' ? $disp['fabricante'] : ($doScan['vendor'] ?? '');
                 $disp['scanner_em'] = $disp['ip_origem'] === 'scanner' ? $scannerEm : null;
 
                 $ativo = $disp['ip'] !== '' ? ($ativosPorIp[$disp['ip']] ?? null) : null;
@@ -3287,6 +3585,14 @@ class AtivoService
         }
 
         $integracoesTentadas = [];
+
+        if ((new UnifiService())->configurado() && ($ativo['tipo_slug'] ?? '') === 'dvr_nvr') {
+            $integracoesTentadas[] = 'UniFi Protect';
+            $resultado = $this->coletarProtect($id);
+            if ($resultado['success']) {
+                return ['success' => true, 'message' => 'Detectado como câmera do UniFi Protect -- ' . $resultado['message']];
+            }
+        }
 
         if ((new UnifiService())->configurado()) {
             $integracoesTentadas[] = 'UniFi';
