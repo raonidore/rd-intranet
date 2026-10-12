@@ -1719,73 +1719,329 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     <?php if (($ativo['tipo_slug'] ?? '') === 'switch' && !empty($detalhes['omada_portas'])): ?>
     <!-- Portas do switch (TP-Link via SSH) -->
     <div class="tab-pane fade" id="abaPortasSwitch">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <strong>Portas</strong>
-                <small class="text-muted">
-                    <?php if (!empty($detalhes['omada_vlans'])): ?>
-                        VLANs: <?= htmlspecialchars(implode(', ', array_map(fn ($v) => $v['id'] . ' (' . $v['nome'] . ')', $detalhes['omada_vlans']))) ?>
-                    <?php endif; ?>
-                    <?php if (!empty($detalhes['omada_coletado_em'])): ?>
-                        · coletado em <?= htmlspecialchars(data_br($detalhes['omada_coletado_em'])) ?>
-                    <?php endif; ?>
-                </small>
-            </div>
-            <div class="card-body p-0">
-                <table class="table table-sm align-middle mb-0">
-                    <thead><tr><th>Porta</th><th>Link</th><th>Velocidade</th><th>Meio</th><th>Dispositivos (IP / nome / MAC)</th><th>Descrição</th></tr></thead>
-                    <tbody>
-                        <?php foreach ($detalhes['omada_portas'] as $porta): ?>
-                            <?php $dispositivosPorta = $porta['dispositivos'] ?? []; ?>
-                            <tr class="<?= $porta['link'] ? '' : 'text-muted' ?>">
-                                <td class="font-monospace small align-top"><?= htmlspecialchars($porta['porta']) ?></td>
-                                <td class="align-top"><?= $porta['link'] ? Badge::make('Com link', 'success') : Badge::make('Sem link', 'secondary') ?></td>
-                                <td class="align-top"><?= htmlspecialchars(trim(($porta['velocidade'] ?: '—') . ' ' . ($porta['duplex'] ?? ''))) ?></td>
-                                <td class="align-top"><?= htmlspecialchars($porta['meio']) ?></td>
-                                <td class="small">
-                                    <?php if (empty($dispositivosPorta)): ?>
-                                        <span class="text-muted">—</span>
-                                    <?php else: ?>
-                                        <?php if (count($dispositivosPorta) > 3): ?>
-                                            <details>
-                                                <summary><?= count($dispositivosPorta) ?> dispositivos <span class="text-muted">(provável outro switch, AP ou servidor de VMs)</span></summary>
-                                        <?php endif; ?>
-                                        <?php foreach ($dispositivosPorta as $disp): ?>
-                                            <div class="py-1">
-                                                <?php if ($disp['ip'] !== ''): ?>
-                                                    <?php if (!empty($disp['ativo_id'])): ?>
-                                                        <a href="<?= url('/ativos/ver?id=' . (int)$disp['ativo_id']) ?>" class="font-monospace fw-semibold" title="<?= htmlspecialchars($disp['ativo_nome']) ?>"><?= htmlspecialchars($disp['ip']) ?></a>
-                                                    <?php else: ?>
-                                                        <span class="font-monospace fw-semibold"><?= htmlspecialchars($disp['ip']) ?></span>
-                                                    <?php endif; ?>
-                                                    <?php if (($disp['ip_origem'] ?? '') === 'scanner'): ?>
-                                                        <span class="text-muted" title="IP tirado da última varredura do IP Scanner -- pode ter mudado desde então">(varredura<?= !empty($disp['scanner_em']) ? ' de ' . htmlspecialchars(date('d/m', strtotime($disp['scanner_em']))) : '' ?>)</span>
-                                                    <?php endif; ?>
-                                                <?php else: ?>
-                                                    <span class="text-muted" title="Nenhuma tabela ARP (switch, servidor ou IP Scanner) conhece esse MAC ainda">IP desconhecido</span>
-                                                <?php endif; ?>
-                                                <?php if (!empty($disp['ativo_nome'])): ?>
-                                                    · <?= htmlspecialchars($disp['ativo_nome']) ?>
-                                                <?php elseif (!empty($disp['hostname'])): ?>
-                                                    · <?= htmlspecialchars($disp['hostname']) ?>
-                                                <?php endif; ?>
-                                                <div class="text-muted font-monospace" style="font-size:.75rem">
-                                                    <?= htmlspecialchars($disp['mac']) ?><?= !empty($disp['fabricante']) ? ' · ' . htmlspecialchars($disp['fabricante']) : '' ?>
-                                                </div>
-                                            </div>
-                                        <?php endforeach; ?>
-                                        <?php if (count($dispositivosPorta) > 3): ?>
-                                            </details>
-                                        <?php endif; ?>
-                                    <?php endif; ?>
-                                </td>
-                                <td class="small align-top"><?= htmlspecialchars($porta['descricao'] ?: '') ?></td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
+<style>
+/* ---------- Painel do switch ---------- */
+.sw-resumo { display:flex; flex-wrap:wrap; gap:1.5rem; align-items:center; }
+.sw-resumo .sw-metrica { min-width:110px; }
+.sw-resumo .sw-metrica .valor { font-size:1.25rem; font-weight:600; line-height:1.1; }
+.sw-resumo .sw-metrica .rotulo { font-size:.75rem; color:#6c757d; text-transform:uppercase; letter-spacing:.03em; }
+.sw-barra { height:6px; background:#e9ecef; border-radius:3px; overflow:hidden; margin-top:4px; }
+.sw-barra > span { display:block; height:100%; background:#0d6efd; }
+
+.sw-rolagem { overflow-x:auto; padding-bottom:4px; }
+.sw-chassi {
+    display:inline-flex; align-items:center; gap:22px; min-width:100%;
+    padding:18px 22px 14px; border-radius:10px;
+    background:linear-gradient(180deg,#3a3f47 0%,#24282e 100%);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 6px 18px rgba(0,0,0,.18);
+    position:relative;
+}
+.sw-chassi::before, .sw-chassi::after { /* parafusos de rack */
+    content:''; position:absolute; top:50%; width:9px; height:9px; margin-top:-4px; border-radius:50%;
+    background:radial-gradient(circle at 35% 35%,#9aa1ab,#4b5058);
+}
+.sw-chassi::before { left:7px; } .sw-chassi::after { right:7px; }
+
+.sw-marca { color:#cfd4da; min-width:120px; }
+.sw-marca .nome { font-weight:700; font-size:.95rem; letter-spacing:.02em; }
+.sw-marca .modelo { font-size:.72rem; color:#8b939c; }
+.sw-marca .sys-leds { display:flex; gap:10px; margin-top:10px; font-size:.62rem; color:#8b939c; }
+.sw-marca .sys-leds span { display:flex; flex-direction:column; align-items:center; gap:3px; }
+
+.sw-grupo { display:grid; grid-auto-flow:column; grid-template-rows:auto auto; gap:6px 6px; }
+.sw-sep { width:1px; align-self:stretch; background:rgba(255,255,255,.08); }
+
+.sw-porta {
+    width:38px; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:3px;
+    border-radius:5px; padding:3px 2px; transition:background .12s, transform .12s;
+}
+.sw-porta.linha-baixo { flex-direction:column-reverse; }
+.sw-porta:hover { background:rgba(255,255,255,.08); transform:translateY(-1px); }
+.sw-porta.selecionada { background:rgba(13,110,253,.35); box-shadow:0 0 0 2px #4d94ff; }
+.sw-porta.esmaecida { opacity:.25; }
+.sw-porta.destaque { background:rgba(255,193,7,.35); box-shadow:0 0 0 2px #ffc107; }
+.sw-num { font-size:.62rem; color:#aab1ba; line-height:1; font-variant-numeric:tabular-nums; }
+
+/* tomada RJ45 */
+.sw-rj45 {
+    width:30px; height:24px; position:relative; border-radius:2px;
+    background:#0f1114; border:2px solid #555c66;
+}
+.sw-rj45::after { /* trava do conector */
+    content:''; position:absolute; left:50%; width:12px; height:5px; margin-left:-6px; background:#555c66;
+}
+.linha-cima .sw-rj45::after { bottom:-2px; border-radius:2px 2px 0 0; }
+.linha-baixo .sw-rj45::after { top:-2px; border-radius:0 0 2px 2px; }
+.sw-rj45 .pinos { position:absolute; left:4px; right:4px; height:3px;
+    background:repeating-linear-gradient(90deg,#b8962e 0 2px,transparent 2px 3px); }
+.linha-cima .sw-rj45 .pinos { top:3px; } .linha-baixo .sw-rj45 .pinos { bottom:3px; }
+.sw-porta.com-link .sw-rj45 { border-color:#6c757d; }
+.sw-porta.com-link .sw-rj45 .cabo { /* "cabo plugado" */
+    position:absolute; inset:5px 5px; border-radius:1px; background:#2f6fd6;
+}
+.sw-porta.uplink .sw-rj45 .cabo { background:#7a4fd6; }
+
+/* gaiola SFP */
+.sw-sfp { width:30px; height:18px; border:2px solid #555c66; border-radius:2px;
+    background:repeating-linear-gradient(0deg,#15181c 0 3px,#1c2025 3px 4px); position:relative; }
+.sw-porta.com-link .sw-sfp { border-color:#20c997; }
+
+/* LED */
+.sw-led { width:8px; height:4px; border-radius:2px; background:#3b4047; }
+.sw-led.v1000 { background:#3ddc84; box-shadow:0 0 6px #3ddc84; }
+.sw-led.v100  { background:#ffb020; box-shadow:0 0 6px #ffb020; }
+.sw-led.v10   { background:#ff6b3d; box-shadow:0 0 6px #ff6b3d; }
+
+.sw-qtd { position:absolute; top:-7px; right:-8px; min-width:15px; height:15px; padding:0 3px;
+    border-radius:8px; background:#ffc107; color:#212529; font-size:.6rem; font-weight:700;
+    display:flex; align-items:center; justify-content:center; z-index:1; }
+
+/* legenda */
+.sw-legenda { display:flex; flex-wrap:wrap; gap:1rem; font-size:.78rem; color:#6c757d; }
+.sw-legenda span { display:inline-flex; align-items:center; gap:6px; }
+.sw-legenda .sw-led { display:inline-block; }
+.sw-legenda .amostra { width:14px; height:10px; border-radius:2px; display:inline-block; }
+
+/* tooltip */
+.sw-tooltip {
+    position:fixed; z-index:2000; pointer-events:none; max-width:340px;
+    background:#1f2329; color:#e9ecef; border-radius:8px; padding:10px 12px;
+    box-shadow:0 8px 24px rgba(0,0,0,.25); font-size:.8rem; display:none;
+}
+.sw-tooltip .titulo { font-weight:600; font-size:.88rem; }
+.sw-tooltip .sub { color:#9aa3ad; margin-bottom:6px; }
+.sw-tooltip .disp { padding:3px 0; border-top:1px solid rgba(255,255,255,.07); }
+.sw-tooltip .disp .ip { font-family:var(--bs-font-monospace); color:#8ec5ff; }
+.sw-tooltip .disp .mac { font-family:var(--bs-font-monospace); color:#8b939c; font-size:.72rem; }
+
+/* detalhe da porta */
+.sw-detalhe-disp { display:flex; gap:.75rem; align-items:flex-start; padding:.5rem 0; border-bottom:1px solid #eef0f3; }
+.sw-detalhe-disp:last-child { border-bottom:0; }
+.sw-detalhe-disp .icone { width:34px; height:34px; border-radius:8px; background:#eef4ff; color:#0d6efd;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+tr.linha-selecionada > td { background:#e7f1ff !important; }
+</style>
+    <!-- Resumo -->
+    <div class="card border-0 shadow-sm mb-3">
+        <div class="card-body sw-resumo" id="swResumo"></div>
+    </div>
+
+    <!-- Painel frontal -->
+    <div class="card border-0 shadow-sm mb-3">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <strong><i class="bi bi-hdd-network"></i> Painel frontal</strong>
+            <div class="input-group input-group-sm" style="max-width:300px">
+                <span class="input-group-text"><i class="bi bi-search"></i></span>
+                <input type="search" class="form-control" id="swBusca" placeholder="Achar IP, nome ou MAC...">
             </div>
         </div>
+        <div class="card-body">
+            <div class="sw-rolagem"><div class="sw-chassi" id="swChassi"></div></div>
+            <div class="sw-legenda mt-3">
+                <span><i class="sw-led v1000"></i> 1 Gbps</span>
+                <span><i class="sw-led v100"></i> 100 Mbps</span>
+                <span><i class="sw-led"></i> Sem link</span>
+                <span><i class="amostra" style="background:#2f6fd6"></i> 1 dispositivo</span>
+                <span><i class="amostra" style="background:#7a4fd6"></i> Vários (outro switch, AP, servidor de VMs)</span>
+                <span class="ms-auto"><i class="bi bi-mouse"></i> Passe o mouse para ver, clique para detalhar</span>
+            </div>
+            <div class="small text-muted mt-2" id="swBuscaResultado"></div>
+        </div>
+    </div>
+
+    <!-- Detalhe da porta selecionada -->
+    <div class="card border-0 shadow-sm mb-3 d-none" id="swDetalhe">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <strong id="swDetalheTitulo"></strong>
+            <button type="button" class="btn-close" id="swDetalheFechar" aria-label="Fechar"></button>
+        </div>
+        <div class="card-body" id="swDetalheCorpo"></div>
+    </div>
+
+    <!-- Tabela (a mesma de hoje, sincronizada com o painel) -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white d-flex justify-content-between">
+            <strong>Todas as portas</strong>
+            <small class="text-muted"><span id="swVlans"></span><?php if (!empty($detalhes['omada_coletado_em'])): ?> · coletado em <?= htmlspecialchars(data_br($detalhes['omada_coletado_em'])) ?><?php endif; ?></small>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-sm align-middle mb-0">
+                <thead><tr><th>Porta</th><th>Link</th><th>Velocidade</th><th>Meio</th><th>Dispositivos</th></tr></thead>
+                <tbody id="swTabela"></tbody>
+            </table>
+        </div>
+    </div>
+
+        <div class="sw-tooltip" id="swTooltip"></div>
+<script>
+const DADOS = <?= json_encode([
+    'omada_nome' => $detalhes['omada_nome'] ?? ($ativo['nome'] ?? ''),
+    'omada_status' => $detalhes['omada_status'] ?? '',
+    'omada_model' => $detalhes['omada_model'] ?? '',
+    'omada_firmware' => $detalhes['omada_firmware'] ?? '',
+    'omada_mac_total' => $detalhes['omada_mac_total'] ?? '',
+    'omada_cpu_pct' => $detalhes['omada_cpu_pct'] ?? '',
+    'omada_mem_pct' => $detalhes['omada_mem_pct'] ?? '',
+    'omada_uptime' => $detalhes['omada_uptime'] ?? '',
+    'omada_vlans' => $detalhes['omada_vlans'] ?? [],
+    'omada_portas' => $detalhes['omada_portas'],
+], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?>;
+const URL_ATIVO = <?= json_encode(url('/ativos/ver?id=')) ?>;
+
+(function () {
+    const portas = DADOS.omada_portas || [];
+    const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const numero = p => parseInt(String(p.porta).split('/').pop(), 10);
+    const classeVel = v => v === '1000M' ? 'v1000' : (v === '100M' ? 'v100' : (v === '10M' ? 'v10' : ''));
+    const nomeDisp = d => d.ativo_nome || d.hostname || '';
+
+    // ---------- resumo ----------
+    const ativas = portas.filter(p => p.link).length;
+    const pct = v => parseInt(v, 10) || 0;
+    document.getElementById('swResumo').innerHTML = `
+        <div class="d-flex align-items-center gap-3 me-3">
+            <div class="rounded-3 d-flex align-items-center justify-content-center" style="width:48px;height:48px;background:#e7f1ff;color:#0d6efd;font-size:1.4rem"><i class="bi bi-hdd-network"></i></div>
+            <div>
+                <div class="fw-semibold">${esc(DADOS.omada_nome)} <span class="badge ${DADOS.omada_status === 'Online' ? 'text-bg-success' : 'text-bg-secondary'} ms-1">${esc(DADOS.omada_status || '—')}</span></div>
+                <div class="small text-muted">${esc(DADOS.omada_model)} · fw ${esc((DADOS.omada_firmware || '').split(' ')[0])}</div>
+            </div>
+        </div>
+        <div class="sw-metrica"><div class="valor">${ativas}<span class="text-muted fs-6">/${portas.length}</span></div><div class="rotulo">portas com link</div></div>
+        <div class="sw-metrica"><div class="valor">${esc(DADOS.omada_mac_total)}</div><div class="rotulo">dispositivos (MACs)</div></div>
+        <div class="sw-metrica"><div class="valor">${esc(DADOS.omada_cpu_pct)}</div><div class="rotulo">CPU</div><div class="sw-barra"><span style="width:${pct(DADOS.omada_cpu_pct)}%"></span></div></div>
+        <div class="sw-metrica"><div class="valor">${esc(DADOS.omada_mem_pct)}</div><div class="rotulo">Memória</div><div class="sw-barra"><span style="width:${pct(DADOS.omada_mem_pct)}%"></span></div></div>
+        <div class="sw-metrica"><div class="valor fs-6">${esc(DADOS.omada_uptime)}</div><div class="rotulo">ligado há</div></div>`;
+
+    document.getElementById('swVlans').textContent = 'VLANs: ' + (DADOS.omada_vlans || []).map(v => v.id + ' (' + v.nome + ')').join(', ');
+
+    // ---------- painel ----------
+    const cobre = portas.filter(p => p.meio !== 'Fibra').sort((a, b) => numero(a) - numero(b));
+    const fibra = portas.filter(p => p.meio === 'Fibra').sort((a, b) => numero(a) - numero(b));
+
+    function htmlPorta(p, linha, sfp) {
+        const n = numero(p);
+        const qtd = (p.dispositivos || []).length;
+        const classes = ['sw-porta', 'linha-' + linha, p.link ? 'com-link' : '', qtd > 1 ? 'uplink' : ''].join(' ');
+        const led = `<i class="sw-led ${p.link ? classeVel(p.velocidade) : ''}"></i>`;
+        const corpo = sfp
+            ? `<div class="sw-sfp"></div>`
+            : `<div class="sw-rj45"><span class="pinos"></span>${p.link ? '<span class="cabo"></span>' : ''}${qtd > 1 ? `<span class="sw-qtd">${qtd}</span>` : ''}</div>`;
+        return `<div class="${classes}" data-porta="${esc(p.porta)}"><span class="sw-num">${n}</span>${led}${corpo}</div>`;
+    }
+
+    // RJ45 em pares (ímpar em cima, par embaixo), grupos de 8 como no SG3428.
+    let html = `<div class="sw-marca"><div class="nome">${esc(DADOS.omada_nome)}</div><div class="modelo">TP-Link ${esc(DADOS.omada_model)}</div>
+        <div class="sys-leds"><span><i class="sw-led v1000"></i>PWR</span><span><i class="sw-led v1000"></i>SYS</span></div></div>`;
+    for (let g = 0; g < cobre.length; g += 8) {
+        html += '<div class="sw-sep"></div><div class="sw-grupo">';
+        const bloco = cobre.slice(g, g + 8);
+        for (let i = 0; i < bloco.length; i += 2) {
+            html += htmlPorta(bloco[i], 'cima', false);
+            if (bloco[i + 1]) html += htmlPorta(bloco[i + 1], 'baixo', false);
+        }
+        html += '</div>';
+    }
+    if (fibra.length) {
+        html += '<div class="sw-sep"></div><div class="sw-grupo">';
+        for (let i = 0; i < fibra.length; i += 2) {
+            html += htmlPorta(fibra[i], 'cima', true);
+            if (fibra[i + 1]) html += htmlPorta(fibra[i + 1], 'baixo', true);
+        }
+        html += '</div>';
+    }
+    const chassi = document.getElementById('swChassi');
+    chassi.innerHTML = html;
+
+    const porNome = Object.fromEntries(portas.map(p => [p.porta, p]));
+
+    // ---------- tooltip ----------
+    const tip = document.getElementById('swTooltip');
+    function htmlDisp(d) {
+        return `<div class="disp"><span class="ip">${esc(d.ip || 'IP desconhecido')}</span>${nomeDisp(d) ? ' · ' + esc(nomeDisp(d)) : ''}
+            <div class="mac">${esc(d.mac)}${d.fabricante ? ' · ' + esc(d.fabricante) : ''}</div></div>`;
+    }
+    chassi.querySelectorAll('.sw-porta').forEach(el => {
+        el.addEventListener('mouseenter', () => {
+            const p = porNome[el.dataset.porta];
+            const ds = p.dispositivos || [];
+            tip.innerHTML = `<div class="titulo">Porta ${numero(p)} <span class="text-secondary fw-normal">${esc(p.porta)}</span></div>
+                <div class="sub">${p.link ? `<i class="bi bi-circle-fill text-success" style="font-size:.5rem"></i> Com link · ${esc(p.velocidade)} ${esc(p.duplex)}` : '<i class="bi bi-circle text-secondary" style="font-size:.5rem"></i> Sem link'} · ${esc(p.meio)}${p.descricao ? ' · ' + esc(p.descricao) : ''}</div>
+                ${ds.slice(0, 6).map(htmlDisp).join('')}
+                ${ds.length > 6 ? `<div class="disp text-secondary">+ ${ds.length - 6} dispositivo(s) -- clique para ver todos</div>` : ''}
+                ${!ds.length && p.link ? '<div class="disp text-secondary">Nenhum MAC aprendido ainda</div>' : ''}`;
+            tip.style.display = 'block';
+        });
+        el.addEventListener('mousemove', e => {
+            const w = tip.offsetWidth, h = tip.offsetHeight;
+            let x = e.clientX + 14, y = e.clientY + 14;
+            if (x + w > innerWidth - 8) x = e.clientX - w - 14;
+            if (y + h > innerHeight - 8) y = e.clientY - h - 14;
+            tip.style.left = x + 'px'; tip.style.top = y + 'px';
+        });
+        el.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+        el.addEventListener('click', () => selecionar(el.dataset.porta));
+    });
+
+    // ---------- detalhe ----------
+    const detalhe = document.getElementById('swDetalhe');
+    function selecionar(nome) {
+        chassi.querySelectorAll('.sw-porta').forEach(el => el.classList.toggle('selecionada', el.dataset.porta === nome));
+        document.querySelectorAll('#swTabela tr').forEach(tr => tr.classList.toggle('linha-selecionada', tr.dataset.porta === nome));
+        const p = porNome[nome];
+        const ds = p.dispositivos || [];
+        document.getElementById('swDetalheTitulo').innerHTML = `<i class="bi bi-ethernet"></i> Porta ${numero(p)} <small class="text-muted fw-normal">${esc(p.porta)} · ${p.link ? esc(p.velocidade + ' ' + p.duplex) : 'sem link'} · ${esc(p.meio)}</small>`;
+        document.getElementById('swDetalheCorpo').innerHTML = ds.length ? ds.map(d => `
+            <div class="sw-detalhe-disp">
+                <div class="icone"><i class="bi ${d.ativo_id ? 'bi-pc-display' : 'bi-question-circle'}"></i></div>
+                <div class="flex-grow-1">
+                    <div><span class="font-monospace fw-semibold">${d.ativo_id ? `<a href="${URL_ATIVO}${parseInt(d.ativo_id, 10)}">${esc(d.ip)}</a>` : esc(d.ip || 'IP desconhecido')}</span>
+                        ${nomeDisp(d) ? '· ' + esc(nomeDisp(d)) : ''}
+                        ${d.ip_origem === 'scanner' ? '<span class="badge text-bg-light border ms-1">IP da varredura</span>' : ''}
+                        ${d.ativo_id ? '<span class="badge text-bg-primary ms-1">Ativo cadastrado</span>' : ''}</div>
+                    <div class="small text-muted font-monospace">${esc(d.mac)}${d.fabricante ? ' · ' + esc(d.fabricante) : ''}</div>
+                </div>
+            </div>`).join('') : `<p class="text-muted mb-0">${p.link ? 'Com link, mas nenhum MAC aprendido ainda.' : 'Porta livre.'}</p>`;
+        detalhe.classList.remove('d-none');
+    }
+    document.getElementById('swDetalheFechar').addEventListener('click', () => {
+        detalhe.classList.add('d-none');
+        chassi.querySelectorAll('.sw-porta').forEach(el => el.classList.remove('selecionada'));
+        document.querySelectorAll('#swTabela tr').forEach(tr => tr.classList.remove('linha-selecionada'));
+    });
+
+    // ---------- tabela ----------
+    document.getElementById('swTabela').innerHTML = portas.map(p => {
+        const ds = p.dispositivos || [];
+        return `<tr data-porta="${esc(p.porta)}" style="cursor:pointer" class="${p.link ? '' : 'text-muted'}">
+            <td class="font-monospace small">${esc(p.porta)}</td>
+            <td>${p.link ? '<span class="badge text-bg-success">Com link</span>' : '<span class="badge text-bg-secondary">Sem link</span>'}</td>
+            <td>${esc(p.velocidade || '—')}</td><td>${esc(p.meio)}</td>
+            <td class="small">${ds.length ? ds.slice(0, 2).map(d => `<span class="font-monospace">${esc(d.ip || '?')}</span>${nomeDisp(d) ? ' ' + esc(nomeDisp(d)) : ''}`).join(', ') + (ds.length > 2 ? ` <span class="text-muted">+${ds.length - 2}</span>` : '') : '<span class="text-muted">—</span>'}</td>
+        </tr>`;
+    }).join('');
+    document.querySelectorAll('#swTabela tr').forEach(tr => tr.addEventListener('click', () => {
+        selecionar(tr.dataset.porta);
+        chassi.querySelector(`[data-porta="${CSS.escape(tr.dataset.porta)}"]`).scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }));
+
+    // ---------- busca ----------
+    const busca = document.getElementById('swBusca');
+    const resultado = document.getElementById('swBuscaResultado');
+    busca.addEventListener('input', () => {
+        const termo = busca.value.trim().toLowerCase();
+        const achadas = [];
+        chassi.querySelectorAll('.sw-porta').forEach(el => {
+            const p = porNome[el.dataset.porta];
+            const bate = termo !== '' && (p.dispositivos || []).some(d =>
+                [d.ip, d.mac, d.hostname, d.ativo_nome, d.fabricante].some(v => String(v || '').toLowerCase().includes(termo)));
+            el.classList.toggle('destaque', bate);
+            el.classList.toggle('esmaecida', termo !== '' && !bate);
+            if (bate) achadas.push(numero(p));
+        });
+        resultado.textContent = termo === '' ? '' : (achadas.length ? `Encontrado na(s) porta(s): ${achadas.join(', ')}` : 'Nada encontrado em nenhuma porta.');
+    });
+})();
+</script>
     </div>
     <?php endif; ?>
 
