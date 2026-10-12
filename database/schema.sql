@@ -3,12 +3,44 @@
 -- cria todas as tabelas ja no estado final, sem precisar repetir o
 -- historico incremental de database/migrations/ (algumas dessas
 -- migrations usam ALTER TABLE, que nao e seguro reaplicar aqui).
--- Gerado em 2026-09-16 03:01:52.
+-- Gerado em 2026-10-12 19:12:58.
 
 -- Import nao respeita ordem de dependencia entre tabelas (algumas tem FK
 -- pra tabelas que so aparecem depois neste arquivo) -- desliga a checagem
 -- soh durante o import, como o proprio mysqldump faz.
 SET FOREIGN_KEY_CHECKS=0;
+
+-- ----------------------------------------------------------------
+-- agente_login_falhas
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `agente_login_falhas` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `ativo_id` int(11) DEFAULT NULL,
+  `login` varchar(60) NOT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_agente_login_falhas` (`login`,`criado_em`),
+  KEY `idx_agente_login_falhas_ativo` (`ativo_id`,`criado_em`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- agente_sessoes
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `agente_sessoes` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `usuario_id` int(11) NOT NULL,
+  `ativo_id` int(11) DEFAULT NULL,
+  `token_hash` char(64) NOT NULL,
+  `usuario_windows` varchar(150) DEFAULT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  `ultimo_uso_em` timestamp NULL DEFAULT NULL,
+  `expira_em` datetime NOT NULL,
+  `revogado` tinyint(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_agente_sessoes_token` (`token_hash`),
+  KEY `idx_agente_sessoes_usuario` (`usuario_id`),
+  CONSTRAINT `fk_agente_sessoes_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------
 -- antivirus_ameacas
@@ -89,18 +121,6 @@ CREATE TABLE IF NOT EXISTS `ativos` (
   CONSTRAINT `fk_ativos_setor` FOREIGN KEY (`setor_id`) REFERENCES `ativos_catalogos` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_ativos_tipo` FOREIGN KEY (`tipo_id`) REFERENCES `ativos_tipos` (`id`),
   CONSTRAINT `fk_ativos_unidade` FOREIGN KEY (`unidade_id`) REFERENCES `unidades` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- ----------------------------------------------------------------
--- ativos_credenciais_web
--- ----------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS `ativos_credenciais_web` (
-  `ativo_id` int(11) NOT NULL,
-  `usuario` varchar(100) NOT NULL,
-  `senha_cifrada` text NOT NULL,
-  `atualizado_em` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  PRIMARY KEY (`ativo_id`),
-  CONSTRAINT `fk_ativos_credenciais_web_ativo` FOREIGN KEY (`ativo_id`) REFERENCES `ativos` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ----------------------------------------------------------------
@@ -229,6 +249,42 @@ CREATE TABLE IF NOT EXISTS `ativos_controladoras` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ----------------------------------------------------------------
+-- ativos_credenciais_web
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `ativos_credenciais_web` (
+  `ativo_id` int(11) NOT NULL,
+  `usuario` varchar(100) NOT NULL,
+  `senha_cifrada` text NOT NULL,
+  `atualizado_em` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`ativo_id`),
+  CONSTRAINT `fk_ativos_credenciais_web_ativo` FOREIGN KEY (`ativo_id`) REFERENCES `ativos` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
+-- ativos_eventos_seguranca
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `ativos_eventos_seguranca` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `ativo_id` int(11) NOT NULL,
+  `tipo` varchar(40) NOT NULL,
+  `severidade` varchar(10) NOT NULL,
+  `resumo` varchar(255) NOT NULL,
+  `detalhes` text DEFAULT NULL,
+  `acao_automatica` varchar(30) NOT NULL DEFAULT 'nenhuma',
+  `isolamento_pendente_ate` timestamp NULL DEFAULT NULL,
+  `ocorrido_em` timestamp NULL DEFAULT NULL,
+  `recebido_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  `resolvido_em` timestamp NULL DEFAULT NULL,
+  `resolvido_por` varchar(100) DEFAULT NULL,
+  `resolucao` varchar(20) DEFAULT NULL,
+  `resolucao_nota` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_ativos_eventos_seg_ativo` (`ativo_id`,`recebido_em`),
+  KEY `idx_ativos_eventos_seg_pendente` (`isolamento_pendente_ate`),
+  CONSTRAINT `fk_ativos_eventos_seg_ativo` FOREIGN KEY (`ativo_id`) REFERENCES `ativos` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
 -- ativos_memoria
 -- ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `ativos_memoria` (
@@ -326,6 +382,22 @@ CREATE TABLE IF NOT EXISTS `ativos_portas_rede` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ----------------------------------------------------------------
+-- ativos_processos
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `ativos_processos` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `ativo_id` int(11) NOT NULL,
+  `pid` int(11) NOT NULL,
+  `nome` varchar(255) NOT NULL,
+  `memoria_mb` int(11) NOT NULL DEFAULT 0,
+  `iniciado_em` timestamp NULL DEFAULT NULL,
+  `coletado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_ativos_processos_ativo` (`ativo_id`),
+  CONSTRAINT `fk_ativos_processos_ativo` FOREIGN KEY (`ativo_id`) REFERENCES `ativos` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
 -- ativos_programas
 -- ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `ativos_programas` (
@@ -374,6 +446,21 @@ CREATE TABLE IF NOT EXISTS `ativos_redes` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ----------------------------------------------------------------
+-- ativos_seguranca_modulos
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `ativos_seguranca_modulos` (
+  `ativo_id` int(11) NOT NULL,
+  `canary_habilitado` tinyint(1) DEFAULT NULL,
+  `shadow_copy_habilitado` tinyint(1) DEFAULT NULL,
+  `fim_habilitado` tinyint(1) DEFAULT NULL,
+  `isolamento_modo` varchar(20) DEFAULT NULL,
+  `isolado_em` timestamp NULL DEFAULT NULL,
+  `atualizado_em` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`ativo_id`),
+  CONSTRAINT `fk_ativos_seg_mod_ativo` FOREIGN KEY (`ativo_id`) REFERENCES `ativos` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
 -- ativos_setor_recursos
 -- ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `ativos_setor_recursos` (
@@ -395,7 +482,7 @@ CREATE TABLE IF NOT EXISTS `ativos_setor_recursos` (
 CREATE TABLE IF NOT EXISTS `ativos_solicitacoes` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `ativo_id` int(11) NOT NULL,
-  `tipo` enum('listar_arquivos','listar_processos','baixar_arquivo','executar_cmd','executar_powershell') NOT NULL,
+  `tipo` varchar(40) NOT NULL,
   `parametro` text DEFAULT NULL,
   `solicitado_por` varchar(150) DEFAULT NULL,
   `elevado` tinyint(1) NOT NULL DEFAULT 0,
@@ -699,15 +786,17 @@ CREATE TABLE IF NOT EXISTS `chamados` (
   `titulo` varchar(200) NOT NULL,
   `descricao` text NOT NULL,
   `categoria_id` int(11) NOT NULL,
+  `subcategoria_id` int(11) DEFAULT NULL,
   `setor_id` int(11) DEFAULT NULL,
   `unidade_id` int(11) NOT NULL,
+  `setor_solicitante_id` int(11) DEFAULT NULL,
   `ativo_id` int(11) DEFAULT NULL,
   `solicitante_id` int(11) NOT NULL,
   `usuario_id` int(11) DEFAULT NULL,
   `usuario_abertura_id` int(11) DEFAULT NULL,
   `prioridade` enum('baixa','media','alta','urgente') NOT NULL DEFAULT 'media',
   `status` enum('fila','em_atendimento','aguardando_cliente','resolvido','fechado') NOT NULL DEFAULT 'fila',
-  `canal_abertura` enum('painel','email','whatsapp','portal','sistema') NOT NULL DEFAULT 'painel',
+  `canal_abertura` enum('painel','email','whatsapp','portal','sistema','agente') NOT NULL DEFAULT 'painel',
   `aguardando_resposta` tinyint(1) NOT NULL DEFAULT 0,
   `sla_resposta_prazo` datetime DEFAULT NULL,
   `sla_resolucao_prazo` datetime DEFAULT NULL,
@@ -729,10 +818,14 @@ CREATE TABLE IF NOT EXISTS `chamados` (
   KEY `idx_chamados_ativo` (`ativo_id`),
   KEY `idx_chamados_solicitante` (`solicitante_id`),
   KEY `idx_chamados_usuario_abertura` (`usuario_abertura_id`),
+  KEY `idx_chamados_subcategoria` (`subcategoria_id`),
+  KEY `idx_chamados_setor_solicitante` (`setor_solicitante_id`),
   CONSTRAINT `fk_chamados_ativo` FOREIGN KEY (`ativo_id`) REFERENCES `ativos` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_chamados_categoria` FOREIGN KEY (`categoria_id`) REFERENCES `chamados_categorias` (`id`),
   CONSTRAINT `fk_chamados_setor` FOREIGN KEY (`setor_id`) REFERENCES `chamados_setores` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_chamados_setor_solicitante` FOREIGN KEY (`setor_solicitante_id`) REFERENCES `chamados_setores_solicitantes` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_chamados_solicitante` FOREIGN KEY (`solicitante_id`) REFERENCES `chamados_solicitantes` (`id`),
+  CONSTRAINT `fk_chamados_subcategoria` FOREIGN KEY (`subcategoria_id`) REFERENCES `chamados_subcategorias` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_chamados_unidade` FOREIGN KEY (`unidade_id`) REFERENCES `unidades` (`id`),
   CONSTRAINT `fk_chamados_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_chamados_usuario_abertura` FOREIGN KEY (`usuario_abertura_id`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
@@ -786,6 +879,8 @@ CREATE TABLE IF NOT EXISTS `chamados_categorias` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `nome` varchar(100) NOT NULL,
   `setor_padrao_id` int(11) DEFAULT NULL,
+  `exige_subcategoria` tinyint(1) NOT NULL DEFAULT 0,
+  `usa_sla` tinyint(1) NOT NULL DEFAULT 1,
   `ativo` tinyint(1) NOT NULL DEFAULT 1,
   `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
@@ -937,6 +1032,20 @@ CREATE TABLE IF NOT EXISTS `chamados_setores` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------
+-- chamados_setores_solicitantes
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `chamados_setores_solicitantes` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nome` varchar(100) NOT NULL,
+  `unidade_id` int(11) DEFAULT NULL,
+  `ativo` tinyint(1) NOT NULL DEFAULT 1,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_chamados_setor_solic_unidade` (`unidade_id`),
+  CONSTRAINT `fk_chamados_setor_solic_unidade` FOREIGN KEY (`unidade_id`) REFERENCES `unidades` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
 -- chamados_slas
 -- ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `chamados_slas` (
@@ -982,6 +1091,38 @@ CREATE TABLE IF NOT EXISTS `chamados_solicitantes` (
   KEY `idx_chamados_solicitantes_telefone` (`telefone`),
   KEY `fk_chamados_solicitantes_unidade` (`unidade_id`),
   CONSTRAINT `fk_chamados_solicitantes_unidade` FOREIGN KEY (`unidade_id`) REFERENCES `unidades` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- chamados_subcategoria_slas
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `chamados_subcategoria_slas` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `subcategoria_id` int(11) NOT NULL,
+  `prioridade` enum('baixa','media','alta','urgente') NOT NULL,
+  `tempo_primeira_resposta_min` int(11) NOT NULL,
+  `tempo_resolucao_min` int(11) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_chamados_subcategoria_slas` (`subcategoria_id`,`prioridade`),
+  CONSTRAINT `fk_chamados_subcategoria_slas_sub` FOREIGN KEY (`subcategoria_id`) REFERENCES `chamados_subcategorias` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- chamados_subcategorias
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `chamados_subcategorias` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `categoria_id` int(11) NOT NULL,
+  `nome` varchar(100) NOT NULL,
+  `setor_padrao_id` int(11) DEFAULT NULL,
+  `sla_proprio` tinyint(1) NOT NULL DEFAULT 0,
+  `ativo` tinyint(1) NOT NULL DEFAULT 1,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_chamados_subcategoria_nome` (`categoria_id`,`nome`),
+  KEY `idx_chamados_subcategoria_setor` (`setor_padrao_id`),
+  CONSTRAINT `fk_chamados_subcategoria_categoria` FOREIGN KEY (`categoria_id`) REFERENCES `chamados_categorias` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_chamados_subcategoria_setor` FOREIGN KEY (`setor_padrao_id`) REFERENCES `chamados_setores` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------
@@ -1077,6 +1218,63 @@ CREATE TABLE IF NOT EXISTS `chat_socket_tokens` (
   KEY `idx_chat_socket_tokens_usuario` (`usuario_id`),
   CONSTRAINT `fk_chat_socket_tokens_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- cofre_permissoes
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `cofre_permissoes` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `cofre_id` int(11) NOT NULL,
+  `sujeito_tipo` enum('usuario','grupo') NOT NULL,
+  `sujeito_id` int(11) NOT NULL,
+  `pode_visualizar` tinyint(1) NOT NULL DEFAULT 1,
+  `pode_editar` tinyint(1) NOT NULL DEFAULT 0,
+  `pode_excluir` tinyint(1) NOT NULL DEFAULT 0,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_cofre_permissao` (`cofre_id`,`sujeito_tipo`,`sujeito_id`),
+  KEY `idx_cofre_permissoes_cofre` (`cofre_id`),
+  CONSTRAINT `fk_cofre_permissoes_cofre` FOREIGN KEY (`cofre_id`) REFERENCES `cofres` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
+-- cofre_senhas
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `cofre_senhas` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nome` varchar(150) NOT NULL,
+  `categoria` varchar(60) NOT NULL DEFAULT 'Geral',
+  `cofre_id` int(11) DEFAULT NULL,
+  `usuario_login` varchar(150) DEFAULT NULL,
+  `senha_cifrada` text NOT NULL,
+  `url_host` varchar(255) DEFAULT NULL,
+  `observacoes` text DEFAULT NULL,
+  `usuario_id_dono` int(11) NOT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  `atualizado_em` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_cofre_senhas_categoria` (`categoria`),
+  KEY `idx_cofre_senhas_cofre` (`cofre_id`),
+  KEY `idx_cofre_senhas_dono` (`usuario_id_dono`),
+  CONSTRAINT `fk_cofre_senhas_cofre` FOREIGN KEY (`cofre_id`) REFERENCES `cofres` (`id`),
+  CONSTRAINT `fk_cofre_senhas_dono` FOREIGN KEY (`usuario_id_dono`) REFERENCES `usuarios` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
+-- cofres
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `cofres` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nome` varchar(150) NOT NULL,
+  `descricao` varchar(255) DEFAULT NULL,
+  `criado_por` int(11) DEFAULT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  `atualizado_em` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_cofres_nome` (`nome`),
+  KEY `fk_cofres_criado_por` (`criado_por`),
+  CONSTRAINT `fk_cofres_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ----------------------------------------------------------------
 -- config_backups
@@ -1229,6 +1427,55 @@ CREATE TABLE IF NOT EXISTS `deploy_pendencias` (
   `criado_em` timestamp NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- dhcp_config
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `dhcp_config` (
+  `id` int(11) NOT NULL,
+  `instalado` tinyint(1) NOT NULL DEFAULT 0,
+  `interface` varchar(255) DEFAULT NULL,
+  `servico_ativo` tinyint(1) NOT NULL DEFAULT 0,
+  `dominio` varchar(150) DEFAULT NULL,
+  `dns_primario` varchar(45) DEFAULT NULL,
+  `dns_secundario` varchar(45) DEFAULT NULL,
+  `lease_padrao_segundos` int(11) NOT NULL DEFAULT 43200,
+  `lease_maximo_segundos` int(11) NOT NULL DEFAULT 86400,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
+-- dhcp_reservas
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `dhcp_reservas` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `subnet_id` int(11) NOT NULL,
+  `mac_address` varchar(17) NOT NULL COMMENT 'formato aa:bb:cc:dd:ee:ff',
+  `ip` varchar(45) NOT NULL,
+  `descricao` varchar(150) NOT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_dhcp_reservas_mac` (`mac_address`),
+  UNIQUE KEY `uq_dhcp_reservas_ip` (`ip`),
+  KEY `fk_dhcp_reservas_subnet` (`subnet_id`),
+  CONSTRAINT `fk_dhcp_reservas_subnet` FOREIGN KEY (`subnet_id`) REFERENCES `dhcp_subnets` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
+-- dhcp_subnets
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `dhcp_subnets` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nome` varchar(100) NOT NULL,
+  `rede` varchar(45) NOT NULL COMMENT 'ex: 192.168.1.0',
+  `mascara` varchar(45) NOT NULL COMMENT 'ex: 255.255.255.0',
+  `faixa_inicio` varchar(45) NOT NULL,
+  `faixa_fim` varchar(45) NOT NULL,
+  `gateway` varchar(45) DEFAULT NULL,
+  `ativo` tinyint(1) NOT NULL DEFAULT 1,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ----------------------------------------------------------------
 -- documentos
@@ -1598,6 +1845,21 @@ CREATE TABLE IF NOT EXISTS `projetos_areas_gestores` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------
+-- projetos_colunas
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `projetos_colunas` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `projeto_id` int(11) NOT NULL,
+  `nome` varchar(60) NOT NULL,
+  `situacao` enum('a_fazer','em_andamento','aguardando_terceiro','concluido') NOT NULL DEFAULT 'em_andamento',
+  `posicao` int(11) NOT NULL DEFAULT 0,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_projetos_colunas_projeto` (`projeto_id`,`posicao`),
+  CONSTRAINT `fk_projetos_colunas_projeto` FOREIGN KEY (`projeto_id`) REFERENCES `projetos` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
 -- projetos_comentarios
 -- ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `projetos_comentarios` (
@@ -1623,6 +1885,23 @@ CREATE TABLE IF NOT EXISTS `projetos_comentarios` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------
+-- projetos_comentarios_mencoes
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `projetos_comentarios_mencoes` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `comentario_id` int(11) NOT NULL,
+  `usuario_id` int(11) DEFAULT NULL,
+  `participante_externo_id` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_projetos_mencoes_comentario` (`comentario_id`),
+  KEY `idx_projetos_mencoes_usuario` (`usuario_id`),
+  KEY `fk_projetos_mencoes_externo` (`participante_externo_id`),
+  CONSTRAINT `fk_projetos_mencoes_comentario` FOREIGN KEY (`comentario_id`) REFERENCES `projetos_comentarios` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_projetos_mencoes_externo` FOREIGN KEY (`participante_externo_id`) REFERENCES `projetos_participantes_externos` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_projetos_mencoes_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
 -- projetos_fases
 -- ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `projetos_fases` (
@@ -1636,6 +1915,20 @@ CREATE TABLE IF NOT EXISTS `projetos_fases` (
   PRIMARY KEY (`id`),
   KEY `idx_projetos_fases_projeto` (`projeto_id`),
   CONSTRAINT `fk_projetos_fases_projeto` FOREIGN KEY (`projeto_id`) REFERENCES `projetos` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- projetos_leituras
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `projetos_leituras` (
+  `projeto_id` int(11) NOT NULL,
+  `usuario_id` int(11) NOT NULL,
+  `ultimo_comentario_id` int(11) NOT NULL DEFAULT 0,
+  `atualizado_em` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`projeto_id`,`usuario_id`),
+  KEY `idx_projetos_leit_proj_usuario` (`usuario_id`),
+  CONSTRAINT `fk_projetos_leit_proj_projeto` FOREIGN KEY (`projeto_id`) REFERENCES `projetos` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_projetos_leit_proj_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------
@@ -1698,8 +1991,10 @@ CREATE TABLE IF NOT EXISTS `projetos_tarefas` (
   `descricao` text DEFAULT NULL,
   `tag` varchar(60) DEFAULT NULL,
   `cor` varchar(20) DEFAULT NULL,
+  `cor_estilo` enum('lateral','inteiro') NOT NULL DEFAULT 'lateral',
   `data_inicio` date DEFAULT NULL,
   `coluna` enum('a_fazer','em_andamento','aguardando_terceiro','concluido') NOT NULL DEFAULT 'a_fazer',
+  `coluna_id` int(11) DEFAULT NULL,
   `posicao` int(11) NOT NULL DEFAULT 0,
   `prazo` date DEFAULT NULL,
   `concluida_em` timestamp NULL DEFAULT NULL,
@@ -1711,6 +2006,8 @@ CREATE TABLE IF NOT EXISTS `projetos_tarefas` (
   KEY `idx_projetos_tarefas_fase` (`fase_id`),
   KEY `idx_projetos_tarefas_coluna` (`coluna`),
   KEY `fk_projetos_tarefas_criado_por` (`criado_por`),
+  KEY `idx_projetos_tarefas_coluna_id` (`coluna_id`),
+  CONSTRAINT `fk_projetos_tarefas_coluna_quadro` FOREIGN KEY (`coluna_id`) REFERENCES `projetos_colunas` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_projetos_tarefas_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_projetos_tarefas_fase` FOREIGN KEY (`fase_id`) REFERENCES `projetos_fases` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_projetos_tarefas_projeto` FOREIGN KEY (`projeto_id`) REFERENCES `projetos` (`id`) ON DELETE CASCADE
@@ -1732,6 +2029,20 @@ CREATE TABLE IF NOT EXISTS `projetos_tarefas_externos` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------
+-- projetos_tarefas_leituras
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `projetos_tarefas_leituras` (
+  `tarefa_id` int(11) NOT NULL,
+  `usuario_id` int(11) NOT NULL,
+  `ultimo_comentario_id` int(11) NOT NULL DEFAULT 0,
+  `atualizado_em` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`tarefa_id`,`usuario_id`),
+  KEY `idx_projetos_leituras_usuario` (`usuario_id`),
+  CONSTRAINT `fk_projetos_leituras_tarefa` FOREIGN KEY (`tarefa_id`) REFERENCES `projetos_tarefas` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_projetos_leituras_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
 -- projetos_tarefas_responsaveis
 -- ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `projetos_tarefas_responsaveis` (
@@ -1745,6 +2056,26 @@ CREATE TABLE IF NOT EXISTS `projetos_tarefas_responsaveis` (
   CONSTRAINT `fk_projetos_tarefas_responsaveis_tarefa` FOREIGN KEY (`tarefa_id`) REFERENCES `projetos_tarefas` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_projetos_tarefas_responsaveis_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- rd_bridge_coletores
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `rd_bridge_coletores` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `unidade_id` int(11) NOT NULL,
+  `nome` varchar(150) NOT NULL,
+  `token` varchar(64) NOT NULL,
+  `modo` enum('http','vpn') NOT NULL DEFAULT 'http',
+  `versao` varchar(20) DEFAULT NULL,
+  `ip_ultimo_checkin` varchar(45) DEFAULT NULL,
+  `ultimo_checkin_em` datetime DEFAULT NULL,
+  `ativo` tinyint(1) NOT NULL DEFAULT 1,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_rd_bridge_token` (`token`),
+  KEY `fk_rd_bridge_unidade` (`unidade_id`),
+  CONSTRAINT `fk_rd_bridge_unidade` FOREIGN KEY (`unidade_id`) REFERENCES `unidades` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ----------------------------------------------------------------
 -- rede_trafego_historico
@@ -1898,6 +2229,24 @@ CREATE TABLE IF NOT EXISTS `ssh_conexoes` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ----------------------------------------------------------------
+-- suporte_remoto_pedidos
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `suporte_remoto_pedidos` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `ativo_id` int(11) NOT NULL,
+  `usuario` varchar(150) DEFAULT NULL,
+  `mensagem` varchar(500) DEFAULT NULL,
+  `status` varchar(20) NOT NULL DEFAULT 'aberto',
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  `atendido_em` timestamp NULL DEFAULT NULL,
+  `atendido_por` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_suporte_pedidos_status` (`status`,`criado_em`),
+  KEY `fk_suporte_pedidos_ativo` (`ativo_id`),
+  CONSTRAINT `fk_suporte_pedidos_ativo` FOREIGN KEY (`ativo_id`) REFERENCES `ativos` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
 -- unidades
 -- ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `unidades` (
@@ -1939,6 +2288,23 @@ CREATE TABLE IF NOT EXISTS `usuarios` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `login` (`login`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- vlans
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `vlans` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nome` varchar(100) NOT NULL,
+  `interface_pai` varchar(30) NOT NULL COMMENT 'interface física/trunk onde a VLAN é criada, ex: eth0',
+  `vlan_id` smallint(6) NOT NULL COMMENT 'tag 802.1Q, 1-4094',
+  `ip_endereco` varchar(45) NOT NULL COMMENT 'IP deste servidor nessa VLAN -- vira o gateway dos dispositivos dela',
+  `prefixo` tinyint(3) unsigned NOT NULL DEFAULT 24 COMMENT 'máscara em CIDR, ex: 24 = /24',
+  `descricao` varchar(255) DEFAULT NULL,
+  `ativo` tinyint(1) NOT NULL DEFAULT 1,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_vlan_interface` (`interface_pai`,`vlan_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ----------------------------------------------------------------
 -- vpn_ikev2_clientes
@@ -2100,6 +2466,7 @@ CREATE TABLE IF NOT EXISTS `vpn_wireguard_peers` (
   `nome` varchar(100) NOT NULL,
   `chave_publica` varchar(64) NOT NULL,
   `ip_atribuido` varchar(45) NOT NULL,
+  `rotas_extras` varchar(255) DEFAULT NULL,
   `ativo` tinyint(1) NOT NULL DEFAULT 1,
   `config_entregue` tinyint(1) NOT NULL DEFAULT 0,
   `config_entregue_em` timestamp NULL DEFAULT NULL,
