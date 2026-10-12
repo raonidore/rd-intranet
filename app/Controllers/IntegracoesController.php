@@ -10,6 +10,7 @@ use App\Services\KbService;
 use App\Services\NotificationService;
 use App\Services\IntelbrasDvrService;
 use App\Services\OmadaService;
+use App\Services\OmadaSshService;
 use App\Services\UnifiService;
 
 /**
@@ -103,13 +104,19 @@ class IntegracoesController extends Controller
         AuthMiddleware::checkAdmin();
 
         $service = new OmadaService();
+        $ssh = new OmadaSshService();
 
         $this->view('administracao/integracoes_omada', [
+            'modo' => $service->modoAtual(),
             'urlAtual' => $service->urlAtual(),
             'omadacIdAtual' => $service->omadacIdAtual(),
             'clientIdAtual' => $service->clientIdAtual(),
             'configurado' => $service->configurado(),
+            'controllerConfigurado' => $service->controllerConfigurado(),
             'siteId' => $service->siteIdAtual(),
+            'sshConfigurado' => $ssh->configurado(),
+            'sshUsuarioAtual' => $ssh->usuarioAtual(),
+            'sshPortaAtual' => $ssh->portaAtual(),
         ]);
     }
 
@@ -117,12 +124,18 @@ class IntegracoesController extends Controller
     {
         AuthMiddleware::checkAdmin();
 
-        (new OmadaService())->salvarConfiguracao(
-            $_POST['url'] ?? '',
-            $_POST['omadac_id'] ?? '',
-            $_POST['client_id'] ?? '',
-            $_POST['client_secret'] ?? ''
-        );
+        $service = new OmadaService();
+        $modo = ($_POST['modo'] ?? '') === OmadaService::MODO_SSH ? OmadaService::MODO_SSH : OmadaService::MODO_CONTROLLER;
+
+        $salvou = $modo === OmadaService::MODO_SSH
+            ? (new OmadaSshService())->salvarConfiguracao($_POST['ssh_usuario'] ?? '', $_POST['ssh_senha'] ?? '', $_POST['ssh_porta'] ?? '')
+            : $service->salvarConfiguracao($_POST['url'] ?? '', $_POST['omadac_id'] ?? '', $_POST['client_id'] ?? '', $_POST['client_secret'] ?? '');
+
+        // Só troca o modo quando a credencial dele foi aceita -- senão um
+        // formulário incompleto derrubaria a coleta que já funcionava no outro modo.
+        if ($salvou) {
+            $service->salvarModo($modo);
+        }
 
         header('Location: ' . url('/administracao/integracoes/omada'));
         exit;
@@ -145,7 +158,11 @@ class IntegracoesController extends Controller
 
         set_time_limit(30);
 
-        echo json_encode((new OmadaService())->testarConexao());
+        $service = new OmadaService();
+
+        echo json_encode($service->modoSsh()
+            ? (new OmadaSshService())->testarConexao($_POST['ip'] ?? '')
+            : $service->testarConexao());
     }
 
     public function intelbrasDvrForm(): void

@@ -65,9 +65,9 @@ ob_start();
             <div class="card h-100 border-0 shadow-sm">
                 <div class="card-body">
                     <div class="mb-2" style="font-size:28px; color:#1B8E5A;"><i class="bi bi-hdd-network"></i></div>
-                    <h6 class="mb-1">Omada SDN Controller (TP-Link)</h6>
+                    <h6 class="mb-1">TP-Link Omada</h6>
                     <p class="text-muted small mb-0">
-                        URL, Omada ID e Client ID/Secret do Controller Omada -- usada pra coletar dados de switches TP-Link cadastrados em Ativos.
+                        Via Omada Controller (Open API) ou SSH direto no switch, só leitura -- usada pra coletar dados de switches TP-Link cadastrados em Ativos.
                     </p>
                 </div>
             </div>

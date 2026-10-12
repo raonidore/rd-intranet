@@ -421,6 +421,13 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     </li>
     <?php endif; ?>
     <?php endif; ?>
+    <?php if (($ativo['tipo_slug'] ?? '') === 'switch' && !empty($detalhes['omada_portas'])): ?>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaPortasSwitch" type="button">
+            <i class="bi bi-ethernet"></i> Portas do switch <span class="badge text-bg-secondary ms-1"><?= count(array_filter($detalhes['omada_portas'], fn ($p) => $p['link'])) ?>/<?= count($detalhes['omada_portas']) ?></span>
+        </button>
+    </li>
+    <?php endif; ?>
     <?php if (($ativo['tipo_slug'] ?? '') === 'dvr_nvr'): ?>
     <?php $canaisDvr = $detalhes['dvr_canais'] ?? []; ?>
     <li class="nav-item" role="presentation">
@@ -1657,6 +1664,42 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
         </div>
     </div>
     <?php endif; ?>
+    <?php endif; ?>
+
+    <?php if (($ativo['tipo_slug'] ?? '') === 'switch' && !empty($detalhes['omada_portas'])): ?>
+    <!-- Portas do switch (TP-Link via SSH) -->
+    <div class="tab-pane fade" id="abaPortasSwitch">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <strong>Portas</strong>
+                <small class="text-muted">
+                    <?php if (!empty($detalhes['omada_vlans'])): ?>
+                        VLANs: <?= htmlspecialchars(implode(', ', array_map(fn ($v) => $v['id'] . ' (' . $v['nome'] . ')', $detalhes['omada_vlans']))) ?>
+                    <?php endif; ?>
+                    <?php if (!empty($detalhes['omada_coletado_em'])): ?>
+                        · coletado em <?= htmlspecialchars(data_br($detalhes['omada_coletado_em'])) ?>
+                    <?php endif; ?>
+                </small>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-sm align-middle mb-0">
+                    <thead><tr><th>Porta</th><th>Link</th><th>Velocidade</th><th>Duplex</th><th>Meio</th><th>Descrição</th></tr></thead>
+                    <tbody>
+                        <?php foreach ($detalhes['omada_portas'] as $porta): ?>
+                            <tr class="<?= $porta['link'] ? '' : 'text-muted' ?>">
+                                <td class="font-monospace small"><?= htmlspecialchars($porta['porta']) ?></td>
+                                <td><?= $porta['link'] ? Badge::make('Com link', 'success') : Badge::make('Sem link', 'secondary') ?></td>
+                                <td><?= htmlspecialchars($porta['velocidade'] ?: '—') ?></td>
+                                <td><?= htmlspecialchars($porta['duplex'] ?: '—') ?></td>
+                                <td><?= htmlspecialchars($porta['meio']) ?></td>
+                                <td class="small"><?= htmlspecialchars($porta['descricao'] ?: '') ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
     <?php endif; ?>
 
     <?php if (($ativo['tipo_slug'] ?? '') === 'dvr_nvr'): ?>

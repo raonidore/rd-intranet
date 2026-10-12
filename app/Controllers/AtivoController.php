@@ -873,7 +873,7 @@ class AtivoController extends Controller
 
         $resultado = (new CronService())->criar([
             'nome' => $this->service->nomeJobCronOmada(),
-            'descricao' => 'Coleta dados via API do Omada Controller dos switches TP-Link cadastrados (Ativos de TI).',
+            'descricao' => 'Coleta dados dos switches TP-Link cadastrados (Ativos de TI), via Omada Controller ou SSH direto no switch -- conforme Integrações > TP-Link Omada.',
             'expressao' => '*/30 * * * *',
             'usuario_execucao' => 'www-data',
             'comando' => 'php /var/www/rd.intranet/rd ativos:coletar-omada',

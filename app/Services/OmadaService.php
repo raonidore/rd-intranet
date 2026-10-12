@@ -5,11 +5,14 @@ namespace App\Services;
 /**
  * Integração com a Open API do Omada SDN Controller (TP-Link) -- usada pra
  * coletar dados dos switches TP-Link (modelo, firmware, uptime, status,
- * portas). Diferente da UniFi, esse switch (TL-SG3428) não tem NENHUMA
- * API própria em modo standalone -- SNMP não responde, SSH/Telnet abrem a
- * porta mas não respondem como serviço real, e a interface web usa uma API
- * JSON privada e não documentada. O caminho oficial confirmado pela
- * TP-Link é sempre via Omada Controller (instalado em
+ * portas). Diferente da UniFi, esse switch (TL-SG3428) não tem API própria
+ * em modo standalone -- SNMP vem desligado e a interface web usa uma API
+ * JSON privada e não documentada. A CLI via SSH funciona (o Enter dela é
+ * ``, não `
+` -- com `
+` parece que "não responde"), e virou o modo
+ * alternativo sem Controller: ver OmadaSshService e modoAtual(). O caminho
+ * oficial da TP-Link continua sendo via Omada Controller (instalado em
  * scripts/system/... nesta mesma máquina, pacote nativo `.deb`, serviço
  * `tpeap`), nunca direto no equipamento.
  *
@@ -40,8 +43,48 @@ class OmadaService
     private const CHAVE_CLIENT_ID = 'omada_client_id';
     private const CHAVE_CLIENT_SECRET_CIFRADO = 'omada_client_secret_cifrado';
     private const CHAVE_SITE_ID = 'omada_site_id';
+    private const CHAVE_MODO = 'omada_modo';
 
+    public const MODO_CONTROLLER = 'controller';
+    public const MODO_SSH = 'ssh';
+
+    /**
+     * Qual caminho a integração usa: Open API do Controller (padrão,
+     * histórico) ou SSH direto no switch (OmadaSshService, sem Controller).
+     */
+    public function modoAtual(): string
+    {
+        $modo = (string)(ConfigService::get(self::CHAVE_MODO, '') ?: '');
+
+        return $modo === self::MODO_SSH ? self::MODO_SSH : self::MODO_CONTROLLER;
+    }
+
+    public function modoSsh(): bool
+    {
+        return $this->modoAtual() === self::MODO_SSH;
+    }
+
+    public function salvarModo(string $modo): void
+    {
+        $modo = $modo === self::MODO_SSH ? self::MODO_SSH : self::MODO_CONTROLLER;
+
+        if ($modo === $this->modoAtual()) {
+            return;
+        }
+
+        ConfigService::set(self::CHAVE_MODO, $modo);
+
+        $rotulo = $modo === self::MODO_SSH ? 'SSH direto no switch' : 'Omada Controller (Open API)';
+        AuditService::registrar('Omada Controller', 'Configuração', "Modo de integração alterado para: {$rotulo}.");
+    }
+
+    /** Integração utilizável no modo escolhido -- é o que Ativos consulta. */
     public function configurado(): bool
+    {
+        return $this->modoSsh() ? (new OmadaSshService())->configurado() : $this->controllerConfigurado();
+    }
+
+    public function controllerConfigurado(): bool
     {
         return $this->urlAtual() !== ''
             && $this->omadacIdAtual() !== ''
@@ -84,7 +127,7 @@ class OmadaService
         }
 
         // Client Secret em branco mantém o atual -- só exige um valor novo quando ainda não havia nenhum.
-        if ($clientSecret === '' && !$this->configurado()) {
+        if ($clientSecret === '' && !$this->controllerConfigurado()) {
             NotificationService::error('Informe o Client Secret.');
             return false;
         }
@@ -110,6 +153,8 @@ class OmadaService
         ConfigService::set(self::CHAVE_CLIENT_ID, '');
         ConfigService::set(self::CHAVE_CLIENT_SECRET_CIFRADO, '');
         ConfigService::set(self::CHAVE_SITE_ID, '');
+        ConfigService::set(self::CHAVE_MODO, '');
+        (new OmadaSshService())->removerConfiguracao();
 
         AuditService::registrar('Omada Controller', 'Configuração', 'Configuração removida.');
         NotificationService::success('Configuração removida.');
@@ -211,7 +256,7 @@ class OmadaService
      */
     private function obterToken(): ?string
     {
-        if (!$this->configurado()) {
+        if (!$this->controllerConfigurado()) {
             return null;
         }
 
