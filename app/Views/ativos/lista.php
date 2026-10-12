@@ -113,12 +113,12 @@ $resumoOffline = 0;
 $resumoMonitorado = 0;
 foreach ($ativos as $a) {
     $detalhesResumo = json_decode($a['detalhes'] ?? '', true) ?: [];
-    $temStatusVendor = !empty($detalhesResumo['unifi_status']) || !empty($detalhesResumo['omada_status']);
+    $temStatusVendor = !empty($detalhesResumo['unifi_status']) || !empty($detalhesResumo['omada_status']) || !empty($detalhesResumo['periferico_status']);
 
     if ($a['origem'] === 'agente') {
         AtivoService::estaLigada($a) ? $resumoOnline++ : $resumoOffline++;
     } elseif ($temStatusVendor) {
-        $online = ($detalhesResumo['unifi_status'] ?? '') === 'Online' || ($detalhesResumo['omada_status'] ?? '') === 'Online';
+        $online = ($detalhesResumo['unifi_status'] ?? '') === 'Online' || ($detalhesResumo['omada_status'] ?? '') === 'Online' || ($detalhesResumo['periferico_status'] ?? '') === 'Online';
         $online ? $resumoOnline++ : $resumoOffline++;
     }
 

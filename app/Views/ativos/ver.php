@@ -241,7 +241,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                 <i class="bi bi-arrow-repeat"></i> Coletar via SNMP
             </button>
         <?php endif; ?>
-        <?php if (in_array($ativo['tipo_slug'] ?? '', ['switch', 'ponto_acesso', 'roteador', 'dvr_nvr'], true) && !empty($ativo['ip']) && ((new UnifiService())->configurado() || (new OmadaService())->configurado() || (new IntelbrasDvrService())->configurado())): ?>
+        <?php if (!empty($ativo['ip']) && (($ativo['tipo_slug'] ?? '') === 'periferico' || (in_array($ativo['tipo_slug'] ?? '', ['switch', 'ponto_acesso', 'roteador', 'dvr_nvr'], true) && ((new UnifiService())->configurado() || (new OmadaService())->configurado() || (new IntelbrasDvrService())->configurado())))): ?>
             <button type="button" class="btn btn-outline-secondary" id="botaoColetarAutomatico" data-id="<?= (int)$ativo['id'] ?>" title="Testa as integrações configuradas (UniFi, TP-Link/Omada, DVR/NVR Intelbras) por IP -- não precisa saber o fabricante">
                 <i class="bi bi-arrow-repeat"></i> Detectar e coletar automaticamente
             </button>
@@ -303,6 +303,19 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
         <i class="bi bi-exclamation-triangle"></i> Ver Alertas (<?= count($alertas) ?>)
     </button>
 </div>
+
+<?php if (($ativo['tipo_slug'] ?? '') === 'periferico' && (($detalhes['periferico_status'] ?? '') === 'Offline' || ($detalhes['periferico_conexao'] ?? '') === 'Sem conexão')): ?>
+    <div class="alert alert-danger d-flex align-items-center gap-2">
+        <i class="bi bi-plug fs-4"></i>
+        <div>
+            <?php if (($detalhes['periferico_status'] ?? '') === 'Offline'): ?>
+                <strong>Não está respondendo ao ping</strong> (última coleta <?= htmlspecialchars($detalhes['periferico_coletado'] ?? '') ?>).
+            <?php else: ?>
+                <strong>Sem conexão com <?= htmlspecialchars($detalhes['periferico_destino'] ?? 'o destino') ?></strong> -- os dados da serial não estão chegando lá.
+            <?php endif; ?>
+        </div>
+    </div>
+<?php endif; ?>
 
 <?php if (($ativo['tipo_slug'] ?? '') === 'dvr_nvr'): ?>
     <?php
@@ -522,6 +535,43 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                 <span class="text-muted">Adotado em</span>
                                 <span><?= htmlspecialchars(data_br($detalhes['unifi_adotado_em'])) ?></span>
                             </div>
+                        <?php endif; ?>
+                        <?php if (!empty($detalhes['periferico_conexoes'])): ?>
+                            <div class="py-2 border-bottom">
+                                <span class="text-muted">Conexões abertas agora</span>
+                                <?php foreach ($detalhes['periferico_conexoes'] as $conexaoPeriferico): ?>
+                                    <div class="small font-monospace"><?= htmlspecialchars($conexaoPeriferico['ip']) ?> -- enviado <?= number_format((int)$conexaoPeriferico['tx'], 0, ',', '.') ?> B / recebido <?= number_format((int)$conexaoPeriferico['rx'], 0, ',', '.') ?> B</div>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
+                        <?php if (($ativo['tipo_slug'] ?? '') === 'periferico' && $podeEditarAtivo): ?>
+                            <?php $usuarioWebPeriferico = (new AtivoService())->usuarioCredencialWeb((int)$ativo['id']); ?>
+                            <div class="py-2 border-bottom">
+                                <div class="text-muted mb-1">Login da interface web
+                                    <span class="small">(<?= $usuarioWebPeriferico !== null ? 'salvo, usuário <code>' . htmlspecialchars($usuarioWebPeriferico) . '</code>' : 'não cadastrado -- só ping' ?>)</span>
+                                </div>
+                                <form class="d-flex gap-2 flex-wrap" id="formCredencialWeb" data-id="<?= (int)$ativo['id'] ?>">
+                                    <input type="text" name="usuario" class="form-control form-control-sm" style="max-width:140px" placeholder="usuário" value="<?= htmlspecialchars($usuarioWebPeriferico ?? '') ?>" autocomplete="off">
+                                    <input type="password" name="senha" class="form-control form-control-sm" style="max-width:160px" placeholder="<?= $usuarioWebPeriferico !== null ? 'senha (em branco mantém)' : 'senha' ?>" autocomplete="new-password">
+                                    <button type="submit" class="btn btn-sm btn-outline-primary">Salvar</button>
+                                </form>
+                                <div class="form-text">Guardado cifrado. Usado só pra ler a página de status do equipamento (conversor serial USR IoT).</div>
+                            </div>
+                            <script>
+                            document.getElementById('formCredencialWeb').addEventListener('submit', async function (e) {
+                                e.preventDefault();
+                                const dados = new URLSearchParams(new FormData(this));
+                                dados.set('id', this.dataset.id);
+                                try {
+                                    const res = await fetch(<?= json_encode(url('/ativos/credencial-web/salvar')) ?>, { method: 'POST', body: dados });
+                                    const resultado = await res.json();
+                                    alert(resultado.message);
+                                    if (resultado.success) location.reload();
+                                } catch (err) {
+                                    alert('Erro ao comunicar com o servidor.');
+                                }
+                            });
+                            </script>
                         <?php endif; ?>
                         <?php if (!empty($ativo['observacoes'])): ?>
                             <hr>

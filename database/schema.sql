@@ -92,6 +92,18 @@ CREATE TABLE IF NOT EXISTS `ativos` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ----------------------------------------------------------------
+-- ativos_credenciais_web
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `ativos_credenciais_web` (
+  `ativo_id` int(11) NOT NULL,
+  `usuario` varchar(100) NOT NULL,
+  `senha_cifrada` text NOT NULL,
+  `atualizado_em` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`ativo_id`),
+  CONSTRAINT `fk_ativos_credenciais_web_ativo` FOREIGN KEY (`ativo_id`) REFERENCES `ativos` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
 -- ativos_alertas
 -- ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `ativos_alertas` (

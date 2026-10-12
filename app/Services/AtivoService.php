@@ -192,9 +192,27 @@ class AtivoService
             'unifi_wan_ip_publico' => 'IP público (WAN)',
             'unifi_velocidade' => 'Última velocidade medida (Speedtest)',
         ],
+        // periferico_* -- ping pra todos; o resto só quando o equipamento é
+        // reconhecido (por enquanto conversor serial USR IoT, via UsrIotService).
+        'periferico' => [
+            'funcao' => 'Função / equipamento ligado',
+            'periferico_status' => 'Status (ping)',
+            'periferico_modelo' => 'Modelo (coletado)',
+            'periferico_firmware' => 'Firmware',
+            'periferico_serial' => 'Número de série (coletado)',
+            'periferico_mac' => 'MAC',
+            'periferico_serial_config' => 'Porta serial',
+            'periferico_modo' => 'Modo de trabalho',
+            'periferico_destino' => 'Destino configurado',
+            'periferico_conexao' => 'Conexão com o destino',
+            'periferico_trafego' => 'Tráfego desde que ligou (enviado / recebido)',
+            'periferico_ultimo_trafego' => 'Último tráfego visto em',
+            'periferico_coletado' => 'Última coleta',
+        ],
     ];
 
     private const NOME_JOB_CRON_SNMP = 'Coleta SNMP de Ativos de TI';
+    private const NOME_JOB_CRON_PERIFERICOS = 'Coleta de Periféricos (Ativos de TI)';
     private const NOME_JOB_CRON_UNIFI = 'Coleta UniFi de Ativos de TI';
     private const NOME_JOB_CRON_OMADA = 'Coleta Omada de Ativos de TI';
     private const NOME_JOB_CRON_INTELBRAS_DVR = 'Coleta DVR/NVR Intelbras de Ativos de TI';
@@ -1833,6 +1851,177 @@ class AtivoService
     }
 
     /**
+     * Periféricos (conversor serial, relógio de ponto...): ping sempre; se
+     * houver credencial web e o equipamento for reconhecido (USR IoT), lê
+     * também a página de status. Gera alerta na ficha quando o equipamento
+     * cai/volta e quando a conexão com o destino configurado (ex.: o ARIIS)
+     * cai/volta -- é isso que importa num conversor que leva resultado de
+     * equipamento de laboratório pro sistema.
+     */
+    public function coletarPeriferico(int $id): array
+    {
+        $ativo = $this->repository->buscarPorId($id);
+
+        if (!$ativo || empty($ativo['ip'])) {
+            return ['success' => false, 'message' => 'Ativo não encontrado ou sem IP cadastrado.'];
+        }
+
+        $antes = json_decode($ativo['detalhes'] ?? '', true) ?: [];
+        $agora = date('d/m/Y H:i');
+        $coletado = ['periferico_coletado' => $agora];
+        $alertas = [];
+
+        exec('ping -c 2 -W 2 ' . escapeshellarg($ativo['ip']) . ' 2>&1', $saidaPing, $codigoPing);
+        $online = $codigoPing === 0;
+        $coletado['periferico_status'] = $online ? 'Online' : 'Offline';
+
+        if (($antes['periferico_status'] ?? '') !== '' && $antes['periferico_status'] !== $coletado['periferico_status']) {
+            $alertas[] = $online
+                ? ['nivel' => 'informacao', 'origem_evento' => 'Periférico', 'mensagem' => 'Voltou a responder ao ping.']
+                : ['nivel' => 'erro', 'origem_evento' => 'Periférico', 'mensagem' => 'Parou de responder ao ping.'];
+        }
+
+        $mensagem = $online ? 'Online (responde ao ping).' : 'Offline -- não respondeu ao ping.';
+        $credencial = $this->credencialWeb($id);
+        $usr = new UsrIotService();
+
+        if ($online && $credencial !== null) {
+            $resultado = $usr->coletar($ativo['ip'], $credencial['usuario'], $credencial['senha']);
+
+            if ($resultado['success']) {
+                $d = $resultado['dados'];
+                $p = $d['porta'];
+
+                $coletado += [
+                    'periferico_modelo' => 'USR IoT ' . $d['modelo'],
+                    'periferico_firmware' => $d['firmware'],
+                    'periferico_serial' => $d['serial'],
+                    'periferico_mac' => strtolower(str_replace('-', ':', $d['mac'])),
+                    'periferico_trafego' => number_format($d['tx_total'], 0, ',', '.') . ' B / ' . number_format($d['rx_total'], 0, ',', '.') . ' B',
+                    'periferico_conexoes' => $d['conexoes'],
+                    'periferico_tx_total' => $d['tx_total'],
+                    'periferico_rx_total' => $d['rx_total'],
+                ];
+
+                // Contador subiu desde a última coleta = o equipamento está mandando/recebendo dados.
+                $totalAntes = (int)($antes['periferico_tx_total'] ?? -1) + (int)($antes['periferico_rx_total'] ?? 0);
+                if ($totalAntes >= 0 && $d['tx_total'] + $d['rx_total'] !== $totalAntes) {
+                    $coletado['periferico_ultimo_trafego'] = $agora;
+                }
+
+                if ($p) {
+                    $coletado['periferico_serial_config'] = $p['baud'] . ' bps, ' . $p['formato'];
+                    $coletado['periferico_modo'] = $p['modo'];
+
+                    if ($p['cliente'] && $p['destino_ip'] !== '') {
+                        $destino = $p['destino_ip'] . ($p['destino_porta'] ? ':' . $p['destino_porta'] : '');
+                        $destinoAtivo = $this->repository->buscarPrimeiroPorIp($p['destino_ip']);
+                        $coletado['periferico_destino'] = $destino . ($destinoAtivo ? ' (' . $destinoAtivo['nome'] . ')' : '');
+
+                        $conectado = (bool)array_filter($d['conexoes'], fn ($c) => $c['ip'] === $p['destino_ip']);
+                        $coletado['periferico_conexao'] = $conectado ? 'Conectado' : 'Sem conexão';
+
+                        if (($antes['periferico_conexao'] ?? '') !== '' && $antes['periferico_conexao'] !== $coletado['periferico_conexao']) {
+                            $alertas[] = $conectado
+                                ? ['nivel' => 'informacao', 'origem_evento' => 'Periférico', 'mensagem' => "Conexão com {$destino} restabelecida."]
+                                : ['nivel' => 'erro', 'origem_evento' => 'Periférico', 'mensagem' => "Perdeu a conexão com {$destino} -- os dados da serial não estão chegando no destino."];
+                        }
+                    } elseif ($p['porta_local']) {
+                        $coletado['periferico_destino'] = 'Aguarda conexões na porta ' . $p['porta_local'];
+                        $coletado['periferico_conexao'] = count($d['conexoes']) . ' conectado(s)';
+                    }
+                }
+
+                $mensagem = 'Online -- dados lidos da interface web (USR IoT).';
+            } else {
+                $mensagem = 'Online, mas a coleta web falhou: ' . $resultado['message'];
+            }
+        } elseif ($online && $usr->pareceUsrIot($ativo['ip'])) {
+            $mensagem = 'Online. Parece um conversor USR IoT -- cadastre o login da interface web na ficha pra coletar status e conexão.';
+        }
+
+        $this->repository->atualizarDetalhesApi($id, json_encode(array_merge($antes, $coletado), JSON_UNESCAPED_UNICODE));
+        $this->repository->inserirAlertas($id, array_map(fn ($a) => $a + ['ocorrido_em' => date('Y-m-d H:i:s')], $alertas));
+
+        return ['success' => true, 'message' => $mensagem];
+    }
+
+    public function coletarPerifericosTodos(): array
+    {
+        $ativos = $this->repository->listarPorTipoSlugComIp('periferico');
+        $sucesso = 0;
+
+        foreach ($ativos as $ativo) {
+            if ($this->coletarPeriferico((int)$ativo['id'])['success']) {
+                $sucesso++;
+            }
+        }
+
+        return ['total' => count($ativos), 'sucesso' => $sucesso];
+    }
+
+    public function nomeJobCronPerifericos(): string
+    {
+        return self::NOME_JOB_CRON_PERIFERICOS;
+    }
+
+    /** @return array{usuario:string, senha:string}|null */
+    public function credencialWeb(int $ativoId): ?array
+    {
+        $stmt = Database::connection()->prepare('SELECT usuario, senha_cifrada FROM ativos_credenciais_web WHERE ativo_id = ?');
+        $stmt->execute([$ativoId]);
+        $linha = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$linha) {
+            return null;
+        }
+
+        try {
+            return ['usuario' => $linha['usuario'], 'senha' => CryptoService::decriptar($linha['senha_cifrada'])];
+        } catch (\RuntimeException $e) {
+            return null;
+        }
+    }
+
+    public function usuarioCredencialWeb(int $ativoId): ?string
+    {
+        $stmt = Database::connection()->prepare('SELECT usuario FROM ativos_credenciais_web WHERE ativo_id = ?');
+        $stmt->execute([$ativoId]);
+        $usuario = $stmt->fetchColumn();
+
+        return $usuario === false ? null : (string)$usuario;
+    }
+
+    /** Senha em branco mantém a atual. */
+    public function salvarCredencialWeb(int $ativoId, string $usuario, string $senha): array
+    {
+        $ativo = $this->repository->buscarPorId($ativoId);
+        $usuario = trim($usuario);
+
+        if (!$ativo) {
+            return ['success' => false, 'message' => 'Ativo não encontrado.'];
+        }
+        if ($usuario === '') {
+            return ['success' => false, 'message' => 'Informe o usuário.'];
+        }
+
+        $atual = $this->credencialWeb($ativoId);
+        if ($senha === '' && $atual === null) {
+            return ['success' => false, 'message' => 'Informe a senha.'];
+        }
+
+        $stmt = Database::connection()->prepare('
+            INSERT INTO ativos_credenciais_web (ativo_id, usuario, senha_cifrada) VALUES (?, ?, ?)
+            ON DUPLICATE KEY UPDATE usuario = VALUES(usuario), senha_cifrada = VALUES(senha_cifrada)
+        ');
+        $stmt->execute([$ativoId, $usuario, CryptoService::encriptar($senha !== '' ? $senha : $atual['senha'])]);
+
+        AuditService::registrar('Ativos', 'Credencial web', "Login da interface web salvo para {$ativo['codigo_patrimonio']} (usuário \"{$usuario}\").");
+
+        return ['success' => true, 'message' => 'Login salvo.'];
+    }
+
+    /**
      * Completa o "quem está em cada porta" do switch: a ARP do próprio
      * switch só conhece quem falou com ele, então o IP que faltar vem da
      * ARP deste servidor (mesma LAN, dado de agora) e, por último, da
@@ -3090,6 +3279,11 @@ class AtivoService
 
         if (empty($ativo['ip'])) {
             return ['success' => false, 'message' => 'Este ativo não tem IP cadastrado.'];
+        }
+
+        // Periférico não passa pelas integrações de rede -- tem coleta própria (ping + web).
+        if (($ativo['tipo_slug'] ?? '') === 'periferico') {
+            return $this->coletarPeriferico($id);
         }
 
         $integracoesTentadas = [];

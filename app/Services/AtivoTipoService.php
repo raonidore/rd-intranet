@@ -22,6 +22,7 @@ class AtivoTipoService
         'bi-tablet' => 'Tablet',
         'bi-phone' => 'Telefone',
         'bi-projector' => 'Projetor',
+        'bi-usb-plug' => 'Periférico',
         'bi-box-seam' => 'Genérico',
     ];
 

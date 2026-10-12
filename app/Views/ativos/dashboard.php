@@ -543,6 +543,27 @@ $statusCores = [
                                 </div>
                             </div>
                         </div>
+
+                        <div class="col-md-4">
+                            <div class="integration-tile">
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="integration-icon" style="background:rgba(163,113,247,.18); color:#a371f7"><i class="bi bi-usb-plug"></i></div>
+                                    <div>
+                                        <div class="integration-name">Periféricos</div>
+                                        <div class="integration-status <?= $coletaPerifericosAtiva ? 'is-ativa' : '' ?>">
+                                            <span class="status-dot"></span> <?= $coletaPerifericosAtiva ? 'Ativa' : 'Inativa' ?>
+                                        </div>
+                                    </div>
+                                </div>
+                                <p class="integration-desc">Ping a cada 5 minutos; conversor serial USR IoT também com status e conexão com o destino, com alerta se cair.</p>
+                                <div class="d-flex justify-content-between align-items-center mt-auto">
+                                    <span class="small text-muted">Login web na ficha de cada um</span>
+                                    <?php if (!$coletaPerifericosAtiva): ?>
+                                        <button type="button" class="btn btn-sm btn-outline-light" id="botaoAtivarColetaPerifericos">Ativar coleta</button>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -630,6 +651,21 @@ $statusCores = [
                 location.reload();
             } catch (e) {
                 botaoOmada.disabled = false;
+            }
+        });
+    }
+
+    const botaoPerifericos = document.getElementById('botaoAtivarColetaPerifericos');
+    if (botaoPerifericos) {
+        botaoPerifericos.addEventListener('click', async function () {
+            botaoPerifericos.disabled = true;
+            try {
+                const res = await fetch(<?= json_encode(url('/ativos/perifericos/ativar-coleta')) ?>, { method: 'POST' });
+                const dados = await res.json();
+                alert(dados.message || (dados.success ? 'Ativado.' : 'Falha ao ativar.'));
+                location.reload();
+            } catch (e) {
+                botaoPerifericos.disabled = false;
             }
         });
     }

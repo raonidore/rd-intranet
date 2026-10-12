@@ -353,6 +353,12 @@ switch ($comando) {
 
         break;
 
+    case 'ativos:coletar-perifericos':
+        $resultado = (new \App\Services\AtivoService())->coletarPerifericosTodos();
+        echo "OK: Periféricos coletados em {$resultado['sucesso']}/{$resultado['total']} ativo(s).\n";
+
+        break;
+
     case 'ativos:coletar-intelbras-dvr':
         $resultado = (new \App\Services\AtivoService())->coletarIntelbrasDvrTodos();
         echo "OK: DVR/NVR Intelbras coletado em {$resultado['sucesso']}/{$resultado['total']} ativo(s).\n";

@@ -48,6 +48,7 @@ class AtivoController extends Controller
             'coletaUnifiAtiva' => $this->coletaUnifiAtiva(),
             'coletaOmadaAtiva' => $this->coletaOmadaAtiva(),
             'coletaIntelbrasDvrAtiva' => $this->coletaIntelbrasDvrAtiva(),
+            'coletaPerifericosAtiva' => $this->coletaPerifericosAtiva(),
             'chaveAgente' => $this->service->chaveAgente(),
             'historicoChaves' => $this->service->historicoChavesAgente(),
             'intervaloComunicacao' => $this->service->intervaloComunicacao(),
@@ -905,6 +906,50 @@ class AtivoController extends Controller
         $resultado = $this->service->coletarIntelbrasDvr($id);
 
         echo json_encode($resultado);
+    }
+
+    /** Login da interface web de um periférico (ex.: conversor serial USR IoT). */
+    public function salvarCredencialWeb(): void
+    {
+        AuthMiddleware::checkModulo('ativos_novo');
+        header('Content-Type: application/json');
+
+        echo json_encode($this->service->salvarCredencialWeb((int)($_POST['id'] ?? 0), $_POST['usuario'] ?? '', $_POST['senha'] ?? ''));
+    }
+
+    public function ativarColetaPerifericos(): void
+    {
+        AuthMiddleware::checkModulo('ativos_dashboard');
+        header('Content-Type: application/json');
+
+        if ($this->coletaPerifericosAtiva()) {
+            echo json_encode(['success' => true, 'message' => 'Coleta já estava ativa.']);
+            return;
+        }
+
+        $resultado = (new CronService())->criar([
+            'nome' => $this->service->nomeJobCronPerifericos(),
+            'descricao' => 'Ping e coleta web (conversor serial USR IoT) dos ativos do tipo Periféricos, com alerta quando caem ou perdem a conexão com o destino.',
+            'expressao' => '*/5 * * * *',
+            'usuario_execucao' => 'www-data',
+            'comando' => 'php /var/www/rd.intranet/rd ativos:coletar-perifericos',
+            'ativo' => true,
+        ]);
+
+        AuditService::registrar('Ativos', 'Ativar coleta de Periféricos', $resultado['message']);
+
+        echo json_encode($resultado);
+    }
+
+    private function coletaPerifericosAtiva(): bool
+    {
+        foreach ((new CronService())->listar() as $job) {
+            if ($job['nome'] === $this->service->nomeJobCronPerifericos()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function ativarColetaIntelbrasDvr(): void

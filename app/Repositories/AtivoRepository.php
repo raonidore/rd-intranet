@@ -98,6 +98,16 @@ class AtivoRepository
         return $item ?: null;
     }
 
+    public function buscarPrimeiroPorIp(string $ip): ?array
+    {
+        $stmt = $this->pdo->prepare('SELECT id, codigo_patrimonio, nome FROM ativos WHERE ip = ? ORDER BY id LIMIT 1');
+        $stmt->execute([$ip]);
+
+        $item = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $item ?: null;
+    }
+
     /**
      * Busca ativos por nome de máquina, comparação case-insensitive --
      * o hostname reportado pelo agente (Environment.MachineName) e o
