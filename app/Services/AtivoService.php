@@ -170,6 +170,7 @@ class AtivoService
             'omada_portas_resumo' => 'Portas com link',
             'omada_mac_total' => 'Endereços MAC aprendidos',
             'omada_coleta_via' => 'Coletado via',
+            'omada_controller_status' => 'Status no Omada Controller',
             // unifi_* -- switch UniFi, coletado pelo UniFi Controller
             // (coletarUnifi()). 'unifi_portas'/'unifi_vlans' (arrays) ficam
             // FORA daqui, igual omada_portas -- aba "Portas do switch".
@@ -2097,6 +2098,11 @@ class AtivoService
         }
 
         $coletado['omada_coleta_via'] = implode(' + ', $fontes);
+        if (!$omada->controllerAtivo()) {
+            // Modo só SSH: o status/alerta de adoção de uma coleta antiga pelo Controller não vale mais.
+            $coletado['omada_controller_status'] = '';
+            $coletado['omada_adocao_alerta'] = '';
+        }
 
         $detalhesAtuais = json_decode($ativo['detalhes'] ?? '', true) ?: [];
         $this->repository->atualizarDetalhesApi($id, json_encode(array_merge($detalhesAtuais, $coletado), JSON_UNESCAPED_UNICODE));
@@ -2109,6 +2115,25 @@ class AtivoService
                 . ($falhas ? ' Atenção: ' . implode(' ', $falhas) : ''),
         ];
     }
+
+    /**
+     * `status` da listagem de dispositivos da Open API (DeviceInfo) -- tabela
+     * oficial da documentação do Controller (/v3/api-docs). Antes o código
+     * tratava 2 como "conectado", mas 2 é "Pendente": switch descoberto e
+     * NÃO adotado (visto no enzilabprime, aparecia "Online" na ficha).
+     */
+    private const STATUS_OMADA = [0 => 'Desconectado', 1 => 'Conectado', 2 => 'Pendente', 3 => 'Sem heartbeat', 4 => 'Isolado'];
+
+    /** `detailStatus` -- mesma documentação; dá o motivo exato (ex.: 24 = adoção falhou). */
+    private const STATUS_DETALHADO_OMADA = [
+        0 => 'Desconectado', 1 => 'Desconectado (migrando)', 10 => 'Provisionando', 11 => 'Configurando',
+        12 => 'Atualizando firmware', 13 => 'Reiniciando', 14 => 'Conectado', 15 => 'Conectado (sem fio)',
+        16 => 'Conectado (migrando)', 17 => 'Conectado (sem fio, migrando)', 20 => 'Pendente de adoção',
+        21 => 'Pendente de adoção (sem fio)', 22 => 'Adotando', 23 => 'Adotando (sem fio)', 24 => 'Adoção falhou',
+        25 => 'Adoção falhou (sem fio)', 26 => 'Gerenciado por outro Controller', 27 => 'Gerenciado por outro Controller (sem fio)',
+        30 => 'Sem heartbeat', 31 => 'Sem heartbeat (sem fio)', 32 => 'Sem heartbeat (migrando)',
+        33 => 'Sem heartbeat (sem fio, migrando)', 40 => 'Isolado', 41 => 'Isolado (migrando)', 50 => 'Configurando slice',
+    ];
 
     /**
      * Open API do Omada Controller -- casa o ativo por IP (o Controller já
@@ -2132,11 +2157,22 @@ class AtivoService
             return ['success' => false, 'message' => 'Nenhum dispositivo com esse IP foi encontrado no Omada Controller.'];
         }
 
+        $status = (int)($dispositivo['status'] ?? -1);
+        $detalhe = (int)($dispositivo['detailStatus'] ?? -1);
+        $rotulo = self::STATUS_DETALHADO_OMADA[$detalhe] ?? (self::STATUS_OMADA[$status] ?? "Status {$status}");
+        // 20-27: descoberto mas não adotado (pendente, adotando, falhou, de outro Controller) --
+        // o Controller não aplica nenhuma configuração nele (SSH, conta do dispositivo, VLANs...).
+        $naoAdotado = $detalhe >= 20 && $detalhe <= 27;
+
         return ['success' => true, 'dados' => [
             'omada_model' => $dispositivo['modelName'] ?? ($dispositivo['model'] ?? ''),
             'omada_firmware' => $dispositivo['firmwareVersion'] ?? '',
-            // status 2 = conectado (confirmado ao vivo) -- qualquer outro valor mostra o código cru em vez de arriscar um rótulo errado.
-            'omada_status' => (int)($dispositivo['status'] ?? -1) === 2 ? 'Online' : ('Status ' . ($dispositivo['status'] ?? '?')),
+            // "Online" é o rótulo que a ficha/painel usam pra badge verde -- só quando o Controller diz Conectado.
+            'omada_status' => $status === 1 ? 'Online' : $rotulo,
+            'omada_controller_status' => $rotulo,
+            'omada_adocao_alerta' => $naoAdotado
+                ? "Este switch não está adotado no Omada Controller ({$rotulo}) -- o Controller não aplica configuração nele."
+                : '',
             // já vem pronto como texto ("42day(s) 18h 52m 21s") -- sem conversão nenhuma.
             'omada_uptime' => $dispositivo['uptime'] ?? '',
         ]];

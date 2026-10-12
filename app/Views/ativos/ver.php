@@ -323,6 +323,16 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     </div>
 <?php endif; ?>
 
+<?php if (($ativo['tipo_slug'] ?? '') === 'switch' && !empty($detalhes['omada_adocao_alerta'])): ?>
+    <div class="alert alert-warning d-flex align-items-center gap-2">
+        <i class="bi bi-diagram-3 fs-4"></i>
+        <div>
+            <strong><?= htmlspecialchars($detalhes['omada_adocao_alerta']) ?></strong>
+            <div class="small">Para adotar, use no Controller a senha atual do switch (adotar aplica a configuração do Controller por cima: VLANs, perfis de porta). Se o Controller não é usado neste cliente, deixe a integração TP-Link só em SSH.</div>
+        </div>
+    </div>
+<?php endif; ?>
+
 <?php if (($ativo['tipo_slug'] ?? '') === 'dvr_nvr' && !$ehCameraProtect): ?>
     <?php
         $discosAtencaoDvr = array_filter($detalhes['dvr_discos'] ?? [], fn ($d) => ($d['smart']['status'] ?? '') === 'atencao');
