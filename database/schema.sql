@@ -3,7 +3,7 @@
 -- cria todas as tabelas ja no estado final, sem precisar repetir o
 -- historico incremental de database/migrations/ (algumas dessas
 -- migrations usam ALTER TABLE, que nao e seguro reaplicar aqui).
--- Gerado em 2026-10-12 19:12:58.
+-- Gerado em 2026-10-13 03:39:24.
 
 -- Import nao respeita ordem de dependencia entre tabelas (algumas tem FK
 -- pra tabelas que so aparecem depois neste arquivo) -- desliga a checagem
@@ -2697,6 +2697,173 @@ CREATE TABLE IF NOT EXISTS `whatsapp_setores` (
   `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_whatsapp_setor_nome` (`nome`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- wifi_aceites
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `wifi_aceites` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `pessoa_id` int(11) NOT NULL,
+  `termo_id` int(11) NOT NULL,
+  `versao` int(11) NOT NULL,
+  `ip` varchar(45) DEFAULT NULL,
+  `mac` varchar(17) DEFAULT NULL,
+  `aceito_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_wifi_aceites_pessoa` (`pessoa_id`),
+  CONSTRAINT `fk_wifi_aceites_pessoa` FOREIGN KEY (`pessoa_id`) REFERENCES `wifi_pessoas` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- wifi_aparelhos
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `wifi_aparelhos` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `pessoa_id` int(11) NOT NULL,
+  `mac` varchar(17) NOT NULL,
+  `lembrado_ate` datetime DEFAULT NULL,
+  `bloqueado` tinyint(1) NOT NULL DEFAULT 0,
+  `ultimo_uso` datetime DEFAULT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_wifi_aparelhos` (`pessoa_id`,`mac`),
+  KEY `idx_wifi_aparelhos_mac` (`mac`),
+  CONSTRAINT `fk_wifi_aparelhos_pessoa` FOREIGN KEY (`pessoa_id`) REFERENCES `wifi_pessoas` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- wifi_perfis
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `wifi_perfis` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `slug` varchar(40) NOT NULL,
+  `nome` varchar(80) NOT NULL,
+  `descricao` varchar(255) DEFAULT NULL,
+  `cor` varchar(20) NOT NULL DEFAULT '#0d6efd',
+  `icone` varchar(40) NOT NULL DEFAULT 'bi-person',
+  `ativo` tinyint(1) NOT NULL DEFAULT 1,
+  `tipo_acesso` enum('senha','cadastro') NOT NULL DEFAULT 'senha',
+  `autocadastro` tinyint(1) NOT NULL DEFAULT 1,
+  `exige_liberacao` tinyint(1) NOT NULL DEFAULT 1,
+  `campos` text DEFAULT NULL,
+  `dominios_email` text DEFAULT NULL,
+  `validade_dias` int(11) DEFAULT NULL,
+  `sessao_minutos` int(11) NOT NULL DEFAULT 480,
+  `banda_down_kbps` int(11) DEFAULT NULL,
+  `banda_up_kbps` int(11) DEFAULT NULL,
+  `cota_mb` int(11) DEFAULT NULL,
+  `max_aparelhos` int(11) NOT NULL DEFAULT 1,
+  `lembrar_dias` int(11) NOT NULL DEFAULT 0,
+  `horarios` text DEFAULT NULL,
+  `filtro` text DEFAULT NULL,
+  `ordem` int(11) NOT NULL DEFAULT 0,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  `atualizado_em` timestamp NULL DEFAULT NULL ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_wifi_perfis_slug` (`slug`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- wifi_pessoas
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `wifi_pessoas` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `perfil_id` int(11) NOT NULL,
+  `nome` varchar(150) NOT NULL,
+  `email` varchar(190) DEFAULT NULL,
+  `telefone` varchar(30) DEFAULT NULL,
+  `documento` varchar(30) DEFAULT NULL,
+  `empresa` varchar(150) DEFAULT NULL,
+  `cnpj` varchar(20) DEFAULT NULL,
+  `setor` varchar(100) DEFAULT NULL,
+  `anfitriao` varchar(150) DEFAULT NULL,
+  `dados_extra` text DEFAULT NULL,
+  `senha_hash` varchar(255) DEFAULT NULL,
+  `trocar_senha` tinyint(1) NOT NULL DEFAULT 0,
+  `status` enum('pendente','ativo','recusado','bloqueado','expirado','anonimizado') NOT NULL DEFAULT 'pendente',
+  `motivo` varchar(255) DEFAULT NULL,
+  `valido_ate` datetime DEFAULT NULL,
+  `regras` text DEFAULT NULL,
+  `origem` enum('admin','portal') NOT NULL DEFAULT 'portal',
+  `liberado_por` int(11) DEFAULT NULL,
+  `liberado_em` datetime DEFAULT NULL,
+  `aviso_vencimento_em` datetime DEFAULT NULL,
+  `ultimo_acesso` datetime DEFAULT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  `atualizado_em` timestamp NULL DEFAULT NULL ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_wifi_pessoas_email` (`email`),
+  KEY `idx_wifi_pessoas_status` (`status`),
+  KEY `fk_wifi_pessoas_perfil` (`perfil_id`),
+  CONSTRAINT `fk_wifi_pessoas_perfil` FOREIGN KEY (`perfil_id`) REFERENCES `wifi_perfis` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- wifi_sessoes
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `wifi_sessoes` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `pessoa_id` int(11) DEFAULT NULL,
+  `perfil_id` int(11) DEFAULT NULL,
+  `mac` varchar(17) DEFAULT NULL,
+  `ip` varchar(45) DEFAULT NULL,
+  `ap_mac` varchar(17) DEFAULT NULL,
+  `ssid` varchar(64) DEFAULT NULL,
+  `inicio` datetime NOT NULL,
+  `fim_previsto` datetime DEFAULT NULL,
+  `fim` datetime DEFAULT NULL,
+  `motivo_fim` varchar(60) DEFAULT NULL,
+  `bytes_down` bigint(20) NOT NULL DEFAULT 0,
+  `bytes_up` bigint(20) NOT NULL DEFAULT 0,
+  `anonimizado` tinyint(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `idx_wifi_sessoes_mac` (`mac`),
+  KEY `idx_wifi_sessoes_ativas` (`fim`),
+  KEY `idx_wifi_sessoes_pessoa` (`pessoa_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- wifi_tentativas
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `wifi_tentativas` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `chave` varchar(190) NOT NULL,
+  `sucesso` tinyint(1) NOT NULL DEFAULT 0,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_wifi_tentativas_chave` (`chave`,`criado_em`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- wifi_termos
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `wifi_termos` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `perfil_id` int(11) NOT NULL,
+  `versao` int(11) NOT NULL,
+  `texto` mediumtext NOT NULL,
+  `criado_por` int(11) DEFAULT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_wifi_termos_versao` (`perfil_id`,`versao`),
+  CONSTRAINT `fk_wifi_termos_perfil` FOREIGN KEY (`perfil_id`) REFERENCES `wifi_perfis` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- wifi_tokens
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `wifi_tokens` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `pessoa_id` int(11) NOT NULL,
+  `token_hash` char(64) NOT NULL,
+  `expira_em` datetime NOT NULL,
+  `usado_em` datetime DEFAULT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_wifi_tokens_hash` (`token_hash`),
+  KEY `fk_wifi_tokens_pessoa` (`pessoa_id`),
+  CONSTRAINT `fk_wifi_tokens_pessoa` FOREIGN KEY (`pessoa_id`) REFERENCES `wifi_pessoas` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS=1;

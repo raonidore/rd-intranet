@@ -191,6 +191,7 @@ class AtualizacaoService
             $this->garantirCronChamadosSlaExpediente();
             $this->garantirCronProjetosPrazos();
             $this->garantirCronProjetosLixeira();
+            $this->garantirCronWifi();
         }
 
         $commitDepois = $this->commitAtual();
@@ -417,6 +418,24 @@ class AtualizacaoService
             'Remove em definitivo projeto excluído há mais de 30 dias no módulo Projetos (antes disso, fica na Lixeira pra restaurar).',
             '@daily',
             'php ' . $this->repoDir() . '/rd projetos:purgar-lixeira'
+        );
+    }
+
+    /**
+     * Manutenção do portal do Wi-Fi (consumo, sessões e contas vencidas,
+     * avisos de vencimento, anonimização LGPD, filtro). Só existe onde o
+     * portal foi ligado -- criado também na hora de ligar (WifiController).
+     */
+    public function garantirCronWifi(): void
+    {
+        if ((new WifiConfigService())->get('portal_ativo') !== '1') {
+            return;
+        }
+        $this->garantirCronJob(
+            'Manutenção do portal Wi-Fi',
+            'Atualiza consumo e encerra sessões vencidas do portal Wi-Fi, vence cadastros, avisa vencimentos por e-mail, anonimiza registros antigos (LGPD) e sincroniza o filtro de sites.',
+            '*/5 * * * *',
+            'php ' . $this->repoDir() . '/rd wifi:manutencao'
         );
     }
 

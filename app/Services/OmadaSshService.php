@@ -661,6 +661,22 @@ class OmadaSshService
     }
 
     /**
+     * Só ACRESCENTA a VLAN como tagueada na porta, sem tirar nada do que ela
+     * já leva -- usado pelo assistente do portal pra levar a VLAN pelos
+     * switches entre o gateway e o AP (inclusive em porta de uplink, onde a
+     * troca completa de VLANs é travada).
+     */
+    public function adicionarVlanTagueada(string $ip, string $porta, int $vlan): array
+    {
+        $interface = self::nomeInterface($porta);
+        if ($interface === null || $vlan < 2 || $vlan > 4094) {
+            return ['success' => false, 'message' => 'Porta ou VLAN inválida.'];
+        }
+
+        return $this->aplicarConfiguracao($ip, ["interface {$interface}", "switchport general allowed vlan {$vlan} tagged", 'exit']);
+    }
+
+    /**
      * Entra em `configure`, roda os comandos e só grava na inicialização se
      * nenhum der erro. Se um falhar no meio, sai sem gravar -- o que já foi
      * aplicado fica só até o próximo reinício (a tela oferece "Desfazer").

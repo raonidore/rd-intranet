@@ -99,6 +99,12 @@ class ModuloCatalogo
         'documentos_acessar' => ['label' => 'Documentos - Acessar', 'grupo' => 'Documentos'],
         'documentos_categorias' => ['label' => 'Documentos - Categorias e Permissões', 'grupo' => 'Documentos'],
         'avisos_gerenciar' => ['label' => 'Avisos - Publicar e Gerenciar', 'grupo' => 'Avisos'],
+        'wifi_painel' => ['label' => 'Wi-Fi - Painel (quem está conectado)', 'grupo' => 'Wi-Fi'],
+        'wifi_liberar' => ['label' => 'Wi-Fi - Liberar, recusar e bloquear acessos', 'grupo' => 'Wi-Fi'],
+        'wifi_pessoas' => ['label' => 'Wi-Fi - Cadastros (criar e editar pessoas)', 'grupo' => 'Wi-Fi'],
+        'wifi_regras' => ['label' => 'Wi-Fi - Perfis e regras (banda, horários, filtro, termos)', 'grupo' => 'Wi-Fi'],
+        'wifi_relatorios' => ['label' => 'Wi-Fi - Relatórios e LGPD (histórico, sites, titular)', 'grupo' => 'Wi-Fi'],
+        'wifi_configuracoes' => ['label' => 'Wi-Fi - Configurações (portal, rede, HTTPS, filtro)', 'grupo' => 'Wi-Fi'],
     ];
 
     public static function chaves(): array
@@ -144,6 +150,7 @@ class ModuloCatalogo
         'SSH' => 'bi-hdd-network',
         'VPN' => 'bi-shield-shaded',
         'WhatsApp' => 'bi-whatsapp',
+        'Wi-Fi' => 'bi-wifi',
     ];
 
     public static function iconeDoGrupo(string $grupo): string
@@ -163,11 +170,11 @@ class ModuloCatalogo
      */
 
     public const GRUPOS_TOGGLEAVEIS = [
-        'Apache', 'Banco de Dados', 'Ativos', 'Infraestrutura', 'VPN', 'Samba', 'Segurança', 'Microsoft Entra', 'Backup', 'SSH', 'Base de Conhecimento', 'WhatsApp', 'Chamados', 'Projetos', 'Chat', 'Fornecedores', 'Documentos', 'Avisos',
+        'Apache', 'Banco de Dados', 'Ativos', 'Infraestrutura', 'VPN', 'Samba', 'Segurança', 'Microsoft Entra', 'Backup', 'SSH', 'Base de Conhecimento', 'WhatsApp', 'Chamados', 'Projetos', 'Chat', 'Fornecedores', 'Documentos', 'Avisos', 'Wi-Fi',
     ];
 
     /** Grupos que nascem desligados em instalações novas -- opt-in, não fazem parte do uso típico. */
-    private const GRUPOS_DESABILITADOS_POR_PADRAO = ['Microsoft Entra'];
+    private const GRUPOS_DESABILITADOS_POR_PADRAO = ['Microsoft Entra', 'Wi-Fi'];
 
     /**
      * Módulos "restritos": nem perfil admin ganha acesso automático (ver

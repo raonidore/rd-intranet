@@ -1926,7 +1926,7 @@ class AtivoService
         return ['success' => true, 'message' => $descricao];
     }
 
-    private static function redeValida(string $cidr): bool
+    public static function redeValida(string $cidr): bool
     {
         if (!preg_match('#^(\d{1,3}(?:\.\d{1,3}){3})/(\d{1,2})$#', $cidr, $m)) {
             return false;
@@ -1935,7 +1935,7 @@ class AtivoService
         return filter_var($m[1], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) && (int)$m[2] >= 8 && (int)$m[2] <= 30;
     }
 
-    private static function ipNaRede(string $ip, string $cidr): bool
+    public static function ipNaRede(string $ip, string $cidr): bool
     {
         [$rede, $bits] = explode('/', $cidr);
         $mascara = -1 << (32 - (int)$bits);

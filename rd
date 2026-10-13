@@ -32,6 +32,8 @@ if (!$comando) {
     echo "  chamados:sincronizar-sla  Pausa/retoma o prazo de SLA dos chamados conforme o horário de expediente\n";
     echo "  projetos:verificar-prazos  Avisa responsáveis de tarefa de Projetos com prazo vencendo amanhã\n";
     echo "  projetos:purgar-lixeira  Remove em definitivo projeto excluído há mais de 30 dias no módulo Projetos\n";
+    echo "  wifi:manutencao         Portal Wi-Fi: consumo, sessões/contas vencidas, avisos, LGPD e filtro de sites
+";
     echo "  whatsapp:diagnosticar-conexoes  Confere as conexões WhatsApp (QR Code) -- API key, porta, conexão padrão, bridge respondendo\n";
     exit;
 }
@@ -330,6 +332,24 @@ switch ($comando) {
     case 'projetos:purgar-lixeira':
         $total = (new \App\Services\ProjetoService())->purgarExpirados();
         echo "OK: {$total} projeto(s) na lixeira há mais de 30 dias removido(s) em definitivo.\n";
+
+        break;
+
+    case 'wifi:manutencao':
+        if ((new \App\Services\WifiConfigService())->get('portal_ativo') !== '1') {
+            echo "Portal Wi-Fi desligado -- nada a fazer.
+";
+            break;
+        }
+        $r = (new \App\Services\WifiPortalService())->manutencao();
+        try {
+            (new \App\Services\WifiFiltroService())->sincronizar();
+        } catch (\Throwable $e) {
+            echo "Aviso: filtro de sites -- {$e->getMessage()}
+";
+        }
+        echo 'OK: ' . json_encode($r, JSON_UNESCAPED_UNICODE) . "
+";
 
         break;
 

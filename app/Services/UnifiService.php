@@ -1145,6 +1145,154 @@ class UnifiService
 
     /*
      * ---------------------------------------------------------------
+     * Visitantes / portal externo (Captive Portal do RD.Intranet).
+     * O UniFi manda o aparelho pro portal; o portal libera aqui.
+     * ---------------------------------------------------------------
+     */
+
+    /** @return array{success: bool, message: string} */
+    public function autorizarConvidado(string $mac, int $minutos, ?int $downKbps, ?int $upKbps, ?int $cotaMb, ?string $apMac): array
+    {
+        $corpo = ['cmd' => 'authorize-guest', 'mac' => strtolower($mac), 'minutes' => max(1, $minutos)];
+        if ($downKbps) {
+            $corpo['down'] = $downKbps;
+        }
+        if ($upKbps) {
+            $corpo['up'] = $upKbps;
+        }
+        if ($cotaMb) {
+            $corpo['bytes'] = $cotaMb;
+        }
+        if ($apMac) {
+            $corpo['ap_mac'] = strtolower($apMac);
+        }
+
+        return $this->comandoConvidado($corpo);
+    }
+
+    /** @return array{success: bool, message: string} */
+    public function desautorizarConvidado(string $mac): array
+    {
+        return $this->comandoConvidado(['cmd' => 'unauthorize-guest', 'mac' => strtolower($mac)]);
+    }
+
+    private function comandoConvidado(array $corpo): array
+    {
+        $ref = $this->siteRefAtual();
+        if ($ref === null) {
+            return ['success' => false, 'message' => 'Site do UniFi Controller ainda não identificado.'];
+        }
+        $r = $this->chamarApi('POST', "/proxy/network/api/s/{$ref}/cmd/stamgr", $corpo);
+        $ok = $r['sucesso'] && ($r['dados']['meta']['rc'] ?? '') === 'ok';
+
+        return ['success' => $ok, 'message' => $ok ? 'ok' : ('UniFi recusou: ' . ($r['dados']['meta']['msg'] ?? $r['mensagem']))];
+    }
+
+    /** Visitantes conhecidos do portal (autorizados agora ou há pouco) -- stat/guest. */
+    public function listarConvidados(): array
+    {
+        $ref = $this->siteRefAtual();
+        if ($ref === null) {
+            return [];
+        }
+        $r = $this->chamarApi('GET', "/proxy/network/api/s/{$ref}/stat/guest?within=24");
+
+        return $r['sucesso'] ? ($r['dados']['data'] ?? []) : [];
+    }
+
+    /** Configuração atual do portal de visitantes (rest/setting -> guest_access). */
+    public function configuracaoPortal(): ?array
+    {
+        $ref = $this->siteRefAtual();
+        if ($ref === null) {
+            return null;
+        }
+        $r = $this->chamarApi('GET', "/proxy/network/api/s/{$ref}/rest/setting");
+        foreach ($r['dados']['data'] ?? [] as $s) {
+            if (($s['key'] ?? '') === 'guest_access') {
+                return $s;
+            }
+        }
+
+        return null;
+    }
+
+    /** Liga o portal externo apontando pro RD.Intranet ($ip), com a página pré-login liberada. */
+    public function configurarPortalExterno(string $ip, int $expiraMinutos): array
+    {
+        $atual = $this->configuracaoPortal();
+        if ($atual === null) {
+            return ['success' => false, 'message' => 'Não foi possível ler a configuração de portal do UniFi.'];
+        }
+        $ref = $this->siteRefAtual();
+        $novo = array_merge($atual, [
+            'portal_enabled' => true,
+            'auth' => 'custom',
+            'custom_ip' => $ip,
+            'expire' => $expiraMinutos,
+            'expire_number' => $expiraMinutos,
+            'expire_unit' => 1,
+            'redirect_enabled' => false,
+            'portal_use_hostname' => false,
+            'allowed_subnet_1' => $ip . '/32',
+        ]);
+        $r = $this->chamarApi('PUT', "/proxy/network/api/s/{$ref}/rest/setting/guest_access/" . rawurlencode($atual['_id']), $novo);
+        $ok = $r['sucesso'] && ($r['dados']['meta']['rc'] ?? '') === 'ok';
+
+        return ['success' => $ok, 'message' => $ok ? 'Portal externo configurado no UniFi.' : ('UniFi recusou: ' . ($r['dados']['meta']['msg'] ?? $r['mensagem']))];
+    }
+
+    /** Redes Wi-Fi (SSIDs) do site. */
+    public function listarWifis(): array
+    {
+        $ref = $this->siteRefAtual();
+        if ($ref === null) {
+            return [];
+        }
+        $r = $this->chamarApi('GET', "/proxy/network/api/s/{$ref}/rest/wlanconf");
+
+        return $r['sucesso'] ? ($r['dados']['data'] ?? []) : [];
+    }
+
+    /** Cria um Wi-Fi aberto com portal (is_guest) ligado a uma rede (VLAN). */
+    public function criarWifiPortal(string $ssid, string $redeId): array
+    {
+        $ref = $this->siteRefAtual();
+        if ($ref === null) {
+            return ['success' => false, 'message' => 'Site do UniFi Controller ainda não identificado.'];
+        }
+        // Network 8+ exige o grupo de APs; usa o padrão do site.
+        $grupos = $this->chamarApi('GET', "/proxy/network/v2/api/site/{$ref}/apgroups");
+        $grupoIds = array_values(array_filter(array_map(fn ($g) => $g['_id'] ?? null, $grupos['dados'] ?? [])));
+        $usergroup = $this->chamarApi('GET', "/proxy/network/api/s/{$ref}/rest/usergroup");
+        $usergroupId = $usergroup['dados']['data'][0]['_id'] ?? null;
+
+        $corpo = [
+            'name' => $ssid, 'enabled' => true, 'security' => 'open', 'is_guest' => true,
+            'networkconf_id' => $redeId, 'wlan_band' => 'both', 'hide_ssid' => false,
+            'l2_isolation' => true, 'ap_group_ids' => $grupoIds, 'ap_group_mode' => 'all',
+        ];
+        if ($usergroupId) {
+            $corpo['usergroup_id'] = $usergroupId;
+        }
+        $r = $this->chamarApi('POST', "/proxy/network/api/s/{$ref}/rest/wlanconf", $corpo);
+        $ok = $r['sucesso'] && ($r['dados']['meta']['rc'] ?? '') === 'ok';
+
+        return ['success' => $ok, 'id' => $r['dados']['data'][0]['_id'] ?? null,
+            'message' => $ok ? "Wi-Fi \"{$ssid}\" criado." : ('UniFi recusou o Wi-Fi: ' . ($r['dados']['meta']['msg'] ?? $r['mensagem']))];
+    }
+
+    public function excluirWifi(string $id): array
+    {
+        $ref = $this->siteRefAtual();
+        $r = $this->chamarApi('DELETE', "/proxy/network/api/s/{$ref}/rest/wlanconf/" . rawurlencode($id));
+        $ok = $r['sucesso'] && ($r['dados']['meta']['rc'] ?? '') === 'ok';
+
+        return ['success' => $ok, 'message' => $ok ? 'Wi-Fi excluído.' : ('UniFi recusou: ' . ($r['dados']['meta']['msg'] ?? $r['mensagem']))];
+    }
+
+    /*
+     * ---------------------------------------------------------------
      * UniFi Protect (câmeras) -- mesma API Key do Network, mas só a API
      * de integração (/proxy/protect/integration/v1) aceita a chave; a
      * privada (/proxy/protect/api) responde 401 (confirmado no UDM Pro

@@ -534,6 +534,49 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
     <?php endif; ?>
 
     <?php
+    $temWifi = PermissionService::temAcesso('wifi_painel') || PermissionService::temAcesso('wifi_liberar') || PermissionService::temAcesso('wifi_pessoas')
+        || PermissionService::temAcesso('wifi_regras') || PermissionService::temAcesso('wifi_relatorios') || PermissionService::temAcesso('wifi_configuracoes');
+    $abrirWifi = str_starts_with($uriAtual, '/wifi');
+    $wifiPendentes = 0;
+    if ($temWifi && PermissionService::temAcesso('wifi_liberar')) {
+        try {
+            $wifiPendentes = (int)((new \App\Repositories\WifiRepository())->contarPorStatus()['pendente'] ?? 0);
+        } catch (\Throwable $e) {
+            // tabelas do Wi-Fi ainda não migradas
+        }
+    }
+    ?>
+    <?php if ($temWifi): ?>
+    <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuWifi" aria-expanded="<?= $abrirWifi ? 'true' : 'false' ?>">
+        <span><i class="bi bi-wifi me-2"></i>Wi-Fi<?php if ($wifiPendentes): ?> <span class="rd-menu-badge ms-1" title="Cadastros aguardando liberação"><?= $wifiPendentes ?></span><?php endif; ?></span>
+        <i class="bi bi-chevron-right chevron"></i>
+    </button>
+    <div class="collapse <?= $abrirWifi ? 'show' : '' ?>" id="menuWifi">
+        <?php if (PermissionService::temAcesso('wifi_painel')): ?>
+        <a href="<?= url('/wifi') ?>" class="<?= $uriAtual === '/wifi' ? 'active' : '' ?>"><i class="bi bi-broadcast me-2"></i> Conectados agora</a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('wifi_liberar')): ?>
+        <a href="<?= url('/wifi/liberacoes') ?>" class="rd-menu-item-badge <?= $uriAtual === '/wifi/liberacoes' ? 'active' : '' ?>">
+            <span><i class="bi bi-person-check me-2"></i> Liberações</span>
+            <?php if ($wifiPendentes): ?><span class="rd-menu-badge"><?= $wifiPendentes ?></span><?php endif; ?>
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('wifi_pessoas') || PermissionService::temAcesso('wifi_liberar')): ?>
+        <a href="<?= url('/wifi/pessoas') ?>" class="<?= str_starts_with($uriAtual, '/wifi/pessoas') ? 'active' : '' ?>"><i class="bi bi-people me-2"></i> Cadastros</a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('wifi_regras')): ?>
+        <a href="<?= url('/wifi/perfis') ?>" class="<?= str_starts_with($uriAtual, '/wifi/perfis') ? 'active' : '' ?>"><i class="bi bi-sliders me-2"></i> Perfis e regras</a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('wifi_relatorios')): ?>
+        <a href="<?= url('/wifi/relatorios') ?>" class="<?= str_starts_with($uriAtual, '/wifi/relatorios') ? 'active' : '' ?>"><i class="bi bi-clipboard-data me-2"></i> Relatórios e LGPD</a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('wifi_configuracoes')): ?>
+        <a href="<?= url('/wifi/configuracoes') ?>" class="<?= str_starts_with($uriAtual, '/wifi/configuracoes') || str_starts_with($uriAtual, '/wifi/rede') ? 'active' : '' ?>"><i class="bi bi-gear me-2"></i> Configurações</a>
+        <?php endif; ?>
+    </div>
+    <?php endif; ?>
+
+    <?php
     $temInfra = PermissionService::temAcesso('infra_servidor')
         || PermissionService::temAcesso('infra_hardware')
         || PermissionService::temAcesso('infra_rede')

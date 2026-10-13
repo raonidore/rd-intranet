@@ -1,0 +1,6 @@
+# Portal do Wi-Fi (/guest, Alias criado por wifi_portal_apache_web.sh):
+# tudo vai para o index.php daqui.
+RewriteEngine On
+RewriteBase /guest/
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^ index.php [QSA,L]

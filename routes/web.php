@@ -1203,3 +1203,36 @@ $router->post('/ativos/politicas/login-script/remover', [PoliticaController::cla
 $router->post('/ativos/politicas/login-script/instalar-em-lote', [PoliticaController::class, 'loginScriptInstalarEmLote']);
 $router->post('/ativos/politicas/login-script/remover-em-lote', [PoliticaController::class, 'loginScriptRemoverEmLote']);
 $router->get('/ativos/solicitacoes/arquivo', [AtivoController::class, 'baixarSolicitacaoArquivo']);
+
+// Wi-Fi / Captive Portal (o portal público em si fica em public/guest, fora deste router)
+$router->get('/wifi', [\App\Controllers\WifiController::class, 'painel']);
+$router->post('/wifi/sessao/derrubar', [\App\Controllers\WifiController::class, 'derrubar']);
+$router->post('/wifi/atualizar', [\App\Controllers\WifiController::class, 'atualizarConsumo']);
+$router->get('/wifi/liberacoes', [\App\Controllers\WifiController::class, 'liberacoes']);
+$router->post('/wifi/liberar', [\App\Controllers\WifiController::class, 'liberar']);
+$router->post('/wifi/recusar', [\App\Controllers\WifiController::class, 'recusar']);
+$router->post('/wifi/bloquear', [\App\Controllers\WifiController::class, 'bloquear']);
+$router->get('/wifi/pessoas', [\App\Controllers\WifiController::class, 'pessoas']);
+$router->get('/wifi/pessoas/nova', [\App\Controllers\WifiController::class, 'pessoaNova']);
+$router->post('/wifi/pessoas/nova', [\App\Controllers\WifiController::class, 'pessoaCriar']);
+$router->get('/wifi/pessoas/ver', [\App\Controllers\WifiController::class, 'pessoaVer']);
+$router->post('/wifi/pessoas/editar', [\App\Controllers\WifiController::class, 'pessoaEditar']);
+$router->post('/wifi/pessoas/excecoes', [\App\Controllers\WifiController::class, 'pessoaExcecoes']);
+$router->post('/wifi/pessoas/senha', [\App\Controllers\WifiController::class, 'pessoaSenha']);
+$router->post('/wifi/pessoas/aparelho', [\App\Controllers\WifiController::class, 'aparelho']);
+$router->get('/wifi/pessoas/exportar', [\App\Controllers\WifiController::class, 'pessoaExportar']);
+$router->post('/wifi/pessoas/anonimizar', [\App\Controllers\WifiController::class, 'pessoaAnonimizar']);
+$router->get('/wifi/perfis', [\App\Controllers\WifiController::class, 'perfis']);
+$router->get('/wifi/perfis/editar', [\App\Controllers\WifiController::class, 'perfilForm']);
+$router->post('/wifi/perfis/salvar', [\App\Controllers\WifiController::class, 'perfilSalvar']);
+$router->post('/wifi/perfis/excluir', [\App\Controllers\WifiController::class, 'perfilExcluir']);
+$router->get('/wifi/relatorios', [\App\Controllers\WifiController::class, 'relatorios']);
+$router->get('/wifi/relatorios/sites', [\App\Controllers\WifiController::class, 'sites']);
+$router->get('/wifi/configuracoes', [\App\Controllers\WifiController::class, 'configuracoes']);
+$router->post('/wifi/configuracoes/salvar', [\App\Controllers\WifiController::class, 'configuracoesSalvar']);
+$router->post('/wifi/configuracoes/filtro-instalar', [\App\Controllers\WifiController::class, 'filtroInstalar']);
+$router->post('/wifi/configuracoes/cpanel-testar', [\App\Controllers\WifiController::class, 'cpanelTestar']);
+$router->post('/wifi/configuracoes/https-emitir', [\App\Controllers\WifiController::class, 'httpsEmitir']);
+$router->post('/wifi/configuracoes/https-desligar', [\App\Controllers\WifiController::class, 'httpsDesligar']);
+$router->get('/wifi/rede', [\App\Controllers\WifiController::class, 'rede']);
+$router->post('/wifi/rede/aplicar', [\App\Controllers\WifiController::class, 'redeAplicar']);
