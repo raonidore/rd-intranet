@@ -2177,6 +2177,8 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
     const listaNomes = (itens, max = 3) => itens.length <= max ? itens.join(', ') : itens.slice(0, max).join(', ') + ` e mais ${itens.length - max}`;
     const vlansDe = ds => [...new Set(ds.map(d => d.vlan).filter(v => v != null))].sort((a, b) => a - b);
     const qtd = (n, um, varios) => n === 1 ? `1 ${um}` : `${n} ${varios}`;
+    // Anunciar rota IPv6 é papel do gateway; qualquer outro fazendo isso merece atenção.
+    const roteadorV6Estranho = d => !!d.roteador_ipv6 && !ehGatewayModelo(d.unifi_dispositivo) && d.ativo_tipo !== 'roteador';
     function explicarPorta(p) {
         const ds = p.dispositivos || [];
         if (!p.link || !ds.length) return null;
@@ -2257,7 +2259,9 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
             <div class="fw-semibold mb-1"><i class="bi bi-question-diamond"></i> E quando aparece "sem IP"?</div>
             <p class="small mb-1">O IP de cada MAC é buscado, nesta ordem, na tabela ARP do próprio switch, na ARP deste servidor, nos clientes e equipamentos
             do UniFi (quando a integração existe) e na última varredura do IP Scanner. A ARP do servidor e o IP Scanner só enxergam a rede do próprio
-            servidor; aparelhos de <strong>outras VLANs</strong> só ganham IP pelo UniFi.</p>
+            servidor; aparelhos de <strong>outras VLANs</strong> só ganham IP pelo UniFi. Aparelho que não tem IPv4 mas fala IPv6 aparece como
+            <strong>"só IPv6"</strong>; se ele se anuncia como roteador IPv6 sem ser o gateway, ganha um alerta -- costuma ser modem/roteador de
+            operadora ligado na rede.</p>
             <p class="small mb-0">${semIp.length
                 ? `Neste switch agora: <strong>${semIp.length}</strong> sem IP -- ${semIp.slice(0, 4).map(x => `porta ${numero(x.p)}: ${esc(nomeDisp(x.d) || x.d.fabricante || x.d.mac)}${x.d.vlan != null ? ' (VLAN ' + x.d.vlan + ')' : ''}`).join('; ')}${semIp.length > 4 ? '...' : ''}.
                    Gateways (o IP que o UniFi informa é o da internet) e aparelhos que só falaram com o switch e não com a rede costumam ficar assim.`
@@ -2362,7 +2366,7 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
     // ---------- tooltip ----------
     const tip = document.getElementById('swTooltip');
     function htmlDisp(d) {
-        return `<div class="disp"><span class="ip">${esc(d.ip || 'sem IP')}</span>${nomeDisp(d) ? ' · ' + esc(nomeDisp(d)) : ''}${d.vlan != null ? ' · VLAN ' + d.vlan : ''}
+        return `<div class="disp"><span class="ip">${esc(d.ip || (d.ipv6 ? 'só IPv6 ' + d.ipv6 : 'sem IP'))}</span>${nomeDisp(d) ? ' · ' + esc(nomeDisp(d)) : ''}${d.vlan != null ? ' · VLAN ' + d.vlan : ''}${roteadorV6Estranho(d) ? ' · <span style="color:#ffc107">roteador IPv6</span>' : ''}
             <div class="mac">${esc(d.mac)}${d.fabricante ? ' · ' + esc(d.fabricante) : ''}${d.wifi !== undefined ? ' · Wi-Fi ' + esc(d.wifi) + (d.wifi_ap ? ' (' + esc(d.wifi_ap) + ')' : '') : ''}</div></div>`;
     }
     chassi.querySelectorAll('.sw-porta').forEach(el => {
@@ -2413,7 +2417,8 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
             <div class="sw-detalhe-disp">
                 <div class="icone"><i class="bi ${d.ativo_id ? 'bi-pc-display' : 'bi-question-circle'}"></i></div>
                 <div class="flex-grow-1">
-                    <div><span class="font-monospace fw-semibold">${d.ativo_id ? `<a href="${URL_ATIVO}${parseInt(d.ativo_id, 10)}">${esc(d.ip)}</a>` : (d.ip ? esc(d.ip) : '<span class="fw-normal fst-italic text-muted">sem IP</span>')}</span>
+                    <div><span class="font-monospace fw-semibold">${d.ativo_id ? `<a href="${URL_ATIVO}${parseInt(d.ativo_id, 10)}">${esc(d.ip)}</a>` : (d.ip ? esc(d.ip) : (d.ipv6 ? `<span class="fw-normal">${esc(d.ipv6)}</span> <span class="badge text-bg-light border">só IPv6</span>` : '<span class="fw-normal fst-italic text-muted">sem IP</span>'))}</span>
+                        ${roteadorV6Estranho(d) ? '<span class="badge text-bg-warning ms-1" title="Este aparelho anuncia rota IPv6 na rede. Se não for o gateway, os computadores podem pegar IPv6 e sair para a internet por ele, por fora do gateway (comum em modem/roteador de operadora ligado na LAN)."><i class="bi bi-exclamation-triangle"></i> anuncia-se como roteador IPv6</span>' : ''}
                         ${nomeDisp(d) ? '· ' + esc(nomeDisp(d)) : ''}
                         ${d.vlan != null ? ' ' + chip(d.vlan, false) : ''}
                         ${d.wifi !== undefined ? `<span class="badge text-bg-light border ms-1"><i class="bi bi-wifi"></i> ${esc(d.wifi || 'Wi-Fi')}${d.wifi_ap ? ' · ' + esc(d.wifi_ap) : ''}</span>` : ''}
@@ -2451,12 +2456,14 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
         } else {
             nome = `<span class="text-muted">${esc(d.fabricante || d.mac || 'desconhecido')}</span>`;
         }
-        const ip = d.ip ? `<span class="disp-ip">${esc(d.ip)}</span>` : '<span class="disp-sem-ip" title="O switch viu o MAC, mas nenhuma fonte informou o IP">sem IP</span>';
+        const ip = d.ip ? `<span class="disp-ip">${esc(d.ip)}</span>`
+            : (d.ipv6 ? `<span class="disp-sem-ip" title="${esc(d.ipv6)}">só IPv6</span>` : '<span class="disp-sem-ip" title="O switch viu o MAC, mas nenhuma fonte informou o IP">sem IP</span>');
         const titulo = [d.ip, nomeDisp(d), d.vlan != null ? 'VLAN ' + d.vlan : '', d.wifi !== undefined ? 'Wi-Fi ' + (d.wifi || '') + (d.wifi_ap ? ' (' + d.wifi_ap + ')' : '') : '', d.mac, d.fabricante].filter(Boolean).join(' · ');
         const icone = cadastrado ? 'bi-pc-display text-primary' : (d.wifi !== undefined ? 'bi-wifi text-secondary' : 'bi-question-circle text-secondary');
         // VLAN só aparece quando ajuda: porta que leva mais de uma (trunk) ou dispositivo fora da nativa.
         const mostraVlan = d.vlan != null && (d.vlan !== portaAtual.vlan_nativa || (portaAtual.vlans || []).length > 1);
-        return `<div class="disp-linha" title="${esc(titulo)}"><i class="bi ${icone}"></i>${ip}<span class="disp-nome">${nome}</span>${mostraVlan ? chip(d.vlan, false) : ''}</div>`;
+        const alertaV6 = roteadorV6Estranho(d) ? '<i class="bi bi-exclamation-triangle-fill text-warning" title="Anuncia-se como roteador IPv6 na rede"></i>' : '';
+        return `<div class="disp-linha" title="${esc(titulo + (d.ipv6 ? ' · IPv6 ' + d.ipv6 : ''))}"><i class="bi ${icone}"></i>${ip}<span class="disp-nome">${nome}</span>${mostraVlan ? chip(d.vlan, false) : ''}${alertaV6}</div>`;
     }
     let portaAtual = {};
     function celulaDispositivos(ds, p) {

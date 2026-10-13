@@ -3119,13 +3119,41 @@ class AtivoService
         foreach ($clientesUnifi as $c) {
             $unifiPorMac[OmadaSshService::normalizarMac($c['mac'] ?? '')] = $c;
         }
+
+        // Vizinhos IPv6 deste servidor: aparelho que não tem IPv4 em lugar nenhum
+        // às vezes fala IPv6 -- e a marca "router" diz que ele anuncia rota IPv6
+        // na rede (visto no Maurílio: um aparelho com MAC 00:00:00:a1:00:03 e um
+        // modem de operadora com IPv6 público 2804:14c:... fazendo isso na LAN).
+        $ipv6Servidor = [];
+        foreach (explode("\n", (string)@shell_exec('ip -6 neigh show 2>/dev/null')) as $linha) {
+            if (!preg_match('/^(\S+)\s.*lladdr\s+(\S+)(.*)$/', $linha, $m)) {
+                continue;
+            }
+            $macV6 = OmadaSshService::normalizarMac($m[2]);
+            $global = !str_starts_with(strtolower($m[1]), 'fe80');
+            $atual = $ipv6Servidor[$macV6] ?? null;
+            // Prefere o endereço global ao link-local (fe80::), que só vale no próprio segmento.
+            if ($atual === null || ($global && !$atual['global'])) {
+                $ipv6Servidor[$macV6] = ['ip' => $m[1], 'global' => $global, 'roteador' => ($atual['roteador'] ?? false) || str_contains($m[3], 'router')];
+            } elseif (str_contains($m[3], 'router')) {
+                $ipv6Servidor[$macV6]['roteador'] = true;
+            }
+        }
         // Equipamentos UniFi (switch, gateway, AP) não são "clientes": vêm da lista
         // de dispositivos, pelo MAC principal ou de uma interface (ethernet_table).
         $unifiDispPorMac = [];
+        $ipGatewayPorVlan = [];
         if ($clientesUnifi !== [] || (new UnifiService())->configurado()) {
             foreach ((new UnifiService())->listarDispositivosLegado() as $dev) {
                 foreach (array_merge([$dev['mac'] ?? ''], array_column($dev['ethernet_table'] ?? [], 'mac')) as $m) {
                     $unifiDispPorMac[OmadaSshService::normalizarMac($m)] = $dev;
+                }
+            }
+            // IP do gateway em cada rede local ("192.168.0.1/24" -> 192.168.0.1), pra
+            // mostrar o gateway pelo IP da LAN em vez do IP de WAN que o UniFi informa.
+            foreach ((new UnifiService())->listarRedesConfiguradas() as $rede) {
+                if (!empty($rede['ip_subnet']) && in_array($rede['purpose'] ?? '', ['corporate', 'guest'], true)) {
+                    $ipGatewayPorVlan[empty($rede['vlan_enabled']) ? 1 : (int)($rede['vlan'] ?? 0)] = explode('/', $rede['ip_subnet'])[0];
                 }
             }
         }
@@ -3193,8 +3221,13 @@ class AtivoService
                     $disp['fabricante'] = ($disp['fabricante'] ?? '') !== '' ? $disp['fabricante'] : 'Ubiquiti';
                     // Marca como equipamento UniFi -- também trava a troca de VLAN dessa porta.
                     $disp['unifi_dispositivo'] = ($disp['unifi_dispositivo'] ?? '') !== '' ? $disp['unifi_dispositivo'] : (string)($devUnifi['model'] ?? 'UniFi');
-                    // Gateway reporta o IP da WAN em 'ip' -- não serve pra identificar na LAN.
+                    // Gateway reporta o IP da WAN em 'ip' -- não serve pra identificar na LAN:
+                    // usa o IP dele na rede (VLAN) em que o switch o viu.
                     $ehGateway = isset($devUnifi['wan1']) || isset($devUnifi['wan2']);
+                    if ($disp['ip'] === '' && $ehGateway && isset($ipGatewayPorVlan[$disp['vlan'] ?? 1])) {
+                        $disp['ip'] = $ipGatewayPorVlan[$disp['vlan'] ?? 1];
+                        $disp['ip_origem'] = 'unifi';
+                    }
                     if ($disp['ip'] === '' && !$ehGateway && !empty($devUnifi['ip'])) {
                         $disp['ip'] = (string)$devUnifi['ip'];
                         $disp['ip_origem'] = 'unifi';
@@ -3203,6 +3236,10 @@ class AtivoService
                 if ($disp['ip'] === '' && $doScan && !empty($doScan['ip'])) {
                     $disp['ip'] = $doScan['ip'];
                     $disp['ip_origem'] = 'scanner';
+                }
+                if (isset($ipv6Servidor[$mac])) {
+                    $disp['ipv6'] = $ipv6Servidor[$mac]['ip'];
+                    $disp['roteador_ipv6'] = $ipv6Servidor[$mac]['roteador'];
                 }
 
                 // Controller UniFi já traz nome/fabricante -- o IP Scanner só completa o que faltar.
