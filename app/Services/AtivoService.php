@@ -1597,6 +1597,7 @@ class AtivoService
                 'hostname' => (string)($c['name'] ?? ($c['hostname'] ?? '')),
                 'fabricante' => (string)($c['oui'] ?? ''),
                 'rede' => (string)($c['network'] ?? ''),
+                'network_id' => (string)($c['network_id'] ?? ''),
             ]);
         }
 
@@ -1665,6 +1666,13 @@ class AtivoService
             $comLink += $link ? 1 : 0;
             $nome = (string)($p['name'] ?? "Port {$numero}");
             $dispositivos = array_values($porPorta[$numero] ?? []);
+            foreach ($dispositivos as &$disp) {
+                if (isset($disp['network_id'])) {
+                    $disp['vlan'] = $redes[$disp['network_id']]['id'] ?? null;
+                    unset($disp['network_id']);
+                }
+            }
+            unset($disp);
 
             // Equipamento que o Controller não lista como cliente (ex.: sem IP
             // na rede) mas que a própria porta lembra como último conectado.
@@ -1721,7 +1729,7 @@ class AtivoService
         $coletado = [
             'unifi_nome' => (string)($legado['name'] ?? ''),
             'unifi_serial' => (string)($legado['serial'] ?? ''),
-            'unifi_portas' => $this->enriquecerDispositivosPortas($portas),
+            'unifi_portas' => $this->enriquecerDispositivosPortas($portas, $clientesLegado),
             'unifi_vlans' => $vlans,
             'unifi_portas_resumo' => "{$comLink} de " . count($portas),
             'unifi_mac_total' => (string)array_sum(array_map(fn ($p) => count($p['dispositivos']), $portas)),
@@ -2937,8 +2945,32 @@ class AtivoService
      * origem fica gravada). Hostname/fabricante vêm do IP Scanner, e o IP
      * é casado com o cadastro de Ativos pra virar link na ficha.
      */
-    private function enriquecerDispositivosPortas(array $portas): array
+    private function enriquecerDispositivosPortas(array $portas, ?array $clientesUnifi = null): array
     {
+        // Clientes do UniFi Controller (quando a integração existe): sabe IP,
+        // nome e VLAN até de quem está em outra VLAN que este servidor não
+        // enxerga -- ex.: Wi-Fi de visitantes passando pela porta trunk do AP
+        // num switch TP-Link (visto no enzilabprime: 4 MACs "IP desconhecido"
+        // eram celulares/PCs no Wi-Fi das VLANs 2, 3 e 4 do AP Recepção).
+        if ($clientesUnifi === null) {
+            $unifi = new UnifiService();
+            $clientesUnifi = $unifi->configurado() ? $unifi->listarClientesLegado() : [];
+        }
+        $unifiPorMac = [];
+        foreach ($clientesUnifi as $c) {
+            $unifiPorMac[OmadaSshService::normalizarMac($c['mac'] ?? '')] = $c;
+        }
+        // Equipamentos UniFi (switch, gateway, AP) não são "clientes": vêm da lista
+        // de dispositivos, pelo MAC principal ou de uma interface (ethernet_table).
+        $unifiDispPorMac = [];
+        if ($clientesUnifi !== [] || (new UnifiService())->configurado()) {
+            foreach ((new UnifiService())->listarDispositivosLegado() as $dev) {
+                foreach (array_merge([$dev['mac'] ?? ''], array_column($dev['ethernet_table'] ?? [], 'mac')) as $m) {
+                    $unifiDispPorMac[OmadaSshService::normalizarMac($m)] = $dev;
+                }
+            }
+        }
+
         $arpServidor = [];
         foreach (explode("\n", (string)@shell_exec('ip neigh show 2>/dev/null')) as $linha) {
             if (preg_match('/^(\d{1,3}(?:\.\d{1,3}){3})\s.*lladdr\s+(\S+)/', $linha, $m)) {
@@ -2972,6 +3004,42 @@ class AtivoService
                 if ($disp['ip'] === '' && isset($arpServidor[$mac])) {
                     $disp['ip'] = $arpServidor[$mac];
                     $disp['ip_origem'] = 'servidor';
+                }
+                $doUnifi = $unifiPorMac[$mac] ?? null;
+                if ($doUnifi) {
+                    $ipUnifi = (string)($doUnifi['ip'] ?? ($doUnifi['last_ip'] ?? ''));
+                    if ($disp['ip'] === '' && $ipUnifi !== '') {
+                        $disp['ip'] = $ipUnifi;
+                        $disp['ip_origem'] = 'unifi';
+                    }
+                    if (($disp['hostname'] ?? '') === '') {
+                        $disp['hostname'] = (string)($doUnifi['name'] ?? ($doUnifi['hostname'] ?? ''));
+                    }
+                    if (($disp['fabricante'] ?? '') === '') {
+                        $disp['fabricante'] = (string)($doUnifi['oui'] ?? '');
+                    }
+                    if (!isset($disp['vlan']) && isset($doUnifi['vlan'])) {
+                        $disp['vlan'] = (int)$doUnifi['vlan'];
+                    }
+                    if (empty($doUnifi['is_wired'])) {
+                        $disp['wifi'] = (string)($doUnifi['essid'] ?? '');
+                        $disp['wifi_ap'] = (string)($doUnifi['last_uplink_name'] ?? '');
+                    }
+                }
+                $devUnifi = $unifiDispPorMac[$mac] ?? null;
+                if ($devUnifi) {
+                    if (($disp['hostname'] ?? '') === '') {
+                        $disp['hostname'] = (string)($devUnifi['name'] ?? '');
+                    }
+                    $disp['fabricante'] = ($disp['fabricante'] ?? '') !== '' ? $disp['fabricante'] : 'Ubiquiti';
+                    // Marca como equipamento UniFi -- também trava a troca de VLAN dessa porta.
+                    $disp['unifi_dispositivo'] = ($disp['unifi_dispositivo'] ?? '') !== '' ? $disp['unifi_dispositivo'] : (string)($devUnifi['model'] ?? 'UniFi');
+                    // Gateway reporta o IP da WAN em 'ip' -- não serve pra identificar na LAN.
+                    $ehGateway = isset($devUnifi['wan1']) || isset($devUnifi['wan2']);
+                    if ($disp['ip'] === '' && !$ehGateway && !empty($devUnifi['ip'])) {
+                        $disp['ip'] = (string)$devUnifi['ip'];
+                        $disp['ip_origem'] = 'unifi';
+                    }
                 }
                 if ($disp['ip'] === '' && $doScan && !empty($doScan['ip'])) {
                     $disp['ip'] = $doScan['ip'];

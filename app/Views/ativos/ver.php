@@ -1847,6 +1847,16 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     display:flex; align-items:center; justify-content:center; flex-shrink:0; }
 tr.linha-selecionada > td { background:#e7f1ff !important; }
 
+/* "Como ler este painel" */
+.sw-explica { background:#f6f9ff; border-left:3px solid #0d6efd; border-radius:4px; padding:.5rem .75rem; font-size:.82rem; margin-bottom:.6rem; }
+.sw-explica .bi { color:#0d6efd; }
+.sw-esquema { font-family:var(--bs-font-monospace); font-size:.78rem; background:#1f2329; color:#e9ecef; border-radius:8px; padding:.85rem 1rem;
+    white-space:pre; overflow-x:auto; line-height:1.55; }
+.sw-esquema b { color:#8ec5ff; font-weight:600; } .sw-esquema i { color:#ffc107; font-style:normal; } .sw-esquema em { color:#3ddc84; font-style:normal; }
+.sw-exemplo { border:1px solid #e9ecef; border-radius:8px; padding:.75rem; height:100%; }
+.sw-exemplo .titulo { font-weight:600; font-size:.88rem; margin-bottom:.35rem; }
+.sw-exemplo ul { padding-left:1.1rem; margin:.4rem 0 0; font-size:.8rem; }
+
 /* Coluna "Dispositivos" da tabela: um por linha */
 .disp-lista { display:flex; flex-direction:column; gap:3px; }
 .disp-linha { display:flex; align-items:baseline; gap:.45rem; line-height:1.3; min-width:0; }
@@ -1960,6 +1970,17 @@ tr.linha-selecionada > td { background:#e7f1ff !important; }
                 <tbody id="swTabela"></tbody>
             </table>
         </div>
+    </div>
+
+    <!-- Como ler este painel: explicação com exemplos deste próprio switch -->
+    <div class="card border-0 shadow-sm mt-3">
+        <div class="card-header bg-white">
+            <a class="text-decoration-none fw-semibold d-flex align-items-center gap-2" data-bs-toggle="collapse" href="#swComoLer" role="button" aria-expanded="false">
+                <i class="bi bi-question-circle"></i> Como ler este painel: por que um aparelho aparece numa porta?
+                <i class="bi bi-chevron-down ms-auto small"></i>
+            </a>
+        </div>
+        <div class="collapse" id="swComoLer"><div class="card-body" id="swComoLerCorpo"></div></div>
     </div>
 
         <div class="sw-tooltip" id="swTooltip"></div>
@@ -2140,6 +2161,108 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
             </div>`;
     }
 
+    // ---------- "Por que esse aparelho aparece nesta porta?" ----------
+    // O switch anota o MAC de ORIGEM de todo pacote que entra por cada porta --
+    // por isso numa porta de AP aparecem os clientes do Wi-Fi dele, e na porta
+    // de outro switch/gateway aparece tudo o que está do outro lado.
+    const ehGatewayModelo = m => /^(UDM|UDR|UXG|USG|UCG|UDW|UX\d|EFG)/i.test(m || '');
+    const ehSwitchModelo = m => /^(US|USW|USL|USM|USP|USF|USC)/i.test(m || '') && !ehGatewayModelo(m);
+    const listaNomes = (itens, max = 3) => itens.length <= max ? itens.join(', ') : itens.slice(0, max).join(', ') + ` e mais ${itens.length - max}`;
+    const vlansDe = ds => [...new Set(ds.map(d => d.vlan).filter(v => v != null))].sort((a, b) => a - b);
+    const qtd = (n, um, varios) => n === 1 ? `1 ${um}` : `${n} ${varios}`;
+    function explicarPorta(p) {
+        const ds = p.dispositivos || [];
+        if (!p.link || !ds.length) return null;
+        const n = numero(p);
+        const wifi = ds.filter(d => d.wifi !== undefined);
+        const unifi = ds.filter(d => d.unifi_dispositivo);
+        const gateway = unifi.find(d => ehGatewayModelo(d.unifi_dispositivo));
+        const outroSwitch = unifi.find(d => ehSwitchModelo(d.unifi_dispositivo));
+        const aps = [...new Set(wifi.map(d => (d.wifi_ap || '').trim()).filter(Boolean))];
+        // AP UniFi visto pelo LLDP/lista de equipamentos (não é switch nem gateway).
+        const apUnifi = unifi.find(d => !ehGatewayModelo(d.unifi_dispositivo) && !ehSwitchModelo(d.unifi_dispositivo));
+        const vls = vlansDe(ds);
+        const txtVlans = vls.length > 1 ? ` (VLANs ${vls.join(', ')})` : '';
+        const vlsWifi = vlansDe(wifi);
+        const txtVlansWifi = vlsWifi.length ? ` (${vlsWifi.length > 1 ? 'VLANs' : 'VLAN'} ${vlsWifi.join(', ')})` : '';
+
+        if (p.uplink || gateway) {
+            return { tipo: 'uplink', texto: `<strong>Porta de saída para a rede${gateway ? ' (gateway ' + esc((gateway.hostname || gateway.unifi_dispositivo).trim()) + ')' : ''}.</strong>
+                ${ds.length === 1 ? 'O aparelho listado é o que está do outro lado deste cabo.' : `Aparecem aqui os ${ds.length} aparelhos cujo tráfego chega por este cabo vindo do outro lado${txtVlans} -- não estão ligados nesta porta.`}` };
+        }
+        if (outroSwitch || ds.length > 6 && !wifi.length) {
+            return { tipo: 'switch', texto: `<strong>Porta ligada a outro switch${outroSwitch ? ' (' + esc((outroSwitch.hostname || outroSwitch.unifi_dispositivo).trim()) + ')' : ''}.</strong>
+                ${qtd(ds.length, 'aparelho aparece', 'aparelhos aparecem')} aqui: o switch de baixo e quem está ligado nele${txtVlans}; o tráfego deles passa por esta porta.` };
+        }
+        if (wifi.length) {
+            return { tipo: 'ap', texto: `<strong>Porta de access point${aps.length ? ' (' + esc(aps.join(', ')) + ')' : ''}.</strong>
+                Além do AP, passa${wifi.length > 1 ? 'm' : ''} por aqui ${qtd(wifi.length, 'aparelho conectado', 'aparelhos conectados')} no Wi-Fi dele${txtVlansWifi}: ${esc(listaNomes(wifi.map(d => (nomeDisp(d) || d.ip || d.mac).trim())))}. ${wifi.length > 1 ? 'Eles não têm' : 'Ele não tem'} cabo nesta porta.` };
+        }
+        if (apUnifi) {
+            return { tipo: 'ap', texto: `<strong>Access point ligado nesta porta (${esc((apUnifi.hostname || apUnifi.unifi_dispositivo).trim())}).</strong>
+                Os aparelhos do Wi-Fi dele também passam por este cabo, mas o UniFi os lista direto no AP (aba Wi-Fi da ficha do AP), não na porta do switch.` };
+        }
+        if (ds.length === 1) {
+            return { tipo: 'direto', texto: `<strong>Aparelho ligado direto nesta porta</strong> (porta ${n}).` };
+        }
+        return { tipo: 'varios', texto: `<strong>${ds.length} aparelhos nesta porta</strong>${txtVlans} -- provavelmente há um switch simples, um telefone IP com PC atrás ou um servidor com máquinas virtuais do outro lado do cabo.` };
+    }
+
+    function montarComoLer() {
+        const comLink = portas.filter(p => p.link && (p.dispositivos || []).length);
+        const achar = tipo => comLink.find(p => (explicarPorta(p) || {}).tipo === tipo);
+        const direto = achar('direto');
+        const ap = achar('ap');
+        const ponte = achar('switch') || achar('uplink');
+        const semIp = [];
+        portas.forEach(p => (p.dispositivos || []).forEach(d => { if (!d.ip) semIp.push({ p, d }); }));
+
+        const exemploDisp = d => `${d.ip ? '<code>' + esc(d.ip) + '</code> ' : ''}${esc(nomeDisp(d) || d.mac)}${d.vlan != null ? ' ' + chip(d.vlan, false) : ''}${d.wifi !== undefined ? ' <i class="bi bi-wifi"></i>' : ''}`;
+        const card = (titulo, icone, p, corpo) => `<div class="col-md-4"><div class="sw-exemplo">
+            <div class="titulo"><i class="bi ${icone}"></i> ${titulo}</div>
+            ${p ? `<div class="small text-muted mb-1">Neste switch: porta <a href="#" data-ir-porta="${esc(p.porta)}">${numero(p)}</a></div>${corpo}` : '<div class="small text-muted">Não há uma porta assim neste switch agora.</div>'}
+        </div></div>`;
+
+        let esquemaAp = '';
+        const cli = ap ? (ap.dispositivos || []).filter(d => d.wifi !== undefined).slice(0, 3) : [];
+        if (cli.length) {
+            const nomeAp = (cli[0] && cli[0].wifi_ap) || 'AP';
+            esquemaAp = cli.map((d, i) => `${esc(String(nomeDisp(d) || d.mac).slice(0, 22).padEnd(22))} <i>))) Wi-Fi ${esc(String(d.wifi || '').slice(0, 24).padEnd(24))}</i>${i === 0 ? ` ─┐` : ` ─┤`}`).join('\n')
+                + `\n${' '.repeat(52)}├─ <b>${esc(nomeAp)}</b> ──cabo──> <em>porta ${numero(ap)} deste switch</em>`;
+        }
+
+        document.getElementById('swComoLerCorpo').innerHTML = `
+            <p class="mb-2">O switch não sabe o IP de ninguém: ele anota o <strong>MAC de origem de todo pacote que entra por cada porta</strong>,
+            pra saber por qual porta devolver a resposta. Por isso a lista de uma porta mostra <strong>todos os aparelhos cujo tráfego passa por ela</strong> --
+            não só o que está espetado no cabo.</p>
+            ${esquemaAp ? `<div class="sw-esquema mb-3">${esquemaAp}</div>
+                <p class="small text-muted">Exemplo real deste switch: os aparelhos à esquerda estão no Wi-Fi; o access point põe o tráfego deles no cabo,
+                cada um com a etiqueta da sua VLAN, e o switch passa a "vê-los" na porta ${numero(ap)}.</p>` : ''}
+            <div class="row g-3 mb-3">
+                ${card('Aparelho ligado direto', 'bi-pc-display', direto, direto ? `<div class="small">${exemploDisp(direto.dispositivos[0])}</div>
+                    <div class="small text-muted mt-1">Só ele aparece: é o caso comum de computador, impressora ou telefone.</div>` : '')}
+                ${card('Porta de access point', 'bi-wifi', ap, ap ? `<ul>${(ap.dispositivos || []).slice(0, 4).map(d => `<li>${exemploDisp(d)}</li>`).join('')}</ul>
+                    <div class="small text-muted mt-1">${cli.length ? 'O AP e todos os clientes do Wi-Fi dele, de todas as VLANs que ele leva.' : 'Aqui aparece só o AP: o UniFi lista os clientes do Wi-Fi na ficha do próprio AP (aba Wi-Fi).'}</div>` : '')}
+                ${card('Porta para outro switch ou gateway', 'bi-diagram-3', ponte, ponte ? `<div class="small">${(ponte.dispositivos || []).length} aparelhos nesta porta, por exemplo:</div>
+                    <ul>${(ponte.dispositivos || []).slice(0, 3).map(d => `<li>${exemploDisp(d)}</li>`).join('')}</ul>
+                    <div class="small text-muted mt-1">Tudo o que está do outro lado do cabo aparece aqui.</div>` : '')}
+            </div>
+            <div class="fw-semibold mb-1"><i class="bi bi-question-diamond"></i> E quando aparece "sem IP"?</div>
+            <p class="small mb-1">O IP de cada MAC é buscado, nesta ordem, na tabela ARP do próprio switch, na ARP deste servidor, nos clientes e equipamentos
+            do UniFi (quando a integração existe) e na última varredura do IP Scanner. A ARP do servidor e o IP Scanner só enxergam a rede do próprio
+            servidor; aparelhos de <strong>outras VLANs</strong> só ganham IP pelo UniFi.</p>
+            <p class="small mb-0">${semIp.length
+                ? `Neste switch agora: <strong>${semIp.length}</strong> sem IP -- ${semIp.slice(0, 4).map(x => `porta ${numero(x.p)}: ${esc(nomeDisp(x.d) || x.d.fabricante || x.d.mac)}${x.d.vlan != null ? ' (VLAN ' + x.d.vlan + ')' : ''}`).join('; ')}${semIp.length > 4 ? '...' : ''}.
+                   Gateways (o IP que o UniFi informa é o da internet) e aparelhos que só falaram com o switch e não com a rede costumam ficar assim.`
+                : 'Neste switch agora: <strong>nenhum</strong> aparelho sem IP.'}</p>`;
+
+        document.querySelectorAll('[data-ir-porta]').forEach(a => a.addEventListener('click', e => {
+            e.preventDefault();
+            selecionar(a.dataset.irPorta);
+            document.getElementById('swDetalhe').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }));
+    }
+
     // ---------- resumo ----------
     const ativas = portas.filter(p => p.link).length;
     const pct = v => parseInt(v, 10) || 0;
@@ -2204,8 +2327,8 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
     // ---------- tooltip ----------
     const tip = document.getElementById('swTooltip');
     function htmlDisp(d) {
-        return `<div class="disp"><span class="ip">${esc(d.ip || 'IP desconhecido')}</span>${nomeDisp(d) ? ' · ' + esc(nomeDisp(d)) : ''}
-            <div class="mac">${esc(d.mac)}${d.fabricante ? ' · ' + esc(d.fabricante) : ''}</div></div>`;
+        return `<div class="disp"><span class="ip">${esc(d.ip || 'sem IP')}</span>${nomeDisp(d) ? ' · ' + esc(nomeDisp(d)) : ''}${d.vlan != null ? ' · VLAN ' + d.vlan : ''}
+            <div class="mac">${esc(d.mac)}${d.fabricante ? ' · ' + esc(d.fabricante) : ''}${d.wifi !== undefined ? ' · Wi-Fi ' + esc(d.wifi) + (d.wifi_ap ? ' (' + esc(d.wifi_ap) + ')' : '') : ''}</div></div>`;
     }
     chassi.querySelectorAll('.sw-porta').forEach(el => {
         el.addEventListener('mouseenter', () => {
@@ -2247,13 +2370,18 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
                 ${p.uplink ? '<span class="badge text-bg-success">Uplink</span>' : ''}
                 ${p.habilitada === false ? '<span class="badge text-bg-danger">Porta desabilitada</span>' : ''}
             </div>`;
-        document.getElementById('swDetalheCorpo').innerHTML = blocoVlanPorta(p) + extrasUnifi + (ds.length ? ds.map(d => `
+        const explicacao = explicarPorta(p);
+        document.getElementById('swDetalheCorpo').innerHTML = (explicacao ? `<div class="sw-explica"><i class="bi bi-info-circle"></i> ${explicacao.texto}</div>` : '')
+            + blocoVlanPorta(p) + extrasUnifi + (ds.length ? ds.map(d => `
             <div class="sw-detalhe-disp">
                 <div class="icone"><i class="bi ${d.ativo_id ? 'bi-pc-display' : 'bi-question-circle'}"></i></div>
                 <div class="flex-grow-1">
-                    <div><span class="font-monospace fw-semibold">${d.ativo_id ? `<a href="${URL_ATIVO}${parseInt(d.ativo_id, 10)}">${esc(d.ip)}</a>` : esc(d.ip || 'IP desconhecido')}</span>
+                    <div><span class="font-monospace fw-semibold">${d.ativo_id ? `<a href="${URL_ATIVO}${parseInt(d.ativo_id, 10)}">${esc(d.ip)}</a>` : (d.ip ? esc(d.ip) : '<span class="fw-normal fst-italic text-muted">sem IP</span>')}</span>
                         ${nomeDisp(d) ? '· ' + esc(nomeDisp(d)) : ''}
+                        ${d.vlan != null ? ' ' + chip(d.vlan, false) : ''}
+                        ${d.wifi !== undefined ? `<span class="badge text-bg-light border ms-1"><i class="bi bi-wifi"></i> ${esc(d.wifi || 'Wi-Fi')}${d.wifi_ap ? ' · ' + esc(d.wifi_ap) : ''}</span>` : ''}
                         ${d.ip_origem === 'scanner' ? '<span class="badge text-bg-light border ms-1">IP da varredura</span>' : ''}
+                        ${d.ip_origem === 'unifi' ? '<span class="badge text-bg-light border ms-1">IP do UniFi</span>' : ''}
                         ${d.ativo_id ? '<span class="badge text-bg-primary ms-1">Ativo cadastrado</span>' : ''}</div>
                     <div class="small text-muted font-monospace">${esc(d.mac)}${d.fabricante ? ' · ' + esc(d.fabricante) : ''}</div>
                 </div>
@@ -2284,10 +2412,15 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
             nome = `<span class="text-muted">${esc(d.fabricante || d.mac || 'desconhecido')}</span>`;
         }
         const ip = d.ip ? `<span class="disp-ip">${esc(d.ip)}</span>` : '<span class="disp-sem-ip" title="O switch viu o MAC, mas nenhuma fonte informou o IP">sem IP</span>';
-        const titulo = [d.ip, nomeDisp(d), d.mac, d.fabricante].filter(Boolean).join(' · ');
-        return `<div class="disp-linha" title="${esc(titulo)}"><i class="bi ${cadastrado ? 'bi-pc-display text-primary' : 'bi-question-circle text-secondary'}"></i>${ip}<span class="disp-nome">${nome}</span></div>`;
+        const titulo = [d.ip, nomeDisp(d), d.vlan != null ? 'VLAN ' + d.vlan : '', d.wifi !== undefined ? 'Wi-Fi ' + (d.wifi || '') + (d.wifi_ap ? ' (' + d.wifi_ap + ')' : '') : '', d.mac, d.fabricante].filter(Boolean).join(' · ');
+        const icone = cadastrado ? 'bi-pc-display text-primary' : (d.wifi !== undefined ? 'bi-wifi text-secondary' : 'bi-question-circle text-secondary');
+        // VLAN só aparece quando ajuda: porta que leva mais de uma (trunk) ou dispositivo fora da nativa.
+        const mostraVlan = d.vlan != null && (d.vlan !== portaAtual.vlan_nativa || (portaAtual.vlans || []).length > 1);
+        return `<div class="disp-linha" title="${esc(titulo)}"><i class="bi ${icone}"></i>${ip}<span class="disp-nome">${nome}</span>${mostraVlan ? chip(d.vlan, false) : ''}</div>`;
     }
-    function celulaDispositivos(ds) {
+    let portaAtual = {};
+    function celulaDispositivos(ds, p) {
+        portaAtual = p || {};
         if (!ds.length) return '<span class="text-muted">—</span>';
         // Primeiro o que a pessoa reconhece: ativo cadastrado, depois quem tem nome, depois quem tem IP.
         const peso = d => (d.ativo_id ? 4 : 0) + (d.hostname ? 2 : 0) + (d.ip ? 1 : 0);
@@ -2305,7 +2438,7 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
             <td>${esc(velocidade(p.velocidade) || '—')}</td><td>${esc(p.meio)}</td>
             ${DADOS.fonte === 'unifi' ? `<td>${htmlPoe(p)}</td><td class="small text-nowrap">${p.link ? esc(p.trafego_rx) + ' / ' + esc(p.trafego_tx) : '—'}</td>` : ''}
             <td class="text-nowrap">${chipsVlansPorta(p)}</td>
-            <td class="small">${celulaDispositivos(ds)}</td>
+            <td class="small">${celulaDispositivos(ds, p)}</td>
         </tr>`;
     }).join('');
     document.querySelectorAll('#swTabela tr').forEach(tr => tr.addEventListener('click', () => {
@@ -2329,6 +2462,8 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
         });
         resultado.textContent = termo === '' ? '' : (achadas.length ? `Encontrado na(s) porta(s): ${achadas.join(', ')}` : 'Nada encontrado em nenhuma porta.');
     });
+
+    montarComoLer();
 
     // ---------- VLANs: tabela ----------
     const ehUnifi = DADOS.fonte === 'unifi';

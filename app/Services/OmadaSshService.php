@@ -295,7 +295,7 @@ class OmadaSshService
         $macsPorPorta = $this->interpretarTabelaMac($saidas['show mac address-table dynamic']);
         foreach ($portas as &$porta) {
             $porta['dispositivos'] = array_map(
-                fn ($mac) => ['mac' => $mac, 'ip' => $arp[$mac] ?? '', 'ip_origem' => isset($arp[$mac]) ? 'switch' : ''],
+                fn ($e) => ['mac' => $e['mac'], 'vlan' => $e['vlan'], 'ip' => $arp[$e['mac']] ?? '', 'ip_origem' => isset($arp[$e['mac']]) ? 'switch' : ''],
                 $macsPorPorta[$porta['porta']] ?? []
             );
 
@@ -422,13 +422,14 @@ class OmadaSshService
     }
 
     /** "MAC  VLAN  Porta  Tipo  Aging" -> [porta => [mac, ...]] */
+    /** "MAC  VLAN  Porta  Tipo  Aging" -> [porta => [['mac' => ..., 'vlan' => 3], ...]] -- a VLAN é onde o switch aprendeu o MAC. */
     private function interpretarTabelaMac(string $saida): array
     {
         $porPorta = [];
 
         foreach (explode("\n", $saida) as $linha) {
-            if (preg_match('/^\s*([0-9a-f]{2}(?::[0-9a-f]{2}){5})\s+\d+\s+(\S+)\s+/i', $linha, $m)) {
-                $porPorta[$m[2]][] = self::normalizarMac($m[1]);
+            if (preg_match('/^\s*([0-9a-f]{2}(?::[0-9a-f]{2}){5})\s+(\d+)\s+(\S+)\s+/i', $linha, $m)) {
+                $porPorta[$m[3]][] = ['mac' => self::normalizarMac($m[1]), 'vlan' => (int)$m[2]];
             }
         }
 
