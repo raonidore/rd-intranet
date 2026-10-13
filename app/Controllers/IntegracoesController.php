@@ -117,6 +117,7 @@ class IntegracoesController extends Controller
             'sshConfigurado' => $ssh->configurado(),
             'sshUsuarioAtual' => $ssh->usuarioAtual(),
             'sshPortaAtual' => $ssh->portaAtual(),
+            'sshManutUsuarioAtual' => $ssh->usuarioManutencaoAtual(),
         ]);
     }
 
@@ -134,6 +135,9 @@ class IntegracoesController extends Controller
         }
         if ($salvou && $modo !== OmadaService::MODO_CONTROLLER) {
             $salvou = (new OmadaSshService())->salvarConfiguracao($_POST['ssh_usuario'] ?? '', $_POST['ssh_senha'] ?? '', $_POST['ssh_porta'] ?? '');
+            if ($salvou) {
+                (new OmadaSshService())->salvarCredencialManutencao($_POST['manut_usuario'] ?? '', $_POST['manut_senha'] ?? '');
+            }
         }
 
         // Só troca o modo quando a credencial dele foi aceita -- senão um

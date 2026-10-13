@@ -1624,6 +1624,39 @@ class AtivoService
             ]);
         }
 
+        // Redes LAN do site (= VLANs). A padrão (sem vlan_enabled) é a VLAN 1.
+        $redes = [];
+        $redePadraoId = null;
+        $dispositivosPorRede = [];
+        foreach ($clientesLegado as $c) {
+            if (!empty($c['network_id'])) {
+                $dispositivosPorRede[$c['network_id']] = ($dispositivosPorRede[$c['network_id']] ?? 0) + 1;
+            }
+        }
+        foreach ($unifi->listarRedesConfiguradas() as $rede) {
+            if (!in_array($rede['purpose'] ?? '', ['corporate', 'guest', 'vlan-only'], true)) {
+                continue;
+            }
+            $padrao = empty($rede['vlan_enabled']);
+            if ($padrao) {
+                $redePadraoId = $rede['_id'];
+            }
+            $redes[$rede['_id']] = [
+                'id' => $padrao ? 1 : (int)($rede['vlan'] ?? 0),
+                'nome' => (string)($rede['name'] ?? ''),
+                'id_rede' => (string)$rede['_id'],
+                'padrao' => $padrao,
+                'subnet' => (string)($rede['ip_subnet'] ?? ''),
+                'dhcp' => !empty($rede['dhcpd_enabled']),
+                'dhcp_inicio' => (string)($rede['dhcpd_start'] ?? ''),
+                'dhcp_fim' => (string)($rede['dhcpd_stop'] ?? ''),
+                'isolada' => !empty($rede['network_isolation_enabled']),
+                'internet' => ($rede['internet_access_enabled'] ?? true) !== false,
+                'dispositivos' => $dispositivosPorRede[$rede['_id']] ?? 0,
+                'portas' => 0,
+            ];
+        }
+
         $portas = [];
         $comLink = 0;
         foreach ($legado['port_table'] as $p) {
@@ -1668,15 +1701,21 @@ class AtivoService
                 'erros' => (int)($p['rx_errors'] ?? 0) + (int)($p['tx_errors'] ?? 0),
                 'stp' => (string)($p['stp_state'] ?? ''),
                 'dispositivos' => $dispositivos,
-            ];
+            ] + $this->vlansPortaUnifi($p, $redes, $redePadraoId);
         }
 
-        $vlans = [];
-        foreach ($unifi->listarRedesConfiguradas() as $rede) {
-            if (in_array($rede['purpose'] ?? '', ['corporate', 'guest', 'vlan-only'], true)) {
-                $vlans[] = ['id' => (int)($rede['vlan'] ?? 1) ?: 1, 'nome' => (string)($rede['name'] ?? '')];
+        foreach ($portas as $porta) {
+            foreach ($porta['vlans'] as $v) {
+                foreach ($redes as &$r) {
+                    if ($r['id'] === $v['id']) {
+                        $r['portas']++;
+                    }
+                }
+                unset($r);
             }
         }
+        $vlans = array_values($redes);
+        usort($vlans, fn ($a, $b) => $a['id'] <=> $b['id']);
 
         $uplink = $legado['uplink'] ?? [];
         $coletado = [
@@ -1687,6 +1726,7 @@ class AtivoService
             'unifi_portas_resumo' => "{$comLink} de " . count($portas),
             'unifi_mac_total' => (string)array_sum(array_map(fn ($p) => count($p['dispositivos']), $portas)),
             'unifi_coletado_em' => date('Y-m-d H:i:s'),
+            'unifi_dispositivo_id' => (string)($legado['_id'] ?? ''),
         ];
         if (isset($legado['total_used_power'], $legado['total_max_power'])) {
             $coletado['unifi_poe_consumo'] = round((float)$legado['total_used_power'], 1) . ' W de ' . round((float)$legado['total_max_power']) . ' W';
@@ -1697,6 +1737,509 @@ class AtivoService
         }
 
         return $coletado;
+    }
+
+    /**
+     * VLANs de uma porta UniFi a partir de forward/native_networkconf_id/
+     * tagged_vlan_mgmt/excluded_networkconf_ids (formato confirmado ao vivo,
+     * ver UnifiService). Sem override a porta leva TODAS as VLANs.
+     *
+     * @return array{vlan_nativa: ?int, vlans: array, vlan_todas: bool, vlan_desabilitada: bool}
+     */
+    private function vlansPortaUnifi(array $p, array $redes, ?string $redePadraoId): array
+    {
+        $forward = (string)($p['forward'] ?? 'all');
+
+        if ($forward === 'disabled') {
+            return ['vlan_nativa' => null, 'vlans' => [], 'vlan_todas' => false, 'vlan_desabilitada' => true];
+        }
+
+        $nativaId = $forward === 'all' ? $redePadraoId : ($p['native_networkconf_id'] ?? $redePadraoId);
+        $gestao = (string)($p['tagged_vlan_mgmt'] ?? ($forward === 'all' ? 'auto' : ''));
+        $excluidas = $p['excluded_networkconf_ids'] ?? [];
+
+        $vlans = [];
+        if ($nativaId !== null && isset($redes[$nativaId])) {
+            $vlans[] = ['id' => $redes[$nativaId]['id'], 'tagueada' => false];
+        }
+        foreach ($redes as $id => $rede) {
+            if ($id === $nativaId) {
+                continue;
+            }
+            $leva = match (true) {
+                $forward === 'all', $gestao === 'auto' => true,
+                $forward === 'native', $gestao === 'block_all' => false,
+                default => !in_array($id, $excluidas, true),
+            };
+            if ($leva) {
+                $vlans[] = ['id' => $rede['id'], 'tagueada' => true];
+            }
+        }
+
+        return [
+            'vlan_nativa' => $nativaId !== null && isset($redes[$nativaId]) ? $redes[$nativaId]['id'] : null,
+            'vlans' => $vlans,
+            'vlan_todas' => $forward === 'all',
+            'vlan_desabilitada' => false,
+        ];
+    }
+
+    /* ==================================================================
+     * Manutenção de VLAN do switch (UniFi pelo Controller, TP-Link por SSH)
+     *
+     * Toda alteração: valida, aplica, guarda o estado anterior em
+     * detalhes['vlan_desfazer'] (um nível de "Desfazer"), registra na
+     * auditoria e recoleta o switch pra tela mostrar o estado real.
+     * Travas: não mexe na porta de uplink, nem em porta onde está o gateway
+     * da rede, este servidor ou outro equipamento UniFi (AP/gateway/switch);
+     * não exclui VLAN padrão, VLAN com dispositivo em uso ou nativa de porta.
+     * ================================================================== */
+
+    /** 'unifi' | 'omada' | null -- de onde vêm as VLANs desse switch. */
+    public static function fonteVlanSwitch(array $ativo, array $detalhes): ?string
+    {
+        if (($ativo['tipo_slug'] ?? '') !== 'switch') {
+            return null;
+        }
+        if (!empty($detalhes['unifi_portas'])) {
+            return 'unifi';
+        }
+
+        return !empty($detalhes['omada_portas']) ? 'omada' : null;
+    }
+
+    public static function manutencaoVlanDisponivel(array $ativo, array $detalhes): bool
+    {
+        return match (self::fonteVlanSwitch($ativo, $detalhes)) {
+            'unifi' => (new UnifiService())->configurado(),
+            'omada' => (new OmadaSshService())->manutencaoDisponivel(),
+            default => false,
+        };
+    }
+
+    /** @return array{0: ?array, 1: array, 2: ?string, 3: ?string} ativo, detalhes, fonte, erro */
+    private function contextoVlan(int $id): array
+    {
+        $ativo = $this->repository->buscarPorId($id);
+        $detalhes = $ativo ? (json_decode($ativo['detalhes'] ?? '', true) ?: []) : [];
+        $fonte = $ativo ? self::fonteVlanSwitch($ativo, $detalhes) : null;
+
+        if (!$ativo || $fonte === null) {
+            return [null, [], null, 'Switch não encontrado ou ainda sem portas coletadas (UniFi ou TP-Link).'];
+        }
+        if (!self::manutencaoVlanDisponivel($ativo, $detalhes)) {
+            return [null, [], null, 'A integração deste switch não está configurada para manutenção -- veja Integrações.'];
+        }
+
+        return [$ativo, $detalhes, $fonte, null];
+    }
+
+    /** IPs que nunca podem perder acesso: este servidor e o gateway padrão dele. */
+    private function ipsProtegidosRede(): array
+    {
+        $ips = preg_split('/\s+/', trim((string)@shell_exec('hostname -I 2>/dev/null'))) ?: [];
+        if (preg_match('/default via (\S+)/', (string)@shell_exec('ip route show default 2>/dev/null'), $m)) {
+            $ips[] = $m[1];
+        }
+
+        return array_values(array_filter($ips, fn ($ip) => filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)));
+    }
+
+    /** Motivo pra não mexer na porta, ou null se pode. */
+    private function travaPortaVlan(array $porta): ?string
+    {
+        if (!empty($porta['uplink'])) {
+            return 'Esta é a porta de uplink do switch -- alterar as VLANs dela derruba o switch inteiro.';
+        }
+        $protegidos = $this->ipsProtegidosRede();
+        foreach ($porta['dispositivos'] ?? [] as $d) {
+            if (!empty($d['unifi_dispositivo'])) {
+                return 'Nesta porta está outro equipamento UniFi (' . ($d['hostname'] ?: $d['unifi_dispositivo']) . ') -- ele precisa levar as VLANs (ex.: redes Wi-Fi). Ajuste pelo UniFi se for mesmo necessário.';
+            }
+            if (($d['ip'] ?? '') !== '' && in_array($d['ip'], $protegidos, true)) {
+                return 'Nesta porta está o gateway da rede ou o próprio servidor do RD.Intranet (' . $d['ip'] . ') -- alterar as VLANs dela pode derrubar a rede e o sistema.';
+            }
+        }
+
+        return null;
+    }
+
+    private function gravarVlanDesfazer(int $id, ?array $desfazer): void
+    {
+        $ativo = $this->repository->buscarPorId($id);
+        $detalhes = json_decode($ativo['detalhes'] ?? '', true) ?: [];
+        if ($desfazer === null) {
+            unset($detalhes['vlan_desfazer']);
+        } else {
+            $usuario = $_SESSION['usuario']['nome'] ?? 'Sistema';
+            $detalhes['vlan_desfazer'] = $desfazer + ['quando' => date('Y-m-d H:i:s'), 'usuario' => $usuario];
+        }
+        $this->repository->atualizarDetalhesApi($id, json_encode($detalhes, JSON_UNESCAPED_UNICODE));
+    }
+
+    private function concluirVlan(int $id, string $fonte, array $ativo, string $descricao, ?array $desfazer, bool $esperarProvisionamento = false): array
+    {
+        $this->gravarVlanDesfazer($id, $desfazer);
+        AuditService::registrar('Ativos', 'VLAN', $ativo['codigo_patrimonio'] . ' (' . $ativo['nome'] . '): ' . $descricao);
+
+        if ($esperarProvisionamento) {
+            sleep(4); // o Controller leva uns segundos pra refletir a porta no registro do switch
+        }
+        $fonte === 'unifi' ? $this->coletarUnifi($id) : $this->coletarOmada($id);
+
+        return ['success' => true, 'message' => $descricao];
+    }
+
+    private static function redeValida(string $cidr): bool
+    {
+        if (!preg_match('#^(\d{1,3}(?:\.\d{1,3}){3})/(\d{1,2})$#', $cidr, $m)) {
+            return false;
+        }
+
+        return filter_var($m[1], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) && (int)$m[2] >= 8 && (int)$m[2] <= 30;
+    }
+
+    private static function ipNaRede(string $ip, string $cidr): bool
+    {
+        [$rede, $bits] = explode('/', $cidr);
+        $mascara = -1 << (32 - (int)$bits);
+
+        return (ip2long($ip) & $mascara) === (ip2long($rede) & $mascara);
+    }
+
+    /**
+     * Cria (sem id_rede / VLAN nova) ou edita uma VLAN.
+     * UniFi: nome, sub-rede (IP do gateway/prefixo), DHCP, isolamento, internet.
+     * TP-Link: só número e nome (switch L2 -- IP/DHCP ficam no roteador).
+     */
+    public function salvarVlan(int $id, array $dados): array
+    {
+        [$ativo, $detalhes, $fonte, $erro] = $this->contextoVlan($id);
+        if ($erro) {
+            return ['success' => false, 'message' => $erro];
+        }
+
+        $vlan = (int)($dados['vlan'] ?? 0);
+        $nome = trim((string)($dados['nome'] ?? ''));
+        $existentes = $detalhes[$fonte . '_vlans'] ?? [];
+        $atual = null;
+        foreach ($existentes as $v) {
+            if ((int)$v['id'] === $vlan) {
+                $atual = $v;
+            }
+        }
+
+        if ($fonte === 'omada') {
+            if ($atual === null && $vlan === 1) {
+                return ['success' => false, 'message' => 'A VLAN 1 já existe em todo switch.'];
+            }
+            $resultado = (new OmadaSshService())->salvarVlan($ativo['ip'], $vlan, $nome);
+            if (!$resultado['success']) {
+                return $resultado;
+            }
+
+            return $atual === null
+                ? $this->concluirVlan($id, $fonte, $ativo, "VLAN {$vlan} \"{$nome}\" criada.", ['acao' => 'vlan_criada', 'vlan' => $vlan])
+                : $this->concluirVlan($id, $fonte, $ativo, "VLAN {$vlan} renomeada de \"{$atual['nome']}\" para \"{$nome}\".", ['acao' => 'vlan_editada', 'vlan' => $vlan, 'antes' => ['nome' => $atual['nome']]]);
+        }
+
+        // ---- UniFi ----
+        if ($nome === '' || mb_strlen($nome) > 32) {
+            return ['success' => false, 'message' => 'Informe um nome de até 32 caracteres.'];
+        }
+        $subnet = trim((string)($dados['subnet'] ?? ''));
+        if (!self::redeValida($subnet)) {
+            return ['success' => false, 'message' => 'Sub-rede inválida -- use o IP do gateway com o prefixo, ex.: 10.20.0.1/24.'];
+        }
+        $dhcp = !empty($dados['dhcp']);
+        $inicio = trim((string)($dados['dhcp_inicio'] ?? ''));
+        $fim = trim((string)($dados['dhcp_fim'] ?? ''));
+        if ($dhcp && (!filter_var($inicio, FILTER_VALIDATE_IP) || !filter_var($fim, FILTER_VALIDATE_IP)
+            || !self::ipNaRede($inicio, $subnet) || !self::ipNaRede($fim, $subnet) || ip2long($inicio) > ip2long($fim))) {
+            return ['success' => false, 'message' => 'Faixa de DHCP inválida -- início e fim precisam estar dentro da sub-rede, nessa ordem.'];
+        }
+        foreach ($existentes as $v) {
+            if (($v['id_rede'] ?? '') !== ($atual['id_rede'] ?? null) && $v['subnet'] !== '' && self::ipNaRede(explode('/', $subnet)[0], $v['subnet'])) {
+                return ['success' => false, 'message' => "Essa sub-rede já é usada pela VLAN {$v['id']} ({$v['nome']})."];
+            }
+        }
+
+        $campos = [
+            'name' => $nome,
+            'ip_subnet' => $subnet,
+            'dhcpd_enabled' => $dhcp,
+            'network_isolation_enabled' => !empty($dados['isolada']),
+            'internet_access_enabled' => !empty($dados['internet']),
+        ];
+        if ($dhcp) {
+            $campos['dhcpd_start'] = $inicio;
+            $campos['dhcpd_stop'] = $fim;
+        }
+
+        $unifi = new UnifiService();
+
+        if ($atual === null) {
+            if ($vlan < 2 || $vlan > 4094) {
+                return ['success' => false, 'message' => 'Número de VLAN de 2 a 4094.'];
+            }
+            $resultado = $unifi->criarRede($campos + ['purpose' => 'corporate', 'vlan_enabled' => true, 'vlan' => $vlan, 'networkgroup' => 'LAN', 'enabled' => true]);
+            if (!$resultado['success']) {
+                return $resultado;
+            }
+
+            return $this->concluirVlan($id, $fonte, $ativo, "VLAN {$vlan} \"{$nome}\" criada ({$subnet}" . ($dhcp ? ", DHCP {$inicio}-{$fim}" : ', sem DHCP') . ').',
+                ['acao' => 'vlan_criada', 'vlan' => $vlan, 'id_rede' => $resultado['id']]);
+        }
+
+        // Sub-rede da rede por onde este servidor acessa não muda pela tela (cortaria o acesso).
+        if ($subnet !== $atual['subnet']) {
+            foreach ($this->ipsProtegidosRede() as $ip) {
+                if ($atual['subnet'] !== '' && self::ipNaRede($ip, $atual['subnet'])) {
+                    return ['success' => false, 'message' => "A sub-rede da VLAN {$vlan} não pode ser alterada por aqui: é por ela que o RD.Intranet ({$ip}) acessa a rede."];
+                }
+            }
+        }
+
+        $resultado = $unifi->editarRede($atual['id_rede'], $campos);
+        if (!$resultado['success']) {
+            return $resultado;
+        }
+        $antes = [
+            'name' => $atual['nome'], 'ip_subnet' => $atual['subnet'], 'dhcpd_enabled' => $atual['dhcp'],
+            'network_isolation_enabled' => $atual['isolada'], 'internet_access_enabled' => $atual['internet'],
+        ];
+        if ($atual['dhcp']) {
+            $antes['dhcpd_start'] = $atual['dhcp_inicio'];
+            $antes['dhcpd_stop'] = $atual['dhcp_fim'];
+        }
+
+        return $this->concluirVlan($id, $fonte, $ativo, "VLAN {$vlan} \"{$nome}\" alterada.", ['acao' => 'vlan_editada', 'vlan' => $vlan, 'id_rede' => $atual['id_rede'], 'antes' => $antes]);
+    }
+
+    public function excluirVlan(int $id, int $vlan): array
+    {
+        [$ativo, $detalhes, $fonte, $erro] = $this->contextoVlan($id);
+        if ($erro) {
+            return ['success' => false, 'message' => $erro];
+        }
+
+        $atual = null;
+        foreach ($detalhes[$fonte . '_vlans'] ?? [] as $v) {
+            if ((int)$v['id'] === $vlan) {
+                $atual = $v;
+            }
+        }
+        if ($atual === null) {
+            return ['success' => false, 'message' => "VLAN {$vlan} não encontrada -- atualize a tela."];
+        }
+        if ($vlan === 1 || !empty($atual['padrao'])) {
+            return ['success' => false, 'message' => 'A VLAN padrão (1) não pode ser excluída.'];
+        }
+        foreach ($detalhes[$fonte . '_portas'] ?? [] as $p) {
+            if (($p['vlan_nativa'] ?? null) === $vlan) {
+                return ['success' => false, 'message' => "A VLAN {$vlan} é a nativa da porta " . ($p['numero'] ?? $p['porta']) . ' -- troque a VLAN dessa porta antes de excluir.'];
+            }
+        }
+
+        if ($fonte === 'omada') {
+            $membros = array_filter($detalhes['omada_portas'] ?? [], fn ($p) => in_array($vlan, array_column($p['vlans'] ?? [], 'id'), true));
+            if ($membros) {
+                return ['success' => false, 'message' => "A VLAN {$vlan} ainda está em " . count($membros) . ' porta(s) -- tire-a das portas antes de excluir.'];
+            }
+            $resultado = (new OmadaSshService())->excluirVlan($ativo['ip'], $vlan);
+            if (!$resultado['success']) {
+                return $resultado;
+            }
+
+            return $this->concluirVlan($id, $fonte, $ativo, "VLAN {$vlan} \"{$atual['nome']}\" excluída.", ['acao' => 'vlan_excluida', 'vlan' => $vlan, 'nome' => $atual['nome']]);
+        }
+
+        if (($atual['dispositivos'] ?? 0) > 0) {
+            return ['success' => false, 'message' => "A VLAN {$vlan} tem {$atual['dispositivos']} dispositivo(s) conectado(s) agora -- mova-os antes de excluir."];
+        }
+        $resultado = (new UnifiService())->excluirRede($atual['id_rede']);
+        if (!$resultado['success']) {
+            return $resultado;
+        }
+        $recriar = [
+            'name' => $atual['nome'], 'purpose' => 'corporate', 'vlan_enabled' => true, 'vlan' => $vlan, 'networkgroup' => 'LAN', 'enabled' => true,
+            'ip_subnet' => $atual['subnet'], 'dhcpd_enabled' => $atual['dhcp'], 'network_isolation_enabled' => $atual['isolada'],
+            'internet_access_enabled' => $atual['internet'],
+        ] + ($atual['dhcp'] ? ['dhcpd_start' => $atual['dhcp_inicio'], 'dhcpd_stop' => $atual['dhcp_fim']] : []);
+
+        return $this->concluirVlan($id, $fonte, $ativo, "VLAN {$vlan} \"{$atual['nome']}\" excluída ({$atual['subnet']}).", ['acao' => 'vlan_excluida', 'vlan' => $vlan, 'recriar' => $recriar]);
+    }
+
+    /** @param int[] $tagueadas */
+    public function salvarVlansPorta(int $id, string $porta, int $nativa, array $tagueadas): array
+    {
+        [$ativo, $detalhes, $fonte, $erro] = $this->contextoVlan($id);
+        if ($erro) {
+            return ['success' => false, 'message' => $erro];
+        }
+
+        $dadosPorta = null;
+        foreach ($detalhes[$fonte . '_portas'] ?? [] as $p) {
+            if ((string)$p['porta'] === $porta) {
+                $dadosPorta = $p;
+            }
+        }
+        if ($dadosPorta === null) {
+            return ['success' => false, 'message' => 'Porta não encontrada -- atualize a tela.'];
+        }
+        if ($trava = $this->travaPortaVlan($dadosPorta)) {
+            return ['success' => false, 'message' => $trava];
+        }
+
+        $tagueadas = array_values(array_diff(array_unique(array_map('intval', $tagueadas)), [$nativa]));
+        $conhecidas = array_map('intval', array_column($detalhes[$fonte . '_vlans'] ?? [], 'id'));
+        foreach (array_merge([$nativa], $tagueadas) as $v) {
+            if (!in_array($v, $conhecidas, true)) {
+                return ['success' => false, 'message' => "A VLAN {$v} não existe neste switch."];
+            }
+        }
+        sort($tagueadas);
+        $rotulo = 'Porta ' . ($dadosPorta['numero'] ?? $porta) . ": nativa VLAN {$nativa}" . ($tagueadas ? ', tagueadas ' . implode(', ', $tagueadas) : ', sem tagueadas');
+
+        if ($fonte === 'omada') {
+            $atuais = array_map('intval', array_column($dadosPorta['vlans'] ?? [], 'id'));
+            $resultado = (new OmadaSshService())->definirVlansPorta($ativo['ip'], $porta, $nativa, $tagueadas, $atuais);
+            if (!$resultado['success']) {
+                return $resultado;
+            }
+            $antesTag = array_values(array_map('intval', array_column(array_filter($dadosPorta['vlans'] ?? [], fn ($v) => !empty($v['tagueada'])), 'id')));
+
+            return $this->concluirVlan($id, $fonte, $ativo, $rotulo . '.', [
+                'acao' => 'porta', 'porta' => $porta, 'nativa' => (int)($dadosPorta['vlan_nativa'] ?? 1), 'tagueadas' => $antesTag,
+            ]);
+        }
+
+        // ---- UniFi: monta o override da porta (lista inteira é regravada) ----
+        $unifi = new UnifiService();
+        $legado = null;
+        foreach ($unifi->listarDispositivosLegado() as $d) {
+            if (($d['_id'] ?? '') === ($detalhes['unifi_dispositivo_id'] ?? '')) {
+                $legado = $d;
+            }
+        }
+        if ($legado === null) {
+            return ['success' => false, 'message' => 'Switch não encontrado no Controller agora -- tente de novo em instantes.'];
+        }
+
+        $redePorVlan = [];
+        $padraoId = null;
+        foreach ($detalhes['unifi_vlans'] as $v) {
+            $redePorVlan[(int)$v['id']] = $v['id_rede'];
+            if (!empty($v['padrao'])) {
+                $padraoId = $v['id_rede'];
+            }
+        }
+        $outras = array_values(array_diff(array_keys($redePorVlan), [$nativa]));
+        sort($outras);
+
+        $overrides = $legado['port_overrides'] ?? [];
+        $indice = null;
+        foreach ($overrides as $i => $o) {
+            if ((int)$o['port_idx'] === (int)$dadosPorta['numero']) {
+                $indice = $i;
+            }
+        }
+        $antes = $indice !== null ? $overrides[$indice] : null;
+
+        $novo = $antes ?? ['port_idx' => (int)$dadosPorta['numero']];
+        unset($novo['forward'], $novo['native_networkconf_id'], $novo['tagged_vlan_mgmt'], $novo['excluded_networkconf_ids'], $novo['portconf_id']);
+
+        $voltaAoPadrao = $redePorVlan[$nativa] === $padraoId && $tagueadas === $outras;
+        if (!$voltaAoPadrao) {
+            $novo['native_networkconf_id'] = $redePorVlan[$nativa];
+            if (!$tagueadas) {
+                $novo['tagged_vlan_mgmt'] = 'block_all';
+            } elseif ($tagueadas === $outras) {
+                $novo['tagged_vlan_mgmt'] = 'auto';
+            } else {
+                $novo['tagged_vlan_mgmt'] = 'custom';
+                $novo['excluded_networkconf_ids'] = array_values(array_map(fn ($v) => $redePorVlan[$v], array_diff($outras, $tagueadas)));
+            }
+        }
+
+        // Override sem nada além do número da porta = porta no padrão: some da lista.
+        $novaLista = array_values(array_filter($overrides, fn ($o) => (int)$o['port_idx'] !== (int)$dadosPorta['numero']));
+        if (count($novo) > 1) {
+            $novaLista[] = $novo;
+        }
+
+        $resultado = $unifi->gravarOverridesPortas($legado['_id'], $novaLista);
+        if (!$resultado['success']) {
+            return $resultado;
+        }
+
+        return $this->concluirVlan($id, $fonte, $ativo, $rotulo . ($voltaAoPadrao ? ' (padrão: todas as VLANs).' : '.'), [
+            'acao' => 'porta', 'porta' => $porta, 'numero' => (int)$dadosPorta['numero'], 'override' => $antes,
+        ], true);
+    }
+
+    /** Reverte a última alteração de VLAN feita pela tela neste switch. */
+    public function desfazerVlan(int $id): array
+    {
+        [$ativo, $detalhes, $fonte, $erro] = $this->contextoVlan($id);
+        if ($erro) {
+            return ['success' => false, 'message' => $erro];
+        }
+        $d = $detalhes['vlan_desfazer'] ?? null;
+        if (!$d) {
+            return ['success' => false, 'message' => 'Não há alteração de VLAN para desfazer.'];
+        }
+
+        $unifi = new UnifiService();
+        $ssh = new OmadaSshService();
+        $vlan = (int)($d['vlan'] ?? 0);
+
+        switch ($d['acao']) {
+            case 'vlan_criada':
+                $resultado = $fonte === 'unifi' ? $unifi->excluirRede($d['id_rede']) : $ssh->excluirVlan($ativo['ip'], $vlan);
+                $descricao = "Desfeito: VLAN {$vlan} criada antes foi excluída.";
+                break;
+            case 'vlan_editada':
+                $resultado = $fonte === 'unifi' ? $unifi->editarRede($d['id_rede'], $d['antes']) : $ssh->salvarVlan($ativo['ip'], $vlan, $d['antes']['nome']);
+                $descricao = "Desfeito: VLAN {$vlan} voltou à configuração anterior.";
+                break;
+            case 'vlan_excluida':
+                $resultado = $fonte === 'unifi' ? $unifi->criarRede($d['recriar']) : $ssh->salvarVlan($ativo['ip'], $vlan, $d['nome']);
+                $descricao = "Desfeito: VLAN {$vlan} recriada" . ($fonte === 'omada' ? ' (sem portas, como estava ao ser excluída).' : '.');
+                break;
+            case 'porta':
+                if ($fonte === 'omada') {
+                    $atual = null;
+                    foreach ($detalhes['omada_portas'] as $p) {
+                        if ($p['porta'] === $d['porta']) {
+                            $atual = $p;
+                        }
+                    }
+                    $resultado = $ssh->definirVlansPorta($ativo['ip'], $d['porta'], (int)$d['nativa'], $d['tagueadas'], array_map('intval', array_column($atual['vlans'] ?? [], 'id')));
+                } else {
+                    $legado = null;
+                    foreach ($unifi->listarDispositivosLegado() as $dev) {
+                        if (($dev['_id'] ?? '') === ($detalhes['unifi_dispositivo_id'] ?? '')) {
+                            $legado = $dev;
+                        }
+                    }
+                    $lista = array_values(array_filter($legado['port_overrides'] ?? [], fn ($o) => (int)$o['port_idx'] !== (int)$d['numero']));
+                    if (!empty($d['override'])) {
+                        $lista[] = $d['override'];
+                    }
+                    $resultado = $legado ? $unifi->gravarOverridesPortas($legado['_id'], $lista) : ['success' => false, 'message' => 'Switch não encontrado no Controller.'];
+                }
+                $descricao = 'Desfeito: VLANs da porta ' . ($d['numero'] ?? $d['porta']) . ' voltaram ao que eram.';
+                break;
+            default:
+                return ['success' => false, 'message' => 'Alteração desconhecida -- nada a desfazer.'];
+        }
+
+        if (!$resultado['success']) {
+            return $resultado;
+        }
+
+        return $this->concluirVlan($id, $fonte, $ativo, $descricao, null, $fonte === 'unifi' && $d['acao'] === 'porta');
     }
 
     /**

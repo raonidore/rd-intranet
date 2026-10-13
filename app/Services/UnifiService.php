@@ -1083,6 +1083,68 @@ class UnifiService
      */
     /*
      * ---------------------------------------------------------------
+     * Manutenção de VLAN (redes LAN do site + VLAN por porta de switch).
+     * Formato confirmado ao vivo no Network 10.6 (UDM Pro do enzilab NTO),
+     * com uma VLAN de teste numa porta sem link:
+     * - porta sem override = nativa na rede padrão + TODAS as outras tagueadas;
+     * - só uma VLAN = native_networkconf_id + tagged_vlan_mgmt "block_all";
+     * - VLANs escolhidas = tagged_vlan_mgmt "custom" + excluded_networkconf_ids
+     *   (a API guarda as EXCLUÍDAS, não as permitidas).
+     * `port_overrides` é gravado inteiro -- quem chama passa a lista completa.
+     * ---------------------------------------------------------------
+     */
+
+    /** @return array{success: bool, message: string, id?: string} */
+    public function criarRede(array $campos): array
+    {
+        return $this->escreverRede('POST', '/rest/networkconf', $campos);
+    }
+
+    /** @return array{success: bool, message: string, id?: string} */
+    public function editarRede(string $redeId, array $campos): array
+    {
+        return $this->escreverRede('PUT', '/rest/networkconf/' . rawurlencode($redeId), $campos);
+    }
+
+    /** @return array{success: bool, message: string} */
+    public function excluirRede(string $redeId): array
+    {
+        return $this->escreverRede('DELETE', '/rest/networkconf/' . rawurlencode($redeId), null);
+    }
+
+    /** @return array{success: bool, message: string} */
+    public function gravarOverridesPortas(string $dispositivoId, array $overrides): array
+    {
+        $ref = $this->siteRefAtual();
+        if ($ref === null) {
+            return ['success' => false, 'message' => 'Site do UniFi Controller ainda não identificado.'];
+        }
+
+        $resultado = $this->chamarApi('PUT', "/proxy/network/api/s/{$ref}/rest/device/" . rawurlencode($dispositivoId), ['port_overrides' => array_values($overrides)]);
+
+        return $resultado['sucesso'] && ($resultado['dados']['meta']['rc'] ?? '') === 'ok'
+            ? ['success' => true, 'message' => 'Configuração da porta enviada ao switch.']
+            : ['success' => false, 'message' => 'O Controller recusou a alteração da porta: ' . ($resultado['dados']['meta']['msg'] ?? $resultado['mensagem'])];
+    }
+
+    private function escreverRede(string $metodo, string $caminho, ?array $campos): array
+    {
+        $ref = $this->siteRefAtual();
+        if ($ref === null) {
+            return ['success' => false, 'message' => 'Site do UniFi Controller ainda não identificado.'];
+        }
+
+        $resultado = $this->chamarApi($metodo, "/proxy/network/api/s/{$ref}" . $caminho, $campos);
+
+        if (!$resultado['sucesso'] || ($resultado['dados']['meta']['rc'] ?? '') !== 'ok') {
+            return ['success' => false, 'message' => 'O Controller recusou a alteração da VLAN: ' . ($resultado['dados']['meta']['msg'] ?? $resultado['mensagem'])];
+        }
+
+        return ['success' => true, 'message' => 'VLAN atualizada no Controller.', 'id' => (string)($resultado['dados']['data'][0]['_id'] ?? '')];
+    }
+
+    /*
+     * ---------------------------------------------------------------
      * UniFi Protect (câmeras) -- mesma API Key do Network, mas só a API
      * de integração (/proxy/protect/integration/v1) aceita a chave; a
      * privada (/proxy/protect/api) responde 401 (confirmado no UDM Pro

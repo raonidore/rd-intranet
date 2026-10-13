@@ -1846,16 +1846,68 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
 .sw-detalhe-disp .icone { width:34px; height:34px; border-radius:8px; background:#eef4ff; color:#0d6efd;
     display:flex; align-items:center; justify-content:center; flex-shrink:0; }
 tr.linha-selecionada > td { background:#e7f1ff !important; }
+
+/* VLANs */
+.vlan-chip { display:inline-flex; align-items:center; gap:4px; padding:1px 7px; border-radius:10px; font-size:.72rem; font-weight:600;
+    color:#fff; background:var(--cor-vlan,#6c757d); white-space:nowrap; }
+.vlan-chip.tag { background:transparent; color:var(--cor-vlan); box-shadow:inset 0 0 0 1.5px var(--cor-vlan); }
+.vlan-bolinha { width:10px; height:10px; border-radius:50%; display:inline-block; background:var(--cor-vlan); flex-shrink:0; }
+#swVlanTabela tr { cursor:pointer; }
+#swVlanTabela tr.vlan-filtrada > td { background:#fff8e1 !important; }
+.sw-chassi.modo-vlan .sw-porta .sw-rj45, .sw-chassi.modo-vlan .sw-porta .sw-sfp { border-color:var(--cor-vlan,#555c66); }
+.sw-chassi.modo-vlan .sw-porta .sw-rj45 .cabo { background:var(--cor-vlan,#2f6fd6) !important; }
+.sw-chassi.modo-vlan .sw-porta:not(.com-link) .sw-rj45 { background:color-mix(in srgb, var(--cor-vlan,#0f1114) 22%, #0f1114); }
+.sw-chassi.modo-vlan .sw-porta.trunk .sw-rj45, .sw-chassi.modo-vlan .sw-porta.trunk .sw-sfp { outline:2px dashed rgba(255,255,255,.7); outline-offset:2px; }
 </style>
     <!-- Resumo -->
     <div class="card border-0 shadow-sm mb-3">
         <div class="card-body sw-resumo" id="swResumo"></div>
     </div>
 
+    <?php
+        $manutencaoVlan = AtivoService::manutencaoVlanDisponivel($ativo, $detalhes) && PermissionService::temAcesso('ativos_novo');
+        $vlanDesfazer = $detalhes['vlan_desfazer'] ?? null;
+    ?>
+    <!-- VLANs do switch -->
+    <div class="card border-0 shadow-sm mb-3">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <strong><i class="bi bi-diagram-2"></i> VLANs <small class="text-muted fw-normal" id="swVlanSub"></small></strong>
+            <div class="d-flex gap-2 flex-wrap">
+                <?php if ($manutencaoVlan && $vlanDesfazer): ?>
+                    <button type="button" class="btn btn-sm btn-outline-warning" id="swVlanDesfazer"
+                            title="Última alteração: <?= htmlspecialchars(($vlanDesfazer['usuario'] ?? '') . ' em ' . data_br($vlanDesfazer['quando'] ?? '')) ?>">
+                        <i class="bi bi-arrow-counterclockwise"></i> Desfazer última alteração
+                    </button>
+                <?php endif; ?>
+                <?php if ($manutencaoVlan): ?>
+                    <button type="button" class="btn btn-sm btn-primary" id="swVlanNova"><i class="bi bi-plus-lg"></i> Nova VLAN</button>
+                <?php endif; ?>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div id="swVlanAlertas"></div>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead id="swVlanCabecalho"></thead>
+                    <tbody id="swVlanTabela"></tbody>
+                </table>
+            </div>
+            <div class="small text-muted px-3 py-2 border-top"><i class="bi bi-hand-index"></i> Clique numa VLAN para destacar no painel as portas que a levam.</div>
+        </div>
+    </div>
+
     <!-- Painel frontal -->
     <div class="card border-0 shadow-sm mb-3">
         <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <strong><i class="bi bi-hdd-network"></i> Painel frontal</strong>
+            <div class="d-flex align-items-center gap-3 flex-wrap">
+                <strong><i class="bi bi-hdd-network"></i> Painel frontal</strong>
+                <div class="btn-group btn-group-sm" role="group" aria-label="Cores do painel">
+                    <input type="radio" class="btn-check" name="swModoCor" id="swModoLink" value="link" checked>
+                    <label class="btn btn-outline-secondary" for="swModoLink">Velocidade</label>
+                    <input type="radio" class="btn-check" name="swModoCor" id="swModoVlan" value="vlan">
+                    <label class="btn btn-outline-secondary" for="swModoVlan">Cores por VLAN</label>
+                </div>
+            </div>
             <div class="input-group input-group-sm" style="max-width:300px">
                 <span class="input-group-text"><i class="bi bi-search"></i></span>
                 <input type="search" class="form-control" id="swBusca" placeholder="Achar IP, nome ou MAC...">
@@ -1864,13 +1916,14 @@ tr.linha-selecionada > td { background:#e7f1ff !important; }
         <div class="card-body">
             <div class="sw-rolagem"><div class="sw-chassi" id="swChassi"></div></div>
             <div class="sw-legenda mt-3">
-                <span><i class="sw-led v1000"></i> 1 Gbps</span>
+                <span><i class="sw-led v1000"></i> 1 Gbps ou mais</span>
                 <span><i class="sw-led v100"></i> 100 Mbps</span>
                 <span><i class="sw-led"></i> Sem link</span>
                 <span><i class="amostra" style="background:#2f6fd6"></i> 1 dispositivo</span>
                 <span><i class="amostra" style="background:#7a4fd6"></i> Vários (outro switch, AP, servidor de VMs)</span>
                 <span class="ms-auto"><i class="bi bi-mouse"></i> Passe o mouse para ver, clique para detalhar</span>
             </div>
+            <div class="sw-legenda mt-2 d-none" id="swLegendaVlan"></div>
             <div class="small text-muted mt-2" id="swBuscaResultado"></div>
         </div>
     </div>
@@ -1888,17 +1941,119 @@ tr.linha-selecionada > td { background:#e7f1ff !important; }
     <div class="card border-0 shadow-sm">
         <div class="card-header bg-white d-flex justify-content-between">
             <strong>Todas as portas</strong>
-            <small class="text-muted"><span id="swVlans"></span><?php if (!empty($detalhes[$fontePortasSwitch . '_coletado_em'])): ?> · coletado em <?= htmlspecialchars(data_br($detalhes[$fontePortasSwitch . '_coletado_em'])) ?><?php endif; ?></small>
+            <small class="text-muted"><?php if (!empty($detalhes[$fontePortasSwitch . '_coletado_em'])): ?>Coletado em <?= htmlspecialchars(data_br($detalhes[$fontePortasSwitch . '_coletado_em'])) ?><?php endif; ?></small>
         </div>
         <div class="card-body p-0">
             <table class="table table-sm align-middle mb-0">
-                <thead><tr><th>Porta</th><th>Link</th><th>Velocidade</th><th>Meio</th><?php if ($fontePortasSwitch === 'unifi'): ?><th>PoE</th><th>Tráfego (↓/↑)</th><?php endif; ?><th>Dispositivos</th></tr></thead>
+                <thead><tr><th>Porta</th><th>Link</th><th>Velocidade</th><th>Meio</th><?php if ($fontePortasSwitch === 'unifi'): ?><th>PoE</th><th>Tráfego (↓/↑)</th><?php endif; ?><th>VLANs</th><th>Dispositivos</th></tr></thead>
                 <tbody id="swTabela"></tbody>
             </table>
         </div>
     </div>
 
         <div class="sw-tooltip" id="swTooltip"></div>
+
+    <?php if ($manutencaoVlan): ?>
+    <!-- Criar / editar VLAN -->
+    <div class="modal fade" id="modalSwVlan" tabindex="-1">
+        <div class="modal-dialog">
+            <form class="modal-content" id="formSwVlan">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalSwVlanTitulo">Nova VLAN</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-4">
+                            <label class="form-label">VLAN (ID)</label>
+                            <input type="number" name="vlan" class="form-control" min="2" max="4094" required>
+                        </div>
+                        <div class="col-8">
+                            <label class="form-label">Nome</label>
+                            <input type="text" name="nome" class="form-control" required>
+                            <div class="form-text d-none" data-so="omada">Até 16 caracteres, sem acento (limite do switch).</div>
+                        </div>
+                        <div class="col-12" data-so="unifi">
+                            <label class="form-label">Gateway / sub-rede</label>
+                            <input type="text" name="subnet" class="form-control font-monospace" placeholder="10.20.0.1/24">
+                            <div class="form-text">IP do gateway nesta VLAN com o prefixo -- é o que o UniFi chama de "Gateway IP/Subnet".</div>
+                        </div>
+                        <div class="col-12" data-so="unifi">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="dhcp" id="swVlanDhcp" value="1">
+                                <label class="form-check-label" for="swVlanDhcp">Servidor DHCP nesta VLAN</label>
+                            </div>
+                        </div>
+                        <div class="col-6" data-so="unifi" data-dhcp>
+                            <label class="form-label">DHCP início</label>
+                            <input type="text" name="dhcp_inicio" class="form-control font-monospace">
+                        </div>
+                        <div class="col-6" data-so="unifi" data-dhcp>
+                            <label class="form-label">DHCP fim</label>
+                            <input type="text" name="dhcp_fim" class="form-control font-monospace">
+                        </div>
+                        <div class="col-6" data-so="unifi">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="isolada" id="swVlanIsolada" value="1">
+                                <label class="form-check-label" for="swVlanIsolada">Isolar das outras redes</label>
+                            </div>
+                        </div>
+                        <div class="col-6" data-so="unifi">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="internet" id="swVlanInternet" value="1" checked>
+                                <label class="form-check-label" for="swVlanInternet">Acesso à internet</label>
+                            </div>
+                        </div>
+                        <div class="col-12 d-none" data-so="omada">
+                            <div class="alert alert-light border small mb-0"><i class="bi bi-info-circle"></i> Switch TP-Link é camada 2: aqui só existem número e nome. IP, DHCP e isolamento da VLAN ficam no roteador/gateway.</div>
+                        </div>
+                        <div class="col-12" data-so="unifi">
+                            <div class="alert alert-light border small mb-0"><i class="bi bi-info-circle"></i> No UniFi a VLAN é do <strong>site inteiro</strong> (gateway e todos os switches/APs), não só deste switch.</div>
+                        </div>
+                    </div>
+                    <div class="alert alert-danger small mt-3 mb-0 d-none" id="swVlanErro"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Salvar no equipamento</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- VLANs de uma porta -->
+    <div class="modal fade" id="modalSwPortaVlan" tabindex="-1">
+        <div class="modal-dialog">
+            <form class="modal-content" id="formSwPortaVlan">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalSwPortaVlanTitulo">VLANs da porta</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="small text-muted mb-3" id="swPortaVlanDispositivos"></div>
+                    <label class="form-label">VLAN nativa (sem tag)</label>
+                    <select name="nativa" class="form-select mb-1" id="swPortaVlanNativa"></select>
+                    <div class="form-text mb-3">É a rede de quem liga um computador/telefone comum nesta porta.</div>
+                    <div class="d-flex justify-content-between align-items-end mb-1">
+                        <label class="form-label mb-0">VLANs tagueadas</label>
+                        <div class="btn-group btn-group-sm">
+                            <button type="button" class="btn btn-outline-secondary" data-marcar="todas">Todas</button>
+                            <button type="button" class="btn btn-outline-secondary" data-marcar="nenhuma">Nenhuma</button>
+                        </div>
+                    </div>
+                    <div id="swPortaVlanTagueadas" class="border rounded p-2"></div>
+                    <div class="form-text">Só para equipamentos que entendem VLAN (AP, outro switch, servidor de VMs, telefone IP com VLAN de voz).</div>
+                    <div class="alert alert-warning small mt-3 mb-0"><i class="bi bi-exclamation-triangle"></i> Quem está nesta porta perde a conexão por alguns segundos e pode mudar de rede (novo IP).</div>
+                    <div class="alert alert-danger small mt-3 mb-0 d-none" id="swPortaVlanErro"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Aplicar na porta</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <?php endif; ?>
 <script>
 <?php $f = $fontePortasSwitch; ?>
 const DADOS = <?= json_encode([
@@ -1916,7 +2071,15 @@ const DADOS = <?= json_encode([
     'uplink' => $detalhes['unifi_uplink'] ?? '',
     'vlans' => $detalhes[$f . '_vlans'] ?? [],
     'portas' => $portasSwitch,
+    'ativo_id' => (int)$ativo['id'],
+    'manutencao' => $manutencaoVlan,
 ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?>;
+const URL_VLAN = <?= json_encode([
+    'salvar' => url('/ativos/vlan/salvar'),
+    'excluir' => url('/ativos/vlan/excluir'),
+    'porta' => url('/ativos/vlan/porta'),
+    'desfazer' => url('/ativos/vlan/desfazer'),
+]) ?>;
 const URL_ATIVO = <?= json_encode(url('/ativos/ver?id=')) ?>;
 const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
 
@@ -1926,8 +2089,45 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
     // TP-Link: "1/0/12"; UniFi já manda o número separado ("Port 12" é só o nome).
     const numero = p => p.numero ?? parseInt(String(p.porta).split('/').pop(), 10);
     const classeVel = v => ['1000M', '2500M', '10000M'].includes(v) ? 'v1000' : (v === '100M' ? 'v100' : (v === '10M' ? 'v10' : ''));
+    // Só exibição: "1000M" -> "1 Gbps", "100M" -> "100 Mbps" (o valor cru continua decidindo a cor do LED).
+    const velocidade = v => {
+        const mbps = parseInt(String(v || '').replace(/[^0-9]/g, ''), 10);
+        if (!mbps) return v || '';
+        return mbps >= 1000 ? String(mbps / 1000).replace('.', ',') + ' Gbps' : mbps + ' Mbps';
+    };
     const htmlPoe = p => p.poe ? (p.poe.potencia_w > 0 ? `<span class="badge text-bg-warning"><i class="bi bi-lightning-charge-fill"></i> ${p.poe.potencia_w} W</span>` : `<span class="text-muted small">${p.poe.modo === 'off' ? 'desligado' : 'disponível'}</span>`) : '<span class="text-muted">—</span>';
     const nomeDisp = d => d.ativo_nome || d.hostname || '';
+
+    // ---------- VLANs: cores e textos ----------
+    const PALETA_VLAN = ['#5b7db1', '#20c997', '#fd7e14', '#d63384', '#6f42c1', '#0dcaf0', '#e0a800', '#198754', '#dc3545', '#6610f2', '#795548', '#0d6efd'];
+    const vlans = (DADOS.vlans || []).slice().sort((a, b) => a.id - b.id);
+    const corVlan = id => { const i = vlans.findIndex(v => v.id === id); return i < 0 ? '#6c757d' : PALETA_VLAN[i % PALETA_VLAN.length]; };
+    const nomeVlan = id => (vlans.find(v => v.id === id) || {}).nome || '';
+    const chip = (id, tag) => `<span class="vlan-chip${tag ? ' tag' : ''}" style="--cor-vlan:${corVlan(id)}" title="${esc(nomeVlan(id))}${tag ? ' (tagueada)' : ' (nativa)'}">${id}</span>`;
+    const tagueadasPorta = p => (p.vlans || []).filter(v => v.tagueada).map(v => v.id);
+    function resumoVlansTexto(p) {
+        if (p.vlan_desabilitada) return 'porta desabilitada';
+        const tag = tagueadasPorta(p);
+        return `nativa ${p.vlan_nativa ?? '—'}${nomeVlan(p.vlan_nativa) ? ' (' + esc(nomeVlan(p.vlan_nativa)) + ')' : ''}${tag.length ? ' · tagueadas ' + tag.join(', ') : ''}${p.vlan_todas ? ' · todas (padrão)' : ''}`;
+    }
+    function chipsVlansPorta(p) {
+        if (!p.vlans) return '<span class="text-muted">—</span>';
+        if (p.vlan_desabilitada) return '<span class="badge text-bg-danger">desabilitada</span>';
+        const tag = tagueadasPorta(p);
+        return (p.vlan_nativa != null ? chip(p.vlan_nativa, false) : '') + ' ' + tag.map(id => chip(id, true)).join(' ');
+    }
+    function blocoVlanPorta(p) {
+        if (!p.vlans) return '';
+        const tag = tagueadasPorta(p);
+        const botao = DADOS.manutencao && !p.vlan_desabilitada
+            ? `<button type="button" class="btn btn-sm btn-outline-primary ms-auto" data-alterar-vlan-porta="${esc(p.porta)}"><i class="bi bi-diagram-2"></i> Alterar VLANs da porta</button>` : '';
+        return `<div class="d-flex flex-wrap align-items-center gap-2 small mb-2 pb-2 border-bottom">
+                <span class="text-muted">VLAN nativa:</span> ${p.vlan_nativa != null ? chip(p.vlan_nativa, false) + ' ' + esc(nomeVlan(p.vlan_nativa)) : '—'}
+                <span class="text-muted ms-2">Tagueadas:</span> ${tag.length ? tag.map(id => chip(id, true)).join(' ') : 'nenhuma'}
+                ${p.vlan_todas ? '<span class="badge text-bg-warning">todas as VLANs (padrão do UniFi)</span>' : ''}
+                ${botao}
+            </div>`;
+    }
 
     // ---------- resumo ----------
     const ativas = portas.filter(p => p.link).length;
@@ -1948,7 +2148,6 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
         <div class="sw-metrica"><div class="valor fs-6">${esc(DADOS.uptime)}</div><div class="rotulo">ligado há</div></div>
         ${DADOS.uplink ? `<div class="sw-metrica"><div class="valor fs-6"><i class="bi bi-arrow-up-circle text-success"></i> ${esc(DADOS.uplink)}</div><div class="rotulo">uplink</div></div>` : ''}`;
 
-    document.getElementById('swVlans').textContent = 'VLANs: ' + (DADOS.vlans || []).map(v => v.id + ' (' + v.nome + ')').join(', ');
 
     // ---------- painel ----------
     const cobre = portas.filter(p => p.meio !== 'Fibra').sort((a, b) => numero(a) - numero(b));
@@ -2002,7 +2201,8 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
             const p = porNome[el.dataset.porta];
             const ds = p.dispositivos || [];
             tip.innerHTML = `<div class="titulo">Porta ${numero(p)} <span class="text-secondary fw-normal">${esc(p.porta)}</span></div>
-                <div class="sub">${p.link ? `<i class="bi bi-circle-fill text-success" style="font-size:.5rem"></i> Com link · ${esc(p.velocidade)} ${esc(p.duplex)}` : '<i class="bi bi-circle text-secondary" style="font-size:.5rem"></i> Sem link'} · ${esc(p.meio)}${p.descricao ? ' · ' + esc(p.descricao) : ''}${p.uplink ? ' · <span class="text-success">uplink</span>' : ''}${p.poe && p.poe.potencia_w > 0 ? ` · <span class="text-warning">PoE ${p.poe.potencia_w} W</span>` : ''}</div>
+                <div class="sub">${p.link ? `<i class="bi bi-circle-fill text-success" style="font-size:.5rem"></i> Com link · ${esc(velocidade(p.velocidade))} ${esc(p.duplex)}` : '<i class="bi bi-circle text-secondary" style="font-size:.5rem"></i> Sem link'} · ${esc(p.meio)}${p.descricao ? ' · ' + esc(p.descricao) : ''}${p.uplink ? ' · <span class="text-success">uplink</span>' : ''}${p.poe && p.poe.potencia_w > 0 ? ` · <span class="text-warning">PoE ${p.poe.potencia_w} W</span>` : ''}</div>
+                ${p.vlans ? `<div class="sub">VLAN ${resumoVlansTexto(p)}</div>` : ''}
                 ${ds.slice(0, 6).map(htmlDisp).join('')}
                 ${ds.length > 6 ? `<div class="disp text-secondary">+ ${ds.length - 6} dispositivo(s) -- clique para ver todos</div>` : ''}
                 ${!ds.length && p.link ? '<div class="disp text-secondary">Nenhum MAC aprendido ainda</div>' : ''}`;
@@ -2026,7 +2226,7 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
         document.querySelectorAll('#swTabela tr').forEach(tr => tr.classList.toggle('linha-selecionada', tr.dataset.porta === nome));
         const p = porNome[nome];
         const ds = p.dispositivos || [];
-        document.getElementById('swDetalheTitulo').innerHTML = `<i class="bi bi-ethernet"></i> Porta ${numero(p)} <small class="text-muted fw-normal">${esc(p.porta)} · ${p.link ? esc(p.velocidade + ' ' + p.duplex) : 'sem link'} · ${esc(p.meio)}</small>`;
+        document.getElementById('swDetalheTitulo').innerHTML = `<i class="bi bi-ethernet"></i> Porta ${numero(p)} <small class="text-muted fw-normal">${esc(p.porta)} · ${p.link ? esc(velocidade(p.velocidade) + ' ' + p.duplex) : 'sem link'} · ${esc(p.meio)}</small>`;
         // Só a UniFi informa PoE/tráfego/erros/STP por porta.
         const extrasUnifi = DADOS.fonte !== 'unifi' ? '' : `<div class="d-flex flex-wrap gap-3 small mb-2 pb-2 border-bottom">
                 <span><span class="text-muted">PoE:</span> ${htmlPoe(p)}${p.poe && p.poe.classe && p.poe.classe !== 'Unknown' ? ' <span class="text-muted">' + esc(p.poe.classe) + '</span>' : ''}</span>
@@ -2036,7 +2236,7 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
                 ${p.uplink ? '<span class="badge text-bg-success">Uplink</span>' : ''}
                 ${p.habilitada === false ? '<span class="badge text-bg-danger">Porta desabilitada</span>' : ''}
             </div>`;
-        document.getElementById('swDetalheCorpo').innerHTML = extrasUnifi + (ds.length ? ds.map(d => `
+        document.getElementById('swDetalheCorpo').innerHTML = blocoVlanPorta(p) + extrasUnifi + (ds.length ? ds.map(d => `
             <div class="sw-detalhe-disp">
                 <div class="icone"><i class="bi ${d.ativo_id ? 'bi-pc-display' : 'bi-question-circle'}"></i></div>
                 <div class="flex-grow-1">
@@ -2064,8 +2264,9 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
         return `<tr data-porta="${esc(p.porta)}" style="cursor:pointer" class="${p.link ? '' : 'text-muted'}">
             <td class="font-monospace small">${esc(p.porta)}</td>
             <td>${p.link ? '<span class="badge text-bg-success">Com link</span>' : '<span class="badge text-bg-secondary">Sem link</span>'}</td>
-            <td>${esc(p.velocidade || '—')}</td><td>${esc(p.meio)}</td>
+            <td>${esc(velocidade(p.velocidade) || '—')}</td><td>${esc(p.meio)}</td>
             ${DADOS.fonte === 'unifi' ? `<td>${htmlPoe(p)}</td><td class="small text-nowrap">${p.link ? esc(p.trafego_rx) + ' / ' + esc(p.trafego_tx) : '—'}</td>` : ''}
+            <td class="text-nowrap">${chipsVlansPorta(p)}</td>
             <td class="small">${ds.length ? ds.slice(0, 2).map(d => `<span class="font-monospace">${esc(d.ip || '?')}</span>${nomeDisp(d) ? ' ' + esc(nomeDisp(d)) : ''}`).join(', ') + (ds.length > 2 ? ` <span class="text-muted">+${ds.length - 2}</span>` : '') : '<span class="text-muted">—</span>'}</td>
         </tr>`;
     }).join('');
@@ -2089,6 +2290,195 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
             if (bate) achadas.push(numero(p));
         });
         resultado.textContent = termo === '' ? '' : (achadas.length ? `Encontrado na(s) porta(s): ${achadas.join(', ')}` : 'Nada encontrado em nenhuma porta.');
+    });
+
+    // ---------- VLANs: tabela ----------
+    const ehUnifi = DADOS.fonte === 'unifi';
+    document.getElementById('swVlanSub').textContent = vlans.length + ' VLAN(s)' + (ehUnifi ? ' do site (UniFi)' : ' no switch');
+    document.getElementById('swVlanCabecalho').innerHTML = `<tr><th class="ps-3">VLAN</th><th>Nome</th>${ehUnifi ? '<th>Sub-rede</th><th>DHCP</th><th>Isolada</th><th>Internet</th><th>Dispositivos</th>' : ''}<th>Portas</th>${DADOS.manutencao ? '<th class="text-end pe-3">Ações</th>' : ''}</tr>`;
+    const sim = v => v ? '<i class="bi bi-check-circle-fill text-success"></i>' : '<i class="bi bi-dash-circle text-muted"></i>';
+    document.getElementById('swVlanTabela').innerHTML = vlans.map(v => `
+        <tr data-vlan="${v.id}">
+            <td class="ps-3"><span class="d-inline-flex align-items-center gap-2"><span class="vlan-bolinha" style="--cor-vlan:${corVlan(v.id)}"></span><strong>${v.id}</strong>${v.padrao || v.id === 1 ? ' <span class="badge text-bg-light border">padrão</span>' : ''}</span></td>
+            <td>${esc(v.nome)}</td>
+            ${ehUnifi ? `<td class="font-monospace small">${esc(v.subnet || '—')}</td>
+                <td class="small">${v.dhcp ? esc(v.dhcp_inicio + ' – ' + v.dhcp_fim) : '<span class="text-muted">desligado</span>'}</td>
+                <td>${v.isolada ? '<span class="badge text-bg-info">isolada</span>' : '<span class="text-muted small">não</span>'}</td>
+                <td>${sim(v.internet)}</td>
+                <td>${v.dispositivos ?? '—'}</td>` : ''}
+            <td>${v.portas ?? '—'}</td>
+            ${DADOS.manutencao ? `<td class="text-end pe-3 text-nowrap">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-editar-vlan="${v.id}" title="Editar"><i class="bi bi-pencil"></i></button>
+                ${v.padrao || v.id === 1 ? '' : `<button type="button" class="btn btn-sm btn-outline-danger" data-excluir-vlan="${v.id}" title="Excluir"><i class="bi bi-trash"></i></button>`}
+            </td>` : ''}
+        </tr>`).join('') || '<tr><td class="ps-3 text-muted" colspan="9">Nenhuma VLAN coletada ainda.</td></tr>';
+
+    const emTodas = ehUnifi ? portas.filter(p => p.vlan_todas).length : 0;
+    if (emTodas) {
+        document.getElementById('swVlanAlertas').innerHTML = `<div class="alert alert-warning small rounded-0 mb-0 border-0 border-bottom">
+            <i class="bi bi-exclamation-triangle"></i> <strong>${emTodas} de ${portas.length} portas estão em "todas as VLANs"</strong> (padrão do UniFi): qualquer
+            equipamento ligado nelas pode entrar em qualquer VLAN, inclusive nas isoladas. Defina a VLAN das portas de usuário pelo detalhe de cada porta.</div>`;
+    }
+
+    // ---------- VLANs: cores no painel + legenda + filtro ----------
+    const legendaVlan = document.getElementById('swLegendaVlan');
+    legendaVlan.innerHTML = vlans.map(v => `<span><i class="vlan-bolinha" style="--cor-vlan:${corVlan(v.id)}"></i> ${v.id} ${esc(v.nome)}</span>`).join('')
+        + '<span><i class="amostra" style="outline:2px dashed #6c757d;outline-offset:1px;background:transparent"></i> leva VLANs tagueadas</span>';
+    chassi.querySelectorAll('.sw-porta').forEach(el => {
+        const p = porNome[el.dataset.porta];
+        el.style.setProperty('--cor-vlan', corVlan(p.vlan_nativa));
+        el.classList.toggle('trunk', tagueadasPorta(p).length > 0);
+    });
+    function aplicarModoCor(modo) {
+        chassi.classList.toggle('modo-vlan', modo === 'vlan');
+        legendaVlan.classList.toggle('d-none', modo !== 'vlan');
+        try { localStorage.setItem('rdSwModoCor', modo); } catch (e) { /* sem storage */ }
+    }
+    document.querySelectorAll('input[name="swModoCor"]').forEach(r => r.addEventListener('change', () => aplicarModoCor(r.value)));
+    try { if (localStorage.getItem('rdSwModoCor') === 'vlan') { document.getElementById('swModoVlan').checked = true; aplicarModoCor('vlan'); } } catch (e) { /* sem storage */ }
+
+    let vlanFiltrada = null;
+    document.querySelectorAll('#swVlanTabela tr[data-vlan]').forEach(tr => tr.addEventListener('click', e => {
+        if (e.target.closest('button')) return;
+        const id = parseInt(tr.dataset.vlan, 10);
+        vlanFiltrada = vlanFiltrada === id ? null : id;
+        document.querySelectorAll('#swVlanTabela tr').forEach(l => l.classList.toggle('vlan-filtrada', vlanFiltrada !== null && parseInt(l.dataset.vlan, 10) === vlanFiltrada));
+        const nas = [];
+        chassi.querySelectorAll('.sw-porta').forEach(el => {
+            const p = porNome[el.dataset.porta];
+            const leva = vlanFiltrada !== null && (p.vlans || []).some(v => v.id === vlanFiltrada);
+            el.classList.toggle('destaque', leva);
+            el.classList.toggle('esmaecida', vlanFiltrada !== null && !leva);
+            if (leva) nas.push(numero(p));
+        });
+        resultado.textContent = vlanFiltrada === null ? '' : `VLAN ${vlanFiltrada} (${nomeVlan(vlanFiltrada)}): ${nas.length ? 'porta(s) ' + nas.join(', ') : 'em nenhuma porta'}.`;
+    }));
+
+    if (!DADOS.manutencao) return;
+
+    // ---------- VLANs: manutenção ----------
+    async function enviar(url, dados) {
+        const corpo = new URLSearchParams();
+        corpo.set('id', DADOS.ativo_id);
+        Object.entries(dados).forEach(([k, v]) => Array.isArray(v) ? v.forEach(x => corpo.append(k + '[]', x)) : corpo.set(k, v));
+        const res = await fetch(url, { method: 'POST', body: corpo });
+        return res.json();
+    }
+    function concluir(resultado) {
+        alert(resultado.message);
+        if (resultado.success) { location.hash = '#abaPortasSwitch'; location.reload(); }
+    }
+
+    const modalVlanEl = document.getElementById('modalSwVlan');
+    const formVlan = document.getElementById('formSwVlan');
+    const erroVlan = document.getElementById('swVlanErro');
+    formVlan.querySelectorAll('[data-so]').forEach(el => el.classList.toggle('d-none', el.dataset.so !== DADOS.fonte));
+    const mostrarDhcp = () => formVlan.querySelectorAll('[data-dhcp]').forEach(el => el.classList.toggle('d-none', !ehUnifi || !formVlan.dhcp.checked));
+    formVlan.dhcp.addEventListener('change', mostrarDhcp);
+
+    function abrirVlan(v) {
+        formVlan.reset();
+        erroVlan.classList.add('d-none');
+        document.getElementById('modalSwVlanTitulo').textContent = v ? `Editar VLAN ${v.id}` : 'Nova VLAN';
+        formVlan.vlan.value = v ? v.id : (Math.max(1, ...vlans.map(x => x.id)) + 1);
+        formVlan.vlan.readOnly = !!v;
+        formVlan.nome.value = v ? v.nome : '';
+        if (ehUnifi) {
+            formVlan.subnet.value = v ? v.subnet : '';
+            formVlan.dhcp.checked = v ? !!v.dhcp : true;
+            formVlan.dhcp_inicio.value = v ? (v.dhcp_inicio || '') : '';
+            formVlan.dhcp_fim.value = v ? (v.dhcp_fim || '') : '';
+            formVlan.isolada.checked = v ? !!v.isolada : false;
+            formVlan.internet.checked = v ? !!v.internet : true;
+        }
+        mostrarDhcp();
+        bootstrap.Modal.getOrCreateInstance(modalVlanEl).show();
+    }
+    // Sugere a faixa de DHCP a partir do gateway digitado (x.x.x.6 a x.x.x.254, igual ao UniFi).
+    if (ehUnifi) formVlan.subnet.addEventListener('change', () => {
+        const m = formVlan.subnet.value.trim().match(/^(\d+\.\d+\.\d+)\.\d+\/24$/);
+        if (m && !formVlan.dhcp_inicio.value) { formVlan.dhcp_inicio.value = m[1] + '.6'; formVlan.dhcp_fim.value = m[1] + '.254'; }
+    });
+    document.getElementById('swVlanNova').addEventListener('click', () => abrirVlan(null));
+    document.querySelectorAll('[data-editar-vlan]').forEach(b => b.addEventListener('click', () => abrirVlan(vlans.find(v => v.id === parseInt(b.dataset.editarVlan, 10)))));
+    formVlan.addEventListener('submit', async e => {
+        e.preventDefault();
+        const botao = formVlan.querySelector('[type=submit]');
+        botao.disabled = true; erroVlan.classList.add('d-none');
+        try {
+            const r = await enviar(URL_VLAN.salvar, {
+                vlan: formVlan.vlan.value, nome: formVlan.nome.value.trim(),
+                subnet: ehUnifi ? formVlan.subnet.value.trim() : '', dhcp: ehUnifi && formVlan.dhcp.checked ? '1' : '0',
+                dhcp_inicio: ehUnifi ? formVlan.dhcp_inicio.value.trim() : '', dhcp_fim: ehUnifi ? formVlan.dhcp_fim.value.trim() : '',
+                isolada: ehUnifi && formVlan.isolada.checked ? '1' : '0', internet: !ehUnifi || formVlan.internet.checked ? '1' : '0',
+            });
+            if (!r.success) { erroVlan.textContent = r.message; erroVlan.classList.remove('d-none'); return; }
+            bootstrap.Modal.getInstance(modalVlanEl).hide();
+            concluir(r);
+        } catch (err) { erroVlan.textContent = 'Erro ao falar com o servidor.'; erroVlan.classList.remove('d-none'); }
+        finally { botao.disabled = false; }
+    });
+    document.querySelectorAll('[data-excluir-vlan]').forEach(b => b.addEventListener('click', async () => {
+        const v = vlans.find(x => x.id === parseInt(b.dataset.excluirVlan, 10));
+        if (!confirm(`Excluir a VLAN ${v.id} "${v.nome}"${ehUnifi ? ' do site inteiro (gateway, switches e APs)' : ' deste switch'}?\n\nDá pra desfazer logo em seguida pelo botão "Desfazer última alteração".`)) return;
+        b.disabled = true;
+        try { concluir(await enviar(URL_VLAN.excluir, { vlan: v.id })); } finally { b.disabled = false; }
+    }));
+    const botaoDesfazer = document.getElementById('swVlanDesfazer');
+    if (botaoDesfazer) botaoDesfazer.addEventListener('click', async () => {
+        if (!confirm('Desfazer a última alteração de VLAN feita por aqui?')) return;
+        botaoDesfazer.disabled = true;
+        try { concluir(await enviar(URL_VLAN.desfazer, {})); } finally { botaoDesfazer.disabled = false; }
+    });
+
+    // VLANs da porta
+    const modalPortaEl = document.getElementById('modalSwPortaVlan');
+    const formPorta = document.getElementById('formSwPortaVlan');
+    const erroPorta = document.getElementById('swPortaVlanErro');
+    const selNativa = document.getElementById('swPortaVlanNativa');
+    const caixaTag = document.getElementById('swPortaVlanTagueadas');
+    let portaEditada = null;
+    function marcarNativaNasTagueadas() {
+        caixaTag.querySelectorAll('input').forEach(c => {
+            const ehNativa = parseInt(c.value, 10) === parseInt(selNativa.value, 10);
+            c.disabled = ehNativa; if (ehNativa) c.checked = false;
+        });
+    }
+    selNativa.addEventListener('change', marcarNativaNasTagueadas);
+    formPorta.querySelectorAll('[data-marcar]').forEach(b => b.addEventListener('click', () =>
+        caixaTag.querySelectorAll('input:not(:disabled)').forEach(c => { c.checked = b.dataset.marcar === 'todas'; })));
+    document.getElementById('swDetalhe').addEventListener('click', e => {
+        const b = e.target.closest('[data-alterar-vlan-porta]');
+        if (!b) return;
+        const p = porNome[b.dataset.alterarVlanPorta];
+        portaEditada = p;
+        erroPorta.classList.add('d-none');
+        document.getElementById('modalSwPortaVlanTitulo').textContent = `VLANs da porta ${numero(p)}`;
+        const ds = p.dispositivos || [];
+        document.getElementById('swPortaVlanDispositivos').innerHTML = ds.length
+            ? '<i class="bi bi-pc-display"></i> Nesta porta agora: ' + ds.map(d => esc((d.ip || '?') + (nomeDisp(d) ? ' ' + nomeDisp(d) : ''))).join(', ')
+            : '<i class="bi bi-info-circle"></i> Nenhum dispositivo nesta porta agora.';
+        selNativa.innerHTML = vlans.map(v => `<option value="${v.id}" ${v.id === p.vlan_nativa ? 'selected' : ''}>${v.id} -- ${esc(v.nome)}</option>`).join('');
+        const tag = tagueadasPorta(p);
+        caixaTag.innerHTML = vlans.map(v => `<div class="form-check"><input class="form-check-input" type="checkbox" value="${v.id}" id="swTag${v.id}" ${tag.includes(v.id) ? 'checked' : ''}>
+            <label class="form-check-label" for="swTag${v.id}"><span class="vlan-bolinha me-1" style="--cor-vlan:${corVlan(v.id)}"></span>${v.id} -- ${esc(v.nome)}</label></div>`).join('');
+        marcarNativaNasTagueadas();
+        bootstrap.Modal.getOrCreateInstance(modalPortaEl).show();
+    });
+    formPorta.addEventListener('submit', async e => {
+        e.preventDefault();
+        const botao = formPorta.querySelector('[type=submit]');
+        botao.disabled = true; erroPorta.classList.add('d-none');
+        try {
+            const r = await enviar(URL_VLAN.porta, {
+                porta: portaEditada.porta, nativa: selNativa.value,
+                tagueadas: [...caixaTag.querySelectorAll('input:checked')].map(c => c.value),
+            });
+            if (!r.success) { erroPorta.textContent = r.message; erroPorta.classList.remove('d-none'); return; }
+            bootstrap.Modal.getInstance(modalPortaEl).hide();
+            concluir(r);
+        } catch (err) { erroPorta.textContent = 'Erro ao falar com o servidor.'; erroPorta.classList.remove('d-none'); }
+        finally { botao.disabled = false; }
     });
 })();
 </script>

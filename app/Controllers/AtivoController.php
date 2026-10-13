@@ -1033,6 +1033,57 @@ class AtivoController extends Controller
         exit;
     }
 
+    /*
+     * Manutenção de VLAN do switch (UniFi/TP-Link) -- mexe na rede do
+     * cliente, então exige o módulo de edição de ativos, não só o de leitura.
+     */
+
+    public function vlanSalvar(): void
+    {
+        AuthMiddleware::checkModulo('ativos_novo');
+        header('Content-Type: application/json');
+        set_time_limit(90);
+
+        echo json_encode($this->service->salvarVlan((int)($_POST['id'] ?? 0), [
+            'vlan' => (int)($_POST['vlan'] ?? 0),
+            'nome' => (string)($_POST['nome'] ?? ''),
+            'subnet' => (string)($_POST['subnet'] ?? ''),
+            'dhcp' => ($_POST['dhcp'] ?? '') === '1',
+            'dhcp_inicio' => (string)($_POST['dhcp_inicio'] ?? ''),
+            'dhcp_fim' => (string)($_POST['dhcp_fim'] ?? ''),
+            'isolada' => ($_POST['isolada'] ?? '') === '1',
+            'internet' => ($_POST['internet'] ?? '1') === '1',
+        ]));
+    }
+
+    public function vlanExcluir(): void
+    {
+        AuthMiddleware::checkModulo('ativos_novo');
+        header('Content-Type: application/json');
+        set_time_limit(90);
+
+        echo json_encode($this->service->excluirVlan((int)($_POST['id'] ?? 0), (int)($_POST['vlan'] ?? 0)));
+    }
+
+    public function vlanPorta(): void
+    {
+        AuthMiddleware::checkModulo('ativos_novo');
+        header('Content-Type: application/json');
+        set_time_limit(90);
+
+        $tagueadas = array_map('intval', (array)($_POST['tagueadas'] ?? []));
+        echo json_encode($this->service->salvarVlansPorta((int)($_POST['id'] ?? 0), (string)($_POST['porta'] ?? ''), (int)($_POST['nativa'] ?? 0), $tagueadas));
+    }
+
+    public function vlanDesfazer(): void
+    {
+        AuthMiddleware::checkModulo('ativos_novo');
+        header('Content-Type: application/json');
+        set_time_limit(90);
+
+        echo json_encode($this->service->desfazerVlan((int)($_POST['id'] ?? 0)));
+    }
+
     /** Câmera do UniFi Protect vinculada ao ativo, ou null (404 já enviado). */
     private function cameraProtectDoAtivo(): ?string
     {

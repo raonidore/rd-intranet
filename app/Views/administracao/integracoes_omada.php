@@ -114,6 +114,27 @@ ob_start();
                                placeholder="<?= $sshConfigurado ? '••••••••  (deixe em branco pra manter)' : 'senha do usuário de leitura' ?>">
                         <div class="form-text">Guardada cifrada. A mesma credencial vale pra todos os switches TP-Link cadastrados em Ativos.</div>
                     </div>
+                    <div class="col-12">
+                        <div class="border rounded p-3 bg-light">
+                            <strong class="small"><i class="bi bi-diagram-2"></i> Manutenção de VLAN (opcional)</strong>
+                            <div class="form-text mt-0 mb-2">
+                                Pra criar/editar/excluir VLANs e trocar a VLAN das portas pela ficha do switch, o usuário precisa
+                                de privilégio <strong>admin</strong> no switch. Se o usuário acima já é admin, deixe em branco
+                                (usa o mesmo). Se ele é só de leitura, informe aqui um usuário admin -- usado <strong>só</strong>
+                                nas alterações de VLAN, nunca na coleta.
+                            </div>
+                            <div class="row g-2">
+                                <div class="col-md-6">
+                                    <input type="text" name="manut_usuario" class="form-control form-control-sm font-monospace" autocomplete="off"
+                                           value="<?= htmlspecialchars($sshManutUsuarioAtual) ?>" placeholder="usuário admin (em branco = o mesmo da coleta)">
+                                </div>
+                                <div class="col-md-6">
+                                    <input type="password" name="manut_senha" class="form-control form-control-sm font-monospace" autocomplete="new-password"
+                                           placeholder="<?= $sshManutUsuarioAtual !== '' ? '••••••••  (deixe em branco pra manter)' : 'senha do usuário admin' ?>">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 

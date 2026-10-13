@@ -1070,6 +1070,10 @@ $router->post('/ativos/intelbras-dvr/snapshot-canal', [AtivoController::class, '
 $router->get('/ativos/intelbras-dvr/ao-vivo', [AtivoController::class, 'aoVivoCanalDvr']);
 $router->get('/ativos/unifi-protect/snapshot', [AtivoController::class, 'snapshotCameraProtect']);
 $router->get('/ativos/unifi-protect/ao-vivo', [AtivoController::class, 'aoVivoCameraProtect']);
+$router->post('/ativos/vlan/salvar', [AtivoController::class, 'vlanSalvar']);
+$router->post('/ativos/vlan/excluir', [AtivoController::class, 'vlanExcluir']);
+$router->post('/ativos/vlan/porta', [AtivoController::class, 'vlanPorta']);
+$router->post('/ativos/vlan/desfazer', [AtivoController::class, 'vlanDesfazer']);
 $router->post('/ativos/intelbras-dvr/renomear-canal', [AtivoController::class, 'renomearCanalDvr']);
 $router->post('/ativos/intelbras-dvr/canal-em-uso', [AtivoController::class, 'definirCanalEmUsoDvr']);
 $router->post('/ativos/intelbras-dvr/canal-sensibilidade', [AtivoController::class, 'definirSensibilidadeCanalDvr']);

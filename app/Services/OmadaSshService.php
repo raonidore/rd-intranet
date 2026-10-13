@@ -11,11 +11,17 @@ use phpseclib3\Net\SSH2;
  * MongoDB) e adotar o switch (o Controller sobrescreve a config dele) não
  * compensa o risco.
  *
- * SÓ LEITURA, por construção: os únicos comandos que esta classe sabe
- * mandar estão em COMANDOS_PERMITIDOS (todos `show ...`, mais o `enable`
- * que a CLI exige antes deles) -- não existe caminho pra mandar texto
- * arbitrário. A recomendação (passo a passo da tela) é ainda usar um
+ * COLETA SÓ LEITURA, por construção: os únicos comandos da coleta estão em
+ * COMANDOS_PERMITIDOS (todos `show ...`, mais o `enable` que a CLI exige
+ * antes deles) e o `show interface switchport <porta>` validado por regex --
+ * não existe caminho pra mandar texto arbitrário. A recomendação é usar um
  * usuário de privilégio `user` no switch, que nem tem `configure`.
+ *
+ * MANUTENÇÃO DE VLAN (salvarVlan/excluirVlan/definirVlansPorta) é o único
+ * caminho que escreve: usa a credencial de manutenção (admin) se houver,
+ * senão a da coleta; os comandos são montados aqui a partir de números e
+ * nomes já validados, nunca de texto vindo da tela, e só são gravados na
+ * inicialização (copy running-config startup-config) se nenhum der erro.
  *
  * Peculiaridades confirmadas ao vivo num SG3428 (fw 2.30.0):
  * 1. O Enter da CLI é `\r` -- com `\n` o switch ecoa o comando e nunca
@@ -32,6 +38,10 @@ class OmadaSshService
     private const CHAVE_USUARIO = 'omada_ssh_usuario';
     private const CHAVE_SENHA_CIFRADA = 'omada_ssh_senha_cifrada';
     private const CHAVE_PORTA = 'omada_ssh_porta';
+    // Credencial opcional só pra manutenção de VLAN (privilégio admin) -- a
+    // da coleta pode continuar sendo um usuário de leitura.
+    private const CHAVE_MANUT_USUARIO = 'omada_ssh_manut_usuario';
+    private const CHAVE_MANUT_SENHA_CIFRADA = 'omada_ssh_manut_senha_cifrada';
 
     private const COMANDOS_PERMITIDOS = [
         'enable',
@@ -43,7 +53,11 @@ class OmadaSshService
         'show vlan brief',
         'show mac address-table dynamic',
         'show arp',
+        'show interface switchport',
     ];
+
+    /** Detalhe de VLAN de UMA porta (tagged/untagged) -- único comando de leitura com parâmetro. */
+    private const REGEX_SWITCHPORT_PORTA = '#^show interface switchport (gigabitEthernet|ten-gigabitEthernet) \d+/\d+/\d+$#';
 
     private const MARCA_PAGINACAO = 'Press any key to continue (Q to quit)';
     private const TIMEOUT_SEGUNDOS = 10;
@@ -104,6 +118,55 @@ class OmadaSshService
         ConfigService::set(self::CHAVE_USUARIO, '');
         ConfigService::set(self::CHAVE_SENHA_CIFRADA, '');
         ConfigService::set(self::CHAVE_PORTA, '');
+        ConfigService::set(self::CHAVE_MANUT_USUARIO, '');
+        ConfigService::set(self::CHAVE_MANUT_SENHA_CIFRADA, '');
+    }
+
+    public function usuarioManutencaoAtual(): string
+    {
+        return trim((string)(ConfigService::get(self::CHAVE_MANUT_USUARIO, '') ?: ''));
+    }
+
+    /** Manutenção de VLAN possível: credencial de manutenção ou, na falta, a da coleta. */
+    public function manutencaoDisponivel(): bool
+    {
+        return $this->usuarioManutencaoAtual() !== '' || $this->configurado();
+    }
+
+    /** Usuário em branco remove a credencial de manutenção (volta a usar a da coleta). */
+    public function salvarCredencialManutencao(string $usuario, string $senha): void
+    {
+        $usuario = trim($usuario);
+
+        if ($usuario === '') {
+            if ($this->usuarioManutencaoAtual() !== '') {
+                ConfigService::set(self::CHAVE_MANUT_USUARIO, '');
+                ConfigService::set(self::CHAVE_MANUT_SENHA_CIFRADA, '');
+                AuditService::registrar('Omada Controller', 'Configuração', 'Credencial de manutenção de VLAN (SSH) removida.');
+            }
+            return;
+        }
+
+        ConfigService::set(self::CHAVE_MANUT_USUARIO, $usuario);
+        if ($senha !== '') {
+            ConfigService::set(self::CHAVE_MANUT_SENHA_CIFRADA, CryptoService::encriptar($senha));
+        }
+        AuditService::registrar('Omada Controller', 'Configuração', "Credencial de manutenção de VLAN (SSH): usuário \"{$usuario}\".");
+    }
+
+    /** @return array{0: string, 1: ?string} usuário e senha usados na manutenção */
+    private function credencialManutencao(): array
+    {
+        if ($this->usuarioManutencaoAtual() !== '') {
+            $cifrada = ConfigService::get(self::CHAVE_MANUT_SENHA_CIFRADA, '');
+            try {
+                return [$this->usuarioManutencaoAtual(), $cifrada ? CryptoService::decriptar($cifrada) : null];
+            } catch (\RuntimeException $e) {
+                return [$this->usuarioManutencaoAtual(), null];
+            }
+        }
+
+        return [$this->usuarioAtual(), $this->senhaAtual()];
     }
 
     private function senhaAtual(): ?string
@@ -184,6 +247,28 @@ class OmadaSshService
                 $saidas[$comando] = $this->executar($ssh, $comando);
             }
 
+            // VLAN por porta: "show vlan brief" diz quem é membro e o "show
+            // interface switchport" geral dá o PVID; tagged/untagged só sai no
+            // detalhe por porta -- consultado só pra quem foge do padrão
+            // (membro de outra VLAN além da 1, ou PVID diferente de 1).
+            $membros = $this->interpretarMembrosVlan($saidas['show vlan brief']);
+            $pvids = $this->interpretarPvids($saidas['show interface switchport']);
+            $vlansPorPorta = [];
+            foreach ($membros as $vlan) {
+                foreach ($vlan['portas'] as $p) {
+                    $vlansPorPorta[$p][] = $vlan['id'];
+                }
+            }
+            $detalhePorta = [];
+            foreach ($vlansPorPorta as $p => $ids) {
+                if ($ids !== [1] || ($pvids[$p] ?? 1) !== 1) {
+                    $interface = self::nomeInterface($p);
+                    if ($interface !== null) {
+                        $detalhePorta[$p] = $this->interpretarDetalheSwitchport($this->executar($ssh, "show interface switchport {$interface}"));
+                    }
+                }
+            }
+
             $ssh->disconnect();
         } catch (\Throwable $e) {
             // Porta 22 aberta que fecha antes do "SSH-2.0-..." = SSH desligado
@@ -213,6 +298,15 @@ class OmadaSshService
                 fn ($mac) => ['mac' => $mac, 'ip' => $arp[$mac] ?? '', 'ip_origem' => isset($arp[$mac]) ? 'switch' : ''],
                 $macsPorPorta[$porta['porta']] ?? []
             );
+
+            $nome = $porta['porta'];
+            $porta['vlan_nativa'] = $pvids[$nome] ?? null;
+            if (isset($detalhePorta[$nome])) {
+                $porta['vlans'] = $detalhePorta[$nome];
+            } else {
+                // Só na VLAN 1 com PVID 1: padrão de fábrica, sem tag.
+                $porta['vlans'] = array_map(fn ($id) => ['id' => $id, 'tagueada' => $id !== ($porta['vlan_nativa'] ?? 1)], $vlansPorPorta[$nome] ?? []);
+            }
         }
         unset($porta);
 
@@ -230,7 +324,7 @@ class OmadaSshService
                 'cpu_pct' => $this->extrairCpu($saidas['show cpu-utilization']),
                 'mem_pct' => $this->extrairPrimeiroPercentual($saidas['show memory-utilization']),
                 'mac_total' => preg_match('/Total MAC Addresses\s*:\s*(\d+)/i', $saidas['show mac address-table count'], $m) ? (int)$m[1] : null,
-                'vlans' => $this->interpretarVlans($saidas['show vlan brief']),
+                'vlans' => array_map(fn ($v) => ['id' => $v['id'], 'nome' => $v['nome'], 'portas' => count($v['portas'])], $membros),
                 'portas' => $portas,
                 'portas_total' => count($portas),
                 'portas_ativas' => count(array_filter($portas, fn ($p) => $p['link'])),
@@ -240,7 +334,7 @@ class OmadaSshService
 
     private function executar(SSH2 $ssh, string $comando): string
     {
-        if (!in_array($comando, self::COMANDOS_PERMITIDOS, true)) {
+        if (!in_array($comando, self::COMANDOS_PERMITIDOS, true) && !preg_match(self::REGEX_SWITCHPORT_PORTA, $comando)) {
             throw new \LogicException("Comando fora da lista de leitura: {$comando}");
         }
 
@@ -356,17 +450,192 @@ class OmadaSshService
     }
 
     /** @return list<array{id:int, nome:string}> */
-    private function interpretarVlans(string $saida): array
+    /**
+     * "VLAN  Name  Status  Ports" com a lista de portas quebrando em linhas de
+     * continuação -> [['id' => 2, 'nome' => 'Clientes', 'portas' => ['Gi1/0/6', ...]], ...]
+     */
+    private function interpretarMembrosVlan(string $saida): array
     {
         $vlans = [];
+        $atual = null;
 
         foreach (explode("\n", $saida) as $linha) {
-            if (preg_match('/^(\d+)\s+(.+?)\s+(active|inactive)\b/i', $linha, $m)) {
-                $vlans[] = ['id' => (int)$m[1], 'nome' => $m[2]];
+            if (preg_match('/^(\d+)\s+(.+?)\s+(active|inactive)\b\s*(.*)$/i', $linha, $m)) {
+                if ($atual !== null) {
+                    $vlans[] = $atual;
+                }
+                $atual = ['id' => (int)$m[1], 'nome' => trim($m[2]), 'portas' => $this->listaPortas($m[4])];
+            } elseif ($atual !== null && preg_match('/^\s+((?:Gi|Te|Tw|Fa)\S.*)$/', $linha, $m)) {
+                $atual['portas'] = array_merge($atual['portas'], $this->listaPortas($m[1]));
+            }
+        }
+        if ($atual !== null) {
+            $vlans[] = $atual;
+        }
+
+        return $vlans;
+    }
+
+    private function listaPortas(string $texto): array
+    {
+        return array_values(array_filter(array_map('trim', explode(',', $texto)), fn ($p) => preg_match('/^(Gi|Te|Tw|Fa)\S*\d$/', $p)));
+    }
+
+    /** "show interface switchport" geral -> [porta => PVID] */
+    private function interpretarPvids(string $saida): array
+    {
+        $pvids = [];
+        foreach (explode("\n", $saida) as $linha) {
+            if (preg_match('/^\s*((?:Gi|Te|Tw|Fa)\S*\d)\s+\S+\s+\S+\s+(\d+)\s/', $linha, $m)) {
+                $pvids[$m[1]] = (int)$m[2];
+            }
+        }
+
+        return $pvids;
+    }
+
+    /** Bloco "Vlan  Name  Egress-rule" de uma porta -> [['id' => 2, 'tagueada' => true], ...] */
+    private function interpretarDetalheSwitchport(string $saida): array
+    {
+        $vlans = [];
+        foreach (explode("\n", $saida) as $linha) {
+            if (preg_match('/^\s*(\d+)\s+.*?\s(Untagged|Tagged)\s*$/i', $linha, $m)) {
+                $vlans[] = ['id' => (int)$m[1], 'tagueada' => strcasecmp($m[2], 'Tagged') === 0];
             }
         }
 
         return $vlans;
+    }
+
+    /** "Gi1/0/12" -> "gigabitEthernet 1/0/12" (nome de interface que a CLI aceita). */
+    public static function nomeInterface(string $porta): ?string
+    {
+        if (preg_match('#^Gi(\d+/\d+/\d+)$#', $porta, $m)) {
+            return 'gigabitEthernet ' . $m[1];
+        }
+        if (preg_match('#^Te(\d+/\d+/\d+)$#', $porta, $m)) {
+            return 'ten-gigabitEthernet ' . $m[1];
+        }
+
+        return null;
+    }
+
+    /* ---------------------------------------------------------------
+     * Manutenção de VLAN -- comandos montados só a partir de valores
+     * validados aqui (números de VLAN, nome restrito, porta conhecida).
+     * --------------------------------------------------------------- */
+
+    public static function nomeVlanValido(string $nome): bool
+    {
+        // A CLI aceita até 16 caracteres; sem acento pra não depender da codificação do switch.
+        return (bool)preg_match('/^[A-Za-z0-9][A-Za-z0-9 _.\-]{0,15}$/', $nome);
+    }
+
+    /** Cria a VLAN, ou só renomeia se ela já existir. */
+    public function salvarVlan(string $ip, int $vlan, string $nome): array
+    {
+        if ($vlan < 2 || $vlan > 4094 || !self::nomeVlanValido($nome)) {
+            return ['success' => false, 'message' => 'VLAN inválida: número de 2 a 4094 e nome de até 16 caracteres (letras sem acento, números, espaço, "-", "_" ou ".").'];
+        }
+
+        return $this->aplicarConfiguracao($ip, ["vlan {$vlan}", "name {$nome}", 'exit']);
+    }
+
+    public function excluirVlan(string $ip, int $vlan): array
+    {
+        if ($vlan < 2 || $vlan > 4094) {
+            return ['success' => false, 'message' => 'A VLAN 1 é a padrão do switch e não pode ser excluída.'];
+        }
+
+        return $this->aplicarConfiguracao($ip, ["no vlan {$vlan}"]);
+    }
+
+    /**
+     * Deixa a porta exatamente com: $nativa sem tag (vira o PVID) e
+     * $tagueadas com tag. $atuais = VLANs em que a porta está hoje (pra tirar
+     * o que sobrou). Ordem pensada pra nunca deixar o PVID numa VLAN da qual
+     * a porta já saiu: primeiro entra nas novas, depois troca o PVID, por
+     * último sai das antigas.
+     *
+     * @param int[] $tagueadas
+     * @param int[] $atuais
+     */
+    public function definirVlansPorta(string $ip, string $porta, int $nativa, array $tagueadas, array $atuais): array
+    {
+        $interface = self::nomeInterface($porta);
+        $tagueadas = array_values(array_unique(array_map('intval', $tagueadas)));
+        $todas = array_merge([$nativa], $tagueadas);
+
+        if ($interface === null || $nativa < 1 || $nativa > 4094 || in_array($nativa, $tagueadas, true)
+            || array_filter($todas, fn ($v) => $v < 1 || $v > 4094)) {
+            return ['success' => false, 'message' => 'Combinação de VLANs inválida para a porta.'];
+        }
+
+        $comandos = ["interface {$interface}", "switchport general allowed vlan {$nativa} untagged"];
+        if ($tagueadas) {
+            $comandos[] = 'switchport general allowed vlan ' . implode(',', $tagueadas) . ' tagged';
+        }
+        $comandos[] = "switchport pvid {$nativa}";
+        foreach (array_diff(array_map('intval', $atuais), $todas) as $sobra) {
+            $comandos[] = "no switchport general allowed vlan {$sobra}";
+        }
+        $comandos[] = 'exit';
+
+        return $this->aplicarConfiguracao($ip, $comandos);
+    }
+
+    /**
+     * Entra em `configure`, roda os comandos e só grava na inicialização se
+     * nenhum der erro. Se um falhar no meio, sai sem gravar -- o que já foi
+     * aplicado fica só até o próximo reinício (a tela oferece "Desfazer").
+     */
+    private function aplicarConfiguracao(string $ip, array $comandos): array
+    {
+        [$usuario, $senha] = $this->credencialManutencao();
+        if ($usuario === '' || $senha === null) {
+            return ['success' => false, 'message' => 'Nenhuma credencial SSH para manutenção -- veja Integrações > TP-Link Omada.'];
+        }
+
+        try {
+            $ssh = new SSH2($ip, $this->portaAtual(), self::TIMEOUT_SEGUNDOS);
+            if (!@$ssh->login($usuario, $senha)) {
+                return ['success' => false, 'message' => "O switch {$ip} recusou o usuário/senha de manutenção."];
+            }
+            $ssh->setTimeout(self::TIMEOUT_SEGUNDOS);
+            $ssh->enablePTY();
+            $ssh->setWindowSize(200, 1000);
+            $this->lerAtePrompt($ssh);
+
+            $log = [];
+            foreach (array_merge(['enable', 'configure'], $comandos) as $comando) {
+                $ssh->write($comando . "\r");
+                $saida = $this->lerAtePrompt($ssh);
+                $log[] = $comando;
+                if (preg_match('/(Error|Bad command|Invalid|Incomplete|failed|not exist)/i', $saida, $m)) {
+                    $ssh->write("end\r");
+                    $this->lerAtePrompt($ssh);
+                    $ssh->disconnect();
+                    $erro = trim(preg_replace('/\s+/', ' ', substr($saida, strpos($saida, $m[1]))));
+                    $privilegio = $comando === 'configure' ? ' (o usuário SSH não tem privilégio de configuração -- cadastre a credencial de manutenção)' : '';
+                    return ['success' => false, 'message' => "O switch recusou \"{$comando}\": {$erro}{$privilegio}", 'comandos' => $log];
+                }
+            }
+
+            $ssh->write("end\r");
+            $this->lerAtePrompt($ssh);
+            $ssh->write("copy running-config startup-config\r");
+            $ssh->setTimeout(30);
+            $gravacao = $this->lerAtePrompt($ssh);
+            $ssh->disconnect();
+        } catch (\Throwable $e) {
+            return ['success' => false, 'message' => "Falha na conexão SSH com {$ip}: " . $e->getMessage()];
+        }
+
+        if (stripos($gravacao, 'OK') === false) {
+            return ['success' => false, 'message' => 'A alteração foi aplicada, mas o switch não confirmou a gravação na inicialização: ' . trim($gravacao), 'comandos' => $log];
+        }
+
+        return ['success' => true, 'message' => 'Alteração aplicada e gravada no switch.', 'comandos' => $log];
     }
 
     /** "59 day - 21 hour - 29 min - 35 sec" -> "59d 21h 29m 35s" (mesmo estilo do uptime do Controller). */
