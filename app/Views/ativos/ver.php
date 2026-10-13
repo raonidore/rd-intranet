@@ -1847,6 +1847,17 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     display:flex; align-items:center; justify-content:center; flex-shrink:0; }
 tr.linha-selecionada > td { background:#e7f1ff !important; }
 
+/* Coluna "Dispositivos" da tabela: um por linha */
+.disp-lista { display:flex; flex-direction:column; gap:3px; }
+.disp-linha { display:flex; align-items:baseline; gap:.45rem; line-height:1.3; min-width:0; }
+.disp-linha .bi { font-size:.8rem; flex-shrink:0; }
+.disp-linha .disp-ip { font-family:var(--bs-font-monospace); min-width:8.2em; flex-shrink:0; }
+.disp-linha .disp-sem-ip { font-style:italic; color:#adb5bd; min-width:8.2em; flex-shrink:0; }
+.disp-linha .disp-nome { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.disp-linha .disp-cod { color:#6c757d; font-size:.72rem; margin-right:.25rem; }
+.disp-mais { align-self:flex-start; border:0; background:#eef1f5; color:#495057; border-radius:10px; font-size:.72rem; padding:1px 8px; }
+.disp-mais:hover { background:#dfe5ec; }
+
 /* VLANs */
 .vlan-chip { display:inline-flex; align-items:center; gap:4px; padding:1px 7px; border-radius:10px; font-size:.72rem; font-weight:600;
     color:#fff; background:var(--cor-vlan,#6c757d); white-space:nowrap; }
@@ -2259,6 +2270,33 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
     });
 
     // ---------- tabela ----------
+    // Uma linha por dispositivo: ícone (ativo cadastrado ou não), IP (ou "sem IP"), nome.
+    // Até 3 por porta; o resto vira "+ N outros", que abre o detalhe da porta com a lista toda.
+    function linhaDispositivo(d) {
+        const cadastrado = !!d.ativo_id;
+        let nome = '';
+        if (cadastrado && d.ativo_nome) {
+            const i = d.ativo_nome.indexOf(' - ');
+            nome = i > 0 ? `<span class="disp-cod">${esc(d.ativo_nome.slice(0, i))}</span>${esc(d.ativo_nome.slice(i + 3))}` : esc(d.ativo_nome);
+        } else if (d.hostname) {
+            nome = esc(d.hostname);
+        } else {
+            nome = `<span class="text-muted">${esc(d.fabricante || d.mac || 'desconhecido')}</span>`;
+        }
+        const ip = d.ip ? `<span class="disp-ip">${esc(d.ip)}</span>` : '<span class="disp-sem-ip" title="O switch viu o MAC, mas nenhuma fonte informou o IP">sem IP</span>';
+        const titulo = [d.ip, nomeDisp(d), d.mac, d.fabricante].filter(Boolean).join(' · ');
+        return `<div class="disp-linha" title="${esc(titulo)}"><i class="bi ${cadastrado ? 'bi-pc-display text-primary' : 'bi-question-circle text-secondary'}"></i>${ip}<span class="disp-nome">${nome}</span></div>`;
+    }
+    function celulaDispositivos(ds) {
+        if (!ds.length) return '<span class="text-muted">—</span>';
+        // Primeiro o que a pessoa reconhece: ativo cadastrado, depois quem tem nome, depois quem tem IP.
+        const peso = d => (d.ativo_id ? 4 : 0) + (d.hostname ? 2 : 0) + (d.ip ? 1 : 0);
+        const ordenados = ds.slice().sort((a, b) => peso(b) - peso(a));
+        const visiveis = ordenados.length > 3 ? ordenados.slice(0, 2) : ordenados;
+        const resto = ordenados.length - visiveis.length;
+        return `<div class="disp-lista">${visiveis.map(linhaDispositivo).join('')}${resto > 0 ? `<button type="button" class="disp-mais">+ ${resto} outro${resto > 1 ? 's' : ''} · ver todos</button>` : ''}</div>`;
+    }
+
     document.getElementById('swTabela').innerHTML = portas.map(p => {
         const ds = p.dispositivos || [];
         return `<tr data-porta="${esc(p.porta)}" style="cursor:pointer" class="${p.link ? '' : 'text-muted'}">
@@ -2267,7 +2305,7 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
             <td>${esc(velocidade(p.velocidade) || '—')}</td><td>${esc(p.meio)}</td>
             ${DADOS.fonte === 'unifi' ? `<td>${htmlPoe(p)}</td><td class="small text-nowrap">${p.link ? esc(p.trafego_rx) + ' / ' + esc(p.trafego_tx) : '—'}</td>` : ''}
             <td class="text-nowrap">${chipsVlansPorta(p)}</td>
-            <td class="small">${ds.length ? ds.slice(0, 2).map(d => `<span class="font-monospace">${esc(d.ip || '?')}</span>${nomeDisp(d) ? ' ' + esc(nomeDisp(d)) : ''}`).join(', ') + (ds.length > 2 ? ` <span class="text-muted">+${ds.length - 2}</span>` : '') : '<span class="text-muted">—</span>'}</td>
+            <td class="small">${celulaDispositivos(ds)}</td>
         </tr>`;
     }).join('');
     document.querySelectorAll('#swTabela tr').forEach(tr => tr.addEventListener('click', () => {
