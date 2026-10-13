@@ -54,10 +54,15 @@ class OmadaSshService
         'show mac address-table dynamic',
         'show arp',
         'show interface switchport',
+        'show lldp neighbor-information',
     ];
 
-    /** Detalhe de VLAN de UMA porta (tagged/untagged) -- único comando de leitura com parâmetro. */
-    private const REGEX_SWITCHPORT_PORTA = '#^show interface switchport (gigabitEthernet|ten-gigabitEthernet) \d+/\d+/\d+$#';
+    /**
+     * Únicos comandos de leitura com parâmetro (a porta): detalhe de VLAN da
+     * porta e vizinho LLDP da porta (firmware antigo, ex. 2.0.10, só aceita
+     * o LLDP por interface).
+     */
+    private const REGEX_SWITCHPORT_PORTA = '#^show (interface switchport|lldp neighbor-information interface) (gigabitEthernet|ten-gigabitEthernet) \d+/\d+/\d+$#';
 
     private const MARCA_PAGINACAO = 'Press any key to continue (Q to quit)';
     private const TIMEOUT_SEGUNDOS = 10;
@@ -269,6 +274,22 @@ class OmadaSshService
                 }
             }
 
+            // Vizinho LLDP = o que está NO CABO de cada porta (com certeza).
+            // Firmware novo: tabela única; antigo: "Incomplete command" -> uma
+            // consulta por porta com link. LLDP desligado: nenhum vizinho.
+            $lldp = $this->interpretarLldpTabela($saidas['show lldp neighbor-information']);
+            if (!$lldp && stripos($saidas['show lldp neighbor-information'], 'Incomplete') !== false) {
+                foreach ($this->interpretarPortas($saidas['show interface status']) as $pLink) {
+                    $interface = $pLink['link'] ? self::nomeInterface($pLink['porta']) : null;
+                    if ($interface !== null) {
+                        $vizinho = $this->interpretarLldpDetalhe($this->executar($ssh, "show lldp neighbor-information interface {$interface}"));
+                        if ($vizinho) {
+                            $lldp[$pLink['porta']] = $vizinho;
+                        }
+                    }
+                }
+            }
+
             $ssh->disconnect();
         } catch (\Throwable $e) {
             // Porta 22 aberta que fecha antes do "SSH-2.0-..." = SSH desligado
@@ -300,6 +321,23 @@ class OmadaSshService
             );
 
             $nome = $porta['porta'];
+            if (isset($lldp[$nome]) && $lldp[$nome]['mac'] !== '') {
+                $v = $lldp[$nome];
+                $achou = false;
+                foreach ($porta['dispositivos'] as &$disp) {
+                    if ($disp['mac'] === $v['mac']) {
+                        $disp['lldp'] = true;
+                        $disp['lldp_nome'] = $v['nome'];
+                        $disp['ip'] = $disp['ip'] !== '' ? $disp['ip'] : $v['ip'];
+                        $achou = true;
+                    }
+                }
+                unset($disp);
+                if (!$achou) {
+                    array_unshift($porta['dispositivos'], ['mac' => $v['mac'], 'vlan' => null, 'ip' => $v['ip'],
+                        'ip_origem' => $v['ip'] !== '' ? 'lldp' : '', 'lldp' => true, 'lldp_nome' => $v['nome']]);
+                }
+            }
             $porta['vlan_nativa'] = $pvids[$nome] ?? null;
             if (isset($detalhePorta[$nome])) {
                 $porta['vlans'] = $detalhePorta[$nome];
@@ -480,6 +518,43 @@ class OmadaSshService
     private function listaPortas(string $texto): array
     {
         return array_values(array_filter(array_map('trim', explode(',', $texto)), fn ($p) => preg_match('/^(Gi|Te|Tw|Fa)\S*\d$/', $p)));
+    }
+
+    /**
+     * Firmware novo: "Port  Device ID  Port ID  management address  Port Description  System Name"
+     * -> [porta => ['mac' => ..., 'ip' => ..., 'nome' => ...]]
+     */
+    private function interpretarLldpTabela(string $saida): array
+    {
+        $vizinhos = [];
+        foreach (explode("\n", $saida) as $linha) {
+            if (preg_match('/^\s*((?:Gi|Te|Tw|Fa)\S*\d)\s+([0-9A-Fa-f]{2}(?:[:\-][0-9A-Fa-f]{2}){5})\s+(.*)$/', $linha, $m)) {
+                $resto = preg_split('/\s{2,}/', trim($m[3]));
+                $ip = '';
+                foreach ($resto as $campo) {
+                    if (filter_var($campo, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+                        $ip = $campo;
+                    }
+                }
+                $vizinhos[$m[1]] = ['mac' => self::normalizarMac($m[2]), 'ip' => $ip, 'nome' => trim((string)end($resto))];
+            }
+        }
+
+        return $vizinhos;
+    }
+
+    /** Firmware antigo: bloco "Chassis ID: ... System name: ... Management address: ..." de uma porta. */
+    private function interpretarLldpDetalhe(string $saida): ?array
+    {
+        if (!preg_match('/Chassis ID:\s*([0-9A-Fa-f]{2}(?:[:\-][0-9A-Fa-f]{2}){5})/', $saida, $mac)) {
+            return null;
+        }
+
+        return [
+            'mac' => self::normalizarMac($mac[1]),
+            'ip' => preg_match('/Management address:\s*(\d+\.\d+\.\d+\.\d+)/', $saida, $m) ? $m[1] : '',
+            'nome' => preg_match('/System name:\s*(.+)/', $saida, $m) ? trim($m[1]) : '',
+        ];
     }
 
     /** "show interface switchport" geral -> [porta => PVID] */

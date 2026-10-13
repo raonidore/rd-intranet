@@ -1867,6 +1867,7 @@ tr.linha-selecionada > td { background:#e7f1ff !important; }
 .disp-linha .disp-cod { color:#6c757d; font-size:.72rem; margin-right:.25rem; }
 .disp-mais { align-self:flex-start; border:0; background:#eef1f5; color:#495057; border-radius:10px; font-size:.72rem; padding:1px 8px; }
 .disp-mais:hover { background:#dfe5ec; }
+.disp-ocultos { font-size:.72rem; color:#868e96; }
 
 /* VLANs */
 .vlan-chip { display:inline-flex; align-items:center; gap:4px; padding:1px 7px; border-radius:10px; font-size:.72rem; font-weight:600;
@@ -1927,6 +1928,12 @@ tr.linha-selecionada > td { background:#e7f1ff !important; }
                     <label class="btn btn-outline-secondary" for="swModoLink">Velocidade</label>
                     <input type="radio" class="btn-check" name="swModoCor" id="swModoVlan" value="vlan">
                     <label class="btn btn-outline-secondary" for="swModoVlan">Cores por VLAN</label>
+                </div>
+                <div class="btn-group btn-group-sm" role="group" aria-label="O que mostrar em cada porta">
+                    <input type="radio" class="btn-check" name="swVisao" id="swVisaoPlugado" value="plugado">
+                    <label class="btn btn-outline-secondary" for="swVisaoPlugado" title="Só o equipamento ligado no cabo de cada porta"><i class="bi bi-plug"></i> Plugado na porta</label>
+                    <input type="radio" class="btn-check" name="swVisao" id="swVisaoTudo" value="tudo" checked>
+                    <label class="btn btn-outline-secondary" for="swVisaoTudo" title="Todo aparelho cujo tráfego passou pela porta na última coleta (inclui Wi-Fi do AP e o que está atrás de outro switch)"><i class="bi bi-diagram-3"></i> Tudo que passa</label>
                 </div>
             </div>
             <div class="input-group input-group-sm" style="max-width:300px">
@@ -2283,13 +2290,41 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
         ${DADOS.uplink ? `<div class="sw-metrica"><div class="valor fs-6"><i class="bi bi-arrow-up-circle text-success"></i> ${esc(DADOS.uplink)}</div><div class="rotulo">uplink</div></div>` : ''}`;
 
 
+    // ---------- visão: "Plugado na porta" x "Tudo que passa" ----------
+    // A lista de cada porta é tudo que o switch viu passar por ela na última coleta;
+    // "plugado" filtra pelo que a coleta deduziu estar no cabo (p.fisico, ver
+    // AtivoService::marcarPontaFisica). Coleta antiga, sem p.fisico, mostra tudo.
+    let visao = 'tudo';
+    try { visao = localStorage.getItem('rdSwVisao') === 'plugado' ? 'plugado' : 'tudo'; } catch (e) { /* sem storage */ }
+    function noCabo(p) {
+        const ds = p.dispositivos || [];
+        if (visao !== 'plugado' || !p.fisico) return ds;
+        if (p.fisico.tipo === 'indeterminado') return [];
+        return ds.filter(d => p.fisico.macs.includes(d.mac));
+    }
+    function dispVisiveis(p) {
+        if (visao !== 'plugado') return p.dispositivos || [];
+        // Um equipamento com vários MACs (gateway: um por VLAN; switch: principal + interface) aparece uma vez.
+        const unicos = new Map();
+        noCabo(p).forEach(d => { const k = d.ativo_id || d.hostname || d.ip || d.mac; if (!unicos.has(k)) unicos.set(k, d); });
+        return [...unicos.values()];
+    }
+    function avisoOcultos(p) {
+        const total = (p.dispositivos || []).length;
+        const ocultos = total - noCabo(p).length;
+        if (visao !== 'plugado' || ocultos <= 0) return '';
+        return p.fisico && p.fisico.tipo === 'indeterminado'
+            ? `Não dá pra saber qual dos ${total} aparelhos está no cabo -- veja em "Tudo que passa".`
+            : `+ ${ocultos} aparelho${ocultos > 1 ? 's passam' : ' passa'} por esta porta (Wi-Fi ou atrás de outro equipamento).`;
+    }
+
     // ---------- painel ----------
     const cobre = portas.filter(p => p.meio !== 'Fibra').sort((a, b) => numero(a) - numero(b));
     const fibra = portas.filter(p => p.meio === 'Fibra').sort((a, b) => numero(a) - numero(b));
 
     function htmlPorta(p, linha, sfp) {
         const n = numero(p);
-        const qtd = (p.dispositivos || []).length;
+        const qtd = dispVisiveis(p).length;
         const classes = ['sw-porta', 'linha-' + linha, p.link ? 'com-link' : '', qtd > 1 ? 'uplink' : '', p.uplink ? 'uplink-rede' : ''].join(' ');
         const raio = p.poe && p.poe.potencia_w > 0 ? '<i class="bi bi-lightning-charge-fill sw-poe"></i>' : '';
         const led = `<i class="sw-led ${p.link ? classeVel(p.velocidade) : ''}"></i>`;
@@ -2333,13 +2368,14 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
     chassi.querySelectorAll('.sw-porta').forEach(el => {
         el.addEventListener('mouseenter', () => {
             const p = porNome[el.dataset.porta];
-            const ds = p.dispositivos || [];
+            const ds = dispVisiveis(p);
             tip.innerHTML = `<div class="titulo">Porta ${numero(p)} <span class="text-secondary fw-normal">${esc(p.porta)}</span></div>
                 <div class="sub">${p.link ? `<i class="bi bi-circle-fill text-success" style="font-size:.5rem"></i> Com link · ${esc(velocidade(p.velocidade))} ${esc(p.duplex)}` : '<i class="bi bi-circle text-secondary" style="font-size:.5rem"></i> Sem link'} · ${esc(p.meio)}${p.descricao ? ' · ' + esc(p.descricao) : ''}${p.uplink ? ' · <span class="text-success">uplink</span>' : ''}${p.poe && p.poe.potencia_w > 0 ? ` · <span class="text-warning">PoE ${p.poe.potencia_w} W</span>` : ''}</div>
                 ${p.vlans ? `<div class="sub">VLAN ${resumoVlansTexto(p)}</div>` : ''}
                 ${ds.slice(0, 6).map(htmlDisp).join('')}
                 ${ds.length > 6 ? `<div class="disp text-secondary">+ ${ds.length - 6} dispositivo(s) -- clique para ver todos</div>` : ''}
-                ${!ds.length && p.link ? '<div class="disp text-secondary">Nenhum MAC aprendido ainda</div>' : ''}`;
+                ${!ds.length && p.link && !avisoOcultos(p) ? '<div class="disp text-secondary">Nenhum MAC aprendido ainda</div>' : ''}
+                ${avisoOcultos(p) ? `<div class="disp text-secondary">${esc(avisoOcultos(p))}</div>` : ''}`;
             tip.style.display = 'block';
         });
         el.addEventListener('mousemove', e => {
@@ -2359,7 +2395,8 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
         chassi.querySelectorAll('.sw-porta').forEach(el => el.classList.toggle('selecionada', el.dataset.porta === nome));
         document.querySelectorAll('#swTabela tr').forEach(tr => tr.classList.toggle('linha-selecionada', tr.dataset.porta === nome));
         const p = porNome[nome];
-        const ds = p.dispositivos || [];
+        portaAberta = nome;
+        const ds = dispVisiveis(p);
         document.getElementById('swDetalheTitulo').innerHTML = `<i class="bi bi-ethernet"></i> Porta ${numero(p)} <small class="text-muted fw-normal">${esc(p.porta)} · ${p.link ? esc(velocidade(p.velocidade) + ' ' + p.duplex) : 'sem link'} · ${esc(p.meio)}</small>`;
         // Só a UniFi informa PoE/tráfego/erros/STP por porta.
         const extrasUnifi = DADOS.fonte !== 'unifi' ? '' : `<div class="d-flex flex-wrap gap-3 small mb-2 pb-2 border-bottom">
@@ -2388,10 +2425,13 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
                 ${!d.ativo_id && d.ip ? `<a class="btn btn-sm btn-outline-primary flex-shrink-0 align-self-center" target="_blank"
                     href="${URL_ATIVO_NOVO}?ip=${encodeURIComponent(d.ip)}&nome=${encodeURIComponent(d.hostname || '')}"
                     title="Abre o Novo Ativo com IP e nome já preenchidos -- use 'Detectar' lá pra completar tipo/marca/modelo"><i class="bi bi-plus-lg"></i> Cadastrar ativo</a>` : ''}
-            </div>`).join('') : `<p class="text-muted mb-0">${p.link ? 'Com link, mas nenhum MAC aprendido ainda.' : 'Porta livre.'}</p>`);
+            </div>`).join('') : (avisoOcultos(p) ? '' : `<p class="text-muted mb-0">${p.link ? 'Com link, mas nenhum MAC aprendido ainda.' : 'Porta livre.'}</p>`))
+            + (avisoOcultos(p) ? `<p class="disp-ocultos mt-2 mb-0"><i class="bi bi-eye-slash"></i> ${esc(avisoOcultos(p))}</p>` : '');
         detalhe.classList.remove('d-none');
     }
+    let portaAberta = null;
     document.getElementById('swDetalheFechar').addEventListener('click', () => {
+        portaAberta = null;
         detalhe.classList.add('d-none');
         chassi.querySelectorAll('.sw-porta').forEach(el => el.classList.remove('selecionada'));
         document.querySelectorAll('#swTabela tr').forEach(tr => tr.classList.remove('linha-selecionada'));
@@ -2430,20 +2470,51 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
         return `<div class="disp-lista">${visiveis.map(linhaDispositivo).join('')}${resto > 0 ? `<button type="button" class="disp-mais">+ ${resto} outro${resto > 1 ? 's' : ''} · ver todos</button>` : ''}</div>`;
     }
 
+    function renderTabela() {
     document.getElementById('swTabela').innerHTML = portas.map(p => {
-        const ds = p.dispositivos || [];
+        const ds = dispVisiveis(p);
+        const aviso = avisoOcultos(p);
         return `<tr data-porta="${esc(p.porta)}" style="cursor:pointer" class="${p.link ? '' : 'text-muted'}">
             <td class="font-monospace small">${esc(p.porta)}</td>
             <td>${p.link ? '<span class="badge text-bg-success">Com link</span>' : '<span class="badge text-bg-secondary">Sem link</span>'}</td>
             <td>${esc(velocidade(p.velocidade) || '—')}</td><td>${esc(p.meio)}</td>
             ${DADOS.fonte === 'unifi' ? `<td>${htmlPoe(p)}</td><td class="small text-nowrap">${p.link ? esc(p.trafego_rx) + ' / ' + esc(p.trafego_tx) : '—'}</td>` : ''}
             <td class="text-nowrap">${chipsVlansPorta(p)}</td>
-            <td class="small">${celulaDispositivos(ds, p)}</td>
+            <td class="small">${ds.length || !aviso ? celulaDispositivos(ds, p) : ''}${aviso ? `<div class="disp-ocultos${ds.length ? ' mt-1' : ''}"><i class="bi bi-eye-slash"></i> ${esc(aviso)}</div>` : ''}</td>
         </tr>`;
     }).join('');
     document.querySelectorAll('#swTabela tr').forEach(tr => tr.addEventListener('click', () => {
         selecionar(tr.dataset.porta);
         chassi.querySelector(`[data-porta="${CSS.escape(tr.dataset.porta)}"]`).scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }));
+    }
+    renderTabela();
+
+    // Trocar a visão: tabela, contadores do painel e detalhe aberto acompanham.
+    function aplicarVisao() {
+        chassi.querySelectorAll('.sw-porta').forEach(el => {
+            const p = porNome[el.dataset.porta];
+            const qtd = dispVisiveis(p).length;
+            el.classList.toggle('uplink', qtd > 1);
+            const rj = el.querySelector('.sw-rj45');
+            if (!rj) return;
+            let badge = rj.querySelector('.sw-qtd');
+            if (qtd > 1) {
+                if (!badge) { badge = document.createElement('span'); badge.className = 'sw-qtd'; rj.appendChild(badge); }
+                badge.textContent = qtd;
+            } else if (badge) {
+                badge.remove();
+            }
+        });
+        renderTabela();
+        if (portaAberta) selecionar(portaAberta);
+    }
+    document.getElementById(visao === 'plugado' ? 'swVisaoPlugado' : 'swVisaoTudo').checked = true;
+    if (visao === 'plugado') aplicarVisao();
+    document.querySelectorAll('input[name="swVisao"]').forEach(r => r.addEventListener('change', () => {
+        visao = r.value;
+        try { localStorage.setItem('rdSwVisao', visao); } catch (e) { /* sem storage */ }
+        aplicarVisao();
     }));
 
     // ---------- busca ----------

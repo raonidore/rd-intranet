@@ -1004,6 +1004,16 @@ class AtivoRepository
     }
 
     /** Só lê o contador atual pro par tipo+unidade, sem incrementar -- pra sugerir um próximo número sem consumir da sequência de verdade. */
+    /** Garante que o contador do tipo+unidade esteja pelo menos em $numero (nunca volta). */
+    public function avancarContador(int $tipoId, int $unidadeId, int $numero): void
+    {
+        $stmt = $this->pdo->prepare("
+            INSERT INTO ativos_contadores (tipo_id, unidade_id, ultimo_numero) VALUES (?, ?, ?)
+            ON DUPLICATE KEY UPDATE ultimo_numero = GREATEST(ultimo_numero, VALUES(ultimo_numero))
+        ");
+        $stmt->execute([$tipoId, $unidadeId, $numero]);
+    }
+
     public function espiarProximoNumeroContador(int $tipoId, int $unidadeId): int
     {
         $stmt = $this->pdo->prepare("SELECT ultimo_numero FROM ativos_contadores WHERE tipo_id = ? AND unidade_id = ?");

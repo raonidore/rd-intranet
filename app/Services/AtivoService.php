@@ -320,7 +320,14 @@ class AtivoService
             return ['success' => false, 'message' => 'Tipo ou unidade do ativo inválidos.'];
         }
 
-        return $this->ajustarCodigoManual($ativo, $unidade, $this->formatarCodigo($tipo, $unidade, $numero));
+        $resultado = $this->ajustarCodigoManual($ativo, $unidade, $this->formatarCodigo($tipo, $unidade, $numero));
+        if ($resultado['success']) {
+            // Número escolhido à mão à frente do contador: avança o contador, senão
+            // o próximo cadastro tentaria reaproveitar um número já usado.
+            $this->repository->avancarContador((int)$tipo['id'], (int)$unidade['id'], $numero);
+        }
+
+        return $resultado;
     }
 
     /**
@@ -344,7 +351,11 @@ class AtivoService
             return ['success' => false, 'message' => 'Tipo ou unidade do ativo inválidos.'];
         }
 
+        // Mesma regra de proximoCodigo(): sugere o próximo número LIVRE.
         $numero = $this->repository->espiarProximoNumeroContador((int)$tipo['id'], (int)$unidade['id']);
+        while ($this->repository->buscarPorCodigoPatrimonio($this->formatarCodigo($tipo, $unidade, $numero)) !== null) {
+            $numero++;
+        }
 
         return [
             'success' => true,
@@ -861,10 +872,26 @@ class AtivoService
         return $this->repository->listarProcessosColetados($ativoId);
     }
 
-    /** @param array $tipo linha de ativos_tipos; @param array $unidade linha de unidades */
+    /**
+     * Próximo código livre do tipo+unidade. O contador pode estar atrás dos
+     * códigos que já existem (código ajustado à mão, ativo movido de unidade,
+     * troca do número de dígitos) -- então pula os que já estão em uso em vez
+     * de devolver um repetido. Visto no enzilabprime: APs ajustados à mão para
+     * EP-AV-AP-0001/0003/0004 com o contador parado em 2; o próximo cadastro
+     * gerou EP-AV-AP-0003 e estourou o UNIQUE (erro 500 ao salvar).
+     *
+     * @param array $tipo linha de ativos_tipos; @param array $unidade linha de unidades
+     */
     private function proximoCodigo(array $tipo, array $unidade): string
     {
-        return $this->formatarCodigo($tipo, $unidade, $this->repository->proximoNumeroContador((int)$tipo['id'], (int)$unidade['id']));
+        for ($tentativa = 0; $tentativa < 10000; $tentativa++) {
+            $codigo = $this->formatarCodigo($tipo, $unidade, $this->repository->proximoNumeroContador((int)$tipo['id'], (int)$unidade['id']));
+            if ($this->repository->buscarPorCodigoPatrimonio($codigo) === null) {
+                return $codigo;
+            }
+        }
+
+        throw new \RuntimeException('Não foi possível gerar um código de patrimônio livre.');
     }
 
     /** Monta a string do código a partir dos dados REAIS do ativo (sigla da empresa + sigla da unidade + sigla do tipo, sempre do cadastro) e de um número já escolhido -- nunca aceita sigla digitada livre. */
@@ -1551,7 +1578,7 @@ class AtivoService
             // Switch UniFi: painel de portas no mesmo formato do Omada
             // (omada_portas), pra reaproveitar a aba "Portas do switch".
             if (!empty($legadoDispositivo['port_table']) && ($ativo['tipo_slug'] ?? '') === 'switch') {
-                $coletado = array_merge($coletado, $this->coletarPortasSwitchUnifi($unifi, $legadoDispositivo, $clientesLegado));
+                $coletado = array_merge($coletado, $this->coletarPortasSwitchUnifi($unifi, $legadoDispositivo, $clientesLegado, $id));
             }
         }
 
@@ -1573,7 +1600,7 @@ class AtivoService
      * já com nome, IP e fabricante) e do LLDP (AP, gateway, outro switch --
      * dispositivos UniFi não aparecem como cliente).
      */
-    private function coletarPortasSwitchUnifi(UnifiService $unifi, array $legado, array $clientesLegado): array
+    private function coletarPortasSwitchUnifi(UnifiService $unifi, array $legado, array $clientesLegado, ?int $ativoId = null): array
     {
         $macSwitch = OmadaSshService::normalizarMac($legado['mac'] ?? '');
 
@@ -1622,6 +1649,7 @@ class AtivoService
                 'hostname' => (string)($dispositivo['name'] ?? ''),
                 'fabricante' => $dispositivo ? 'Ubiquiti' : '',
                 'unifi_dispositivo' => (string)($dispositivo['model'] ?? ''),
+                'lldp' => true, // vizinho anunciado pelo próprio cabo: é o que está plugado
             ]);
         }
 
@@ -1729,7 +1757,7 @@ class AtivoService
         $coletado = [
             'unifi_nome' => (string)($legado['name'] ?? ''),
             'unifi_serial' => (string)($legado['serial'] ?? ''),
-            'unifi_portas' => $this->enriquecerDispositivosPortas($portas, $clientesLegado),
+            'unifi_portas' => $this->marcarPontaFisica($this->enriquecerDispositivosPortas($portas, $clientesLegado), (string)($legado['mac'] ?? ''), $ativoId),
             'unifi_vlans' => $vlans,
             'unifi_portas_resumo' => "{$comLink} de " . count($portas),
             'unifi_mac_total' => (string)array_sum(array_map(fn ($p) => count($p['dispositivos']), $portas)),
@@ -2251,6 +2279,137 @@ class AtivoService
     }
 
     /**
+     * Quem está FISICAMENTE plugado em cada porta -- o switch só informa
+     * quem passou por ela (todo MAC de origem que entrou), então isto é
+     * deduzido e gravado em $porta['fisico'] = ['tipo' => direto|equipamento|
+     * indeterminado, 'macs' => [...]]:
+     *  1. um aparelho só -> é ele;
+     *  2. vizinho anunciado por LLDP (switch UniFi) -> certeza;
+     *  3. equipamentos de rede da porta (switch/gateway/AP, pelo UniFi ou pelo
+     *     tipo do ativo cadastrado), tirando quem outro switch CADASTRADO vê
+     *     em outra porta dele que não a que volta pra cá (= está atrás dele);
+     *     fica o mais próximo: switch > gateway > AP;
+     *  4. AP que não é UniFi: quem está no Wi-Fi não está no cabo;
+     *  5. não deu pra saber -> 'indeterminado' (a tela diz isso, não chuta).
+     * Visto no enzilabprime: na porta 25 do AV-SW2 aparecem AV-SW1, gateway,
+     * USW-Lite e 5 APs -- só o AV-SW1 está no cabo, o resto está atrás dele.
+     */
+    private function marcarPontaFisica(array $portas, string $macProprio, ?int $ativoProprioId): array
+    {
+        $macProprio = OmadaSshService::normalizarMac($macProprio);
+        $cache = [];
+        $portasDe = function (int $ativoId) use (&$cache, $ativoProprioId): array {
+            if ($ativoId === $ativoProprioId) {
+                return [];
+            }
+            if (!array_key_exists($ativoId, $cache)) {
+                $outro = $this->repository->buscarPorId($ativoId);
+                $d = json_decode($outro['detalhes'] ?? '', true) ?: [];
+                $cache[$ativoId] = $d['omada_portas'] ?? ($d['unifi_portas'] ?? []);
+            }
+
+            return $cache[$ativoId];
+        };
+
+        foreach ($portas as &$porta) {
+            $porta['fisico'] = $this->pontaFisica($porta['dispositivos'] ?? [], $macProprio, $portasDe);
+        }
+        unset($porta);
+
+        return $portas;
+    }
+
+    private static function papelRede(array $d): ?string
+    {
+        $modelo = (string)($d['unifi_dispositivo'] ?? '');
+        $tipo = (string)($d['ativo_tipo'] ?? '');
+
+        if ($tipo === 'roteador' || preg_match('/^(UDM|UDR|UXG|USG|UCG|UDW|UX\d|EFG)/i', $modelo)) {
+            return 'gateway';
+        }
+        if ($tipo === 'switch' || preg_match('/^(US|USW|USL|USM|USP|USF|USC)/i', $modelo)) {
+            return 'switch';
+        }
+
+        return $tipo === 'ponto_acesso' || $modelo !== '' ? 'ap' : null;
+    }
+
+    private function pontaFisica(array $ds, string $macProprio, callable $portasDe): array
+    {
+        if (count($ds) <= 1) {
+            return ['tipo' => 'direto', 'macs' => array_column($ds, 'mac')];
+        }
+
+        $lldp = array_values(array_filter($ds, fn ($d) => !empty($d['lldp'])));
+        if ($lldp) {
+            return ['tipo' => 'equipamento', 'macs' => array_column($lldp, 'mac')];
+        }
+
+        $candidatos = [];
+        foreach ($ds as $d) {
+            if ($papel = self::papelRede($d)) {
+                $candidatos[] = $d + ['_papel' => $papel];
+            }
+        }
+
+        if ($candidatos) {
+            // Atrás de outro candidato: o switch cadastrado X vê o MAC em uma porta dele
+            // que não é a que volta pra este switch.
+            $atras = [];
+            foreach ($candidatos as $x) {
+                $portasX = !empty($x['ativo_id']) ? $portasDe((int)$x['ativo_id']) : [];
+                if (!$portasX) {
+                    continue;
+                }
+                $macsPorPorta = [];
+                $portaDeVolta = null;
+                foreach ($portasX as $px) {
+                    $macsPorPorta[$px['porta']] = array_column($px['dispositivos'] ?? [], 'mac');
+                    if (in_array($macProprio, $macsPorPorta[$px['porta']], true)) {
+                        $portaDeVolta = $px['porta'];
+                    }
+                }
+                foreach ($macsPorPorta as $nomePorta => $macs) {
+                    if ($nomePorta !== $portaDeVolta) {
+                        foreach ($macs as $m) {
+                            $atras[$m] = true;
+                        }
+                    }
+                }
+            }
+            $candidatos = array_values(array_filter($candidatos, fn ($c) => !isset($atras[$c['mac']])));
+
+            foreach (['switch', 'gateway', 'ap'] as $papel) {
+                $nivel = array_values(array_filter($candidatos, fn ($c) => $c['_papel'] === $papel));
+                if (!$nivel) {
+                    continue;
+                }
+                // Mesmo equipamento com mais de um MAC (ex.: USW-Lite: MAC principal + interface).
+                $equipamentos = array_unique(array_map(fn ($c) => $c['ativo_id'] ?: ($c['hostname'] ?: ($c['ip'] ?: $c['mac'])), $nivel));
+                if (count($equipamentos) === 1) {
+                    return ['tipo' => 'equipamento', 'macs' => array_column($nivel, 'mac')];
+                }
+                // Gateway com mais de um MAC na mesma porta é a mesma caixa (uma interface
+                // por VLAN/rede) -- visto no enzilabprime: UDR pelo UniFi + o ativo "UCG".
+                if ($papel === 'gateway') {
+                    $cadastrados = array_values(array_filter($nivel, fn ($c) => !empty($c['ativo_id'])));
+
+                    return ['tipo' => 'equipamento', 'macs' => array_column($cadastrados ?: $nivel, 'mac')];
+                }
+
+                return ['tipo' => 'indeterminado', 'macs' => []];
+            }
+        }
+
+        $noCabo = array_values(array_filter($ds, fn ($d) => !isset($d['wifi'])));
+        if (count($noCabo) === 1) {
+            return ['tipo' => 'direto', 'macs' => [$noCabo[0]['mac']]];
+        }
+
+        return ['tipo' => 'indeterminado', 'macs' => []];
+    }
+
+    /**
      * Câmera avulsa do UniFi Protect (G3/G4/G5...) cadastrada como DVR/NVR.
      * Acha a câmera pelo id já vinculado ou, na primeira vez, pelo MAC do
      * cliente da rede com o IP do ativo (a API de integração do Protect não
@@ -2760,7 +2919,7 @@ class AtivoService
             'omada_mem_pct' => $d['mem_pct'] !== null ? $d['mem_pct'] . '%' : '',
             'omada_portas_resumo' => "{$d['portas_ativas']} de {$d['portas_total']}",
             'omada_mac_total' => $d['mac_total'] !== null ? (string)$d['mac_total'] : '',
-            'omada_portas' => $this->enriquecerDispositivosPortas($d['portas']),
+            'omada_portas' => $this->marcarPontaFisica($this->enriquecerDispositivosPortas($d['portas']), (string)$d['mac'], (int)$ativo['id']),
             'omada_vlans' => $d['vlans'],
             'omada_coletado_em' => date('Y-m-d H:i:s'),
         ]];
@@ -2992,7 +3151,7 @@ class AtivoService
         }
 
         $ativosPorIp = [];
-        foreach (Database::connection()->query("SELECT id, codigo_patrimonio, nome, ip FROM ativos WHERE ip IS NOT NULL AND ip <> ''") as $a) {
+        foreach (Database::connection()->query("SELECT a.id, a.codigo_patrimonio, a.nome, a.ip, t.slug AS tipo_slug FROM ativos a LEFT JOIN ativos_tipos t ON t.id = a.tipo_id WHERE a.ip IS NOT NULL AND a.ip <> ''") as $a) {
             $ativosPorIp[$a['ip']] = $a;
         }
 
@@ -3054,6 +3213,11 @@ class AtivoService
                 $ativo = $disp['ip'] !== '' ? ($ativosPorIp[$disp['ip']] ?? null) : null;
                 $disp['ativo_id'] = $ativo ? (int)$ativo['id'] : null;
                 $disp['ativo_nome'] = $ativo ? $ativo['codigo_patrimonio'] . ' - ' . $ativo['nome'] : '';
+                $disp['ativo_tipo'] = $ativo['tipo_slug'] ?? null;
+                // Nome anunciado por LLDP só como último recurso: o TP-Link tira os acentos ("Clnica").
+                if (($disp['hostname'] ?? '') === '' && !empty($disp['lldp_nome'])) {
+                    $disp['hostname'] = $disp['lldp_nome'];
+                }
             }
             unset($disp);
         }
