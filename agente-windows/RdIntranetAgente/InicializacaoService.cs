@@ -84,6 +84,7 @@ public static class InicializacaoService
         Tentar(() => Ifeo(itens));
         Tentar(() => Wmi(itens));
         Tentar(() => AppInit(itens));
+        Tentar(() => Politicas(itens));
         Tentar(() => DesativadosPeloRd(itens));
 
         return itens
@@ -314,6 +315,60 @@ public static class InicializacaoService
             if (dlls != "" && Convert.ToInt32(chave?.GetValue("LoadAppInit_DLLs") ?? 0) == 1)
             {
                 itens.Add(Item("appinit", sub, "AppInit_DLLs", $@"HKLM\{sub}", dlls, pontosExtra: 40, motivoExtra: "DLL injetada em todo programa que abre (AppInit_DLLs)"));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Políticas que TRAVAM o Windows -- malware liga pra impedir a própria
+    /// remoção. ARIIS (Maurílio, 14/10/2026): DisableTaskMgr=1 no perfil do
+    /// Administrador ("Task Manager has been disabled by your administrator")
+    /// e Defender desligado por política (DisableAntiSpyware/DisableAntiVirus).
+    /// </summary>
+    private static void Politicas(List<ItemInicializacao> itens)
+    {
+        var travas = new (string valor, string oque, int pontos)[]
+        {
+            ("DisableTaskMgr", "bloqueia o Gerenciador de Tarefas", 60),
+            ("DisableRegistryTools", "bloqueia o Editor do Registro", 60),
+            ("DisableCMD", "bloqueia o Prompt de Comando", 50),
+            ("NoRun", "esconde o Executar do menu Iniciar", 25),
+            ("NoControlPanel", "bloqueia o Painel de Controle", 35)
+        };
+        var raizes = new List<(RegistryKey raiz, string raizId, string conta)> { (Registry.LocalMachine, "HKLM", "todos os usuários") };
+        foreach (var sid in Registry.Users.GetSubKeyNames().Where(s => s.StartsWith("S-1-5-21-") && !s.EndsWith("_Classes")))
+        {
+            using var usuario = Registry.Users.OpenSubKey(sid);
+            if (usuario != null) raizes.Add((Registry.Users, $@"HKU\{sid}", NomeDaConta(sid)));
+        }
+
+        foreach (var (raiz, raizId, conta) in raizes)
+        {
+            var prefixo = raizId == "HKLM" ? "" : raizId[4..] + @"\";
+            foreach (var sub in new[] { @"Software\Microsoft\Windows\CurrentVersion\Policies\System", @"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer", @"Software\Policies\Microsoft\Windows\System" })
+            {
+                using var chave = raiz.OpenSubKey(prefixo + sub);
+                if (chave == null) continue;
+                foreach (var (valor, oque, pontos) in travas)
+                {
+                    if (chave.GetValue(valor) is { } v && Convert.ToInt32(v) != 0)
+                    {
+                        itens.Add(Item("politica", $"{raizId}|{sub}|{valor}", $"{valor} ({conta})", $@"{raizId}\{sub}", $"{valor} = {v}", conta,
+                            pontosExtra: pontos, motivoExtra: $"política que {oque} (malware usa para impedir a própria remoção)", caminhoForcado: ""));
+                    }
+                }
+            }
+        }
+
+        const string defender = @"SOFTWARE\Policies\Microsoft\Windows Defender";
+        foreach (var (sub, valor, oque) in new[] { (defender, "DisableAntiSpyware", "desliga o Microsoft Defender"), (defender, "DisableAntiVirus", "desliga o antivírus do Defender"),
+                                                   (defender + @"\Real-Time Protection", "DisableRealtimeMonitoring", "desliga a proteção em tempo real do Defender") })
+        {
+            using var chave = Registry.LocalMachine.OpenSubKey(sub);
+            if (chave?.GetValue(valor) is { } v && Convert.ToInt32(v) != 0)
+            {
+                itens.Add(Item("politica", $"HKLM|{sub}|{valor}", valor, $@"HKLM\{sub}", $"{valor} = {v}", "todos os usuários",
+                    pontosExtra: 60, motivoExtra: $"política que {oque} -- confira se foi a TI (outro antivírus) ou malware", caminhoForcado: ""));
             }
         }
     }

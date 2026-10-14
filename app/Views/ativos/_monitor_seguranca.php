@@ -317,7 +317,7 @@
         contador.className = 'badge rounded-pill ' + (ruins.some((i) => i.nivel === 'critico') ? 'text-bg-danger' : 'text-bg-warning');
         document.getElementById('monSegInicioInfo').textContent = inicio ? itens.length + ' itens · inventário ' + ha(inicio.recebido_em) : '';
 
-        const rotulosTipo = { servico: 'serviço', tarefa: 'tarefa agendada', registro: 'registro (Run)', pasta_inicializar: 'pasta Inicializar', winlogon: 'Winlogon', ifeo: 'IFEO', wmi: 'WMI', appinit: 'AppInit' };
+        const rotulosTipo = { servico: 'serviço', tarefa: 'tarefa agendada', registro: 'registro (Run)', pasta_inicializar: 'pasta Inicializar', winlogon: 'Winlogon', ifeo: 'IFEO', wmi: 'WMI', appinit: 'AppInit', politica: 'política (trava)' };
         const lista = itens.filter((i) => (mostrarMs || !i.ms) && (!busca || [i.nome, i.caminho, i.comando, i.origem].join(' ').toLowerCase().includes(busca)));
 
         document.getElementById('monSegInicializacao').innerHTML = lista.map((i) => {

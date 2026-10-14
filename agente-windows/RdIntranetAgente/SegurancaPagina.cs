@@ -863,7 +863,7 @@ public sealed class SegurancaPagina : Panel
     private static string RotuloTipoInicio(string tipo) => tipo switch
     {
         "servico" => "Serviço", "tarefa" => "Tarefa agendada", "registro" => "Registro (Run)", "pasta_inicializar" => "Pasta Inicializar",
-        "winlogon" => "Winlogon", "ifeo" => "IFEO (sequestro)", "wmi" => "Assinatura WMI", "appinit" => "AppInit", _ => tipo
+        "winlogon" => "Winlogon", "ifeo" => "IFEO (sequestro)", "wmi" => "Assinatura WMI", "appinit" => "AppInit", "politica" => "Política (trava)", _ => tipo
     };
 
     private static string RotuloTipo(string tipo) => tipo switch

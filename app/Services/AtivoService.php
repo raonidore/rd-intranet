@@ -6223,7 +6223,7 @@ class AtivoService
             case 'reativar_inicializacao':
                 $tipoItem = (string)($dados['tipo'] ?? '');
                 $idItem = (string)($dados['item_id'] ?? '');
-                if (!in_array($tipoItem, ['servico', 'tarefa', 'registro', 'pasta_inicializar', 'winlogon', 'ifeo', 'wmi', 'appinit'], true) || $idItem === '' || mb_strlen($idItem) > 600) {
+                if (!in_array($tipoItem, ['servico', 'tarefa', 'registro', 'pasta_inicializar', 'winlogon', 'ifeo', 'wmi', 'appinit', 'politica'], true) || $idItem === '' || mb_strlen($idItem) > 600) {
                     return ['success' => false, 'message' => 'Item de inicialização inválido.'];
                 }
                 $ativar = $acao === 'reativar_inicializacao';

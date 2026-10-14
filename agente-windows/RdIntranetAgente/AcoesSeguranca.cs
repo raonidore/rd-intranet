@@ -74,6 +74,7 @@ public static class AcoesSeguranca
                 "servico" => AlternarServico(id, ativar),
                 "tarefa" => AlternarTarefa(id, ativar),
                 "registro" or "ifeo" or "winlogon" or "appinit" when !ativar => DesativarRegistro(tipo, id),
+                "politica" when !ativar => DesativarRegistro("registro", id),
                 "pasta_inicializar" when !ativar => DesativarArquivoInicializar(id),
                 "wmi" when !ativar => RemoverWmi(id),
                 _ => new ResultadoAcao(false, ativar ? "Esse item já está ativo." : "Tipo de item desconhecido.")
