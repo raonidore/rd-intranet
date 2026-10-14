@@ -104,7 +104,8 @@ public class TrayApplicationContext : ApplicationContext
             () => AtualizarAgoraManualAsync(),
             () => _config,
             AplicarConfiguracao,
-            AlternarServicoAsync);
+            AlternarServicoAsync,
+            _monitorRede);
         _icone.MouseClick += (s, e) =>
         {
             if (e.Button == MouseButtons.Left) _janelaPrincipal.Abrir();
@@ -431,6 +432,10 @@ public class TrayApplicationContext : ApplicationContext
                     case "firewall_desbloquear":
                     case "servico_desativar":
                     case "processo_encerrar":
+                    case "inicializacao_alternar":
+                    case "arquivo_quarentena":
+                    case "quarentena_restaurar":
+                    case "firewall_perfil":
                         var pedidoAcao = solicitacao;
                         _ = Task.Run(async () =>
                         {
@@ -441,7 +446,8 @@ public class TrayApplicationContext : ApplicationContext
                                     "firewall_bloquear" => FirewallService.Bloquear(pedidoAcao.Parametro, pedidoAcao.UsuarioElevacao, pedidoAcao.SenhaElevacao),
                                     "firewall_desbloquear" => FirewallService.Desbloquear(pedidoAcao.Parametro, pedidoAcao.UsuarioElevacao, pedidoAcao.SenhaElevacao),
                                     "servico_desativar" => FirewallService.DesativarServico(pedidoAcao.Parametro, pedidoAcao.UsuarioElevacao, pedidoAcao.SenhaElevacao),
-                                    _ => FirewallService.EncerrarProcesso(pedidoAcao.Parametro, pedidoAcao.UsuarioElevacao, pedidoAcao.SenhaElevacao)
+                                    "processo_encerrar" => FirewallService.EncerrarProcesso(pedidoAcao.Parametro, pedidoAcao.UsuarioElevacao, pedidoAcao.SenhaElevacao),
+                                    _ => AcaoRemotaSeguranca(pedidoAcao.Tipo, pedidoAcao.Parametro)
                                 };
                                 LogAtividade.Registrar(NivelAtividade.Seguranca, "SEGURANÇA", $"Ação do portal ({pedidoAcao.Tipo}): {System.Text.Json.JsonSerializer.Serialize(resposta)[..Math.Min(200, System.Text.Json.JsonSerializer.Serialize(resposta).Length)]}");
                                 await cliente.ResponderAsync(_machineGuid!, pedidoAcao.Id, resposta);
@@ -465,6 +471,26 @@ public class TrayApplicationContext : ApplicationContext
                 await cliente.ResponderErroAsync(_machineGuid!, solicitacao.Id, ex.Message);
             }
         }
+    }
+
+    /// <summary>Remediação pedida pelo portal (mesmas ações da tela Segurança do agente). Parâmetro em JSON.</summary>
+    private static object AcaoRemotaSeguranca(string tipo, string? parametro)
+    {
+        System.Text.Json.JsonElement p;
+        try { p = System.Text.Json.JsonDocument.Parse(parametro ?? "{}").RootElement.Clone(); }
+        catch { return new { sucesso = false, mensagem = "Pedido inválido." }; }
+        string Texto(string nome) => p.TryGetProperty(nome, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String ? v.GetString() ?? "" : "";
+        bool Logico(string nome) => p.TryGetProperty(nome, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.True;
+
+        var r = tipo switch
+        {
+            "inicializacao_alternar" => AcoesSeguranca.AlternarInicializacao(Texto("tipo"), Texto("id"), Logico("ativar")),
+            "arquivo_quarentena" => AcoesSeguranca.Quarentena(Texto("caminho"), Texto("motivo") is { Length: > 0 } m ? m : "Pedido pelo portal"),
+            "quarentena_restaurar" => AcoesSeguranca.RestaurarQuarentena(Texto("id")),
+            "firewall_perfil" => AcoesSeguranca.Firewall(Logico("ligar"), Logico("forcar")),
+            _ => new ResultadoAcao(false, "Ação desconhecida.")
+        };
+        return new { sucesso = r.Sucesso, mensagem = r.Mensagem };
     }
 
     private const long TamanhoMaximoDownload = 200L * 1024 * 1024; // mesmo teto configurado no PHP (upload_max_filesize)

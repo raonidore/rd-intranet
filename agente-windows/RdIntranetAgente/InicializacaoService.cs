@@ -12,6 +12,13 @@ public sealed class ItemInicializacao
     /// <summary>Onde está configurado (chave do registro, pasta da tarefa, arquivo .lnk).</summary>
     public string Origem { get; init; } = "";
     public string Comando { get; init; } = "";
+    /// <summary>
+    /// O que identifica o item pra desativar/reativar (AcoesSeguranca):
+    /// nome do serviço, caminho da tarefa, "RAIZ|subchave|valor" do
+    /// registro, caminho do arquivo da pasta Inicializar, programa do IFEO,
+    /// "Classe|Nome" do WMI, "rd|id" de algo já desativado pelo RD.Intranet.
+    /// </summary>
+    public string Identificador { get; init; } = "";
     public string? Conta { get; init; }
     public string? Estado { get; init; }
     public string? Inicio { get; init; }
@@ -27,6 +34,7 @@ public sealed class ItemInicializacao
         {
             ["tipo"] = Tipo,
             ["nome"] = Nome,
+            ["id"] = Identificador,
             ["caminho"] = Exe.Caminho,
             ["estado"] = Estado,
             ["inicio"] = Inicio,
@@ -76,6 +84,7 @@ public static class InicializacaoService
         Tentar(() => Ifeo(itens));
         Tentar(() => Wmi(itens));
         Tentar(() => AppInit(itens));
+        Tentar(() => DesativadosPeloRd(itens));
 
         return itens
             .OrderByDescending(i => i.Avaliacao.Pontos)
@@ -84,7 +93,7 @@ public static class InicializacaoService
             .ToList();
     }
 
-    private static ItemInicializacao Item(string tipo, string nome, string origem, string comando, string? conta = null,
+    private static ItemInicializacao Item(string tipo, string id, string nome, string origem, string comando, string? conta = null,
         string? estado = null, string? inicio = null, int pontosExtra = 0, string? motivoExtra = null, string? caminhoForcado = null)
     {
         var caminho = caminhoForcado ?? AnaliseExecutavel.ExecutavelDaLinha(comando);
@@ -100,6 +109,7 @@ public static class InicializacaoService
         return new ItemInicializacao
         {
             Tipo = tipo,
+            Identificador = id,
             Nome = nome,
             Origem = origem,
             Comando = comando,
@@ -131,7 +141,7 @@ public static class InicializacaoService
                 }
 
                 var exibicao = s["DisplayName"] as string ?? nome;
-                itens.Add(Item("servico", exibicao == nome ? nome : $"{exibicao} ({nome})", $@"HKLM\SYSTEM\CurrentControlSet\Services\{nome}",
+                itens.Add(Item("servico", nome, exibicao == nome ? nome : $"{exibicao} ({nome})", $@"HKLM\SYSTEM\CurrentControlSet\Services\{nome}",
                     dll != null ? $"{comando} → {dll}" : comando, s["StartName"] as string, s["State"] as string, s["StartMode"] as string,
                     caminhoForcado: dll != null ? Environment.ExpandEnvironmentVariables(dll) : null));
             }
@@ -162,7 +172,7 @@ public static class InicializacaoService
                         string programa = acao.Path ?? "";
                         string argumentos = acao.Arguments ?? "";
                         var comando = programa.Contains(' ') && !programa.StartsWith('"') ? $"\"{programa}\" {argumentos}" : $"{programa} {argumentos}";
-                        itens.Add(Item("tarefa", caminhoTarefa, caminhoTarefa, comando.Trim(), conta, habilitada ? "Habilitada" : "Desativada"));
+                        itens.Add(Item("tarefa", caminhoTarefa, caminhoTarefa, caminhoTarefa, comando.Trim(), conta, habilitada ? "Habilitada" : "Desativada"));
                     }
                 }
                 catch
@@ -178,21 +188,21 @@ public static class InicializacaoService
 
     private static void Registro(List<ItemInicializacao> itens)
     {
-        void Ler(RegistryKey raiz, string rotuloRaiz, string subchave, string? conta)
+        void Ler(RegistryKey raiz, string rotuloRaiz, string subchave, string? conta, string raizId)
         {
             using var chave = raiz.OpenSubKey(subchave);
             if (chave == null) return;
             foreach (var valor in chave.GetValueNames())
             {
                 if (chave.GetValue(valor) is not string comando || string.IsNullOrWhiteSpace(comando)) continue;
-                itens.Add(Item("registro", valor == "" ? "(padrão)" : valor, $@"{rotuloRaiz}\{subchave}", comando, conta));
+                itens.Add(Item("registro", $"{raizId}|{subchave}|{valor}", valor == "" ? "(padrão)" : valor, $@"{rotuloRaiz}\{subchave}", comando, conta));
             }
         }
 
         foreach (var sub in new[] { ChaveRun, ChaveRun + "Once", @"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer\Run",
                                     @"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Run", @"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\RunOnce" })
         {
-            Ler(Registry.LocalMachine, "HKLM", sub, "todos os usuários");
+            Ler(Registry.LocalMachine, "HKLM", sub, "todos os usuários", "HKLM");
         }
 
         // Cada usuário com o perfil carregado (logado ou com serviço rodando como ele).
@@ -201,8 +211,8 @@ public static class InicializacaoService
             using var usuario = Registry.Users.OpenSubKey(sid);
             if (usuario == null) continue;
             var conta = NomeDaConta(sid);
-            Ler(usuario, $@"HKU\{conta}", ChaveRun, conta);
-            Ler(usuario, $@"HKU\{conta}", ChaveRun + "Once", conta);
+            Ler(usuario, $@"HKU\{conta}", ChaveRun, conta, $@"HKU\{sid}");
+            Ler(usuario, $@"HKU\{conta}", ChaveRun + "Once", conta, $@"HKU\{sid}");
         }
     }
 
@@ -227,7 +237,7 @@ public static class InicializacaoService
                 {
                     comando = alvo;
                 }
-                itens.Add(Item("pasta_inicializar", Path.GetFileName(arquivo), pasta, comando, conta));
+                itens.Add(Item("pasta_inicializar", arquivo, Path.GetFileName(arquivo), pasta, comando, conta));
             }
         }
     }
@@ -240,13 +250,13 @@ public static class InicializacaoService
         var shell = (chave.GetValue("Shell") as string ?? "").Trim();
         if (shell != "" && !shell.Equals("explorer.exe", StringComparison.OrdinalIgnoreCase))
         {
-            itens.Add(Item("winlogon", "Shell", @"HKLM\...\Winlogon\Shell", shell, pontosExtra: 40, motivoExtra: "Winlogon abre outro programa no lugar do explorer.exe"));
+            itens.Add(Item("winlogon", "Shell", "Shell", @"HKLM\...\Winlogon\Shell", shell, pontosExtra: 40, motivoExtra: "Winlogon abre outro programa no lugar do explorer.exe"));
         }
 
         var userinit = (chave.GetValue("Userinit") as string ?? "").Trim().TrimEnd(',');
         if (userinit != "" && !userinit.EndsWith(@"\system32\userinit.exe", StringComparison.OrdinalIgnoreCase))
         {
-            itens.Add(Item("winlogon", "Userinit", @"HKLM\...\Winlogon\Userinit", userinit, pontosExtra: 40, motivoExtra: "Winlogon roda algo além do userinit.exe no login"));
+            itens.Add(Item("winlogon", "Userinit", "Userinit", @"HKLM\...\Winlogon\Userinit", userinit, pontosExtra: 40, motivoExtra: "Winlogon roda algo além do userinit.exe no login"));
         }
     }
 
@@ -260,7 +270,7 @@ public static class InicializacaoService
             using var sub = raiz.OpenSubKey(programa);
             if (sub?.GetValue("Debugger") is string depurador && depurador.Trim() != "")
             {
-                itens.Add(Item("ifeo", programa, $@"HKLM\{caminho}\{programa}", depurador, pontosExtra: 60,
+                itens.Add(Item("ifeo", programa, programa, $@"HKLM\{caminho}\{programa}", depurador, pontosExtra: 60,
                     motivoExtra: $"sequestra a abertura de {programa} (Debugger do IFEO)"));
             }
         }
@@ -277,7 +287,7 @@ public static class InicializacaoService
                 using (c)
                 {
                     var comando = (c["CommandLineTemplate"] as string) ?? (c["ExecutablePath"] as string) ?? "";
-                    itens.Add(Item("wmi", c["Name"] as string ?? "(sem nome)", @"root\subscription\CommandLineEventConsumer", comando,
+                    itens.Add(Item("wmi", "CommandLineEventConsumer|" + (c["Name"] as string ?? ""), c["Name"] as string ?? "(sem nome)", @"root\subscription\CommandLineEventConsumer", comando,
                         pontosExtra: 50, motivoExtra: "assinatura WMI que executa comando (persistência comum de malware)"));
                 }
             }
@@ -288,7 +298,7 @@ public static class InicializacaoService
             {
                 using (c)
                 {
-                    itens.Add(Item("wmi", c["Name"] as string ?? "(sem nome)", @"root\subscription\ActiveScriptEventConsumer",
+                    itens.Add(Item("wmi", "ActiveScriptEventConsumer|" + (c["Name"] as string ?? ""), c["Name"] as string ?? "(sem nome)", @"root\subscription\ActiveScriptEventConsumer",
                         $"{c["ScriptingEngine"]} {c["ScriptFileName"]}".Trim(), pontosExtra: 50, motivoExtra: "assinatura WMI que executa script"));
                 }
             }
@@ -303,8 +313,17 @@ public static class InicializacaoService
             var dlls = (chave?.GetValue("AppInit_DLLs") as string ?? "").Trim();
             if (dlls != "" && Convert.ToInt32(chave?.GetValue("LoadAppInit_DLLs") ?? 0) == 1)
             {
-                itens.Add(Item("appinit", "AppInit_DLLs", $@"HKLM\{sub}", dlls, pontosExtra: 40, motivoExtra: "DLL injetada em todo programa que abre (AppInit_DLLs)"));
+                itens.Add(Item("appinit", sub, "AppInit_DLLs", $@"HKLM\{sub}", dlls, pontosExtra: 40, motivoExtra: "DLL injetada em todo programa que abre (AppInit_DLLs)"));
             }
+        }
+    }
+
+    /// <summary>O que o RD.Intranet desativou (backup em HKLM\SOFTWARE\RDIntranet e na subpasta da Inicializar) -- pra poder reativar.</summary>
+    private static void DesativadosPeloRd(List<ItemInicializacao> itens)
+    {
+        foreach (var d in AcoesSeguranca.ListarDesativados())
+        {
+            itens.Add(Item(d.Tipo, "rd|" + d.Id, d.Nome, d.Origem, d.Comando, estado: "Desativado pelo RD.Intranet"));
         }
     }
 

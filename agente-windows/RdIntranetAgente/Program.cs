@@ -30,6 +30,13 @@ internal static class Program
         // Diagnóstico local do monitor de conexões/processos/inicialização:
         // grava o resultado em JSON e sai, sem falar com servidor nenhum.
         // Uso: RdIntranetAgente.exe --teste-seguranca-rede C:\Temp\saida.json
+        var indicePrints = Array.FindIndex(args, a => a.Equals("--teste-tela-seguranca", StringComparison.OrdinalIgnoreCase));
+        if (indicePrints >= 0)
+        {
+            DiagnosticoSegurancaRede.PrintsDaTela(args.Length > indicePrints + 1 ? args[indicePrints + 1] : Path.Combine(Path.GetTempPath(), "rd-tela-seguranca"));
+            return;
+        }
+
         var indiceTeste = Array.FindIndex(args, a => a.Equals("--teste-seguranca-rede", StringComparison.OrdinalIgnoreCase));
         if (indiceTeste >= 0)
         {
@@ -114,7 +121,7 @@ internal static class Program
     /// vivo numa VM de teste -- só destravou rodando o próprio agente como
     /// administrador.
     /// </summary>
-    private static bool EstaElevado()
+    internal static bool EstaElevado()
     {
         using var identidade = WindowsIdentity.GetCurrent();
         var principal = new WindowsPrincipal(identidade);

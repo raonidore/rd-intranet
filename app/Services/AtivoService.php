@@ -6151,6 +6151,8 @@ class AtivoService
         'network_list', 'network_apply', 'network_revert', 'network_ping', 'network_speedtest', 'network_traceroute', 'network_mtr', 'mesh_install',
         // Monitor de conexões/processos e firewall (agente 1.0.56+) -- criados por acaoMonitorSeguranca().
         'seguranca_atualizar', 'firewall_bloquear', 'firewall_desbloquear', 'servico_desativar', 'processo_encerrar',
+        // Agente 1.0.58+: remediação (inicialização, quarentena, firewall ligado).
+        'inicializacao_alternar', 'arquivo_quarentena', 'quarentena_restaurar', 'firewall_perfil',
     ];
 
     /**
@@ -6213,6 +6215,35 @@ class AtivoService
                 $tipo = 'servico_desativar';
                 $parametro = $servico;
                 $descricao = 'desativação do serviço ' . $servico;
+                break;
+
+            case 'desativar_inicializacao':
+            case 'reativar_inicializacao':
+                $tipoItem = (string)($dados['tipo'] ?? '');
+                $idItem = (string)($dados['item_id'] ?? '');
+                if (!in_array($tipoItem, ['servico', 'tarefa', 'registro', 'pasta_inicializar', 'winlogon', 'ifeo', 'wmi', 'appinit'], true) || $idItem === '' || mb_strlen($idItem) > 600) {
+                    return ['success' => false, 'message' => 'Item de inicialização inválido.'];
+                }
+                $ativar = $acao === 'reativar_inicializacao';
+                $tipo = 'inicializacao_alternar';
+                $parametro = json_encode(['tipo' => $tipoItem, 'id' => $idItem, 'ativar' => $ativar], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                $descricao = ($ativar ? 'reativação' : 'desativação') . " de {$tipoItem} \"" . mb_substr((string)($dados['nome'] ?? $idItem), 0, 120) . '" na inicialização';
+                break;
+
+            case 'quarentena':
+                $caminho = trim((string)($dados['caminho'] ?? ''));
+                if (!preg_match('#^[A-Za-z]:\\\\.{3,}#', $caminho)) {
+                    return ['success' => false, 'message' => 'Caminho inválido.'];
+                }
+                $tipo = 'arquivo_quarentena';
+                $parametro = json_encode(['caminho' => $caminho, 'motivo' => mb_substr(trim((string)($dados['motivo'] ?? 'Pedido pelo portal')), 0, 300) . ' (por ' . $usuario . ')'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                $descricao = 'quarentena de ' . $caminho;
+                break;
+
+            case 'ligar_firewall':
+                $tipo = 'firewall_perfil';
+                $parametro = json_encode(['ligar' => true, 'forcar' => !empty($dados['forcar'])]);
+                $descricao = 'ligar o firewall do Windows (entrada e saída liberadas por padrão)';
                 break;
 
             case 'encerrar_processo':

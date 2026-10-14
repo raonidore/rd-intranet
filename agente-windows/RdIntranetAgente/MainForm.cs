@@ -20,7 +20,7 @@ public sealed class MainForm : Form
     private readonly Panel _conteudo;
     private readonly Panel _navegacao;
     private readonly Panel _paginaVisao;
-    private readonly Panel _paginaSeguranca;
+    private readonly SegurancaPagina _paginaSeguranca;
     private readonly Panel _paginaAtividade;
     private readonly NetworkPagina _paginaNetwork;
     private readonly Panel _paginaConfig;
@@ -35,13 +35,7 @@ public sealed class MainForm : Form
     private readonly CartaoInfo _cartaoHeartbeat;
     private readonly CartaoInfo _cartaoTrafego;
     private readonly CartaoInfo _cartaoServico;
-    private readonly Label _avisoIsolamento;
-    private readonly Label _statusCanary;
-    private readonly Label _statusFim;
-    private readonly Label _statusShadow;
-    private readonly ListView _listaEventos;
     private readonly ListView _listaAtividade;
-    private string _assinaturaEventos = "";
 
     public MainForm(
         AppState estado,
@@ -51,7 +45,8 @@ public sealed class MainForm : Form
         Func<Task> atualizar,
         Func<Config> configAtual,
         Action<Config> aplicarConfig,
-        Func<Task> alternarServico)
+        Func<Task> alternarServico,
+        MonitorRedeService monitorRede)
     {
         _estado = estado;
         _seguranca = seguranca;
@@ -169,42 +164,8 @@ public sealed class MainForm : Form
         acoes.Controls.Add(CriarBotaoAcao("Serviço do Windows", BotaoTema.Variante.Secundario, async () => await _alternarServico()));
         Empilhar(_paginaVisao, null, tituloVisao, linhaStatus, _cartaoAtivo, Espaco(10), grade, Espaco(16), acoes);
 
-        _paginaSeguranca = CriarPagina();
-        var tituloSeguranca = CriarTitulo("Segurança", "Detectores locais e eventos reportados ao servidor.");
-        _avisoIsolamento = new Label
-        {
-            Location = new Point(0, 80),
-            Size = new Size(720, 42),
-            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
-            BackColor = Color.FromArgb(54, Tema.Perigo),
-            ForeColor = Tema.Perigo,
-            Font = Tema.FonteSemibold(9F),
-            TextAlign = ContentAlignment.MiddleLeft,
-            Padding = new Padding(12),
-            Visible = false
-        };
-        var detectores = new TableLayoutPanel
-        {
-            Location = new Point(0, 132),
-            Size = new Size(720, 80),
-            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
-            ColumnCount = 3,
-            RowCount = 1,
-            BackColor = Tema.Fundo
-        };
-        for (var coluna = 0; coluna < 3; coluna++) detectores.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.333F));
-        _statusCanary = CriarStatusDetector();
-        _statusFim = CriarStatusDetector();
-        _statusShadow = CriarStatusDetector();
-        detectores.Controls.Add(_statusCanary, 0, 0);
-        detectores.Controls.Add(_statusFim, 1, 0);
-        detectores.Controls.Add(_statusShadow, 2, 0);
-        var rotuloEventos = CriarLegenda("EVENTOS DETECTADOS", 224);
-        _listaEventos = CriarLista(new[] { ("Quando", 145), ("Severidade", 95), ("Detecção", 450) });
-        _listaEventos.Location = new Point(0, 250);
-        _listaEventos.Size = new Size(720, 340);
-        _listaEventos.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-        Empilhar(_paginaSeguranca, _listaEventos, tituloSeguranca, _avisoIsolamento, Espaco(10), detectores, Espaco(14), rotuloEventos);
+        // Segurança: página própria (abas Eventos/Processos/Inicialização/Conexões/Firewall/Quarentena).
+        _paginaSeguranca = new SegurancaPagina(_seguranca, monitorRede);
 
         _paginaAtividade = CriarPagina();
         var tituloAtividade = CriarTitulo("Atividade", "Registro recente do que o agente executou.");
@@ -372,16 +333,6 @@ public sealed class MainForm : Form
     }
 
 
-    private static Label CriarStatusDetector() => new()
-    {
-        Dock = DockStyle.Fill,
-        BackColor = Tema.Superficie,
-        ForeColor = Tema.TextoSecundario,
-        Font = Tema.FonteSemibold(9F),
-        TextAlign = ContentAlignment.MiddleCenter,
-        Margin = new Padding(0, 0, 8, 0)
-    };
-
     private static Label CriarLegenda(string texto, int top) => new()
     {
         Text = texto,
@@ -391,7 +342,7 @@ public sealed class MainForm : Form
         Font = Tema.FonteSemibold(8F)
     };
 
-    private static ListView CriarLista((string titulo, int largura)[] colunas)
+    internal static ListView CriarLista((string titulo, int largura)[] colunas)
     {
         var lista = new ListView
         {
@@ -559,41 +510,7 @@ public sealed class MainForm : Form
         _cartaoServico.Definir("SERVIÇO DO WINDOWS", servicoTexto, "RD Intranet - Agente", statusServico == ServiceControllerStatus.Running ? Tema.Sucesso : Tema.TextoSecundario);
 
 
-        var status = _seguranca.ObterStatus();
-        _statusCanary.Text = $"ARQUIVOS-ISCA\n{TextoEstado(status.CanaryAtivo)}  ·  {status.CanaryArquivos} arquivos";
-        _statusCanary.ForeColor = status.CanaryAtivo ? Tema.Sucesso : Tema.TextoSecundario;
-        _statusFim.Text = $"MUDANÇA EM MASSA\n{TextoEstado(status.FimAtivo)}  ·  {status.FimAlteracoesJanela} na janela";
-        _statusFim.ForeColor = status.FimAtivo ? Tema.Sucesso : Tema.TextoSecundario;
-        var shadowInfo = status.ShadowContagem.HasValue ? $"{status.ShadowContagem} cópias" : status.ShadowErro ?? "Aguardando leitura";
-        _statusShadow.Text = $"SHADOW COPIES\n{TextoEstado(status.ShadowAtivo)}  ·  {shadowInfo}";
-        _statusShadow.ForeColor = status.ShadowAtivo ? Tema.Sucesso : Tema.TextoSecundario;
-        _avisoIsolamento.Text = "REDE ISOLADA PELA TI  ·  A conectividade desta máquina foi bloqueada.";
-        _avisoIsolamento.Visible = status.Configuracao?.Isolado == true;
-        AtualizarEventos(status.EventosRecentes);
-    }
-
-    private void AtualizarEventos(List<EventoSeguranca> eventos)
-    {
-        // Só refaz a lista quando algo mudou -- refazer a cada tick fazia
-        // a lista piscar e perder seleção e rolagem.
-        var assinatura = string.Join("|", eventos.Select(e => $"{e.OcorridoEm.Ticks}:{e.Enviado}"));
-        if (assinatura == _assinaturaEventos)
-        {
-            return;
-        }
-        _assinaturaEventos = assinatura;
-
-        _listaEventos.BeginUpdate();
-        _listaEventos.Items.Clear();
-        foreach (var evento in eventos)
-        {
-            var item = new ListViewItem(evento.OcorridoEm.LocalDateTime.ToString("dd/MM HH:mm:ss"));
-            item.SubItems.Add(evento.Severidade);
-            item.SubItems.Add(evento.Resumo);
-            item.ForeColor = evento.Severidade == "CRITICAL" ? Tema.Perigo : Tema.Texto;
-            _listaEventos.Items.Add(item);
-        }
-        _listaEventos.EndUpdate();
+        if (_paginaSeguranca.Visible) _paginaSeguranca.Atualizar();
     }
 
     private void AtualizarAtividade()
@@ -656,8 +573,6 @@ public sealed class MainForm : Form
             return null;
         }
     }
-
-    private static string TextoEstado(bool ativo) => ativo ? "ATIVO" : "DESATIVADO";
 
     private static string FormatarBytes(long bytes)
     {

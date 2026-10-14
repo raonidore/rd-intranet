@@ -92,6 +92,41 @@ public static class FirewallService
         return estado;
     }
 
+    public sealed record RegraFirewall(string Nome, bool Habilitada, string Direcao, string Acao, string? Programa, string? Ips, string? Portas, string? Grupo, bool DoRd);
+
+    /// <summary>Todas as regras (pra tela do agente). Rápido: COM direto, sem PowerShell.</summary>
+    public static List<RegraFirewall> ListarRegras()
+    {
+        var lista = new List<RegraFirewall>();
+        try
+        {
+            var tipo = Type.GetTypeFromProgID("HNetCfg.FwPolicy2");
+            if (tipo == null) return lista;
+            dynamic politica = Activator.CreateInstance(tipo)!;
+            foreach (dynamic regra in politica.Rules)
+            {
+                string nome = regra.Name ?? "";
+                string? portas = null;
+                try { portas = (string?)regra.RemotePorts is "*" ? null : (string?)regra.RemotePorts; } catch { }
+                lista.Add(new RegraFirewall(
+                    nome,
+                    (bool)regra.Enabled,
+                    (int)regra.Direction == 1 ? "entrada" : "saída",
+                    (int)regra.Action == 0 ? "bloquear" : "permitir",
+                    (string?)regra.ApplicationName,
+                    IpsLegiveis((string?)regra.RemoteAddresses),
+                    portas,
+                    (string?)regra.Grouping,
+                    nome.StartsWith("RD.Intranet", StringComparison.OrdinalIgnoreCase)));
+            }
+        }
+        catch
+        {
+            // sem acesso ao firewall: lista vazia
+        }
+        return lista;
+    }
+
     /// <summary>
     /// Bloqueio pedido pelo portal. parametro (JSON): {"tipo":"programa"|"ip",
     /// "valor":"C:\...exe"|"1.2.3.4"|"1.2.3.0/24", "motivo":"...", "por":"..."}.
@@ -241,7 +276,8 @@ Stop-Process -Id {pid} -Force
 
     private static object Executar(string script, string? usuarioElevacao, string? senhaElevacao, string mensagemSucesso)
     {
-        var (saida, erro, codigo) = ExploradorService.ExecutarPowerShell(script, true, usuarioElevacao, senhaElevacao);
+        // Agente já elevado (o normal): roda direto. Senão, pela tarefa elevada (com a credencial do portal, se houver).
+        var (saida, erro, codigo) = ExploradorService.ExecutarPowerShell(script, !Program.EstaElevado(), usuarioElevacao, senhaElevacao);
         if (codigo != 0 || string.IsNullOrWhiteSpace(saida))
         {
             return Falha(MensagemDeErro(erro, codigo));
@@ -267,7 +303,7 @@ Stop-Process -Id {pid} -Force
     }
 
     /// <summary>stderr do PowerShell vem em CLIXML (com ruído de "Preparing modules"): pega só as linhas de erro.</summary>
-    private static string MensagemDeErro(string? erro, int codigo)
+    internal static string MensagemDeErro(string? erro, int codigo)
     {
         erro ??= "";
         var linhas = Regex.Matches(erro, @"<S S=""Error"">(.*?)</S>", RegexOptions.Singleline)

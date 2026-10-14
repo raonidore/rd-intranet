@@ -145,7 +145,11 @@
         bloquear_ip: (d) => 'Bloquear a saída desta máquina para ' + d.valor + ' no firewall do Windows?',
         desbloquear: (d) => 'Remover o bloqueio "' + d.regra + '"?',
         desativar_servico: (d) => 'Parar e DESATIVAR o serviço "' + d.servico + '"? Ele não volta sozinho no próximo reinício.',
-        encerrar_processo: (d) => 'Encerrar agora o processo ' + d.pid + (d.caminho ? ' (' + d.caminho + ')' : '') + '?\nSe algo o relança (serviço/vigia), ele volta -- bloqueie ou desative a origem.'
+        encerrar_processo: (d) => 'Encerrar agora o processo ' + d.pid + (d.caminho ? ' (' + d.caminho + ')' : '') + '?\nSe algo o relança (serviço/vigia), ele volta -- bloqueie ou desative a origem.',
+        desativar_inicializacao: (d) => 'Desativar "' + d.nome + '" na inicialização do Windows?\nO original fica guardado na máquina para reativar.',
+        reativar_inicializacao: (d) => 'Reativar "' + d.nome + '" na inicialização do Windows?',
+        quarentena: (d) => 'Pôr em quarentena:\n' + d.caminho + '\n\nO que estiver rodando o arquivo é encerrado e ele vai para a quarentena do agente (não executa mais; dá para restaurar na tela do agente).',
+        ligar_firewall: () => 'Ligar o firewall do Windows nos três perfis?\nEntrada e saída ficam LIBERADAS por padrão -- só as regras de bloqueio passam a valer.'
     };
 
     async function executarAcao(acao, d) {
@@ -274,7 +278,8 @@
         document.getElementById('monSegSuspeitos').innerHTML = lista.map((s) => {
             const acoes = botaoAcao('encerrar_processo', 'Encerrar processo', 'bi-x-octagon', { pid: s.pid, caminho: s.caminho || '' })
                 + (s.caminho ? botaoAcao('bloquear_programa', 'Bloquear a rede deste programa', 'bi-slash-circle', { valor: s.caminho }, 'text-danger') : '')
-                + (s.servico ? botaoAcao('desativar_servico', 'Parar e desativar o serviço ' + s.servico, 'bi-power', { servico: String(s.servico).split(',')[0].trim() }, 'text-danger') : '');
+                + (s.servico ? botaoAcao('desativar_servico', 'Parar e desativar o serviço ' + s.servico, 'bi-power', { servico: String(s.servico).split(',')[0].trim() }, 'text-danger') : '')
+                + (s.caminho ? botaoAcao('quarentena', 'Pôr o arquivo em quarentena', 'bi-archive', { caminho: s.caminho, motivo: 'Processo suspeito: ' + (s.motivos || []).slice(0, 2).join('; ') }, 'text-danger') : '');
             return '<div class="mon-cartao ' + esc(s.nivel) + '">'
                 + '<div class="d-flex justify-content-between gap-2"><div>' + nivelPonto(s.nivel) + ' <span class="mon-nome ms-1">' + esc(s.nome) + '</span> <span class="small text-muted">PID ' + esc(s.pid) + '</span>'
                 + (s.servico ? ' <span class="mon-chip">serviço ' + esc(s.servico) + '</span>' : '') + (s.como_system ? ' <span class="mon-chip">SYSTEM</span>' : '') + ' ' + assinaturaChip(s) + '</div>'
@@ -303,8 +308,13 @@
         const lista = itens.filter((i) => (mostrarMs || !i.ms) && (!busca || [i.nome, i.caminho, i.comando, i.origem].join(' ').toLowerCase().includes(busca)));
 
         document.getElementById('monSegInicializacao').innerHTML = lista.map((i) => {
-            const nomeServico = i.tipo === 'servico' ? ((String(i.nome).match(/\(([^()]+)\)$/) || [null, i.nome])[1]) : null;
-            const acoes = nomeServico && i.inicio !== 'Disabled' ? botaoAcao('desativar_servico', 'Parar e desativar este serviço', 'bi-power', { servico: nomeServico }, 'text-danger') : '';
+            const desativado = i.estado === 'Desativado pelo RD.Intranet' || i.estado === 'Desativada' || i.inicio === 'Disabled';
+            const acoes = i.id && !i.ms
+                ? (desativado
+                    ? botaoAcao('reativar_inicializacao', 'Reativar', 'bi-arrow-counterclockwise', { tipo: i.tipo, item_id: i.id, nome: i.nome })
+                    : botaoAcao('desativar_inicializacao', 'Desativar na inicialização', 'bi-power', { tipo: i.tipo, item_id: i.id, nome: i.nome }, 'text-danger'))
+                  + (i.existe && i.caminho && (i.nivel === 'suspeito' || i.nivel === 'critico') ? botaoAcao('quarentena', 'Pôr o arquivo em quarentena', 'bi-archive', { caminho: i.caminho, motivo: 'Inicialização suspeita: ' + i.nome }, 'text-danger') : '')
+                : '';
             return '<tr class="mon-linha">'
                 + '<td style="width:22px">' + nivelPonto(i.ms ? 'ok' : i.nivel) + '</td>'
                 + '<td><div class="mon-nome">' + esc(i.nome) + '</div><div class="mon-caminho">' + esc(i.caminho || i.comando || '') + '</div></td>'
@@ -340,7 +350,8 @@
             + '<td class="text-end">' + botaoAcao('desbloquear', 'Remover este bloqueio', 'bi-trash', { regra: r.nome }, 'text-danger') + '</td></tr>').join('');
 
         document.getElementById('monSegFirewall').innerHTML =
-            (desligados.length ? '<div class="alert alert-warning small py-2">O firewall do Windows está <b>desligado</b> em ' + desligados.map((p) => nomes[p.perfil]).join(', ') + '. Bloquear um programa ou IP pela tela liga o firewall com tudo liberado por padrão -- só os bloqueios do RD.Intranet passam a valer.</div>' : '')
+            (desligados.length ? '<div class="alert alert-warning small py-2 d-flex flex-wrap justify-content-between align-items-center gap-2"><span>O firewall do Windows está <b>desligado</b> em ' + desligados.map((p) => nomes[p.perfil]).join(', ') + '. Bloquear um programa ou IP pela tela liga o firewall com tudo liberado por padrão -- só os bloqueios do RD.Intranet passam a valer.</span>'
+                + (podeEditar ? '<button type="button" class="btn btn-sm btn-warning" data-mon-acao="ligar_firewall">Ligar firewall</button>' : '') + '</div>' : '')
             + '<div class="d-flex flex-wrap gap-2 mb-3">' + perfis + '</div>'
             + '<div class="mon-kv mb-2">' + fmtNum(fw.regras_total) + ' regras no total · ' + fmtNum(fw.bloqueios_ativos) + ' de bloqueio ativas</div>'
             + '<div class="fw-semibold small mb-1">Bloqueios feitos pelo RD.Intranet</div>'

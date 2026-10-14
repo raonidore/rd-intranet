@@ -37,6 +37,38 @@ public static class DiagnosticoSegurancaRede
         return eventos;
     }
 
+    /// <summary>Desenha a página Segurança (cada aba) em PNG -- conferência visual sem abrir o agente.</summary>
+    public static void PrintsDaTela(string pasta)
+    {
+        Directory.CreateDirectory(pasta);
+        System.Windows.Forms.Application.EnableVisualStyles();
+        var seguranca = new SegurancaService(() => new Config(), () => null);
+        seguranca.RegistrarExterno(new EventoSeguranca
+        {
+            Tipo = "SUSPICIOUS_STARTUP", Severidade = "CRITICAL",
+            Resumo = "5 item(ns) suspeito(s) na inicialização do Windows: taskmgr.exe, SQLite, \\JavaUpdateInstallerNL e mais 2 -- veja todos em Segurança > Eventos",
+            Detalhes = new Dictionary<string, object?> { ["itens"] = InicializacaoService.Coletar().Take(5).Select(i => i.ParaEnvio()).ToList() }
+        });
+        using var monitor = new MonitorRedeService(() => new Config(), () => null, seguranca);
+        using var janela = new System.Windows.Forms.Form { Width = 1200, Height = 760, BackColor = Tema.Fundo, Padding = new System.Windows.Forms.Padding(24), ShowInTaskbar = false };
+        var pagina = new SegurancaPagina(seguranca, monitor) { Visible = true };
+        janela.Controls.Add(pagina);
+        janela.Show();
+        foreach (var aba in new[] { "eventos", "processos", "inicializacao", "conexoes", "firewall", "quarentena" })
+        {
+            pagina.SelecionarAba(aba);
+            var limite = DateTime.Now.AddSeconds(40);
+            do { System.Windows.Forms.Application.DoEvents(); Thread.Sleep(100); } while ((pagina.Carregando || DateTime.Now < limite.AddSeconds(-38)) && DateTime.Now < limite);
+            pagina.Atualizar();
+            System.Windows.Forms.Application.DoEvents();
+            using var imagem = new System.Drawing.Bitmap(janela.ClientSize.Width, janela.ClientSize.Height);
+            janela.DrawToBitmap(imagem, new System.Drawing.Rectangle(System.Drawing.Point.Empty, janela.ClientSize));
+            imagem.Save(Path.Combine(pasta, $"seguranca-{aba}.png"));
+        }
+        janela.Close();
+        seguranca.Dispose();
+    }
+
     public static string AnalisarArquivos(IEnumerable<string> arquivos) => JsonSerializer.Serialize(arquivos.Select(a =>
     {
         var exe = AnaliseExecutavel.Analisar(a);

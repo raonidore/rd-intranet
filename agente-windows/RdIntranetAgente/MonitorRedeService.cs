@@ -462,7 +462,7 @@ public sealed class MonitorRedeService : IDisposable
         {
             Tipo = "SUSPICIOUS_STARTUP",
             Severidade = alertar.Any(i => i.Avaliacao.Nivel == "critico") ? "CRITICAL" : "WARNING",
-            Resumo = $"{alertar.Count} item(ns) {(primeiraVez ? "suspeito(s)" : "novo(s) ou que pioraram")} na inicialização do Windows: {string.Join(", ", alertar.Take(3).Select(i => i.Nome))}",
+            Resumo = $"{alertar.Count} item(ns) {(primeiraVez ? "suspeito(s)" : "novo(s) ou que pioraram")} na inicialização do Windows: {string.Join(", ", alertar.Take(3).Select(i => i.Nome))}{(alertar.Count > 3 ? $" e mais {alertar.Count - 3}" : "")} -- veja todos em Segurança > Eventos",
             Detalhes = new Dictionary<string, object?>
             {
                 ["novos"] = !primeiraVez,
