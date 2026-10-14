@@ -65,6 +65,20 @@ public static class DiagnosticoSegurancaRede
             janela.DrawToBitmap(imagem, new System.Drawing.Rectangle(System.Drawing.Point.Empty, janela.ClientSize));
             imagem.Save(Path.Combine(pasta, $"seguranca-{aba}.png"));
         }
+        janela.Controls.Clear();
+        var desempenho = new DesempenhoPagina();
+        janela.Controls.Add(desempenho);
+        desempenho.Visible = false;
+        desempenho.Visible = true;
+        // Carga simulada por alguns segundos pros gráficos terem o que desenhar.
+        var carga = Task.Run(() => { var fim = DateTime.Now.AddSeconds(14); while (DateTime.Now < fim) { Math.Sqrt(DateTime.Now.Ticks); } });
+        var ate = DateTime.Now.AddSeconds(22);
+        while (DateTime.Now < ate) { System.Windows.Forms.Application.DoEvents(); Thread.Sleep(100); }
+        using (var imagem = new System.Drawing.Bitmap(janela.ClientSize.Width, janela.ClientSize.Height))
+        {
+            janela.DrawToBitmap(imagem, new System.Drawing.Rectangle(System.Drawing.Point.Empty, janela.ClientSize));
+            imagem.Save(Path.Combine(pasta, "desempenho.png"));
+        }
         janela.Close();
         seguranca.Dispose();
     }

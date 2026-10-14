@@ -224,8 +224,6 @@ public sealed class SegurancaPagina : Panel
                 Colunas(("Ação", 80), ("Direção", 75), ("Ativa", 55), ("Regra", 330), ("Programa / IP", 380));
                 Botao("Atualizar", () => CarregarFirewall());
                 Botao(_mostrarTudo ? "Só bloqueios" : "Todas as regras", () => { _mostrarTudo = !_mostrarTudo; MontarAba(); });
-                Botao("Ligar firewall", () => AcaoFirewallPerfil(true));
-                Botao("Desligar", () => AcaoFirewallPerfil(false), BotaoTema.Variante.Perigo);
                 Botao("Bloquear IP...", () => BloquearIpManual(), BotaoTema.Variante.Perigo);
                 Botao("Bloquear programa...", () => BloquearProgramaManual(), BotaoTema.Variante.Perigo);
                 Botao("Remover bloqueio", () => RemoverRegra());
@@ -242,6 +240,31 @@ public sealed class SegurancaPagina : Panel
                 Preencher();
                 break;
         }
+    }
+
+    /// <summary>
+    /// Um botão só, que segue o estado real: com tudo ligado oferece
+    /// "Desligar firewall"; com algum perfil desligado, "Ligar firewall" em
+    /// destaque. Antes eram dois botões ("Ligar firewall" e um "Desligar"
+    /// vermelho) e o vermelho era lido como status "desligado".
+    /// </summary>
+    private void BotaoLigaDesliga(bool algumDesligado)
+    {
+        foreach (var antigo in _barra.Controls.OfType<BotaoTema>().Where(b => (b.Tag as string) == "fw-liga").ToList())
+        {
+            _barra.Controls.Remove(antigo);
+            antigo.Dispose();
+        }
+        var texto = algumDesligado ? "Ligar firewall" : "Desligar firewall";
+        var botao = new BotaoTema(texto, algumDesligado ? BotaoTema.Variante.Primario : BotaoTema.Variante.Secundario)
+        {
+            Tag = "fw-liga",
+            Width = TextRenderer.MeasureText(texto, Tema.FonteSemibold(9.5F)).Width + 28,
+            Margin = new Padding(0, 0, 6, 0)
+        };
+        botao.Click += (s, e) => { if (!_ocupado) AcaoFirewallPerfil(algumDesligado); };
+        _barra.Controls.Add(botao);
+        _barra.Controls.SetChildIndex(botao, Math.Min(3, _barra.Controls.Count - 1)); // depois de Filtro, Atualizar e Todas as regras
     }
 
     private void Colunas(params (string titulo, int largura)[] colunas)
@@ -390,8 +413,10 @@ public sealed class SegurancaPagina : Panel
                     itens.Add(Linha(r, r.DoRd ? Tema.Ciano : r.Acao == "bloquear" ? Tema.Alerta : Tema.Texto, r.Acao, r.Direcao, r.Habilitada ? "sim" : "não",
                         r.Nome, r.Programa ?? r.Ips ?? (r.Portas != null ? "portas " + r.Portas : "qualquer")));
                 }
-                _status.Text = TextoPerfis(estado) + $"  ·  {regras.Count} regras ({regras.Count(r => r.DoRd)} do RD.Intranet)";
-                _status.ForeColor = TextoPerfis(estado).Contains("DESLIGADO") ? Tema.Alerta : Tema.TextoSecundario;
+                var algumDesligado = TextoPerfis(estado).Contains("DESLIGADO");
+                _status.Text = (algumDesligado ? "⚠ " : "✓ ") + TextoPerfis(estado) + $"  ·  {regras.Count} regras ({regras.Count(r => r.DoRd)} do RD.Intranet)";
+                _status.ForeColor = algumDesligado ? Tema.Alerta : Tema.Sucesso;
+                BotaoLigaDesliga(algumDesligado);
                 break;
 
             case "quarentena":
