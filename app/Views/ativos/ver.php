@@ -2032,68 +2032,18 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     <?php if ($fontePortasSwitch !== null): ?>
     <!-- Portas do switch (TP-Link via SSH ou UniFi via Controller) -->
     <div class="tab-pane fade" id="abaPortasSwitch">
-        <?php
-        $rotasSwitch = $detalhes['omada_rotas'] ?? [];
-        $interfacesIpSwitch = $detalhes['omada_interfaces_ip'] ?? [];
-        $rotasEstaticasSwitch = array_filter($rotasSwitch, fn ($r) => $r['tipo'] !== 'conectada');
-        ?>
-        <?php if ($rotasEstaticasSwitch || count($interfacesIpSwitch) > 1 || $dhcpSwitchTplink): ?>
-        <div class="card border-0 shadow-sm mb-3">
-            <div class="card-header bg-white d-flex justify-content-between align-items-start gap-2">
-                <div>
-                    <strong><i class="bi bi-signpost-split"></i> Roteamento (L3) deste switch</strong>
-                    <div class="small text-muted">O switch também roteia: quem usa ele como caminho para essas redes depende destas rotas.</div>
-                </div>
-                <?php if ($dhcpSwitchTplink): ?>
-                    <button type="button" class="btn btn-sm btn-primary flex-shrink-0" id="botaoNovaRotaSw"><i class="bi bi-plus-lg"></i> Nova rota</button>
-                <?php endif; ?>
-            </div>
-            <div class="card-body p-0">
-                <div class="row g-0">
-                    <div class="col-lg-7 border-end">
-                        <table class="table table-sm align-middle mb-0">
-                            <thead><tr><th>Rede de destino</th><th>Próximo salto</th><th>Interface</th><th>Tipo</th><th></th></tr></thead>
-                            <tbody>
-                                <?php foreach ($rotasSwitch as $rota): ?>
-                                    <tr>
-                                        <td class="font-monospace small"><?= htmlspecialchars($rota['destino']) ?></td>
-                                        <td class="font-monospace small"><?= $rota['via'] !== '' ? htmlspecialchars($rota['via']) : '<span class="text-muted">direto</span>' ?></td>
-                                        <td class="small"><?= htmlspecialchars($rota['interface']) ?></td>
-                                        <td><span class="badge <?= $rota['tipo'] === 'conectada' ? 'text-bg-light border' : 'text-bg-primary' ?>"><?= htmlspecialchars($rota['tipo']) ?></span><?= !empty($rota['distancia']) && $rota['distancia'] !== 1 && $rota['tipo'] !== 'conectada' ? ' <span class="small text-muted">dist. ' . (int)$rota['distancia'] . '</span>' : '' ?></td>
-                                        <td class="text-end text-nowrap">
-                                            <?php if ($dhcpSwitchTplink && $rota['tipo'] === 'estática'): ?>
-                                                <button type="button" class="btn btn-sm btn-outline-secondary me-1 botao-editar-rota-sw" data-destino="<?= htmlspecialchars($rota['destino']) ?>" data-via="<?= htmlspecialchars($rota['via']) ?>" data-distancia="<?= (int)($rota['distancia'] ?? 1) ?>" title="Editar"><i class="bi bi-pencil"></i></button>
-                                                <button type="button" class="btn btn-sm btn-outline-danger botao-remover-rota-sw" data-destino="<?= htmlspecialchars($rota['destino']) ?>" data-via="<?= htmlspecialchars($rota['via']) ?>" title="Remover"><i class="bi bi-trash"></i></button>
-                                            <?php endif; ?>
-                                        </td>
-                                    </tr>
-                                <?php endforeach; ?>
-                                <?php if (!$rotasSwitch): ?>
-                                    <tr><td colspan="5" class="text-muted small p-3">Nenhuma rota coletada ainda -- use "Coletar" ou crie a primeira.</td></tr>
-                                <?php endif; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                    <div class="col-lg-5">
-                        <table class="table table-sm align-middle mb-0">
-                            <thead><tr><th>Interface</th><th>IP</th><th>Status</th></tr></thead>
-                            <tbody>
-                                <?php foreach ($interfacesIpSwitch as $interfaceIp): ?>
-                                    <tr>
-                                        <td class="small"><?= htmlspecialchars($interfaceIp['interface']) ?></td>
-                                        <td class="font-monospace small"><?= htmlspecialchars($interfaceIp['ip']) ?></td>
-                                        <td><?= $interfaceIp['ativa'] ? '<span class="badge text-bg-success">no ar</span>' : '<span class="badge text-bg-secondary" title="Sem nenhuma porta ativa nessa VLAN">fora do ar</span>' ?></td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <?php endif; ?>
 <style>
 /* ---------- Painel do switch ---------- */
+.sw-redes-ip { display:flex; flex-wrap:wrap; align-items:center; gap:.4rem .5rem; }
+.sw-rede-ip { display:inline-flex; align-items:center; gap:.35rem; font-size:.8rem; padding:.15rem .55rem; border:1px solid var(--bs-border-color); border-radius:999px; background:var(--bs-body-bg); }
+.sw-rede-ip .ponto { width:7px; height:7px; border-radius:50%; background:#2fa36b; display:inline-block; }
+.sw-rede-ip.fora { color:#8a929c; }
+.sw-rede-ip.fora .ponto { background:#b9c0c8; }
+.sw-rotas th { font-size:.75rem; font-weight:600; color:#6c757d; text-transform:uppercase; letter-spacing:.03em; border-bottom-width:1px; }
+.sw-rotas th:first-child, .sw-rotas td:first-child { padding-left:1rem; width:32%; }
+.sw-rotas td:last-child { padding-right:.75rem; width:90px; }
+.sw-rota-acoes { opacity:.35; transition:opacity .15s; }
+.sw-rotas tr:hover .sw-rota-acoes, .sw-rota-acoes:focus-within { opacity:1; }
 .sw-resumo { display:flex; flex-wrap:wrap; gap:1.5rem; align-items:center; }
 .sw-resumo .sw-metrica { min-width:110px; }
 .sw-resumo .sw-metrica .valor { font-size:1.25rem; font-weight:600; line-height:1.1; }
@@ -2266,6 +2216,68 @@ tr.linha-selecionada > td { background:#e7f1ff !important; }
             <div class="small text-muted px-3 py-2 border-top"><i class="bi bi-hand-index"></i> Clique numa VLAN para destacar no painel as portas que a levam.</div>
         </div>
     </div>
+
+    <?php
+        $rotasSwitch = $detalhes['omada_rotas'] ?? [];
+        $interfacesIpSwitch = $detalhes['omada_interfaces_ip'] ?? [];
+        $rotasEstaticasSwitch = array_values(array_filter($rotasSwitch, fn ($r) => $r['tipo'] !== 'conectada'));
+        $editarRotas = $dhcpSwitchTplink && PermissionService::temAcesso('ativos_novo');
+    ?>
+    <?php if ($rotasEstaticasSwitch || count($interfacesIpSwitch) > 1 || $editarRotas): ?>
+    <!-- Roteamento (L3) do switch -->
+    <div class="card border-0 shadow-sm mb-3">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <strong><i class="bi bi-signpost-split"></i> Rotas
+                <small class="text-muted fw-normal">
+                    <?= count($rotasEstaticasSwitch) ?> estática(s)<?php if ($interfacesIpSwitch): ?> · IP em <?= count($interfacesIpSwitch) ?> rede(s)<?php endif; ?>
+                </small>
+            </strong>
+            <?php if ($editarRotas): ?>
+                <button type="button" class="btn btn-sm btn-primary" id="botaoNovaRotaSw"><i class="bi bi-plus-lg"></i> Nova rota</button>
+            <?php endif; ?>
+        </div>
+        <div class="card-body p-0">
+            <?php if ($interfacesIpSwitch): ?>
+                <div class="sw-redes-ip px-3 py-2 border-bottom">
+                    <span class="text-muted small me-1">Redes do switch</span>
+                    <?php foreach ($interfacesIpSwitch as $interfaceIp): ?>
+                        <span class="sw-rede-ip<?= $interfaceIp['ativa'] ? '' : ' fora' ?>" title="<?= $interfaceIp['ativa'] ? 'No ar' : 'Fora do ar: nenhuma porta ativa nessa VLAN' ?>">
+                            <i class="ponto"></i><?= htmlspecialchars($interfaceIp['interface']) ?>
+                            <span class="font-monospace"><?= htmlspecialchars($interfaceIp['ip']) ?></span>
+                        </span>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+            <?php if ($rotasEstaticasSwitch): ?>
+                <table class="table table-sm table-hover align-middle mb-0 sw-rotas">
+                    <thead><tr><th>Destino</th><th>Caminho</th><th class="text-end"></th></tr></thead>
+                    <tbody>
+                        <?php foreach ($rotasEstaticasSwitch as $rota): ?>
+                            <tr>
+                                <td class="font-monospace"><?= htmlspecialchars($rota['destino']) ?></td>
+                                <td>
+                                    <i class="bi bi-arrow-right text-muted me-1"></i>
+                                    <span class="font-monospace"><?= htmlspecialchars($rota['via']) ?></span>
+                                    <span class="text-muted small ms-1"><?= htmlspecialchars($rota['interface']) ?><?= !empty($rota['distancia']) && (int)$rota['distancia'] !== 1 ? ' · distância ' . (int)$rota['distancia'] : '' ?></span>
+                                </td>
+                                <td class="text-end text-nowrap">
+                                    <?php if ($editarRotas && $rota['tipo'] === 'estática'): ?>
+                                        <span class="sw-rota-acoes">
+                                            <button type="button" class="btn btn-sm btn-link text-secondary p-1 botao-editar-rota-sw" data-destino="<?= htmlspecialchars($rota['destino']) ?>" data-via="<?= htmlspecialchars($rota['via']) ?>" data-distancia="<?= (int)($rota['distancia'] ?? 1) ?>" title="Editar"><i class="bi bi-pencil"></i></button>
+                                            <button type="button" class="btn btn-sm btn-link text-danger p-1 botao-remover-rota-sw" data-destino="<?= htmlspecialchars($rota['destino']) ?>" data-via="<?= htmlspecialchars($rota['via']) ?>" title="Remover"><i class="bi bi-trash"></i></button>
+                                        </span>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php else: ?>
+                <div class="text-muted small px-3 py-3">Nenhuma rota estática: o switch só alcança as redes em que tem IP.</div>
+            <?php endif; ?>
+        </div>
+    </div>
+    <?php endif; ?>
 
     <!-- Painel frontal -->
     <div class="card border-0 shadow-sm mb-3">
