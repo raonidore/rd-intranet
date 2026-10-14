@@ -448,6 +448,11 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             <i class="bi bi-shield-lock"></i> Firewall
         </button>
     </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaDhcpUnifi" type="button">
+            <i class="bi bi-pin-map"></i> DHCP / IPs fixos
+        </button>
+    </li>
     <?php endif; ?>
     <?php endif; ?>
     <?php if ($fontePortasSwitch !== null): ?>
@@ -1180,6 +1185,48 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     <!-- Wi-Fi (UniFi) -->
     <div class="tab-pane fade" id="abaWifi">
         <div class="row g-3">
+            <div class="col-12">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-white"><strong>Redes Wi-Fi transmitidas por este AP</strong></div>
+                    <div class="card-body p-0">
+                        <?php $ssidsAp = $detalhes['unifi_ssids'] ?? null; ?>
+                        <?php if ($ssidsAp === null): ?>
+                            <p class="text-muted p-3 mb-0">Ainda não coletado. Use o botão "Coletar dados UniFi".</p>
+                        <?php elseif (empty($ssidsAp)): ?>
+                            <p class="text-muted p-3 mb-0">Este AP não está transmitindo nenhuma rede Wi-Fi.</p>
+                        <?php else: ?>
+                            <table class="table table-sm align-middle mb-0">
+                                <thead><tr><th>Nome da rede (SSID)</th><th>Bandas</th><th>Canal</th><th>Segurança</th><th>VLAN</th><th>Clientes</th><th>Status</th></tr></thead>
+                                <tbody>
+                                    <?php foreach ($ssidsAp as $ssid): ?>
+                                        <?php $seguranca = strtoupper((string)($ssid['seguranca'] ?? '')); ?>
+                                        <tr>
+                                            <td>
+                                                <strong><?= htmlspecialchars($ssid['nome']) ?></strong>
+                                                <?php if (!empty($ssid['convidado'])): ?><span class="badge text-bg-light border ms-1">convidado / portal</span><?php endif; ?>
+                                                <?php if (!empty($ssid['oculta'])): ?><i class="bi bi-eye-slash text-muted ms-1" title="SSID oculto"></i><?php endif; ?>
+                                                <?php if (!empty($ssid['bssids'])): ?><div class="small text-muted font-monospace"><?= htmlspecialchars(implode(' · ', $ssid['bssids'])) ?></div><?php endif; ?>
+                                            </td>
+                                            <td><?= htmlspecialchars(implode(' + ', array_unique($ssid['bandas']))) ?></td>
+                                            <td><?= $ssid['canais'] ? htmlspecialchars(implode(', ', array_unique($ssid['canais']))) : '—' ?></td>
+                                            <td>
+                                                <?php if ($seguranca === '' || $seguranca === 'OPEN'): ?>
+                                                    <span class="badge text-bg-warning">Aberta</span>
+                                                <?php else: ?>
+                                                    <i class="bi bi-lock-fill text-success"></i> <?= htmlspecialchars($seguranca) ?>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td><?= !empty($ssid['vlan']) ? (int)$ssid['vlan'] : '<span class="text-muted small">nativa</span>' ?></td>
+                                            <td><?= (int)$ssid['clientes'] ?></td>
+                                            <td><?= !empty($ssid['ativo']) ? '<span class="badge text-bg-success">No ar</span>' : '<span class="badge text-bg-secondary">Fora do ar</span>' ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
             <div class="col-lg-5">
                 <div class="card border-0 shadow-sm h-100">
                     <div class="card-header bg-white"><strong>Rádios</strong></div>
@@ -1595,6 +1642,88 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- DHCP do Gateway UniFi: redes + IPs fixos (reservas) -->
+    <div class="tab-pane fade" id="abaDhcpUnifi">
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <strong>DHCP por rede</strong>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="botaoAtualizarDhcpUnifi"><i class="bi bi-arrow-repeat"></i> Atualizar</button>
+            </div>
+            <div class="card-body p-0">
+                <div class="small text-muted p-3" id="dhcpUnifiCarregando"><div class="spinner-border spinner-border-sm"></div> Consultando o Controller...</div>
+                <div class="table-responsive" id="dhcpUnifiRedesWrap" style="display:none">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead><tr><th>Rede</th><th>VLAN</th><th>Gateway / sub-rede</th><th>DHCP do gateway</th><th>Faixa</th><th>DNS entregue</th><th>Concessão</th></tr></thead>
+                        <tbody id="dhcpUnifiRedesCorpo"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <strong>IPs fixos (reservas DHCP) <span class="badge text-bg-secondary ms-1" id="dhcpUnifiTotal"></span></strong>
+                <div class="d-flex gap-2">
+                    <input type="text" class="form-control form-control-sm" style="width:220px" id="dhcpUnifiBusca" placeholder="Filtrar por IP, MAC ou nome...">
+                    <button type="button" class="btn btn-sm btn-primary" id="botaoNovoIpFixo"><i class="bi bi-plus-lg"></i> Novo IP fixo</button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="alert alert-warning small m-3 mb-0" id="dhcpUnifiAvisoDesligado" style="display:none"></div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead><tr><th>IP fixo</th><th>MAC</th><th>Aparelho</th><th>Ativo no RD.Intranet</th><th>Rede</th><th>Agora</th><th></th></tr></thead>
+                        <tbody id="dhcpUnifiReservasCorpo"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalIpFixo" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <form class="modal-content" id="formIpFixo">
+                <div class="modal-header">
+                    <h6 class="modal-title" id="modalIpFixoTitulo">Novo IP fixo</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-2" id="ipFixoSugestaoGrupo">
+                        <label class="form-label small mb-1">Aparelho conectado agora (opcional)</label>
+                        <select class="form-select form-select-sm" id="ipFixoSugestao"><option value="">— digitar MAC manualmente —</option></select>
+                        <div class="form-text">Aparelhos online que ainda não têm IP fixo. Escolher preenche MAC, nome e o IP atual.</div>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-6">
+                            <label class="form-label small mb-1">MAC</label>
+                            <input type="text" class="form-control form-control-sm font-monospace" id="ipFixoMac" placeholder="aa:bb:cc:dd:ee:ff" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small mb-1">IP fixo</label>
+                            <input type="text" class="form-control form-control-sm font-monospace" id="ipFixoIp" placeholder="192.168.0.50" required>
+                        </div>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-6">
+                            <label class="form-label small mb-1">Rede</label>
+                            <select class="form-select form-select-sm" id="ipFixoRede"></select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small mb-1">Nome (aparece no UniFi)</label>
+                            <input type="text" class="form-control form-control-sm" id="ipFixoNome" maxlength="60" placeholder="Ex.: Impressora Recepção">
+                        </div>
+                    </div>
+                    <div class="form-text">O aparelho passa a usar o IP novo quando renovar o DHCP (ou ao reconectar o cabo/Wi-Fi), e só se o DHCP do gateway estiver ligado nessa rede.</div>
+                    <div class="text-danger small mt-2" id="ipFixoErro"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-sm btn-primary" id="ipFixoSalvar">Salvar</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -4589,6 +4718,187 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
     if (botaoAtualizarSaude) {
         botaoAtualizarSaude.addEventListener('click', carregarSaude);
     }
+})();
+
+// DHCP do Gateway UniFi: redes + IPs fixos (listar, criar, trocar, remover).
+(function () {
+    const nav = document.querySelector('.nav-link[data-bs-target="#abaDhcpUnifi"]');
+    if (!nav) return;
+
+    const esc = function (s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    };
+    const urlAtivo = <?= json_encode(url('/ativos/ver?id=')) ?>;
+    const modalEl = document.getElementById('modalIpFixo');
+    let dados = null;
+
+    function rotuloConcessao(seg) {
+        if (!seg) return '—';
+        return seg % 86400 === 0 ? (seg / 86400) + ' dia(s)' : (seg % 3600 === 0 ? (seg / 3600) + ' h' : Math.round(seg / 60) + ' min');
+    }
+
+    function nomeAparelho(r) {
+        return r.nome || r.hostname || '';
+    }
+
+    function desenharReservas() {
+        const termo = document.getElementById('dhcpUnifiBusca').value.trim().toLowerCase();
+        const lista = dados.reservas.filter(function (r) {
+            return !termo || [r.ip_fixo, r.mac, r.nome, r.hostname, r.fabricante, r.ativo ? r.ativo.nome : '', r.ativo ? r.ativo.codigo : ''].join(' ').toLowerCase().includes(termo);
+        });
+        document.getElementById('dhcpUnifiTotal').textContent = dados.reservas.length;
+        document.getElementById('dhcpUnifiReservasCorpo').innerHTML = lista.map(function (r) {
+            let agora;
+            if (!r.online) {
+                agora = '<span class="badge text-bg-light border">offline</span>' + (r.visto_em ? '<div class="small text-muted">visto ' + esc(r.visto_em.substr(8, 2) + '/' + r.visto_em.substr(5, 2) + ' ' + r.visto_em.substr(11, 5)) + '</div>' : '');
+            } else if (r.ip_atual === r.ip_fixo) {
+                agora = '<span class="badge text-bg-success">online no IP reservado</span>';
+            } else {
+                agora = '<span class="badge text-bg-warning" title="Ainda não renovou o DHCP pelo gateway">online em ' + esc(r.ip_atual) + '</span>';
+            }
+            const aparelho = nomeAparelho(r)
+                ? esc(nomeAparelho(r)) + (r.fabricante ? '<div class="small text-muted">' + esc(r.fabricante) + '</div>' : '')
+                : '<span class="text-muted small">' + esc(r.fabricante || 'sem nome') + '</span>';
+            const ativo = r.ativo ? '<a href="' + urlAtivo + r.ativo.id + '">' + esc(r.ativo.nome) + '</a>' + (r.ativo.codigo ? '<div class="small text-muted">' + esc(r.ativo.codigo) + '</div>' : '') : '<span class="text-muted small">—</span>';
+            return '<tr>' +
+                '<td class="font-monospace">' + esc(r.ip_fixo) + '</td>' +
+                '<td class="font-monospace small">' + esc(r.mac) + '</td>' +
+                '<td>' + aparelho + '</td>' +
+                '<td>' + ativo + '</td>' +
+                '<td class="small">' + esc(r.rede) + '</td>' +
+                '<td>' + agora + '</td>' +
+                '<td class="text-end text-nowrap">' +
+                    '<button type="button" class="btn btn-sm btn-outline-secondary me-1 botao-editar-ip-fixo" data-mac="' + esc(r.mac) + '" title="Trocar IP / nome"><i class="bi bi-pencil"></i></button>' +
+                    '<button type="button" class="btn btn-sm btn-outline-danger botao-remover-ip-fixo" data-mac="' + esc(r.mac) + '" data-ip="' + esc(r.ip_fixo) + '" title="Remover reserva"><i class="bi bi-trash"></i></button>' +
+                '</td>' +
+            '</tr>';
+        }).join('') || '<tr><td colspan="7" class="text-muted small p-3">' + (termo ? 'Nada encontrado com esse filtro.' : 'Nenhum IP fixo cadastrado no gateway.') + '</td></tr>';
+    }
+
+    async function carregar() {
+        const carregando = document.getElementById('dhcpUnifiCarregando');
+        carregando.style.display = '';
+        carregando.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Consultando o Controller...';
+        const res = await fetch(<?= json_encode(url('/ativos/unifi/dhcp')) ?>, { method: 'POST' });
+        const resultado = await res.json();
+        if (!resultado.success) {
+            carregando.innerHTML = '<span class="text-danger">' + esc(resultado.message || 'Falha ao consultar.') + '</span>';
+            return;
+        }
+        dados = resultado;
+
+        document.getElementById('dhcpUnifiRedesCorpo').innerHTML = dados.redes.map(function (n) {
+            return '<tr>' +
+                '<td>' + esc(n.nome) + '</td>' +
+                '<td>' + (n.vlan ? esc(n.vlan) : '<span class="text-muted small">nativa</span>') + '</td>' +
+                '<td class="font-monospace small">' + esc(n.subnet) + '</td>' +
+                '<td>' + (n.dhcp_ligado ? '<span class="badge text-bg-success">Ligado</span>' : '<span class="badge text-bg-secondary">Desligado</span>') + '</td>' +
+                '<td class="font-monospace small">' + (n.inicio ? esc(n.inicio) + ' – ' + esc(n.fim) : '—') + '</td>' +
+                '<td class="font-monospace small">' + (n.dns.length ? esc(n.dns.join(', ')) : '<span class="text-muted">o próprio gateway</span>') + '</td>' +
+                '<td class="small">' + rotuloConcessao(n.concessao_segundos) + '</td>' +
+            '</tr>';
+        }).join('') || '<tr><td colspan="7" class="text-muted small">Nenhuma rede local.</td></tr>';
+
+        const desligadas = dados.redes.filter(function (n) {
+            return !n.dhcp_ligado && dados.reservas.some(function (r) { return r.rede_id === n.id; });
+        });
+        const aviso = document.getElementById('dhcpUnifiAvisoDesligado');
+        aviso.style.display = desligadas.length ? '' : 'none';
+        aviso.innerHTML = '<i class="bi bi-exclamation-triangle"></i> O DHCP do gateway está <strong>desligado</strong> em ' +
+            desligadas.map(function (n) { return '"' + esc(n.nome) + '"'; }).join(', ') +
+            ': as reservas abaixo ficam guardadas, mas só passam a valer quando o gateway entregar os endereços (hoje outro equipamento faz o DHCP dessa rede).';
+
+        document.getElementById('ipFixoRede').innerHTML = dados.redes.map(function (n) {
+            return '<option value="' + esc(n.id) + '">' + esc(n.nome) + ' (' + esc(n.subnet) + ')</option>';
+        }).join('');
+        document.getElementById('ipFixoSugestao').innerHTML = '<option value="">— digitar MAC manualmente —</option>' + dados.sem_reserva.map(function (c, i) {
+            return '<option value="' + i + '">' + esc(c.ip) + ' — ' + esc(c.nome || c.fabricante || c.mac) + ' (' + esc(c.mac) + ')' + (c.ativo ? ' · ' + esc(c.ativo.nome) : '') + '</option>';
+        }).join('');
+
+        carregando.style.display = 'none';
+        document.getElementById('dhcpUnifiRedesWrap').style.display = '';
+        desenharReservas();
+    }
+
+    function abrirModal(reserva) {
+        document.getElementById('ipFixoErro').textContent = '';
+        document.getElementById('modalIpFixoTitulo').textContent = reserva ? 'Trocar IP fixo' : 'Novo IP fixo';
+        document.getElementById('ipFixoSugestaoGrupo').style.display = reserva ? 'none' : '';
+        document.getElementById('ipFixoSugestao').value = '';
+        const mac = document.getElementById('ipFixoMac');
+        mac.value = reserva ? reserva.mac : '';
+        mac.readOnly = !!reserva;
+        document.getElementById('ipFixoIp').value = reserva ? reserva.ip_fixo : '';
+        document.getElementById('ipFixoNome').value = reserva ? reserva.nome : '';
+        if (reserva && reserva.rede_id) document.getElementById('ipFixoRede').value = reserva.rede_id;
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+
+    document.getElementById('ipFixoSugestao').addEventListener('change', function () {
+        const c = dados.sem_reserva[this.value];
+        if (!c) return;
+        document.getElementById('ipFixoMac').value = c.mac;
+        document.getElementById('ipFixoIp').value = c.ip;
+        document.getElementById('ipFixoNome').value = c.nome || (c.ativo ? c.ativo.nome : '');
+        if (c.rede_id) document.getElementById('ipFixoRede').value = c.rede_id;
+    });
+
+    document.getElementById('botaoNovoIpFixo').addEventListener('click', function () { if (dados) abrirModal(null); });
+    document.getElementById('dhcpUnifiBusca').addEventListener('input', function () { if (dados) desenharReservas(); });
+    document.getElementById('botaoAtualizarDhcpUnifi').addEventListener('click', carregar);
+
+    document.getElementById('dhcpUnifiReservasCorpo').addEventListener('click', async function (ev) {
+        const editar = ev.target.closest('.botao-editar-ip-fixo');
+        if (editar) {
+            abrirModal(dados.reservas.find(function (r) { return r.mac === editar.dataset.mac; }));
+            return;
+        }
+        const remover = ev.target.closest('.botao-remover-ip-fixo');
+        if (!remover || !confirm('Remover a reserva do IP ' + remover.dataset.ip + ' (' + remover.dataset.mac + ')?\nO aparelho passa a receber um IP qualquer da faixa na próxima renovação.')) return;
+        remover.disabled = true;
+        const corpo = new FormData();
+        corpo.set('mac', remover.dataset.mac);
+        const res = await fetch(<?= json_encode(url('/ativos/unifi/dhcp/remover-ip-fixo')) ?>, { method: 'POST', body: corpo });
+        const resultado = await res.json();
+        if (!resultado.success) {
+            alert(resultado.message || 'Falha ao remover.');
+            remover.disabled = false;
+            return;
+        }
+        carregar();
+    });
+
+    document.getElementById('formIpFixo').addEventListener('submit', async function (ev) {
+        ev.preventDefault();
+        const botao = document.getElementById('ipFixoSalvar');
+        const erro = document.getElementById('ipFixoErro');
+        erro.textContent = '';
+        botao.disabled = true;
+        const corpo = new FormData();
+        corpo.set('mac', document.getElementById('ipFixoMac').value.trim());
+        corpo.set('ip', document.getElementById('ipFixoIp').value.trim());
+        corpo.set('rede_id', document.getElementById('ipFixoRede').value);
+        corpo.set('nome', document.getElementById('ipFixoNome').value.trim());
+        try {
+            const res = await fetch(<?= json_encode(url('/ativos/unifi/dhcp/ip-fixo')) ?>, { method: 'POST', body: corpo });
+            const resultado = await res.json();
+            if (!resultado.success) {
+                erro.textContent = resultado.message || 'Falha ao salvar.';
+                return;
+            }
+            bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+            carregar();
+        } finally {
+            botao.disabled = false;
+        }
+    });
+
+    let carregou = false;
+    nav.addEventListener('shown.bs.tab', function () {
+        if (!carregou) { carregou = true; carregar(); }
+    });
 })();
 
 // Clientes da rede (UniFi Gateway) -- lista site inteira (com fio + Wi-Fi), só leitura, carregada sob demanda.

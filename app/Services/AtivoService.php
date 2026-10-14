@@ -1446,6 +1446,48 @@ class AtivoService
             'unifi_clientes' => $clientesWifi,
         ];
 
+        // SSIDs que ESTE AP está transmitindo agora (vap_table da API legada:
+        // um registro por SSID por rádio) -- agrupado por nome, com bandas,
+        // canal, clientes e a segurança/VLAN vindas da configuração do Wi-Fi.
+        if ($legadoDispositivo !== null && isset($legadoDispositivo['vap_table'])) {
+            $configWifi = [];
+            foreach ((new UnifiService())->listarRedesWifiConfiguradas()['redes'] ?? [] as $w) {
+                $configWifi[$w['nome']] = $w;
+            }
+            $ssids = [];
+            foreach ($legadoDispositivo['vap_table'] as $vap) {
+                $nome = (string)($vap['essid'] ?? '');
+                if ($nome === '') {
+                    continue;
+                }
+                $ssids[$nome] ??= [
+                    'nome' => $nome,
+                    'bandas' => [],
+                    'canais' => [],
+                    'bssids' => [],
+                    'clientes' => 0,
+                    'ativo' => false,
+                    'seguranca' => $configWifi[$nome]['seguranca'] ?? '',
+                    'convidado' => (bool)($vap['is_guest'] ?? ($configWifi[$nome]['convidado'] ?? false)),
+                    'oculta' => (bool)($configWifi[$nome]['oculta'] ?? false),
+                    'vlan' => null,
+                ];
+                $ssids[$nome]['bandas'][] = self::rotuloBandaRadio(($vap['radio'] ?? '') === 'ng' ? 2.4 : (($vap['radio'] ?? '') === '6e' ? 6 : 5));
+                if (!empty($vap['channel'])) {
+                    $ssids[$nome]['canais'][] = (int)$vap['channel'];
+                }
+                if (!empty($vap['bssid'])) {
+                    $ssids[$nome]['bssids'][] = $vap['bssid'];
+                }
+                $ssids[$nome]['clientes'] += (int)($vap['num_sta'] ?? 0);
+                $ssids[$nome]['ativo'] = $ssids[$nome]['ativo'] || !empty($vap['up']);
+                if (!empty($vap['vlan'])) {
+                    $ssids[$nome]['vlan'] = (int)$vap['vlan'];
+                }
+            }
+            $coletado['unifi_ssids'] = array_values($ssids);
+        }
+
         // Só existem na API legada, e nem todo tipo de dispositivo reporta
         // todos eles (gateways têm WAN/speedtest, AP e switch não) -- por
         // isso cada chave só entra em $coletado quando o dado realmente veio.
@@ -4624,6 +4666,100 @@ class AtivoService
     public function listarRotasEstaticasUnifi(): array
     {
         return (new UnifiService())->listarRotasEstaticas();
+    }
+
+    /** DHCP do Gateway UniFi + o ativo do RD.Intranet dono de cada MAC (pelos adaptadores que o agente coletou, ou pelo IP). */
+    public function listarDhcpUnifi(): array
+    {
+        $resultado = (new UnifiService())->listarDhcp();
+        if (!$resultado['success']) {
+            return $resultado;
+        }
+
+        $porMac = [];
+        $porIp = [];
+        $pdo = Database::connection();
+        foreach ($pdo->query("SELECT r.mac, a.id, a.nome, a.codigo_patrimonio FROM ativos_redes r JOIN ativos a ON a.id = r.ativo_id WHERE r.mac IS NOT NULL AND r.mac <> ''") as $l) {
+            $porMac[OmadaSshService::normalizarMac($l['mac'])] = ['id' => (int)$l['id'], 'nome' => $l['nome'], 'codigo' => $l['codigo_patrimonio']];
+        }
+        foreach ($pdo->query("SELECT id, nome, codigo_patrimonio, ip FROM ativos WHERE ip IS NOT NULL AND ip <> ''") as $l) {
+            $porIp[$l['ip']] = ['id' => (int)$l['id'], 'nome' => $l['nome'], 'codigo' => $l['codigo_patrimonio']];
+        }
+
+        foreach (['reservas' => 'ip_fixo', 'sem_reserva' => 'ip'] as $lista => $campoIp) {
+            foreach ($resultado[$lista] as &$item) {
+                $item['ativo'] = $porMac[$item['mac']] ?? ($porIp[$item[$campoIp]] ?? null);
+            }
+            unset($item);
+        }
+
+        return $resultado;
+    }
+
+    public function definirIpFixoUnifi(string $mac, string $ip, string $redeId, string $nome): array
+    {
+        $mac = OmadaSshService::normalizarMac($mac);
+        $ip = trim($ip);
+        if ($mac === '') {
+            return ['success' => false, 'message' => 'MAC inválido (use o formato aa:bb:cc:dd:ee:ff).'];
+        }
+        if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+            return ['success' => false, 'message' => 'IP inválido.'];
+        }
+
+        $atual = (new UnifiService())->listarDhcp();
+        if (!$atual['success']) {
+            return $atual;
+        }
+        $rede = null;
+        foreach ($atual['redes'] as $r) {
+            if ($r['id'] === $redeId) {
+                $rede = $r;
+            }
+        }
+        if ($rede === null) {
+            return ['success' => false, 'message' => 'Rede não encontrada no Controller.'];
+        }
+        [$ipGateway, $bits] = explode('/', $rede['subnet']);
+        $base = ip2long($ipGateway) & (-1 << (32 - (int)$bits));
+        $broadcast = $base | ~(-1 << (32 - (int)$bits)) & 0xFFFFFFFF;
+        if (!self::ipNaRede($ip, $rede['subnet']) || ip2long($ip) === $base || ip2long($ip) === $broadcast) {
+            return ['success' => false, 'message' => "O IP {$ip} não é um endereço válido da rede {$rede['nome']} ({$rede['subnet']})."];
+        }
+        if ($ip === $ipGateway) {
+            return ['success' => false, 'message' => "{$ip} é o próprio gateway da rede."];
+        }
+        foreach ($atual['reservas'] as $r) {
+            if ($r['ip_fixo'] === $ip && $r['mac'] !== $mac) {
+                return ['success' => false, 'message' => "O IP {$ip} já está reservado para " . ($r['nome'] ?: $r['hostname'] ?: $r['mac']) . " ({$r['mac']})."];
+            }
+        }
+        foreach ($atual['sem_reserva'] as $c) {
+            if ($c['ip'] === $ip && $c['mac'] !== $mac) {
+                return ['success' => false, 'message' => "O IP {$ip} está em uso agora por " . ($c['nome'] ?: $c['mac']) . " ({$c['mac']}), que não tem reserva. Escolha outro IP ou reserve esse para ele."];
+            }
+        }
+
+        $resultado = (new UnifiService())->definirIpFixo($mac, $ip, $redeId, trim($nome));
+        if ($resultado['success']) {
+            AuditService::registrar('Ativos', 'UniFi - IP fixo', "Reserva DHCP {$ip} -> {$mac}" . (trim($nome) !== '' ? " ({$nome})" : '') . " na rede {$rede['nome']}.");
+        }
+
+        return $resultado;
+    }
+
+    public function removerIpFixoUnifi(string $mac): array
+    {
+        $mac = OmadaSshService::normalizarMac($mac);
+        if ($mac === '') {
+            return ['success' => false, 'message' => 'MAC inválido.'];
+        }
+        $resultado = (new UnifiService())->removerIpFixo($mac);
+        if ($resultado['success']) {
+            AuditService::registrar('Ativos', 'UniFi - IP fixo', $resultado['message']);
+        }
+
+        return $resultado;
     }
 
     public function buscarInfoControladorUnifi(): array

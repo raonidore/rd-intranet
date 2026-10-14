@@ -936,7 +936,8 @@ class UnifiService
                 'nome' => $w['name'] ?? '',
                 'habilitada' => (bool)($w['enabled'] ?? true),
                 'banda' => $w['wlan_band'] ?? '',
-                'seguranca' => strtoupper((string)($w['wpa_mode'] ?? ($w['security'] ?? ''))),
+                // Rede aberta costuma manter um wpa_mode antigo -- quem manda é o `security`.
+                'seguranca' => ($w['security'] ?? '') === 'open' ? 'OPEN' : strtoupper((string)($w['wpa_mode'] ?? ($w['security'] ?? ''))),
                 'oculta' => (bool)($w['hide_ssid'] ?? false),
                 'convidado' => (bool)($w['is_guest'] ?? false),
             ];
@@ -977,6 +978,152 @@ class UnifiService
         }
 
         return ['success' => true, 'rotas' => $rotas];
+    }
+
+    /**
+     * DHCP do Gateway: cada rede local (faixa, DNS, se o DHCP está ligado) +
+     * os IPs fixos (reservas) -- no UniFi a reserva mora no cadastro do
+     * cliente (`rest/user` com use_fixedip/fixed_ip/network_id), não na rede.
+     * Junta os clientes online (`stat/sta`) pra dizer se o aparelho já está no
+     * IP reservado e pra sugerir quem ainda não tem reserva.
+     *
+     * @return array{success:bool, message?:string, redes?:array, reservas?:array, sem_reserva?:array}
+     */
+    public function listarDhcp(): array
+    {
+        $ref = $this->siteRefAtual();
+
+        if ($ref === null) {
+            return ['success' => false, 'message' => 'Site do UniFi Controller ainda não identificado -- use "Testar conexão" em Integrações > UniFi.'];
+        }
+
+        $resultadoRedes = $this->chamarApi('GET', "/proxy/network/api/s/{$ref}/rest/networkconf");
+        if (!$resultadoRedes['sucesso']) {
+            return ['success' => false, 'message' => $resultadoRedes['mensagem']];
+        }
+
+        $redes = [];
+        foreach ($resultadoRedes['dados']['data'] ?? [] as $n) {
+            if (!in_array($n['purpose'] ?? '', ['corporate', 'guest'], true) || empty($n['ip_subnet'])) {
+                continue;
+            }
+            $dns = array_values(array_filter([$n['dhcpd_dns_1'] ?? '', $n['dhcpd_dns_2'] ?? '', $n['dhcpd_dns_3'] ?? '', $n['dhcpd_dns_4'] ?? '']));
+            $redes[$n['_id']] = [
+                'id' => $n['_id'],
+                'nome' => $n['name'] ?? '',
+                'vlan' => !empty($n['vlan_enabled']) ? (int)($n['vlan'] ?? 0) : null,
+                'subnet' => $n['ip_subnet'],
+                'dhcp_ligado' => (bool)($n['dhcpd_enabled'] ?? false),
+                'inicio' => $n['dhcpd_start'] ?? '',
+                'fim' => $n['dhcpd_stop'] ?? '',
+                'dns' => !empty($n['dhcpd_dns_enabled']) ? $dns : [],
+                'concessao_segundos' => isset($n['dhcpd_leasetime']) ? (int)$n['dhcpd_leasetime'] : null,
+            ];
+        }
+
+        $online = [];
+        foreach ($this->chamarApi('GET', "/proxy/network/api/s/{$ref}/stat/sta")['dados']['data'] ?? [] as $c) {
+            $online[strtolower($c['mac'] ?? '')] = $c;
+        }
+
+        $reservas = [];
+        $comReserva = [];
+        foreach ($this->chamarApi('GET', "/proxy/network/api/s/{$ref}/rest/user")['dados']['data'] ?? [] as $u) {
+            if (empty($u['use_fixedip']) || empty($u['fixed_ip'])) {
+                continue;
+            }
+            $mac = strtolower($u['mac'] ?? '');
+            $agora = $online[$mac] ?? null;
+            $comReserva[$mac] = true;
+            $reservas[] = [
+                'mac' => $mac,
+                'nome' => $u['name'] ?? '',
+                'hostname' => $u['hostname'] ?? ($agora['hostname'] ?? ''),
+                'fabricante' => $u['oui'] ?? ($agora['oui'] ?? ''),
+                'ip_fixo' => $u['fixed_ip'],
+                'rede_id' => $u['network_id'] ?? '',
+                'rede' => $redes[$u['network_id'] ?? '']['nome'] ?? '',
+                'online' => $agora !== null,
+                'ip_atual' => $agora['ip'] ?? '',
+                'visto_em' => isset($u['last_seen']) ? date('Y-m-d H:i:s', (int)$u['last_seen']) : null,
+            ];
+        }
+        usort($reservas, fn ($a, $b) => sprintf('%u', ip2long($a['ip_fixo'])) <=> sprintf('%u', ip2long($b['ip_fixo'])));
+
+        // Online sem reserva -- atalho pro formulário de "Novo IP fixo".
+        $semReserva = [];
+        foreach ($online as $mac => $c) {
+            if ($mac === '' || isset($comReserva[$mac]) || empty($c['ip'])) {
+                continue;
+            }
+            $semReserva[] = [
+                'mac' => $mac,
+                'nome' => $c['name'] ?? ($c['hostname'] ?? ''),
+                'fabricante' => $c['oui'] ?? '',
+                'ip' => $c['ip'],
+                'rede_id' => $c['network_id'] ?? '',
+            ];
+        }
+        usort($semReserva, fn ($a, $b) => sprintf('%u', ip2long($a['ip'])) <=> sprintf('%u', ip2long($b['ip'])));
+
+        return ['success' => true, 'redes' => array_values($redes), 'reservas' => $reservas, 'sem_reserva' => $semReserva];
+    }
+
+    /**
+     * Cria/troca o IP fixo de um MAC. Cliente já conhecido = PUT no cadastro
+     * dele; MAC que o Controller nunca viu = POST (confirmado ao vivo no UCG
+     * do Maurílio, 22 reservas migradas do switch TP-Link em 13/10/2026).
+     * Quem chama já validou formato, faixa e duplicidade.
+     */
+    public function definirIpFixo(string $mac, string $ip, string $redeId, ?string $nome): array
+    {
+        $ref = $this->siteRefAtual();
+        if ($ref === null) {
+            return ['success' => false, 'message' => 'Site do UniFi Controller ainda não identificado.'];
+        }
+
+        $existente = $this->clientePorMac($ref, $mac);
+        $corpo = ['use_fixedip' => true, 'fixed_ip' => $ip, 'network_id' => $redeId];
+        if ($nome !== null && $nome !== '') {
+            $corpo['name'] = $nome;
+        }
+
+        $r = $existente
+            ? $this->chamarApi('PUT', "/proxy/network/api/s/{$ref}/rest/user/" . rawurlencode($existente['_id']), $corpo)
+            : $this->chamarApi('POST', "/proxy/network/api/s/{$ref}/rest/user", $corpo + ['mac' => $mac]);
+
+        if (!$r['sucesso'] || ($r['dados']['meta']['rc'] ?? '') !== 'ok') {
+            return ['success' => false, 'message' => 'O Controller recusou a reserva: ' . ($r['dados']['meta']['msg'] ?? $r['mensagem'])];
+        }
+
+        return ['success' => true, 'message' => "IP fixo {$ip} reservado para {$mac}."];
+    }
+
+    public function removerIpFixo(string $mac): array
+    {
+        $ref = $this->siteRefAtual();
+        $existente = $ref !== null ? $this->clientePorMac($ref, $mac) : null;
+        if (!$existente || empty($existente['use_fixedip'])) {
+            return ['success' => false, 'message' => 'Esse MAC não tem IP fixo no Controller.'];
+        }
+
+        $r = $this->chamarApi('PUT', "/proxy/network/api/s/{$ref}/rest/user/" . rawurlencode($existente['_id']), ['use_fixedip' => false]);
+        if (!$r['sucesso'] || ($r['dados']['meta']['rc'] ?? '') !== 'ok') {
+            return ['success' => false, 'message' => 'O Controller recusou: ' . ($r['dados']['meta']['msg'] ?? $r['mensagem'])];
+        }
+
+        return ['success' => true, 'message' => "Reserva do IP {$existente['fixed_ip']} removida ({$mac})."];
+    }
+
+    private function clientePorMac(string $ref, string $mac): ?array
+    {
+        foreach ($this->chamarApi('GET', "/proxy/network/api/s/{$ref}/rest/user")['dados']['data'] ?? [] as $u) {
+            if (strtolower($u['mac'] ?? '') === $mac) {
+                return $u;
+            }
+        }
+
+        return null;
     }
 
     /**
