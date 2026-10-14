@@ -443,14 +443,18 @@ public sealed class MonitorRedeService : IDisposable
 
     private void DetectarInicializacaoNova(List<ItemInicializacao> itens)
     {
-        var anteriores = _persistido.ChavesInicializacao;
-        var primeiraVez = anteriores == null;
+        // Avisa o que é suspeito/crítico e ainda não foi avisado NESSE nível:
+        // item novo, item que piorou, e tudo na primeira vez (inclusive ao
+        // atualizar de uma versão que não guardava os níveis).
+        var niveis = _persistido.NiveisInicializacao;
+        var primeiraVez = niveis == null;
+        static int Peso(string? n) => n switch { "critico" => 3, "suspeito" => 2, "atencao" => 1, _ => 0 };
         var alertar = itens
-            .Where(i => i.Avaliacao.Nivel is "critico" or "suspeito")
-            .Where(i => primeiraVez || !anteriores!.Contains(i.Chave))
-            .Where(i => _persistido.PodeAlertar($"INICIO|{i.Chave}", TimeSpan.FromDays(7)))
+            .Where(i => Peso(i.Avaliacao.Nivel) >= 2)
+            .Where(i => primeiraVez || !niveis!.TryGetValue(i.Chave, out var antes) || Peso(i.Avaliacao.Nivel) > Peso(antes))
+            .Where(i => _persistido.PodeAlertar($"INICIO|{i.Chave}|{i.Avaliacao.Nivel}", TimeSpan.FromDays(7)))
             .ToList();
-        _persistido.ChavesInicializacao = itens.Select(i => i.Chave).ToHashSet();
+        _persistido.NiveisInicializacao = itens.GroupBy(i => i.Chave).ToDictionary(g => g.Key, g => g.First().Avaliacao.Nivel);
 
         if (alertar.Count == 0) return;
 
@@ -458,7 +462,7 @@ public sealed class MonitorRedeService : IDisposable
         {
             Tipo = "SUSPICIOUS_STARTUP",
             Severidade = alertar.Any(i => i.Avaliacao.Nivel == "critico") ? "CRITICAL" : "WARNING",
-            Resumo = $"{alertar.Count} item(ns) {(primeiraVez ? "suspeito(s)" : "novo(s) e suspeito(s)")} na inicialização do Windows: {string.Join(", ", alertar.Take(3).Select(i => i.Nome))}",
+            Resumo = $"{alertar.Count} item(ns) {(primeiraVez ? "suspeito(s)" : "novo(s) ou que pioraram")} na inicialização do Windows: {string.Join(", ", alertar.Take(3).Select(i => i.Nome))}",
             Detalhes = new Dictionary<string, object?>
             {
                 ["novos"] = !primeiraVez,
@@ -601,6 +605,7 @@ public sealed class MonitorRedeService : IDisposable
 
         public Dictionary<string, DateTime> UltimoAlerta { get; set; } = new();
         public HashSet<string>? ChavesInicializacao { get; set; }
+        public Dictionary<string, string>? NiveisInicializacao { get; set; }
         private bool _mudou;
 
         public bool PodeAlertar(string chave, TimeSpan intervalo)
@@ -623,7 +628,7 @@ public sealed class MonitorRedeService : IDisposable
 
         public void Salvar()
         {
-            if (!_mudou && File.Exists(Arquivo) && ChavesInicializacao != null) return;
+            if (!_mudou && File.Exists(Arquivo) && NiveisInicializacao != null) return;
             try
             {
                 foreach (var velho in UltimoAlerta.Where(kv => DateTime.Now - kv.Value > TimeSpan.FromDays(8)).Select(kv => kv.Key).ToList()) UltimoAlerta.Remove(velho);
