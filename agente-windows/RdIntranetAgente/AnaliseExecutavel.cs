@@ -24,6 +24,9 @@ public sealed class InfoExecutavel
     public int Pontos { get; set; }
 
     public bool Assinado => Assinatura is "valida" or "catalogo" or "pacote";
+
+    /// <summary>Tem alguma assinatura, mesmo que expirada ou de certificado que o Windows não reconhece (MeshAgent, certificado próprio).</summary>
+    public bool TemAssinatura => Assinado || Assinatura is "expirada" or "nao_confiavel";
 }
 
 /// <summary>Avaliação final de um item (processo ou entrada de inicialização): arquivo + contexto.</summary>
@@ -158,12 +161,12 @@ public static class AnaliseExecutavel
         }
 
         // Nome mostrado (processo/serviço) imitando o Windows mesmo que o arquivo tenha outro nome.
-        if (!string.IsNullOrEmpty(nomeExibido) && ImitaWindows(nomeExibido, exe.Caminho) is { } imitado)
+        if (!string.IsNullOrEmpty(nomeExibido) && ImitaWindows(nomeExibido, exe.Caminho, exe.Microsoft) is { } imitado)
         {
             avaliacao.Somar(50, $"nome \"{nomeExibido}\" imita o {imitado} do Windows");
         }
 
-        if (comoSystem && exe.Existe && !exe.Assinado)
+        if (comoSystem && exe.Existe && !exe.TemAssinatura)
         {
             avaliacao.Somar(10, "roda como SYSTEM sem assinatura digital");
         }
@@ -279,13 +282,15 @@ public static class AnaliseExecutavel
             info.Motivos.Add(motivo);
         }
 
-        if (info.Oculto) Somar(25, "arquivo oculto");
+        if (info.Oculto) Somar(35, "arquivo oculto");
 
         if (info.Assinatura == "invalida") Somar(35, "assinatura digital inválida ou adulterada");
         else if (info.Assinatura == "ausente") Somar(20, "sem assinatura digital");
+        else if (info.Assinatura == "nao_confiavel") Somar(10, $"assinado por certificado que o Windows não reconhece ({info.Assinante ?? "desconhecido"})");
+        else if (info.Assinatura == "expirada") Somar(5, "certificado da assinatura expirado");
 
         // Pasta estranha pesa de verdade só sem assinatura (instalador assinado roda do Temp o tempo todo).
-        var pesoLocal = info.Assinado ? 0.25 : 1.0;
+        var pesoLocal = info.TemAssinatura ? 0.25 : 1.0;
         if (Regex.IsMatch(caminho, @"\\(AppData\\Local\\Temp|Windows\\Temp|Temp)\\", RegexOptions.IgnoreCase)) Somar((int)(30 * pesoLocal), "fica em pasta temporária");
         else if (caminho.Contains(@"\$Recycle.Bin\", StringComparison.OrdinalIgnoreCase)) Somar(45, "fica na lixeira");
         else if (Regex.IsMatch(caminho, @"\\Users\\Public\\", RegexOptions.IgnoreCase)) Somar((int)(15 * pesoLocal), "fica na pasta pública de usuários");
@@ -299,7 +304,7 @@ public static class AnaliseExecutavel
             Somar(15, "dentro da pasta do Windows sem assinatura");
         }
 
-        if (ImitaWindows(nome, caminho) is { } imitado)
+        if (ImitaWindows(nome, caminho, info.Microsoft) is { } imitado)
         {
             Somar(50, $"nome \"{nome}\" imita o {imitado} do Windows");
         }
@@ -313,7 +318,7 @@ public static class AnaliseExecutavel
     }
 
     /// <summary>Nome do processo do Windows imitado, ou null. Igual de verdade E no lugar certo = não imita.</summary>
-    private static string? ImitaWindows(string nome, string caminho)
+    private static string? ImitaWindows(string nome, string caminho, bool assinadoMicrosoft)
     {
         if (string.IsNullOrEmpty(nome)) return null;
         if (!nome.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) nome += ".exe";
@@ -325,7 +330,7 @@ public static class AnaliseExecutavel
             if (normalizado != alvo) continue;
 
             var mesmoNome = string.Equals(nome, original, StringComparison.OrdinalIgnoreCase);
-            var lugarCerto = caminho.StartsWith(PastaWindows, StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(caminho);
+            var lugarCerto = caminho.StartsWith(PastaWindows, StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(caminho) || assinadoMicrosoft;
             if (mesmoNome && lugarCerto) return null;
             return original;
         }
@@ -400,7 +405,15 @@ public static class AnaliseExecutavel
                 return ("ausente", null);
             }
 
-            return ("invalida", NomeDoAssinante(caminho));
+            // Assinado, mas: certificado vencido (sem carimbo de tempo) ou de
+            // emissor que o Windows não conhece (MeshAgent usa o certificado do
+            // próprio MeshCentral) -- bem diferente de arquivo ADULTERADO.
+            return resultado switch
+            {
+                CertEExpirado or CertEPeriodoInvalido => ("expirada", NomeDoAssinante(caminho)),
+                CertERaizNaoConfiavel or CertEEncadeamento or CertERaizDeTeste => ("nao_confiavel", NomeDoAssinante(caminho)),
+                _ => ("invalida", NomeDoAssinante(caminho)) // hash não confere, revogado, desconfiado explicitamente
+            };
         }
         catch
         {
@@ -438,6 +451,11 @@ public static class AnaliseExecutavel
     private const int TrustENoSignature = unchecked((int)0x800B0100);
     private const int TrustESubjectFormUnknown = unchecked((int)0x800B0003);
     private const int TrustEProviderUnknown = unchecked((int)0x800B0001);
+    private const int CertEExpirado = unchecked((int)0x800B0101);
+    private const int CertEPeriodoInvalido = unchecked((int)0x800B0102);
+    private const int CertERaizNaoConfiavel = unchecked((int)0x800B0109);
+    private const int CertEEncadeamento = unchecked((int)0x800B010A);
+    private const int CertERaizDeTeste = unchecked((int)0x800B010D);
 
     private static readonly Guid AcaoVerificar = new("00AAC56B-CD44-11d0-8CC2-00C04FC295EE");
 

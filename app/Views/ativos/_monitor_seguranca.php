@@ -116,6 +116,8 @@
     const assinaturaChip = (p) => {
         if (p.assinatura === 'valida' || p.assinatura === 'catalogo' || p.assinatura === 'pacote') return '<span class="mon-chip bom" title="Assinatura digital válida"><i class="bi bi-patch-check"></i> ' + esc(p.assinante || 'assinado') + '</span>';
         if (p.assinatura === 'invalida') return '<span class="mon-chip ruim"><i class="bi bi-patch-exclamation"></i> assinatura inválida</span>';
+        if (p.assinatura === 'expirada') return '<span class="mon-chip" title="Assinado, mas o certificado venceu">' + esc(p.assinante || 'assinado') + ' · expirado</span>';
+        if (p.assinatura === 'nao_confiavel') return '<span class="mon-chip" title="Assinado por certificado que o Windows não reconhece (ex.: certificado próprio)">' + esc(p.assinante || 'assinado') + ' · certificado próprio</span>';
         if (p.assinatura === 'ausente') return '<span class="mon-chip ruim">sem assinatura</span>';
         return '';
     };

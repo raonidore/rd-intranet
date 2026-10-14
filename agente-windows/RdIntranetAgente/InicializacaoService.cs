@@ -260,7 +260,7 @@ public static class InicializacaoService
             using var sub = raiz.OpenSubKey(programa);
             if (sub?.GetValue("Debugger") is string depurador && depurador.Trim() != "")
             {
-                itens.Add(Item("ifeo", programa, $@"HKLM\{caminho}\{programa}", depurador, pontosExtra: 40,
+                itens.Add(Item("ifeo", programa, $@"HKLM\{caminho}\{programa}", depurador, pontosExtra: 60,
                     motivoExtra: $"sequestra a abertura de {programa} (Debugger do IFEO)"));
             }
         }

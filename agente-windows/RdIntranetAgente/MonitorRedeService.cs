@@ -447,7 +447,7 @@ public sealed class MonitorRedeService : IDisposable
         var primeiraVez = anteriores == null;
         var alertar = itens
             .Where(i => i.Avaliacao.Nivel is "critico" or "suspeito")
-            .Where(i => primeiraVez ? i.Avaliacao.Nivel == "critico" : !anteriores!.Contains(i.Chave))
+            .Where(i => primeiraVez || !anteriores!.Contains(i.Chave))
             .Where(i => _persistido.PodeAlertar($"INICIO|{i.Chave}", TimeSpan.FromDays(7)))
             .ToList();
         _persistido.ChavesInicializacao = itens.Select(i => i.Chave).ToHashSet();
