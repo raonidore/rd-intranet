@@ -462,6 +462,14 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
         </button>
     </li>
     <?php endif; ?>
+    <?php $dhcpSwitchTplink = $fontePortasSwitch === 'omada' && (new OmadaService())->sshAtivo(); ?>
+    <?php if ($dhcpSwitchTplink): ?>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaDhcpSwitch" type="button">
+            <i class="bi bi-pin-map"></i> DHCP / IPs fixos
+        </button>
+    </li>
+    <?php endif; ?>
     <?php if ($ehCameraProtect): ?>
     <li class="nav-item" role="presentation">
         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaCameraProtect" type="button" id="navCameraProtect">
@@ -1867,6 +1875,86 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
         </div>
     </div>
     <?php endif; ?>
+    <?php endif; ?>
+
+    <?php if ($dhcpSwitchTplink): ?>
+    <!-- DHCP do switch TP-Link (SSH): pools + IPs fixos (manual-binding) -->
+    <div class="tab-pane fade" id="abaDhcpSwitch">
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <strong>Servidor DHCP do switch <span id="dhcpSwStatus"></span></strong>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="botaoAtualizarDhcpSw"><i class="bi bi-arrow-repeat"></i> Atualizar</button>
+            </div>
+            <div class="card-body p-0">
+                <div class="small text-muted p-3" id="dhcpSwCarregando"><div class="spinner-border spinner-border-sm"></div> Consultando o switch por SSH...</div>
+                <div id="dhcpSwConteudo" style="display:none">
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead><tr><th>Pool</th><th>Rede</th><th>Gateway</th><th>DNS entregue</th><th>Concessão</th><th>Excluídos (IP manual)</th></tr></thead>
+                            <tbody id="dhcpSwPoolsCorpo"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <strong>IPs fixos (reservas DHCP) <span class="badge text-bg-secondary ms-1" id="dhcpSwTotal"></span></strong>
+                <div class="d-flex gap-2">
+                    <input type="text" class="form-control form-control-sm" style="width:220px" id="dhcpSwBusca" placeholder="Filtrar por IP, MAC ou ativo...">
+                    <button type="button" class="btn btn-sm btn-primary" id="botaoNovoIpFixoSw"><i class="bi bi-plus-lg"></i> Novo IP fixo</button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead><tr><th>IP fixo</th><th>MAC</th><th>Ativo no RD.Intranet</th><th>Pool</th><th>Agora</th><th></th></tr></thead>
+                        <tbody id="dhcpSwReservasCorpo"></tbody>
+                    </table>
+                </div>
+                <div class="form-text px-3 pb-2" id="dhcpSwRodape"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalIpFixoSw" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <form class="modal-content" id="formIpFixoSw">
+                <div class="modal-header">
+                    <h6 class="modal-title" id="modalIpFixoSwTitulo">Novo IP fixo</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-2" id="ipFixoSwSugestaoGrupo">
+                        <label class="form-label small mb-1">Aparelho com IP emprestado pelo switch agora (opcional)</label>
+                        <select class="form-select form-select-sm" id="ipFixoSwSugestao"><option value="">— digitar MAC manualmente —</option></select>
+                        <div class="form-text">Escolher preenche o MAC e o IP que ele já usa.</div>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-6">
+                            <label class="form-label small mb-1">MAC</label>
+                            <input type="text" class="form-control form-control-sm font-monospace" id="ipFixoSwMac" placeholder="aa:bb:cc:dd:ee:ff" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small mb-1">IP fixo</label>
+                            <input type="text" class="form-control form-control-sm font-monospace" id="ipFixoSwIp" required>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small mb-1">Pool</label>
+                        <select class="form-select form-select-sm" id="ipFixoSwPool"></select>
+                    </div>
+                    <div class="form-text">Gravado no switch e salvo na inicialização. O aparelho passa a usar o IP novo quando renovar o DHCP (ou ao reconectar o cabo/Wi-Fi).</div>
+                    <div class="text-danger small mt-2" id="ipFixoSwErro"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-sm btn-primary" id="ipFixoSwSalvar">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
     <?php endif; ?>
 
     <?php if ($fontePortasSwitch !== null): ?>
@@ -4718,6 +4806,176 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
     if (botaoAtualizarSaude) {
         botaoAtualizarSaude.addEventListener('click', carregarSaude);
     }
+})();
+
+// DHCP do switch TP-Link (SSH): pools + IPs fixos (listar, criar, trocar, remover).
+(function () {
+    const nav = document.querySelector('.nav-link[data-bs-target="#abaDhcpSwitch"]');
+    if (!nav) return;
+
+    const ativoId = <?= (int)$ativo['id'] ?>;
+    const esc = function (s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    };
+    const urlAtivo = <?= json_encode(url('/ativos/ver?id=')) ?>;
+    const modalEl = document.getElementById('modalIpFixoSw');
+    let dados = null;
+    let editando = null;
+
+    function ipNum(ip) {
+        return ip.split('.').reduce(function (a, b) { return a * 256 + parseInt(b, 10); }, 0);
+    }
+
+    function linkAtivo(a) {
+        return a ? '<a href="' + urlAtivo + a.id + '">' + esc(a.nome) + '</a>' + (a.codigo ? '<div class="small text-muted">' + esc(a.codigo) + '</div>' : '') : '<span class="text-muted small">—</span>';
+    }
+
+    function desenhar() {
+        const termo = document.getElementById('dhcpSwBusca').value.trim().toLowerCase();
+        const lista = dados.reservas.slice().sort(function (a, b) { return ipNum(a.ip) - ipNum(b.ip); }).filter(function (r) {
+            return !termo || [r.ip, r.mac, r.pool, r.ativo ? r.ativo.nome : '', r.ativo ? r.ativo.codigo : ''].join(' ').toLowerCase().includes(termo);
+        });
+        document.getElementById('dhcpSwTotal').textContent = dados.reservas.length;
+        document.getElementById('dhcpSwReservasCorpo').innerHTML = lista.map(function (r) {
+            const agora = r.entregue
+                ? '<span class="badge text-bg-success">em uso pelo aparelho</span>'
+                : (r.ip_atual ? '<span class="badge text-bg-warning">aparelho em ' + esc(r.ip_atual) + '</span>' : '<span class="badge text-bg-light border" title="O aparelho não pediu IP ao switch desde o último reinício dele">sem concessão</span>');
+            return '<tr>' +
+                '<td class="font-monospace">' + esc(r.ip) + '</td>' +
+                '<td class="font-monospace small">' + esc(r.mac) + '</td>' +
+                '<td>' + linkAtivo(r.ativo) + '</td>' +
+                '<td class="small">' + esc(r.pool) + '</td>' +
+                '<td>' + agora + '</td>' +
+                '<td class="text-end text-nowrap">' +
+                    '<button type="button" class="btn btn-sm btn-outline-secondary me-1 botao-editar-ip-fixo-sw" data-ip="' + esc(r.ip) + '" title="Trocar IP"><i class="bi bi-pencil"></i></button>' +
+                    '<button type="button" class="btn btn-sm btn-outline-danger botao-remover-ip-fixo-sw" data-ip="' + esc(r.ip) + '" data-mac="' + esc(r.mac) + '" title="Remover reserva"><i class="bi bi-trash"></i></button>' +
+                '</td>' +
+            '</tr>';
+        }).join('') || '<tr><td colspan="6" class="text-muted small p-3">' + (termo ? 'Nada encontrado com esse filtro.' : 'Nenhum IP fixo no switch.') + '</td></tr>';
+    }
+
+    async function carregar() {
+        const carregando = document.getElementById('dhcpSwCarregando');
+        carregando.style.display = '';
+        carregando.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Consultando o switch por SSH...';
+        const corpo = new FormData();
+        corpo.set('id', ativoId);
+        const res = await fetch(<?= json_encode(url('/ativos/switch/dhcp')) ?>, { method: 'POST', body: corpo });
+        const resultado = await res.json();
+        if (!resultado.success) {
+            carregando.innerHTML = '<span class="text-danger">' + esc(resultado.message || 'Falha ao consultar.') + '</span>';
+            return;
+        }
+        dados = resultado;
+
+        document.getElementById('dhcpSwStatus').innerHTML = dados.ligado ? '<span class="badge text-bg-success ms-1">Ligado</span>' : '<span class="badge text-bg-secondary ms-1">Desligado</span>';
+        const excluidos = dados.excluidos.map(function (e) { return e.inicio === e.fim ? e.inicio : e.inicio + '–' + e.fim; }).join(', ');
+        document.getElementById('dhcpSwPoolsCorpo').innerHTML = dados.pools.map(function (p) {
+            return '<tr>' +
+                '<td>' + esc(p.nome) + '</td>' +
+                '<td class="font-monospace small">' + esc(p.cidr) + '</td>' +
+                '<td class="font-monospace small">' + esc(p.gateway || '—') + '</td>' +
+                '<td class="font-monospace small">' + esc(p.dns.join(', ') || '—') + '</td>' +
+                '<td class="small">' + (p.concessao_minutos ? (p.concessao_minutos % 60 === 0 ? (p.concessao_minutos / 60) + ' h' : p.concessao_minutos + ' min') : '—') + '</td>' +
+                '<td class="font-monospace small">' + esc(excluidos || '—') + '</td>' +
+            '</tr>';
+        }).join('') || '<tr><td colspan="6" class="text-muted small">Nenhum pool DHCP configurado neste switch.</td></tr>';
+
+        document.getElementById('ipFixoSwPool').innerHTML = dados.pools.map(function (p) {
+            return '<option value="' + esc(p.nome) + '">' + esc(p.nome) + ' (' + esc(p.cidr) + ')</option>';
+        }).join('');
+        document.getElementById('ipFixoSwSugestao').innerHTML = '<option value="">— digitar MAC manualmente —</option>' + dados.sem_reserva.map(function (c, i) {
+            return '<option value="' + i + '">' + esc(c.ip) + ' — ' + esc(c.mac) + (c.ativo ? ' · ' + esc(c.ativo.nome) : '') + '</option>';
+        }).join('');
+        document.getElementById('botaoNovoIpFixoSw').disabled = !dados.pools.length;
+        const dinamicos = dados.concessoes.filter(function (c) { return c.tipo === 'dinamico'; }).length;
+        document.getElementById('dhcpSwRodape').innerHTML = dinamicos + ' aparelho(s) com IP dinâmico emprestado pelo switch agora. ' +
+            'Alterações usam a credencial SSH <strong>' + esc(dados.manutencao_usuario) + '</strong>' +
+            (dados.manutencao_separada ? ' (manutenção)' : ' (a mesma da coleta -- se ela for só de leitura, cadastre uma credencial de manutenção em Integrações > TP-Link Omada)') + '.';
+
+        carregando.style.display = 'none';
+        document.getElementById('dhcpSwConteudo').style.display = '';
+        desenhar();
+    }
+
+    function abrirModal(reserva) {
+        editando = reserva;
+        document.getElementById('ipFixoSwErro').textContent = '';
+        document.getElementById('modalIpFixoSwTitulo').textContent = reserva ? 'Trocar IP fixo' : 'Novo IP fixo';
+        document.getElementById('ipFixoSwSugestaoGrupo').style.display = reserva ? 'none' : '';
+        document.getElementById('ipFixoSwSugestao').value = '';
+        const mac = document.getElementById('ipFixoSwMac');
+        mac.value = reserva ? reserva.mac : '';
+        mac.readOnly = !!reserva;
+        document.getElementById('ipFixoSwIp').value = reserva ? reserva.ip : '';
+        document.getElementById('ipFixoSwIp').placeholder = dados.pools[0] ? dados.pools[0].gateway || '' : '';
+        if (reserva) document.getElementById('ipFixoSwPool').value = reserva.pool;
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+
+    document.getElementById('ipFixoSwSugestao').addEventListener('change', function () {
+        const c = dados.sem_reserva[this.value];
+        if (!c) return;
+        document.getElementById('ipFixoSwMac').value = c.mac;
+        document.getElementById('ipFixoSwIp').value = c.ip;
+    });
+    document.getElementById('botaoNovoIpFixoSw').addEventListener('click', function () { if (dados) abrirModal(null); });
+    document.getElementById('dhcpSwBusca').addEventListener('input', function () { if (dados) desenhar(); });
+    document.getElementById('botaoAtualizarDhcpSw').addEventListener('click', carregar);
+
+    document.getElementById('dhcpSwReservasCorpo').addEventListener('click', async function (ev) {
+        const editar = ev.target.closest('.botao-editar-ip-fixo-sw');
+        if (editar) {
+            abrirModal(dados.reservas.find(function (r) { return r.ip === editar.dataset.ip; }));
+            return;
+        }
+        const remover = ev.target.closest('.botao-remover-ip-fixo-sw');
+        if (!remover || !confirm('Remover a reserva do IP ' + remover.dataset.ip + ' (' + remover.dataset.mac + ') no switch?\nO aparelho passa a receber um IP qualquer da faixa na próxima renovação.')) return;
+        remover.disabled = true;
+        const corpo = new FormData();
+        corpo.set('id', ativoId);
+        corpo.set('ip', remover.dataset.ip);
+        const res = await fetch(<?= json_encode(url('/ativos/switch/dhcp/remover-ip-fixo')) ?>, { method: 'POST', body: corpo });
+        const resultado = await res.json();
+        if (!resultado.success) {
+            alert(resultado.message || 'Falha ao remover.');
+            remover.disabled = false;
+            return;
+        }
+        carregar();
+    });
+
+    document.getElementById('formIpFixoSw').addEventListener('submit', async function (ev) {
+        ev.preventDefault();
+        const botao = document.getElementById('ipFixoSwSalvar');
+        const erro = document.getElementById('ipFixoSwErro');
+        erro.textContent = '';
+        botao.disabled = true;
+        const corpo = new FormData();
+        corpo.set('id', ativoId);
+        corpo.set('mac', document.getElementById('ipFixoSwMac').value.trim());
+        corpo.set('ip', document.getElementById('ipFixoSwIp').value.trim());
+        corpo.set('pool', document.getElementById('ipFixoSwPool').value);
+        try {
+            const res = await fetch(<?= json_encode(url('/ativos/switch/dhcp/ip-fixo')) ?>, { method: 'POST', body: corpo });
+            const resultado = await res.json();
+            if (!resultado.success) {
+                erro.textContent = resultado.message || 'Falha ao salvar.';
+                return;
+            }
+            bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+            carregar();
+        } finally {
+            botao.disabled = false;
+        }
+    });
+
+    let carregou = false;
+    nav.addEventListener('shown.bs.tab', function () {
+        if (!carregou) { carregou = true; carregar(); }
+    });
 })();
 
 // DHCP do Gateway UniFi: redes + IPs fixos (listar, criar, trocar, remover).

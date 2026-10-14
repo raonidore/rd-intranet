@@ -1473,6 +1473,35 @@ class AtivoController extends Controller
         echo json_encode($this->service->listarRotasEstaticasUnifi());
     }
 
+    public function switchDhcp(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        echo json_encode($this->service->listarDhcpSwitch((int)($_POST['id'] ?? 0)));
+    }
+
+    public function switchDefinirIpFixo(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        echo json_encode($this->service->definirReservaDhcpSwitch(
+            (int)($_POST['id'] ?? 0),
+            (string)($_POST['mac'] ?? ''),
+            (string)($_POST['ip'] ?? ''),
+            trim((string)($_POST['pool'] ?? ''))
+        ));
+    }
+
+    public function switchRemoverIpFixo(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        echo json_encode($this->service->removerReservaDhcpSwitch((int)($_POST['id'] ?? 0), (string)($_POST['ip'] ?? '')));
+    }
+
     public function unifiDhcp(): void
     {
         AuthMiddleware::checkModulo('ativos_lista');

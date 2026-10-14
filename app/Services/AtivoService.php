@@ -4676,6 +4676,21 @@ class AtivoService
             return $resultado;
         }
 
+        [$porMac, $porIp] = $this->mapaAtivosPorMacIp();
+
+        foreach (['reservas' => 'ip_fixo', 'sem_reserva' => 'ip'] as $lista => $campoIp) {
+            foreach ($resultado[$lista] as &$item) {
+                $item['ativo'] = $porMac[$item['mac']] ?? ($porIp[$item[$campoIp]] ?? null);
+            }
+            unset($item);
+        }
+
+        return $resultado;
+    }
+
+    /** [MAC => ativo, IP => ativo] -- MAC pelos adaptadores que o agente coletou, IP pelo cadastro. */
+    private function mapaAtivosPorMacIp(): array
+    {
         $porMac = [];
         $porIp = [];
         $pdo = Database::connection();
@@ -4686,14 +4701,157 @@ class AtivoService
             $porIp[$l['ip']] = ['id' => (int)$l['id'], 'nome' => $l['nome'], 'codigo' => $l['codigo_patrimonio']];
         }
 
-        foreach (['reservas' => 'ip_fixo', 'sem_reserva' => 'ip'] as $lista => $campoIp) {
-            foreach ($resultado[$lista] as &$item) {
-                $item['ativo'] = $porMac[$item['mac']] ?? ($porIp[$item[$campoIp]] ?? null);
+        return [$porMac, $porIp];
+    }
+
+    /* ---------------------------------------------------------------
+     * DHCP do switch TP-Link (modo SSH). Mesma tela do gateway UniFi:
+     * pools + IPs fixos (manual-binding) + concessões em uso.
+     * --------------------------------------------------------------- */
+
+    /** @return array{0: ?array, 1: ?string} ativo e mensagem de erro */
+    private function switchDhcp(int $id): array
+    {
+        $ativo = $this->repository->buscarPorId($id);
+        $detalhes = $ativo ? (json_decode($ativo['detalhes'] ?? '', true) ?: []) : [];
+        if (!$ativo || empty($ativo['ip']) || self::fonteVlanSwitch($ativo, $detalhes) !== 'omada' || !(new OmadaService())->sshAtivo()) {
+            return [null, 'Este ativo não é um switch TP-Link acessado por SSH.'];
+        }
+
+        return [$ativo, null];
+    }
+
+    public function listarDhcpSwitch(int $id): array
+    {
+        [$ativo, $erro] = $this->switchDhcp($id);
+        if ($erro) {
+            return ['success' => false, 'message' => $erro];
+        }
+        $ssh = new OmadaSshService();
+        $dados = $ssh->coletarDhcp($ativo['ip']);
+        if (!$dados['success']) {
+            return $dados;
+        }
+
+        [$porMac, $porIp] = $this->mapaAtivosPorMacIp();
+        $concessaoPorMac = [];
+        foreach ($dados['concessoes'] as $c) {
+            if ($c['mac'] !== '') {
+                $concessaoPorMac[$c['mac']] = $c;
             }
-            unset($item);
+        }
+        $comReserva = [];
+        foreach ($dados['reservas'] as &$r) {
+            $comReserva[$r['mac']] = true;
+            $c = $concessaoPorMac[$r['mac']] ?? null;
+            $r['entregue'] = $c !== null && $c['ip'] === $r['ip'];
+            $r['ip_atual'] = $c['ip'] ?? '';
+            $r['ativo'] = $porMac[$r['mac']] ?? ($porIp[$r['ip']] ?? null);
+        }
+        unset($r);
+        // Concessões dinâmicas = atalho pro "Novo IP fixo" (aparelho já pegou IP do switch).
+        $semReserva = [];
+        foreach ($dados['concessoes'] as $c) {
+            if ($c['tipo'] === 'dinamico' && $c['mac'] !== '' && !isset($comReserva[$c['mac']])) {
+                $c['ativo'] = $porMac[$c['mac']] ?? ($porIp[$c['ip']] ?? null);
+                $semReserva[] = $c;
+            }
+        }
+        $dados['sem_reserva'] = $semReserva;
+        $dados['manutencao_usuario'] = $ssh->usuarioManutencaoAtual() ?: $ssh->usuarioAtual();
+        $dados['manutencao_separada'] = $ssh->usuarioManutencaoAtual() !== '';
+
+        return $dados;
+    }
+
+    public function definirReservaDhcpSwitch(int $id, string $mac, string $ip, string $pool): array
+    {
+        [$ativo, $erro] = $this->switchDhcp($id);
+        if ($erro) {
+            return ['success' => false, 'message' => $erro];
+        }
+        $mac = OmadaSshService::normalizarMac($mac);
+        $ip = trim($ip);
+        if ($mac === '') {
+            return ['success' => false, 'message' => 'MAC inválido (use o formato aa:bb:cc:dd:ee:ff).'];
+        }
+        if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+            return ['success' => false, 'message' => 'IP inválido.'];
+        }
+
+        $ssh = new OmadaSshService();
+        $atual = $ssh->coletarDhcp($ativo['ip']);
+        if (!$atual['success']) {
+            return $atual;
+        }
+        $dadosPool = null;
+        foreach ($atual['pools'] as $p) {
+            if ($p['nome'] === $pool) {
+                $dadosPool = $p;
+            }
+        }
+        if ($dadosPool === null || $dadosPool['cidr'] === '') {
+            return ['success' => false, 'message' => 'Pool DHCP não encontrado no switch.'];
+        }
+        [$base, $bits] = explode('/', $dadosPool['cidr']);
+        $broadcast = (ip2long($base) | ~(-1 << (32 - (int)$bits))) & 0xFFFFFFFF;
+        if (!self::ipNaRede($ip, $dadosPool['cidr']) || ip2long($ip) === ip2long($base) || ip2long($ip) === $broadcast) {
+            return ['success' => false, 'message' => "O IP {$ip} não é um endereço válido do pool {$pool} ({$dadosPool['cidr']})."];
+        }
+        if ($ip === $dadosPool['gateway']) {
+            return ['success' => false, 'message' => "{$ip} é o gateway entregue por esse pool."];
+        }
+        foreach ($atual['excluidos'] as $e) {
+            if (ip2long($ip) >= ip2long($e['inicio']) && ip2long($ip) <= ip2long($e['fim'])) {
+                return ['success' => false, 'message' => "O IP {$ip} está na lista de endereços excluídos do DHCP do switch (reservado para equipamento com IP manual)."];
+            }
+        }
+        $ipAnterior = null;
+        foreach ($atual['reservas'] as $r) {
+            if ($r['ip'] === $ip && $r['mac'] !== $mac) {
+                return ['success' => false, 'message' => "O IP {$ip} já está reservado para {$r['mac']}."];
+            }
+            if ($r['mac'] === $mac) {
+                $ipAnterior = $r['ip'];
+            }
+        }
+        foreach ($atual['concessoes'] as $c) {
+            if ($c['ip'] === $ip && $c['mac'] !== $mac) {
+                return ['success' => false, 'message' => "O IP {$ip} está emprestado agora pelo switch a " . ($c['mac'] ?: 'outro aparelho') . ". Escolha outro IP ou reserve esse para ele."];
+            }
+        }
+
+        $resultado = $ssh->definirReservaDhcp($ativo['ip'], $pool, $ip, $mac, $ipAnterior);
+        if ($resultado['success']) {
+            AuditService::registrar('Ativos', 'Switch - IP fixo (DHCP)', "{$ativo['nome']}: reserva {$ip} -> {$mac} no pool {$pool}" . ($ipAnterior ? " (antes {$ipAnterior})" : '') . '.');
         }
 
         return $resultado;
+    }
+
+    public function removerReservaDhcpSwitch(int $id, string $ip): array
+    {
+        [$ativo, $erro] = $this->switchDhcp($id);
+        if ($erro) {
+            return ['success' => false, 'message' => $erro];
+        }
+        $ssh = new OmadaSshService();
+        $atual = $ssh->coletarDhcp($ativo['ip']);
+        if (!$atual['success']) {
+            return $atual;
+        }
+        foreach ($atual['reservas'] as $r) {
+            if ($r['ip'] === trim($ip)) {
+                $resultado = $ssh->removerReservaDhcp($ativo['ip'], $r['pool'], $r['ip']);
+                if ($resultado['success']) {
+                    AuditService::registrar('Ativos', 'Switch - IP fixo (DHCP)', "{$ativo['nome']}: reserva {$r['ip']} ({$r['mac']}) removida do pool {$r['pool']}.");
+                }
+
+                return $resultado;
+            }
+        }
+
+        return ['success' => false, 'message' => 'Esse IP não tem reserva no switch.'];
     }
 
     public function definirIpFixoUnifi(string $mac, string $ip, string $redeId, string $nome): array

@@ -62,6 +62,15 @@ class OmadaSshService
      * porta e vizinho LLDP da porta (firmware antigo, ex. 2.0.10, só aceita
      * o LLDP por interface).
      */
+    /** Leitura do servidor DHCP do switch -- fora da coleta periódica, só quando a aba DHCP é aberta. */
+    private const COMANDOS_DHCP = [
+        'show ip dhcp server status',
+        'show ip dhcp server pool',
+        'show ip dhcp server excluded-address',
+        'show ip dhcp server manual-binding',
+        'show ip dhcp server binding',
+    ];
+
     private const REGEX_SWITCHPORT_PORTA = '#^show (interface switchport|lldp neighbor-information interface) (gigabitEthernet|ten-gigabitEthernet) \d+/\d+/\d+$#';
 
     private const MARCA_PAGINACAO = 'Press any key to continue (Q to quit)';
@@ -372,7 +381,7 @@ class OmadaSshService
 
     private function executar(SSH2 $ssh, string $comando): string
     {
-        if (!in_array($comando, self::COMANDOS_PERMITIDOS, true) && !preg_match(self::REGEX_SWITCHPORT_PORTA, $comando)) {
+        if (!in_array($comando, self::COMANDOS_PERMITIDOS, true) && !in_array($comando, self::COMANDOS_DHCP, true) && !preg_match(self::REGEX_SWITCHPORT_PORTA, $comando)) {
             throw new \LogicException("Comando fora da lista de leitura: {$comando}");
         }
 
@@ -728,6 +737,153 @@ class OmadaSshService
         }
 
         return ['success' => true, 'message' => 'Alteração aplicada e gravada no switch.', 'comandos' => $log];
+    }
+
+    /* ---------------------------------------------------------------
+     * Servidor DHCP do switch (o TL-SG3428 do Maurílio faz o DHCP da LAN).
+     * Sintaxe confirmada ao vivo (13/10/2026) no AV-SW1 do enzilab com um
+     * pool de teste: `ip dhcp server pool "X"` -> `address IP
+     * hardware-address MAC hardware-type ethernet` / `no address IP`.
+     * --------------------------------------------------------------- */
+
+    /**
+     * @return array{success:bool, message?:string, ligado?:bool, pools?:array, excluidos?:array, reservas?:array, concessoes?:array}
+     */
+    public function coletarDhcp(string $ip): array
+    {
+        if (!$this->configurado()) {
+            return ['success' => false, 'message' => 'Credencial SSH dos switches ainda não configurada -- veja Integrações > TP-Link Omada.'];
+        }
+        $senha = $this->senhaAtual();
+        if ($senha === null) {
+            return ['success' => false, 'message' => 'Não foi possível ler a senha SSH salva -- salve a credencial de novo.'];
+        }
+
+        try {
+            $ssh = new SSH2($ip, $this->portaAtual(), self::TIMEOUT_SEGUNDOS);
+            if (!@$ssh->login($this->usuarioAtual(), $senha)) {
+                return ['success' => false, 'message' => "O switch {$ip} recusou o usuário/senha SSH."];
+            }
+            $ssh->setTimeout(self::TIMEOUT_SEGUNDOS);
+            $ssh->enablePTY();
+            $ssh->setWindowSize(200, 1000);
+            $this->lerAtePrompt($ssh);
+            $this->executar($ssh, 'enable');
+            $saidas = [];
+            foreach (self::COMANDOS_DHCP as $comando) {
+                $saidas[$comando] = $this->executar($ssh, $comando);
+            }
+            $ssh->disconnect();
+        } catch (\Throwable $e) {
+            return ['success' => false, 'message' => "Falha na conexão SSH com {$ip}: " . $e->getMessage()];
+        }
+
+        $pools = [];
+        foreach (preg_split('/(?=^\s*Pool Name:)/m', $saidas['show ip dhcp server pool']) as $bloco) {
+            if (!preg_match('/Pool Name:\s*(\S.*?)\s*$/m', $bloco, $nome)) {
+                continue;
+            }
+            $campo = fn (string $rotulo) => preg_match('/^\s*' . $rotulo . ':[ \t]*(.*?)\s*$/m', $bloco, $m) ? $m[1] : '';
+            $rede = $campo('Network Address');
+            $mascara = $campo('Sube?net Mask'); // o firmware escreve "Subenet"
+            $bits = $mascara !== '' ? substr_count(decbin((int)ip2long($mascara)), '1') : 0;
+            $pools[] = [
+                'nome' => $nome[1],
+                'rede' => $rede,
+                'mascara' => $mascara,
+                'cidr' => $rede !== '' && $bits > 0 ? "{$rede}/{$bits}" : '',
+                'gateway' => $campo('Default Gateway'),
+                'dns' => array_values(array_filter(array_map('trim', explode(',', $campo('DNS Server'))))),
+                'concessao_minutos' => ctype_digit($campo('Lease Time')) ? (int)$campo('Lease Time') : null,
+                'dominio' => $campo('Domain Name'),
+            ];
+        }
+
+        $excluidos = [];
+        if (preg_match_all('/^\s*\d+\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)/m', $saidas['show ip dhcp server excluded-address'], $mm, PREG_SET_ORDER)) {
+            foreach ($mm as $m) {
+                $excluidos[] = ['inicio' => $m[1], 'fim' => $m[2]];
+            }
+        }
+
+        $reservas = [];
+        if (preg_match_all('/^\s*(\S+)\s+([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5})\s+(\d+\.\d+\.\d+\.\d+)/m', $saidas['show ip dhcp server manual-binding'], $mm, PREG_SET_ORDER)) {
+            foreach ($mm as $m) {
+                // A coluna do nome é estreita e pode vir cortada: o pool certo é o que contém o IP.
+                $pool = $m[1];
+                foreach ($pools as $p) {
+                    if ($p['cidr'] !== '' && AtivoService::ipNaRede($m[3], $p['cidr'])) {
+                        $pool = $p['nome'];
+                    }
+                }
+                $reservas[] = ['pool' => $pool, 'mac' => self::normalizarMac($m[2]), 'ip' => $m[3]];
+            }
+        }
+
+        // "192.168.0.2   01-60cf-8464-d5bf   Automatic   01:07:49" -- client id "01" + MAC
+        // é o normal; outros formatos (DUID de VM, por exemplo) ficam sem MAC.
+        $concessoes = [];
+        if (preg_match_all('/^\s*(\d+\.\d+\.\d+\.\d+)\s+(\S+)\s+(Automatic|Manual)\s+(\S+)/mi', $saidas['show ip dhcp server binding'], $mm, PREG_SET_ORDER)) {
+            foreach ($mm as $m) {
+                $hex = strtolower(str_replace('-', '', $m[2]));
+                $concessoes[] = [
+                    'ip' => $m[1],
+                    'mac' => str_starts_with($hex, '01') && strlen($hex) === 14 ? self::normalizarMac(substr($hex, 2)) : '',
+                    'tipo' => strtolower($m[3]) === 'manual' ? 'reserva' : 'dinamico',
+                    'restante' => $m[4],
+                ];
+            }
+        }
+
+        return [
+            'success' => true,
+            'ligado' => (bool)preg_match('/DHCP server is enable/i', $saidas['show ip dhcp server status']),
+            'pools' => $pools,
+            'excluidos' => $excluidos,
+            'reservas' => $reservas,
+            'concessoes' => $concessoes,
+        ];
+    }
+
+    /** Nome de pool que dá pra mandar entre aspas na CLI sem escapar nada. */
+    private static function nomePoolValido(string $nome): bool
+    {
+        return (bool)preg_match('/^[A-Za-z0-9 _.\-]{1,32}$/', $nome);
+    }
+
+    /**
+     * Cria a reserva IP -> MAC no pool. $ipAnterior = IP que esse MAC já
+     * tinha reservado (troca de IP): sai primeiro, na mesma sessão.
+     * Quem chama já validou faixa e duplicidade.
+     */
+    public function definirReservaDhcp(string $ip, string $pool, string $ipReserva, string $mac, ?string $ipAnterior = null): array
+    {
+        $mac = self::normalizarMac($mac);
+        if (!self::nomePoolValido($pool) || $mac === '' || !filter_var($ipReserva, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)
+            || ($ipAnterior !== null && !filter_var($ipAnterior, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4))) {
+            return ['success' => false, 'message' => 'Dados inválidos para a reserva.'];
+        }
+        if ($ipAnterior === $ipReserva) {
+            return ['success' => true, 'message' => 'A reserva já está com esse IP.'];
+        }
+
+        $comandos = ["ip dhcp server pool \"{$pool}\""];
+        if ($ipAnterior !== null) {
+            $comandos[] = "no address {$ipAnterior}";
+        }
+        $comandos[] = "address {$ipReserva} hardware-address {$mac} hardware-type ethernet";
+        $comandos[] = 'exit';
+
+        return $this->aplicarConfiguracao($ip, $comandos);
+    }
+
+    public function removerReservaDhcp(string $ip, string $pool, string $ipReserva): array
+    {
+        if (!self::nomePoolValido($pool) || !filter_var($ipReserva, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+            return ['success' => false, 'message' => 'Dados inválidos para a reserva.'];
+        }
+
+        return $this->aplicarConfiguracao($ip, ["ip dhcp server pool \"{$pool}\"", "no address {$ipReserva}", 'exit']);
     }
 
     /** "59 day - 21 hour - 29 min - 35 sec" -> "59d 21h 29m 35s" (mesmo estilo do uptime do Controller). */
