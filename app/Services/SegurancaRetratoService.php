@@ -95,7 +95,11 @@ class SegurancaRetratoService
                     continue;
                 }
                 foreach (explode(',', (string)$regra['ips']) as $ip) {
+                    // O firewall devolve "a-a" (intervalo de um IP só) ou "x/255.255.255.255": vira o IP puro.
                     $ip = preg_replace('#/255\.255\.255\.255$#', '', trim($ip));
+                    if (preg_match('/^([^-]+)-([^-]+)$/', $ip, $m) && $m[1] === $m[2]) {
+                        $ip = $m[1];
+                    }
                     if ($ip === '' || $ip === '*') {
                         continue;
                     }

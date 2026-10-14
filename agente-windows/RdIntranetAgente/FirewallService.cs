@@ -76,7 +76,7 @@ public static class FirewallService
                     direcao = (int)regra.Direction == 1 ? "entrada" : "saida",
                     acao = acao == 0 ? "bloquear" : "permitir",
                     programa = (string?)regra.ApplicationName,
-                    ips = (string?)regra.RemoteAddresses is "*" ? null : (string?)regra.RemoteAddresses,
+                    ips = IpsLegiveis((string?)regra.RemoteAddresses),
                     descricao = (string?)regra.Description
                 });
             }
@@ -253,6 +253,18 @@ Stop-Process -Id {pid} -Force
     }
 
     private static object Falha(string mensagem) => new { sucesso = false, mensagem };
+
+    /// <summary>O firewall guarda um IP só como "a-a" ou "a/255.255.255.255" -- devolve "a"; "*" = qualquer (null).</summary>
+    private static string? IpsLegiveis(string? ips)
+    {
+        if (string.IsNullOrWhiteSpace(ips) || ips == "*") return null;
+        return string.Join(",", ips.Split(',').Select(x =>
+        {
+            var item = Regex.Replace(x.Trim(), @"/255\.255\.255\.255$", "");
+            var partes = item.Split('-');
+            return partes.Length == 2 && partes[0] == partes[1] ? partes[0] : item;
+        }));
+    }
 
     /// <summary>stderr do PowerShell vem em CLIXML (com ruído de "Preparing modules"): pega só as linhas de erro.</summary>
     private static string MensagemDeErro(string? erro, int codigo)

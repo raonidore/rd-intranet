@@ -121,6 +121,11 @@
         if (p.assinatura === 'ausente') return '<span class="mon-chip ruim">sem assinatura</span>';
         return '';
     };
+    // O firewall guarda um IP só como intervalo "a-a"; mostra "a".
+    const ipsLegiveis = (ips) => String(ips || '').split(',').map((x) => {
+        const p = x.trim().replace(/\/255\.255\.255\.255$/, '').split('-');
+        return p.length === 2 && p[0] === p[1] ? p[0] : x.trim();
+    }).join(', ');
     const motivosLista = (m) => (m && m.length) ? '<ul class="mon-motivos">' + m.map((x) => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '';
 
     function aviso(html, tipo) {
@@ -330,7 +335,7 @@
             + (p.ligado ? '<span class="mon-chip bom">ligado</span>' : '<span class="mon-chip ruim">desligado</span>') + '</div>'
             + '<div class="mon-kv mt-1">entrada: ' + esc(p.entrada_padrao) + ' · saída: ' + esc(p.saida_padrao) + '</div>'
             + (String(fw.perfil_ativo || '').includes(p.perfil) ? '<div class="small text-primary mt-1">em uso agora</div>' : '') + '</div>').join('');
-        const regras = (fw.regras_rd || []).map((r) => '<tr><td>' + esc(r.nome) + '<div class="mon-caminho">' + esc(r.programa || r.ips || '') + '</div>' + (r.descricao ? '<div class="small text-muted">' + esc(r.descricao) + '</div>' : '') + '</td>'
+        const regras = (fw.regras_rd || []).map((r) => '<tr><td>' + esc(r.nome) + '<div class="mon-caminho">' + esc(r.programa || ipsLegiveis(r.ips)) + '</div>' + (r.descricao ? '<div class="small text-muted">' + esc(r.descricao) + '</div>' : '') + '</td>'
             + '<td class="small">' + esc(r.direcao) + '</td><td class="small">' + (r.habilitada ? 'ativa' : 'desativada') + '</td>'
             + '<td class="text-end">' + botaoAcao('desbloquear', 'Remover este bloqueio', 'bi-trash', { regra: r.nome }, 'text-danger') + '</td></tr>').join('');
 
