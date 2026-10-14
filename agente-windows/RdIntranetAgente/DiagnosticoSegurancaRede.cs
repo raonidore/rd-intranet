@@ -66,7 +66,8 @@ public static class DiagnosticoSegurancaRede
             imagem.Save(Path.Combine(pasta, $"seguranca-{aba}.png"));
         }
         janela.Controls.Clear();
-        var desempenho = new DesempenhoPagina();
+        using var monitorDesempenho = new MonitorDesempenhoService(() => new Config(), () => null);
+        var desempenho = new DesempenhoPagina(monitorDesempenho);
         janela.Controls.Add(desempenho);
         desempenho.Visible = false;
         desempenho.Visible = true;
@@ -74,11 +75,24 @@ public static class DiagnosticoSegurancaRede
         var carga = Task.Run(() => { var fim = DateTime.Now.AddSeconds(14); while (DateTime.Now < fim) { Math.Sqrt(DateTime.Now.Ticks); } });
         var ate = DateTime.Now.AddSeconds(22);
         while (DateTime.Now < ate) { System.Windows.Forms.Application.DoEvents(); Thread.Sleep(100); }
-        using (var imagem = new System.Drawing.Bitmap(janela.ClientSize.Width, janela.ClientSize.Height))
+        void Print(string nome)
         {
+            using var imagem = new System.Drawing.Bitmap(janela.ClientSize.Width, janela.ClientSize.Height);
             janela.DrawToBitmap(imagem, new System.Drawing.Rectangle(System.Drawing.Point.Empty, janela.ClientSize));
-            imagem.Save(Path.Combine(pasta, "desempenho.png"));
+            imagem.Save(Path.Combine(pasta, nome));
         }
+        Print("desempenho.png");
+        // Coleta contínua por ~40 s (intervalo 2 s) pra ter histórico, programas e IPs.
+        monitorDesempenho.AplicarServidor(true, 2);
+        var ateColeta = DateTime.Now.AddSeconds(40);
+        while (DateTime.Now < ateColeta) { System.Windows.Forms.Application.DoEvents(); Thread.Sleep(100); }
+        foreach (var aba in new[] { "historico", "programas", "rede", "picos" })
+        {
+            desempenho.SelecionarAba(aba);
+            for (var i = 0; i < 10; i++) { System.Windows.Forms.Application.DoEvents(); Thread.Sleep(100); }
+            Print($"desempenho-{aba}.png");
+        }
+        monitorDesempenho.AplicarServidor(false, 2);
         janela.Close();
         seguranca.Dispose();
     }

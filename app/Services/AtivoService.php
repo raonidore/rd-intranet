@@ -6065,7 +6065,9 @@ class AtivoService
         // Monitor de conexões/processos (agente 1.0.56+): liga/desliga e
         // intervalo vão no heartbeat pra mudança no portal valer em segundos.
         try {
-            $resposta['monitor_rede'] = (new SegurancaModuloService())->monitorRedeParaAgente($ativoId);
+            $modulos = new SegurancaModuloService();
+            $resposta['monitor_rede'] = $modulos->monitorRedeParaAgente($ativoId);
+            $resposta['monitor_desempenho'] = $modulos->monitorDesempenhoParaAgente($ativoId);
         } catch (\Throwable) {
             // servidor sem a migração: o agente segue como está
         }
@@ -6152,7 +6154,7 @@ class AtivoService
         // Monitor de conexões/processos e firewall (agente 1.0.56+) -- criados por acaoMonitorSeguranca().
         'seguranca_atualizar', 'firewall_bloquear', 'firewall_desbloquear', 'servico_desativar', 'processo_encerrar',
         // Agente 1.0.58+: remediação (inicialização, quarentena, firewall ligado).
-        'inicializacao_alternar', 'arquivo_quarentena', 'quarentena_restaurar', 'firewall_perfil',
+        'inicializacao_alternar', 'arquivo_quarentena', 'quarentena_restaurar', 'firewall_perfil', 'programa_confiar', 'programa_desconfiar',
     ];
 
     /**
@@ -6240,10 +6242,38 @@ class AtivoService
                 $descricao = 'quarentena de ' . $caminho;
                 break;
 
+            case 'confiar_programa':
+            case 'desconfiar_programa':
+                $caminho = trim((string)($dados['caminho'] ?? ''));
+                if (!preg_match('#^[A-Za-z]:\\\\.{3,}#', $caminho)) {
+                    return ['success' => false, 'message' => 'Caminho inválido.'];
+                }
+                if ($acao === 'confiar_programa') {
+                    $descricaoPrograma = trim((string)($dados['descricao'] ?? ''));
+                    if (mb_strlen($descricaoPrograma) < 3) {
+                        return ['success' => false, 'message' => 'Escreva para que serve o programa.'];
+                    }
+                    $tipo = 'programa_confiar';
+                    $parametro = json_encode(['caminho' => $caminho, 'descricao' => mb_substr($descricaoPrograma, 0, 300),
+                        'portas' => preg_replace('/[^0-9, ]/', '', (string)($dados['portas'] ?? '')), 'por' => $usuario], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                    $descricao = "confiar em {$caminho} ({$descricaoPrograma})";
+                } else {
+                    $tipo = 'programa_desconfiar';
+                    $parametro = json_encode(['caminho' => $caminho], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                    $descricao = "deixar de confiar em {$caminho}";
+                }
+                break;
+
             case 'ligar_firewall':
+            case 'desligar_firewall':
+                $perfil = (string)($dados['perfil'] ?? '');
+                if ($perfil !== '' && !in_array($perfil, ['dominio', 'privado', 'publico'], true)) {
+                    return ['success' => false, 'message' => 'Camada do firewall inválida.'];
+                }
+                $ligar = $acao === 'ligar_firewall';
                 $tipo = 'firewall_perfil';
-                $parametro = json_encode(['ligar' => true, 'forcar' => !empty($dados['forcar'])]);
-                $descricao = 'ligar o firewall do Windows (entrada e saída liberadas por padrão)';
+                $parametro = json_encode(['ligar' => $ligar, 'forcar' => !empty($dados['forcar']), 'perfil' => $perfil]);
+                $descricao = ($ligar ? 'ligar' : 'desligar') . ' o firewall do Windows' . ($perfil !== '' ? " (camada {$perfil})" : ' (todas as camadas)');
                 break;
 
             case 'encerrar_processo':

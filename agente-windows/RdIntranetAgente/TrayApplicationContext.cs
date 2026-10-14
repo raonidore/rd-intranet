@@ -26,6 +26,7 @@ public class TrayApplicationContext : ApplicationContext
     private readonly PrintListener _printListener;
     private readonly SegurancaService _seguranca;
     private readonly MonitorRedeService _monitorRede;
+    private readonly MonitorDesempenhoService _monitorDesempenho;
     private readonly MainForm _janelaPrincipal;
     private readonly SynchronizationContext? _contextoUi;
     private readonly ToolStripMenuItem _itemServico;
@@ -59,6 +60,7 @@ public class TrayApplicationContext : ApplicationContext
         _seguranca.Detectado += AoDetectarEventoSeguranca;
         _seguranca.Aplicar(_estado.UltimoModuloSeguranca);
         _monitorRede = new MonitorRedeService(() => _config, () => _machineGuid, _seguranca);
+        _monitorDesempenho = new MonitorDesempenhoService(() => _config, () => _machineGuid);
 
         // Escuta local pra imprimir etiqueta sob demanda (sem esperar o
         // proximo checkin) -- sempre tenta iniciar; so imprime de verdade
@@ -105,7 +107,8 @@ public class TrayApplicationContext : ApplicationContext
             () => _config,
             AplicarConfiguracao,
             AlternarServicoAsync,
-            _monitorRede);
+            _monitorRede,
+            _monitorDesempenho);
         _icone.MouseClick += (s, e) =>
         {
             if (e.Button == MouseButtons.Left) _janelaPrincipal.Abrir();
@@ -226,6 +229,12 @@ public class TrayApplicationContext : ApplicationContext
             if (resultado.Sucesso && resultado.MonitorRede != null)
             {
                 _monitorRede.Aplicar(resultado.MonitorRede.Ativo, resultado.MonitorRede.Intervalo);
+            }
+
+            if (resultado.Sucesso && resultado.MonitorDesempenho != null)
+            {
+                _monitorDesempenho.Regras = _seguranca.Regras.Desempenho;
+                _monitorDesempenho.AplicarServidor(resultado.MonitorDesempenho.Ativo, resultado.MonitorDesempenho.Intervalo);
             }
 
             if (resultado.Sucesso)
@@ -425,6 +434,7 @@ public class TrayApplicationContext : ApplicationContext
                     // ---- Monitor de conexões/processos e firewall (1.0.56) ----
                     case "seguranca_atualizar":
                         _monitorRede.ForcarAtualizacao();
+                        _monitorDesempenho.ForcarRetrato();
                         await cliente.ResponderAsync(_machineGuid!, solicitacao.Id, new { sucesso = true, mensagem = "Retrato e inventário sendo coletados agora." });
                         break;
 
@@ -436,6 +446,8 @@ public class TrayApplicationContext : ApplicationContext
                     case "arquivo_quarentena":
                     case "quarentena_restaurar":
                     case "firewall_perfil":
+                    case "programa_confiar":
+                    case "programa_desconfiar":
                         var pedidoAcao = solicitacao;
                         _ = Task.Run(async () =>
                         {
@@ -487,7 +499,9 @@ public class TrayApplicationContext : ApplicationContext
             "inicializacao_alternar" => AcoesSeguranca.AlternarInicializacao(Texto("tipo"), Texto("id"), Logico("ativar")),
             "arquivo_quarentena" => AcoesSeguranca.Quarentena(Texto("caminho"), Texto("motivo") is { Length: > 0 } m ? m : "Pedido pelo portal"),
             "quarentena_restaurar" => AcoesSeguranca.RestaurarQuarentena(Texto("id")),
-            "firewall_perfil" => AcoesSeguranca.Firewall(Logico("ligar"), Logico("forcar")),
+            "programa_confiar" => ConfiaveisService.Confiar(Texto("caminho"), Texto("descricao"), Texto("portas"), Texto("por")),
+            "programa_desconfiar" => ConfiaveisService.Desconfiar(Texto("caminho")),
+            "firewall_perfil" => AcoesSeguranca.Firewall(Logico("ligar"), Logico("forcar"), Texto("perfil") is { Length: > 0 } perfil ? perfil : null),
             _ => new ResultadoAcao(false, "Ação desconhecida.")
         };
         return new { sucesso = r.Sucesso, mensagem = r.Mensagem };
@@ -1370,6 +1384,7 @@ del ""%~f0""
         _timerBandeja.Stop();
         _seguranca.Detectado -= AoDetectarEventoSeguranca;
         _monitorRede.Dispose();
+        _monitorDesempenho.Dispose();
         _seguranca.Dispose();
         _janelaPrincipal.Dispose();
         _icone.Visible = false;

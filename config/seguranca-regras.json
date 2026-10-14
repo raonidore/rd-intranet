@@ -1,5 +1,5 @@
 {
-    "versao": "2026-10-14.1",
+    "versao": "2026-10-14.2",
     "descricao": "Regras de comportamento do anti-ransomware do agente. Mudou aqui + commit/push = em até 30 min todos os servidores sincronizam (rd agente:sincronizar) e os agentes aplicam no próximo heartbeat, sem recompilar. Suba a \"versao\" a cada mudança -- é ela que avisa os agentes.",
     "shadow": {
         "fracao_minima_restante": 0.5,
@@ -55,10 +55,19 @@
         ],
         "processos_ignorados": []
     },
+    "desempenho": {
+        "cpu_pico": 90,
+        "memoria_pico": 90,
+        "disco_pico": 90,
+        "rede_pico_percentual": 80,
+        "duracao_minima_segundos": 60,
+        "retrato_minutos": 15
+    },
     "historico": [
         "2026-10-01.1: primeira versão -- valores iguais aos fixos do agente 1.0.50 (rodízio de shadow copies da MDA-PC-0012; exclusão em massa do Patrimonial).",
         "2026-10-01.2: fora da lista pública de ransomware as extensões genéricas de dados de programas (.delta, .info, .data, .wal, .session(s), .safe, .secure, .rec, .ppam, .rdp) -- EP-PC-000001 (enzilab) isolada ao restaurar o Firefox, que copiou o perfil antigo pra \"Dados antigos do Firefox\".",
-        "2026-10-14.1: limiares do monitor de conexões/processos/inicialização (agente 1.0.56) -- caso ARIIS (Maurílio): malware Java varrendo RDP (3.205 IPs, portas 3380-3398) e conversando com servidor de comando. O intervalo de verificação é configurado por servidor/máquina na Central de Segurança, não aqui."
+        "2026-10-14.1: limiares do monitor de conexões/processos/inicialização (agente 1.0.56) -- caso ARIIS (Maurílio): malware Java varrendo RDP (3.205 IPs, portas 3380-3398) e conversando com servidor de comando. O intervalo de verificação é configurado por servidor/máquina na Central de Segurança, não aqui.",
+        "2026-10-14.2: limites de PICO da coleta contínua de desempenho (agente 1.0.61): CPU/memória/disco >= 90% ou rede >= 80% do link por 60 s viram um episódio com os processos e IPs responsáveis."
     ],
     "assinaturas": {
         "extensoes_ignoradas": [

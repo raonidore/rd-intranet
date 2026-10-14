@@ -486,4 +486,7 @@ public sealed class RegrasSeguranca
     };
     /// <summary>Trecho do caminho ou nome do .exe que nunca gera alerta de varredura (scanner de rede legítimo da TI).</summary>
     public List<string> RedeProcessosIgnorados { get; init; } = new();
+
+    /// <summary>Limiares de pico da coleta contínua de desempenho (1.0.61+).</summary>
+    public RegrasDesempenho Desempenho { get; init; } = new();
 }

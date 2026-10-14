@@ -77,6 +77,15 @@ public class SegurancaEventoClient
                 InicializacaoHoras = Inteiro("rede", "inicializacao_horas", p.InicializacaoHoras, 1, 48),
                 RedePortasSensiveis = portas is { Count: > 0 } ? portas : p.RedePortasSensiveis,
                 RedeProcessosIgnorados = Lista("rede", "processos_ignorados"),
+                Desempenho = new RegrasDesempenho
+                {
+                    CpuPico = Math.Clamp(Numero("desempenho", "cpu_pico", 90), 50, 100),
+                    MemoriaPico = Math.Clamp(Numero("desempenho", "memoria_pico", 90), 50, 100),
+                    DiscoPico = Math.Clamp(Numero("desempenho", "disco_pico", 90), 50, 100),
+                    RedePicoPercentual = Math.Clamp(Numero("desempenho", "rede_pico_percentual", 80), 10, 100),
+                    DuracaoMinimaSegundos = Inteiro("desempenho", "duracao_minima_segundos", 60, 10, 3600),
+                    RetratoMinutos = Inteiro("desempenho", "retrato_minutos", 15, 1, 120)
+                },
                 Versao = versao.GetString() ?? "padrao",
                 // O servidor já valida as faixas; aqui só garante que nunca fica absurdo.
                 ShadowFracaoMinimaRestante = Math.Clamp(Numero("shadow", "fracao_minima_restante", p.ShadowFracaoMinimaRestante), 0.1, 1),

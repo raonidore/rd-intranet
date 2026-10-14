@@ -14,7 +14,7 @@ use PDO;
  */
 class SegurancaRetratoService
 {
-    public const TIPOS = ['rede', 'inicializacao'];
+    public const TIPOS = ['rede', 'inicializacao', 'desempenho'];
 
     /** Retrato bem maior que isso = algo errado no agente; recusa em vez de lotar o banco. */
     private const TAMANHO_MAXIMO = 4 * 1024 * 1024;

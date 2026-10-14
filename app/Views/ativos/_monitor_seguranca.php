@@ -149,10 +149,19 @@
         desativar_inicializacao: (d) => 'Desativar "' + d.nome + '" na inicialização do Windows?\nO original fica guardado na máquina para reativar.',
         reativar_inicializacao: (d) => 'Reativar "' + d.nome + '" na inicialização do Windows?',
         quarentena: (d) => 'Pôr em quarentena:\n' + d.caminho + '\n\nO que estiver rodando o arquivo é encerrado e ele vai para a quarentena do agente (não executa mais; dá para restaurar na tela do agente).',
-        ligar_firewall: () => 'Ligar o firewall do Windows nos três perfis?\nEntrada e saída ficam LIBERADAS por padrão -- só as regras de bloqueio passam a valer.'
+        desconfiar_programa: (d) => 'Deixar de confiar em ' + d.caminho + '?\nAs regras de permissão saem do firewall e o programa volta para a análise de risco.',
+        ligar_firewall: (d) => 'Ligar ' + (d.perfil ? 'a camada ' + d.rotulo : 'todas as camadas') + ' do firewall do Windows?\nEntrada e saída ficam LIBERADAS por padrão -- só as regras de bloqueio passam a valer.',
+        desligar_firewall: (d) => 'DESLIGAR a camada ' + d.rotulo + ' do firewall do Windows?\nEnquanto a máquina estiver nesse tipo de rede, nenhum bloqueio vale (inclusive os do RD.Intranet).'
     };
 
     async function executarAcao(acao, d) {
+        if (acao === 'confiar_programa') {
+            const descricao = prompt('Para que serve ' + d.caminho.split('\\').pop() + '? (fica na regra do firewall e na lista de confiáveis)\nEx.: Driver de comunicação com os equipamentos do laboratório');
+            if (!descricao || descricao.trim().length < 3) return;
+            const portas = prompt('Portas TCP que recebem conexão (opcional, separadas por vírgula):', d.portas || '');
+            if (portas === null) return;
+            d = Object.assign({}, d, { descricao: descricao.trim(), portas: portas });
+        }
         const pergunta = confirmacoes[acao] ? confirmacoes[acao](d) : null;
         if (pergunta && !confirm(pergunta)) return;
 
@@ -245,7 +254,11 @@
             const tentativas = t ? '<span class="mon-chip ruim" title="Tentativas de conexão nos últimos minutos"><i class="bi bi-broadcast"></i> ' + fmtNum(t.ips_distintos) + ' IPs · portas ' + esc((t.portas || []).slice(0, 3).map((x) => x.porta).join(', ')) + '</span>' : '';
             const escuta = (p.escutando || []).length ? '<span class="small text-muted" title="Portas abertas esperando conexão">escuta ' + esc(p.escutando.slice(0, 4).join(', ')) + (p.escutando.length > 4 ? '…' : '') + '</span>' : '';
 
-            const acoes = (p.caminho ? botaoAcao('bloquear_programa', 'Bloquear a rede deste programa', 'bi-slash-circle', { valor: p.caminho }, 'text-danger') : '')
+            const confiavel = (rede.confiaveis || []).find((c) => c.caminho.toLowerCase() === String(p.caminho || '').toLowerCase());
+            const acoes = (p.caminho ? (confiavel
+                    ? botaoAcao('desconfiar_programa', 'Confiável: ' + confiavel.descricao + ' -- clique para deixar de confiar', 'bi-shield-fill-check', { caminho: p.caminho }, 'text-success')
+                    : botaoAcao('confiar_programa', 'Confiar neste programa (libera no firewall e tira da análise de risco)', 'bi-shield-check', { caminho: p.caminho, portas: (p.escutando || []).join(', ') }, 'text-success')) : '')
+                + (p.caminho ? botaoAcao('bloquear_programa', 'Bloquear a rede deste programa', 'bi-slash-circle', { valor: p.caminho }, 'text-danger') : '')
                 + (p.pid > 4 ? botaoAcao('encerrar_processo', 'Encerrar processo', 'bi-x-octagon', { pid: p.pid, caminho: p.caminho || '' }) : '');
 
             const conexoes = (p.estabelecidas || []).map((e) => '<tr><td class="font-monospace small">' + esc(e.ip) + ':' + e.porta + '</td><td class="small text-muted">' + (e.publico ? 'internet' : 'rede local') + (e.qtd > 1 ? ' · ' + e.qtd + ' conexões' : '') + '</td><td class="text-end">' + (e.publico ? botaoAcao('bloquear_ip', 'Bloquear este IP no firewall da máquina', 'bi-slash-circle', { valor: e.ip }, 'text-danger') : '') + '</td></tr>').join('');
@@ -341,11 +354,13 @@
             return;
         }
         const nomes = { dominio: 'Domínio', privado: 'Privado', publico: 'Público' };
-        const perfis = (fw.perfis || []).map((p) => '<div class="mon-cartao mb-0" style="min-width:190px"><div class="d-flex justify-content-between"><b>' + esc(nomes[p.perfil] || p.perfil) + '</b>'
+        const perfis = (fw.perfis || []).map((p) => '<div class="mon-cartao mb-0" style="min-width:210px"><div class="d-flex justify-content-between align-items-center"><b>' + esc(nomes[p.perfil] || p.perfil) + '</b>'
             + (p.ligado ? '<span class="mon-chip bom">ligado</span>' : '<span class="mon-chip ruim">desligado</span>') + '</div>'
             + '<div class="mon-kv mt-1">entrada: ' + esc(p.entrada_padrao) + ' · saída: ' + esc(p.saida_padrao) + '</div>'
-            + (String(fw.perfil_ativo || '').includes(p.perfil) ? '<div class="small text-primary mt-1">em uso agora</div>' : '') + '</div>').join('');
-        const regras = (fw.regras_rd || []).map((r) => '<tr><td>' + esc(r.nome) + '<div class="mon-caminho">' + esc(r.programa || ipsLegiveis(r.ips)) + '</div>' + (r.descricao ? '<div class="small text-muted">' + esc(r.descricao) + '</div>' : '') + '</td>'
+            + (String(fw.perfil_ativo || '').includes(p.perfil) ? '<div class="small text-primary mt-1">em uso agora</div>' : '')
+            + (podeEditar ? '<button type="button" class="btn btn-sm mt-2 ' + (p.ligado ? 'btn-outline-secondary' : 'btn-primary') + '" data-mon-acao="' + (p.ligado ? 'desligar_firewall' : 'ligar_firewall') + '" data-perfil="' + esc(p.perfil) + '" data-rotulo="' + esc(nomes[p.perfil] || p.perfil) + '">' + (p.ligado ? 'Desligar' : 'Ligar') + ' esta camada</button>' : '')
+            + '</div>').join('');
+        const regras = (fw.regras_rd || []).filter((r) => r.acao === 'bloquear').map((r) => '<tr><td>' + esc(r.nome) + '<div class="mon-caminho">' + esc(r.programa || ipsLegiveis(r.ips)) + '</div>' + (r.descricao ? '<div class="small text-muted">' + esc(r.descricao) + '</div>' : '') + '</td>'
             + '<td class="small">' + esc(r.direcao) + '</td><td class="small">' + (r.habilitada ? 'ativa' : 'desativada') + '</td>'
             + '<td class="text-end">' + botaoAcao('desbloquear', 'Remover este bloqueio', 'bi-trash', { regra: r.nome }, 'text-danger') + '</td></tr>').join('');
 
@@ -354,6 +369,8 @@
                 + (podeEditar ? '<button type="button" class="btn btn-sm btn-warning" data-mon-acao="ligar_firewall">Ligar firewall</button>' : '') + '</div>' : '')
             + '<div class="d-flex flex-wrap gap-2 mb-3">' + perfis + '</div>'
             + '<div class="mon-kv mb-2">' + fmtNum(fw.regras_total) + ' regras no total · ' + fmtNum(fw.bloqueios_ativos) + ' de bloqueio ativas</div>'
+            + '<div class="fw-semibold small mb-1">Programas confiáveis (liberados pelo RD.Intranet)</div>'
+            + (((rede.confiaveis || []).length) ? '<table class="table table-sm align-middle mb-3"><tbody>' + rede.confiaveis.map((c) => '<tr><td><span class="mon-nome">' + esc(c.caminho.split('\\').pop()) + '</span><div class="mon-caminho">' + esc(c.caminho) + '</div><div class="small text-muted">' + esc(c.descricao) + (c.portas ? ' · portas ' + esc(c.portas) : '') + (c.por ? ' · por ' + esc(c.por) : '') + '</div></td><td class="text-end">' + botaoAcao('desconfiar_programa', 'Deixar de confiar', 'bi-shield-x', { caminho: c.caminho }, 'text-danger') + '</td></tr>').join('') + '</tbody></table>' : '<div class="mon-vazio p-0 mb-3">Nenhum.</div>')
             + '<div class="fw-semibold small mb-1">Bloqueios feitos pelo RD.Intranet</div>'
             + (regras ? '<table class="table table-sm align-middle mb-3"><tbody>' + regras + '</tbody></table>' : '<div class="mon-vazio p-0 mb-3">Nenhum.</div>')
             + (podeEditar ? '<div class="d-flex flex-wrap gap-2 align-items-center"><input type="text" class="form-control form-control-sm" style="max-width:220px" placeholder="IP ou rede (1.2.3.0/24)" id="monSegIpManual"><button type="button" class="btn btn-sm btn-outline-danger" id="monSegBloquearIp"><i class="bi bi-slash-circle"></i> Bloquear saída para este IP</button></div>' : '');

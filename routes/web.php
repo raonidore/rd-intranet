@@ -1141,6 +1141,7 @@ $router->get('/api/ativos/seguranca/regras', [AtivoAgenteController::class, 'reg
 $router->post('/api/ativos/seguranca/retrato', [AtivoAgenteController::class, 'retratoSeguranca']);
 $router->get('/ativos/seguranca/monitor', [AtivoController::class, 'monitorSeguranca']);
 $router->post('/ativos/seguranca/monitor/acao', [AtivoController::class, 'acaoMonitorSeguranca']);
+$router->post('/ativos/desempenho/config', [AtivoController::class, 'salvarDesempenhoAtivo']);
 $router->post('/ativos/seguranca/gateway/bloquear-ip', [AtivoController::class, 'bloquearIpGateway']);
 $router->post('/api/ativos/suporte/pedido', [AtivoAgenteController::class, 'pedidoSuporte']);
 $router->post('/api/ativos/agente/meshagent', [AtivoAgenteController::class, 'baixarInstaladorMeshAgent']);

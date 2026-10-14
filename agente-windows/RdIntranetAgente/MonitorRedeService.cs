@@ -541,7 +541,8 @@ public sealed class MonitorRedeService : IDisposable
                 .ThenByDescending(p => (int)p["estabelecidas_total"]!)
                 .Take(120).ToList(),
             processos_suspeitos = suspeitos.OrderByDescending(s => (int)s["pontos"]!).Take(40).ToList(),
-            firewall = FirewallService.Estado()
+            firewall = FirewallService.Estado(),
+            confiaveis = ConfiaveisService.ParaEnvio()
         };
 
         return (dados, suspeitos);

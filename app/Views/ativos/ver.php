@@ -522,6 +522,11 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
         </button>
     </li>
     <?php endif; ?>
+    <?php if (($ativo['origem'] ?? '') === 'agente'): ?>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaDesempenho" type="button"><i class="bi bi-activity"></i> Desempenho</button>
+    </li>
+    <?php endif; ?>
     <?php if ($temAcessoChamadosInternos || $temAcessoChamadosExternos): ?>
     <li class="nav-item" role="presentation">
         <?php $totalChamados = count($historicoChamadosInternos) + count($historicoChamadosExternos); ?>
@@ -666,6 +671,10 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
 
     <?php if ($temAcessoChamadosInternos || $temAcessoChamadosExternos): ?>
     <!-- Chamados -->
+    <?php if (($ativo['origem'] ?? '') === 'agente'): ?>
+        <?php require __DIR__ . '/_desempenho.php'; ?>
+    <?php endif; ?>
+
     <div class="tab-pane fade" id="abaChamados">
         <?php if ($temAcessoChamadosExternos): ?>
         <div class="card border-0 shadow-sm mb-3">

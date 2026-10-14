@@ -154,6 +154,12 @@ public static class AnaliseExecutavel
     public static Avaliacao Avaliar(InfoExecutavel exe, string? linhaComando = null, bool comoSystem = false, string? nomeExibido = null)
     {
         var avaliacao = new Avaliacao();
+        // Marcado como confiável pela TI (tela Segurança / portal): fica fora da análise de risco.
+        if (exe.Existe && ConfiaveisService.Buscar(exe.Caminho) is { } confiavel)
+        {
+            avaliacao.Motivos.Add($"confiável (TI): {confiavel.Descricao}");
+            return avaliacao;
+        }
         if (exe.Existe)
         {
             avaliacao.Pontos = exe.Pontos;

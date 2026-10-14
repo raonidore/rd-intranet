@@ -29,6 +29,11 @@ class SegurancaModuloService
     public const REDE_INTERVALO_MIN = 5;
     public const REDE_INTERVALO_MAX = 3600;
 
+    /** Coleta contínua de desempenho (agente 1.0.61+): padrão DESLIGADO, intervalo em segundos. */
+    public const DESEMPENHO_INTERVALO_PADRAO = 5;
+    public const DESEMPENHO_INTERVALO_MIN = 2;
+    public const DESEMPENHO_INTERVALO_MAX = 60;
+
     public const MODOS_ISOLAMENTO = [
         'desligado' => 'Desligado -- nunca isola',
         'alerta' => 'Só alerta -- avisa e espera alguém decidir',
@@ -56,6 +61,8 @@ class SegurancaModuloService
             $padrao[$modulo] = ConfigService::get(self::PREFIXO . $modulo, $modulo === 'rede' ? '1' : '0') === '1';
         }
         $padrao['rede_intervalo'] = self::intervaloValido(ConfigService::get(self::PREFIXO . 'rede_intervalo', (string)self::REDE_INTERVALO_PADRAO));
+        $padrao['desempenho'] = ConfigService::get(self::PREFIXO . 'desempenho', '0') === '1';
+        $padrao['desempenho_intervalo'] = self::intervaloDesempenho(ConfigService::get(self::PREFIXO . 'desempenho_intervalo', (string)self::DESEMPENHO_INTERVALO_PADRAO));
 
         $modo = ConfigService::get(self::PREFIXO . 'isolamento_modo', 'alerta');
         $padrao['isolamento_modo'] = isset(self::MODOS_ISOLAMENTO[$modo]) ? $modo : 'alerta';
@@ -92,6 +99,8 @@ class SegurancaModuloService
         ConfigService::set(self::PREFIXO . 'fim_limiar_aviso', (string)$aviso);
         ConfigService::set(self::PREFIXO . 'fim_janela_segundos', (string)max(5, min(300, (int)($dados['fim_janela_segundos'] ?? 30))));
         ConfigService::set(self::PREFIXO . 'rede_intervalo', (string)self::intervaloValido($dados['rede_intervalo'] ?? self::REDE_INTERVALO_PADRAO));
+        ConfigService::set(self::PREFIXO . 'desempenho', !empty($dados['desempenho']) ? '1' : '0');
+        ConfigService::set(self::PREFIXO . 'desempenho_intervalo', (string)self::intervaloDesempenho($dados['desempenho_intervalo'] ?? self::DESEMPENHO_INTERVALO_PADRAO));
 
         ConfigService::set(self::PREFIXO . 'alerta_emails', trim((string)($dados['alerta_emails'] ?? '')));
         ConfigService::set(self::PREFIXO . 'alerta_whatsapp', trim((string)($dados['alerta_whatsapp'] ?? '')));
@@ -100,6 +109,11 @@ class SegurancaModuloService
         $urlPortal = rtrim(trim((string)($dados['alerta_url_portal'] ?? '')), '/');
         ConfigService::set(self::PREFIXO . 'alerta_url_portal', preg_match('#^https?://[^\s<>"\']+$#i', $urlPortal) ? $urlPortal : '');
         ConfigService::set(self::PREFIXO . 'isolamento_liberados', implode("\n", self::normalizarLiberados((string)($dados['isolamento_liberados'] ?? ''))));
+    }
+
+    public static function intervaloDesempenho(mixed $valor): int
+    {
+        return max(self::DESEMPENHO_INTERVALO_MIN, min(self::DESEMPENHO_INTERVALO_MAX, (int)$valor ?: self::DESEMPENHO_INTERVALO_PADRAO));
     }
 
     public static function intervaloValido(mixed $valor): int
@@ -230,6 +244,8 @@ class SegurancaModuloService
             'fim' => isset($linha['fim_habilitado']) ? (bool)$linha['fim_habilitado'] : null,
             'rede' => isset($linha['rede_habilitado']) ? (bool)$linha['rede_habilitado'] : null,
             'rede_intervalo' => isset($linha['rede_intervalo_segundos']) ? (int)$linha['rede_intervalo_segundos'] : null,
+            'desempenho' => isset($linha['desempenho_habilitado']) ? (bool)$linha['desempenho_habilitado'] : null,
+            'desempenho_intervalo' => isset($linha['desempenho_intervalo_segundos']) ? (int)$linha['desempenho_intervalo_segundos'] : null,
             'isolamento_modo' => $linha['isolamento_modo'] ?? null,
             'isolado_em' => $linha['isolado_em'] ?? null,
         ];
@@ -294,6 +310,12 @@ class SegurancaModuloService
         if ($overrides['rede_intervalo'] !== null) {
             $efetivo['rede_intervalo'] = self::intervaloValido($overrides['rede_intervalo']);
         }
+        if ($overrides['desempenho'] !== null) {
+            $efetivo['desempenho'] = $overrides['desempenho'];
+        }
+        if ($overrides['desempenho_intervalo'] !== null) {
+            $efetivo['desempenho_intervalo'] = self::intervaloDesempenho($overrides['desempenho_intervalo']);
+        }
         $efetivo['isolado_em'] = $overrides['isolado_em'];
 
         return $efetivo;
@@ -332,6 +354,26 @@ class SegurancaModuloService
         $efetivo = $this->efetivo($ativoId);
 
         return ['ativo' => (bool)$efetivo['rede'], 'intervalo' => (int)$efetivo['rede_intervalo']];
+    }
+
+    /** Bloco "monitor_desempenho" do heartbeat. */
+    public function monitorDesempenhoParaAgente(int $ativoId): array
+    {
+        $efetivo = $this->efetivo($ativoId);
+
+        return ['ativo' => (bool)$efetivo['desempenho'], 'intervalo' => (int)$efetivo['desempenho_intervalo']];
+    }
+
+    /** Override da coleta contínua na máquina ('padrao' | '1' | '0'; intervalo vazio = padrão). */
+    public function salvarDesempenho(int $ativoId, string $ligado, string $intervalo): void
+    {
+        $valor = $ligado === '1' ? 1 : ($ligado === '0' ? 0 : null);
+        $segundos = trim($intervalo) === '' ? null : self::intervaloDesempenho($intervalo);
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO ativos_seguranca_modulos (ativo_id, desempenho_habilitado, desempenho_intervalo_segundos) VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE desempenho_habilitado = VALUES(desempenho_habilitado), desempenho_intervalo_segundos = VALUES(desempenho_intervalo_segundos)'
+        );
+        $stmt->execute([$ativoId, $valor, $segundos]);
     }
 
     public function marcarIsolado(int $ativoId, bool $isolado): void

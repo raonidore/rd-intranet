@@ -472,23 +472,45 @@ public static class AcoesSeguranca
     /// desliga. Ligar não acontece se houver regra de bloqueio de terceiros
     /// que passaria a valer (pode derrubar sistema) -- avisa quais.
     /// </summary>
-    public static ResultadoAcao Firewall(bool ligar, bool forcar = false)
+    /// <summary>Camadas (perfis) do firewall do Windows: chave usada aqui/no portal -> nome do PowerShell e rótulo.</summary>
+    public static readonly (string Chave, string Ps, string Rotulo)[] Perfis =
     {
+        ("dominio", "Domain", "Domínio"), ("privado", "Private", "Privado"), ("publico", "Public", "Público")
+    };
+
+    /// <summary>
+    /// Liga/desliga o firewall -- todas as camadas (perfil null) ou uma só
+    /// ("dominio" | "privado" | "publico"). Ligar deixa entrada e saída
+    /// LIBERADAS por padrão naquela camada (o que funciona continua
+    /// funcionando; só regras de bloqueio passam a valer) e não acontece se
+    /// houver regra de bloqueio de terceiros que passaria a valer -- avisa quais.
+    /// </summary>
+    public static ResultadoAcao Firewall(bool ligar, bool forcar = false, string? perfil = null)
+    {
+        var alvo = perfil == null ? Perfis : Perfis.Where(p => p.Chave == perfil).ToArray();
+        if (alvo.Length == 0) return new ResultadoAcao(false, "Camada do firewall inválida.");
+        var lista = string.Join(",", alvo.Select(p => p.Ps));
+        var nomes = string.Join(", ", alvo.Select(p => p.Rotulo));
+
         var script = ligar
             ? $@"
 $ErrorActionPreference = 'Stop'
 $bloqueios = @(Get-NetFirewallRule -Enabled True -Action Block -ErrorAction SilentlyContinue | Where-Object {{ $_.Group -ne '{FirewallService.Grupo}' -and $_.DisplayName -notlike '{FirewallService.PrefixoRegra}*' }})
 if ($bloqueios.Count -gt 0 -and -not ${(forcar ? "true" : "false")}) {{ throw ""Existem $($bloqueios.Count) regra(s) de bloqueio de outros programas que passariam a valer (ex.: $($bloqueios[0].DisplayName)). Confira e confirme para ligar mesmo assim."" }}
-Set-NetFirewallProfile -Profile Domain,Private,Public -DefaultInboundAction Allow -DefaultOutboundAction Allow -Enabled True
+foreach ($p in @(Get-NetFirewallProfile -Profile {lista})) {{
+  if (-not $p.Enabled) {{ Set-NetFirewallProfile -Profile $p.Name -DefaultInboundAction Allow -DefaultOutboundAction Allow -Enabled True }}
+}}
 'ok'"
-            : @"
+            : $@"
 $ErrorActionPreference = 'Stop'
-Set-NetFirewallProfile -Profile Domain,Private,Public -Enabled False
+Set-NetFirewallProfile -Profile {lista} -Enabled False
 'ok'";
         var (saida, erro, codigo) = ExploradorService.ExecutarPowerShell(script, !Program.EstaElevado());
         if (codigo != 0 || !saida.Contains("ok")) return new ResultadoAcao(false, FirewallService.MensagemDeErro(erro, codigo));
-        Registrar(ligar ? "Firewall do Windows ligado (entrada e saída liberadas por padrão)." : "Firewall do Windows desligado.");
-        return new ResultadoAcao(true, ligar ? "Firewall ligado. Tudo continua liberado por padrão; só os bloqueios passam a valer." : "Firewall desligado.");
+        Registrar(ligar ? $"Firewall do Windows ligado em {nomes} (entrada e saída liberadas por padrão)." : $"Firewall do Windows desligado em {nomes}.");
+        return new ResultadoAcao(true, ligar
+            ? $"Firewall ligado em {nomes}. O tráfego continua liberado por padrão; só os bloqueios passam a valer."
+            : $"Firewall desligado em {nomes}.");
     }
 
     private static void Registrar(string texto) => LogAtividade.Registrar(NivelAtividade.Seguranca, "SEGURANÇA", texto);

@@ -70,6 +70,19 @@ use App\Components\Alert;
                         varreduras curtas. Cada máquina pode ter o próprio valor na aba Segurança. Muda em segundos, sem esperar check-in.
                     </div>
 
+                    <label class="form-label small fw-semibold mb-1">Coleta contínua de desempenho (padrão das máquinas)</label>
+                    <div class="d-flex flex-wrap align-items-center gap-2 mb-1 small">
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input" type="checkbox" name="desempenho" value="1" id="padrao_desempenho" <?= !empty($padraoSeguranca['desempenho']) ? 'checked' : '' ?>>
+                            <label class="form-check-label" for="padrao_desempenho">ligada em todas as máquinas</label>
+                        </div>
+                        · a cada
+                        <input type="number" name="desempenho_intervalo" class="form-control form-control-sm" style="width:80px"
+                               min="<?= \App\Services\SegurancaModuloService::DESEMPENHO_INTERVALO_MIN ?>" max="<?= \App\Services\SegurancaModuloService::DESEMPENHO_INTERVALO_MAX ?>"
+                               value="<?= (int)$padraoSeguranca['desempenho_intervalo'] ?>"> segundos
+                    </div>
+                    <div class="form-text small mb-3">Agente 1.0.61+. Guarda histórico de 7 dias, os picos com o processo/software responsável e o tráfego por IP. Normalmente se liga só nos servidores, pela aba Desempenho de cada máquina.</div>
+
                     <label class="form-label small fw-semibold mb-1">Limiar do FIM</label>
                     <div class="d-flex flex-wrap align-items-center gap-2 mb-3 small">
                         <input type="number" name="fim_limiar_critico" aria-label="Arquivos para crítico" class="form-control form-control-sm" style="width:80px" min="5" value="<?= (int)$padraoSeguranca['fim_limiar_critico'] ?>"> arquivos = crítico,

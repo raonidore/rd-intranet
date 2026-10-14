@@ -44,6 +44,15 @@ class SegurancaRegrasService
                 3380, 3381, 3382, 3383, 3384, 3385, 3386, 3387, 3388, 3390, 3391, 3392, 3393, 3394, 3395, 3396, 3397, 3398, 3399],
             'processos_ignorados' => [],
         ],
+        // Agente 1.0.61+: coleta contínua de desempenho -- o que conta como PICO.
+        'desempenho' => [
+            'cpu_pico' => 90,
+            'memoria_pico' => 90,
+            'disco_pico' => 90,
+            'rede_pico_percentual' => 80,
+            'duracao_minima_segundos' => 60,
+            'retrato_minutos' => 15,
+        ],
     ];
 
     /** [mínimo, máximo] aceitos pra cada número. */
@@ -58,6 +67,12 @@ class SegurancaRegrasService
         'rede.janela_minutos' => [1, 60],
         'rede.retrato_minutos' => [1, 60],
         'rede.inicializacao_horas' => [1, 48],
+        'desempenho.cpu_pico' => [50, 100],
+        'desempenho.memoria_pico' => [50, 100],
+        'desempenho.disco_pico' => [50, 100],
+        'desempenho.rede_pico_percentual' => [10, 100],
+        'desempenho.duracao_minima_segundos' => [10, 3600],
+        'desempenho.retrato_minutos' => [1, 120],
     ];
 
     private string $arquivoCache;

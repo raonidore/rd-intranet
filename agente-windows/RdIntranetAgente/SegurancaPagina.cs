@@ -175,6 +175,7 @@ public sealed class SegurancaPagina : Panel
         _barra.Controls.Add(_filtro);
         _lista.Items.Clear();
         _lista.Columns.Clear();
+        _lista.ListViewItemSorter = null; // colunas mudam de uma aba pra outra
         _detalhe.Text = "";
 
         switch (_aba)
@@ -194,6 +195,7 @@ public sealed class SegurancaPagina : Panel
                 Botao("Encerrar", () => AcaoProcesso("encerrar"), BotaoTema.Variante.Perigo);
                 Botao("Quarentena", () => AcaoProcesso("quarentena"), BotaoTema.Variante.Perigo);
                 Botao("Bloquear rede", () => AcaoProcesso("bloquear"));
+                Botao("Confiar...", () => Confiar(Selecionado<LinhaProcesso>()?.Processo.Caminho));
                 Botao("Abrir local", () => AbrirLocal(Selecionado<LinhaProcesso>()?.Processo.Caminho));
                 Botao("VirusTotal", () => VirusTotal(Selecionado<LinhaProcesso>()?.Processo.Caminho));
                 CarregarProcessos();
@@ -206,6 +208,7 @@ public sealed class SegurancaPagina : Panel
                 Botao("Desativar", () => AcaoInicializacao(false), BotaoTema.Variante.Perigo);
                 Botao("Reativar", () => AcaoInicializacao(true));
                 Botao("Quarentena do arquivo", () => AcaoInicializacaoQuarentena(), BotaoTema.Variante.Perigo);
+                Botao("Confiar...", () => Confiar(Selecionado<ItemInicializacao>()?.Exe.Caminho));
                 Botao("Abrir local", () => AbrirLocal(Selecionado<ItemInicializacao>()?.Exe.Caminho));
                 CarregarInicializacao(false);
                 break;
@@ -217,6 +220,7 @@ public sealed class SegurancaPagina : Panel
                 Botao("Bloquear IP", () => AcaoConexao("bloquear_ip"), BotaoTema.Variante.Perigo);
                 Botao("Bloquear programa", () => AcaoConexao("bloquear_programa"), BotaoTema.Variante.Perigo);
                 Botao("Encerrar", () => AcaoConexao("encerrar"), BotaoTema.Variante.Perigo);
+                Botao("Confiar...", () => Confiar(Selecionado<LinhaConexao>()?.Processo?.Caminho));
                 CarregarConexoes();
                 break;
 
@@ -226,7 +230,8 @@ public sealed class SegurancaPagina : Panel
                 Botao(_mostrarTudo ? "Só bloqueios" : "Todas as regras", () => { _mostrarTudo = !_mostrarTudo; MontarAba(); });
                 Botao("Bloquear IP...", () => BloquearIpManual(), BotaoTema.Variante.Perigo);
                 Botao("Bloquear programa...", () => BloquearProgramaManual(), BotaoTema.Variante.Perigo);
-                Botao("Remover bloqueio", () => RemoverRegra());
+                Botao("Permitir programa...", () => PermitirProgramaManual());
+                Botao("Remover regra do RD", () => RemoverRegra());
                 CarregarFirewall();
                 break;
 
@@ -248,23 +253,36 @@ public sealed class SegurancaPagina : Panel
     /// destaque. Antes eram dois botões ("Ligar firewall" e um "Desligar"
     /// vermelho) e o vermelho era lido como status "desligado".
     /// </summary>
-    private void BotaoLigaDesliga(bool algumDesligado)
+    private void BotoesCamadas(Dictionary<string, object?> estado)
     {
         foreach (var antigo in _barra.Controls.OfType<BotaoTema>().Where(b => (b.Tag as string) == "fw-liga").ToList())
         {
             _barra.Controls.Remove(antigo);
             antigo.Dispose();
         }
-        var texto = algumDesligado ? "Ligar firewall" : "Desligar firewall";
-        var botao = new BotaoTema(texto, algumDesligado ? BotaoTema.Variante.Primario : BotaoTema.Variante.Secundario)
+        if (estado.GetValueOrDefault("perfis") is not IEnumerable<object> perfis) return;
+
+        var posicao = 3; // depois de Filtro, Atualizar e Todas as regras
+        foreach (var perfil in perfis)
         {
-            Tag = "fw-liga",
-            Width = TextRenderer.MeasureText(texto, Tema.FonteSemibold(9.5F)).Width + 28,
-            Margin = new Padding(0, 0, 6, 0)
-        };
-        botao.Click += (s, e) => { if (!_ocupado) AcaoFirewallPerfil(algumDesligado); };
-        _barra.Controls.Add(botao);
-        _barra.Controls.SetChildIndex(botao, Math.Min(3, _barra.Controls.Count - 1)); // depois de Filtro, Atualizar e Todas as regras
+            var json = JsonSerializer.SerializeToElement(perfil);
+            var chave = json.GetProperty("perfil").GetString() ?? "";
+            var ligado = json.GetProperty("ligado").GetBoolean();
+            var rotulo = AcoesSeguranca.Perfis.FirstOrDefault(p => p.Chave == chave).Rotulo ?? chave;
+            var texto = $"{(ligado ? "●" : "○")}  {rotulo}: {(ligado ? "ligado" : "DESLIGADO")}";
+            var botao = new BotaoTema(texto, ligado ? BotaoTema.Variante.Secundario : BotaoTema.Variante.Primario)
+            {
+                Tag = "fw-liga",
+                Width = TextRenderer.MeasureText(texto, Tema.FonteSemibold(9.5F)).Width + 30,
+                Margin = new Padding(0, 0, 6, 0),
+                ForeColor = ligado ? Tema.Sucesso : Color.White
+            };
+            var dica = new ToolTip();
+            dica.SetToolTip(botao, ligado ? $"Clique para DESLIGAR a camada {rotulo}" : $"Clique para LIGAR a camada {rotulo}");
+            botao.Click += (s, e) => { if (!_ocupado) AcaoFirewallPerfil(!ligado, chave, rotulo); };
+            _barra.Controls.Add(botao);
+            _barra.Controls.SetChildIndex(botao, Math.Min(posicao++, _barra.Controls.Count - 1));
+        }
     }
 
     private void Colunas(params (string titulo, int largura)[] colunas)
@@ -378,7 +396,7 @@ public sealed class SegurancaPagina : Panel
                 var visiveis = processos.Where(l => (_mostrarTudo || l.Avaliacao.Pontos >= 15) && Passa(l.Processo.Nome, l.Processo.Caminho)).ToList();
                 foreach (var l in visiveis)
                 {
-                    itens.Add(Linha(l, Cor(l.Avaliacao.Nivel), RotuloNivel(l.Avaliacao.Nivel), l.Avaliacao.Pontos.ToString(), l.Processo.Nome, l.Processo.Pid.ToString(),
+                    itens.Add(Linha(l, RotuloNivel(l.Avaliacao) == "Confiável" ? Tema.Sucesso : Cor(l.Avaliacao.Nivel), RotuloNivel(l.Avaliacao), l.Avaliacao.Pontos.ToString(), l.Processo.Nome, l.Processo.Pid.ToString(),
                         RotuloAssinatura(l.Exe), l.Processo.Caminho ?? ""));
                 }
                 _status.Text = $"{processos.Count(l => l.Avaliacao.Pontos >= 35)} suspeito(s) entre {processos.Count} processos. "
@@ -390,7 +408,7 @@ public sealed class SegurancaPagina : Panel
                 {
                     var situacao = string.Join(" · ", new[] { i.Estado, i.Inicio }.Where(x => !string.IsNullOrEmpty(x)));
                     itens.Add(Linha(i, i.Estado == "Desativado pelo RD.Intranet" ? Tema.TextoApagado : Cor(i.Avaliacao.Nivel),
-                        i.Exe.Microsoft && i.Avaliacao.Pontos == 0 ? "Microsoft" : RotuloNivel(i.Avaliacao.Nivel), RotuloTipoInicio(i.Tipo), i.Nome, situacao, i.Exe.Caminho));
+                        i.Exe.Microsoft && i.Avaliacao.Pontos == 0 ? "Microsoft" : RotuloNivel(i.Avaliacao), RotuloTipoInicio(i.Tipo), i.Nome, situacao, i.Exe.Caminho));
                 }
                 _status.Text = $"{inicio.Count(i => i.Avaliacao.Pontos >= 35)} suspeito(s) entre {inicio.Count} itens · lido às {_inicializacaoEm:HH:mm}."
                     + " Desativar guarda backup: dá para reativar depois.";
@@ -399,7 +417,7 @@ public sealed class SegurancaPagina : Panel
             case "conexoes" when _dados is List<LinhaConexao> conexoes:
                 foreach (var c in conexoes.Where(c => Passa(c.Processo?.Nome, c.Ip, c.Porta.ToString(), c.Processo?.Caminho)))
                 {
-                    itens.Add(Linha(c, c.Estado == "SYN_SENT" ? Tema.Alerta : Cor(c.Avaliacao.Nivel), RotuloNivel(c.Avaliacao.Nivel), c.Processo?.Nome ?? $"PID {c.Pid}",
+                    itens.Add(Linha(c, c.Estado == "SYN_SENT" ? Tema.Alerta : RotuloNivel(c.Avaliacao) == "Confiável" ? Tema.Sucesso : Cor(c.Avaliacao.Nivel), RotuloNivel(c.Avaliacao), c.Processo?.Nome ?? $"PID {c.Pid}",
                         c.Estado == "SYN_SENT" ? "tentando" : "conectado", $"{c.Ip}:{c.Porta}{(c.Publico ? "" : "  (rede local)")}", c.Qtd.ToString(), c.Processo?.Caminho ?? ""));
                 }
                 _status.Text = $"{conexoes.Count(c => c.Publico && c.Estado == "ESTABLISHED")} conversa(s) com a internet, {conexoes.Count(c => c.Estado == "SYN_SENT")} tentativa(s) em andamento. "
@@ -408,15 +426,15 @@ public sealed class SegurancaPagina : Panel
 
             case "firewall" when _dados is ValueTuple<Dictionary<string, object?>, List<FirewallService.RegraFirewall>> fw:
                 var (estado, regras) = fw;
-                foreach (var r in regras.Where(r => (_mostrarTudo || r.Acao == "bloquear") && Passa(r.Nome, r.Programa, r.Ips)).OrderByDescending(r => r.DoRd).ThenBy(r => r.Nome))
+                foreach (var r in regras.Where(r => (_mostrarTudo || r.Acao == "bloquear" || r.DoRd) && Passa(r.Nome, r.Programa, r.Ips)).OrderByDescending(r => r.DoRd).ThenBy(r => r.Nome))
                 {
-                    itens.Add(Linha(r, r.DoRd ? Tema.Ciano : r.Acao == "bloquear" ? Tema.Alerta : Tema.Texto, r.Acao, r.Direcao, r.Habilitada ? "sim" : "não",
+                    itens.Add(Linha(r, r.DoRd ? (r.Acao == "permitir" ? Tema.Sucesso : Tema.Ciano) : r.Acao == "bloquear" ? Tema.Alerta : Tema.Texto, r.Acao, r.Direcao, r.Habilitada ? "sim" : "não",
                         r.Nome, r.Programa ?? r.Ips ?? (r.Portas != null ? "portas " + r.Portas : "qualquer")));
                 }
                 var algumDesligado = TextoPerfis(estado).Contains("DESLIGADO");
                 _status.Text = (algumDesligado ? "⚠ " : "✓ ") + TextoPerfis(estado) + $"  ·  {regras.Count} regras ({regras.Count(r => r.DoRd)} do RD.Intranet)";
                 _status.ForeColor = algumDesligado ? Tema.Alerta : Tema.Sucesso;
-                BotaoLigaDesliga(algumDesligado);
+                BotoesCamadas(estado);
                 break;
 
             case "quarentena":
@@ -662,18 +680,19 @@ public sealed class SegurancaPagina : Panel
         Abrir($"https://www.abuseipdb.com/check/{WebUtility.UrlEncode(c.Ip)}");
     }
 
-    private void AcaoFirewallPerfil(bool ligar)
+    private void AcaoFirewallPerfil(bool ligar, string perfil, string rotulo)
     {
+        var usoAgora = rotulo.Equals("Domínio") ? "rede de domínio (empresa com Active Directory)" : rotulo.Equals("Privado") ? "rede privada (a rede da empresa sem domínio, em geral)" : "rede pública (Wi-Fi de hotel, aeroporto...)";
         if (!Confirmar(ligar
-                ? "Ligar o firewall do Windows nos três perfis?\n\nEntrada e saída ficam LIBERADAS por padrão -- o que funciona hoje continua funcionando; só as regras de bloqueio passam a valer."
-                : "DESLIGAR o firewall do Windows?\n\nTodos os bloqueios (inclusive os do RD.Intranet) deixam de valer.")) return;
-        Executar(ligar ? "Ligando o firewall..." : "Desligando o firewall...", () =>
+                ? $"Ligar a camada {rotulo} do firewall do Windows?\n\nVale quando a máquina está em {usoAgora}. Entrada e saída ficam LIBERADAS por padrão -- o que funciona hoje continua funcionando; só as regras de bloqueio passam a valer."
+                : $"DESLIGAR a camada {rotulo} do firewall do Windows?\n\nEnquanto a máquina estiver em {usoAgora}, nenhum bloqueio vale (inclusive os do RD.Intranet).")) return;
+        Executar(ligar ? $"Ligando a camada {rotulo}..." : $"Desligando a camada {rotulo}...", () =>
         {
-            var r = AcoesSeguranca.Firewall(ligar);
+            var r = AcoesSeguranca.Firewall(ligar, perfil: perfil);
             if (!r.Sucesso && ligar && r.Mensagem.Contains("passariam a valer"))
             {
                 var confirmou = (bool)Invoke(() => Confirmar(r.Mensagem + "\n\nLigar mesmo assim?"));
-                if (confirmou) r = AcoesSeguranca.Firewall(true, forcar: true);
+                if (confirmou) r = AcoesSeguranca.Firewall(true, forcar: true, perfil: perfil);
             }
             return r;
         }, CarregarFirewall);
@@ -700,8 +719,75 @@ public sealed class SegurancaPagina : Panel
         var r = Selecionado<FirewallService.RegraFirewall>();
         if (r == null) return;
         if (!r.DoRd) { MessageBox.Show(FindForm(), "Só regras criadas pelo RD.Intranet podem ser removidas por aqui.", "RD Intranet", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+        if (r.Nome.StartsWith(ConfiaveisService.PrefixoRegra) && r.Programa != null)
+        {
+            if (!Confirmar($"Deixar de confiar em {Path.GetFileName(r.Programa)}?\n\nAs regras de permissão são removidas e o programa volta para a análise de risco.")) return;
+            Executar("Removendo...", () => ConfiaveisService.Desconfiar(r.Programa), CarregarFirewall);
+            return;
+        }
         if (!Confirmar($"Remover o bloqueio \"{r.Nome}\"?")) return;
         Executar("Removendo...", () => DeObjeto(FirewallService.Desbloquear(r.Nome, null, null)), CarregarFirewall);
+    }
+
+    /// <summary>"Confiar...": pede a descrição e as portas (já preenchidas com as que o programa usa agora).</summary>
+    private void Confiar(string? caminho)
+    {
+        if (string.IsNullOrEmpty(caminho)) return;
+        var atual = ConfiaveisService.Buscar(caminho);
+        if (atual != null)
+        {
+            if (Confirmar($"{Path.GetFileName(caminho)} já é confiável ({atual.Descricao}).\n\nDeixar de confiar? As regras de permissão são removidas."))
+                Executar("Removendo...", () => ConfiaveisService.Desconfiar(caminho), RecarregarAba);
+            return;
+        }
+        var (descricao, portas) = PerguntarConfianca(caminho);
+        if (descricao == null) return;
+        Executar("Criando as permissões no firewall...", () => ConfiaveisService.Confiar(caminho, descricao, portas ?? "", Environment.UserName), RecarregarAba);
+    }
+
+    private void PermitirProgramaManual()
+    {
+        using var dialogo = new OpenFileDialog { Title = "Programa confiável (vai ser liberado no firewall)", Filter = "Programas|*.exe|Todos|*.*" };
+        if (dialogo.ShowDialog(FindForm()) == DialogResult.OK) Confiar(dialogo.FileName);
+    }
+
+    private void RecarregarAba()
+    {
+        switch (_aba)
+        {
+            case "processos": CarregarProcessos(); break;
+            case "inicializacao": CarregarInicializacao(true); break;
+            case "conexoes": CarregarConexoes(); break;
+            case "firewall": CarregarFirewall(); break;
+        }
+    }
+
+    private (string? descricao, string? portas) PerguntarConfianca(string caminho)
+    {
+        using var janela = new Form
+        {
+            Text = "Confiar no programa", FormBorderStyle = FormBorderStyle.FixedDialog, StartPosition = FormStartPosition.CenterParent,
+            Size = new Size(560, 300), MaximizeBox = false, MinimizeBox = false, BackColor = Tema.Fundo, ForeColor = Tema.Texto, Font = Tema.Fonte(9F)
+        };
+        Tema.BarraTituloEscura(janela);
+        var exe = AnaliseExecutavel.Analisar(caminho);
+        var cabecalho = new Label
+        {
+            Text = $"{Path.GetFileName(caminho)}\n{caminho}\nAssinatura: {(exe.Assinado ? exe.Assinante : "sem assinatura")}",
+            Location = new Point(14, 10), Size = new Size(520, 52), ForeColor = Tema.TextoSecundario
+        };
+        var rotuloDesc = new Label { Text = "Para que serve (fica na regra do firewall e na lista de confiáveis):", Location = new Point(14, 68), Size = new Size(520, 18) };
+        var descricao = new TextBox { Location = new Point(14, 88), Width = 516, BackColor = Tema.Campo, ForeColor = Tema.Texto, BorderStyle = BorderStyle.FixedSingle,
+            PlaceholderText = "Ex.: Driver de comunicação com os equipamentos do laboratório (ARIIS)" };
+        var rotuloPortas = new Label { Text = "Portas TCP que recebem conexão (opcional, separadas por vírgula):", Location = new Point(14, 120), Size = new Size(520, 18) };
+        var portas = new TextBox { Location = new Point(14, 140), Width = 220, BackColor = Tema.Campo, ForeColor = Tema.Texto, BorderStyle = BorderStyle.FixedSingle, Text = ConfiaveisService.PortasEmUso(caminho) };
+        var aviso = new Label { Text = "O programa fica liberado no firewall (entrada e saída) e deixa de ser marcado na análise de risco.", Location = new Point(14, 172), Size = new Size(520, 32), ForeColor = Tema.TextoApagado };
+        var ok = new BotaoTema("Confiar", BotaoTema.Variante.Primario) { Location = new Point(334, 212), Width = 96, DialogResult = DialogResult.OK };
+        var cancelar = new BotaoTema("Cancelar") { Location = new Point(436, 212), Width = 96, DialogResult = DialogResult.Cancel };
+        janela.Controls.AddRange(new Control[] { cabecalho, rotuloDesc, descricao, rotuloPortas, portas, aviso, ok, cancelar });
+        janela.AcceptButton = ok;
+        janela.CancelButton = cancelar;
+        return janela.ShowDialog(FindForm()) == DialogResult.OK && descricao.Text.Trim().Length >= 3 ? (descricao.Text.Trim(), portas.Text) : (null, null);
     }
 
     private void AcaoQuarentena(bool restaurar)
@@ -762,6 +848,7 @@ public sealed class SegurancaPagina : Panel
     };
 
     private static string RotuloNivel(string nivel) => nivel switch { "critico" => "CRÍTICO", "suspeito" => "Suspeito", "atencao" => "Atenção", _ => "Normal" };
+    private static string RotuloNivel(Avaliacao a) => a.Motivos.FirstOrDefault()?.StartsWith("confiável") == true ? "Confiável" : RotuloNivel(a.Nivel);
 
     private static string RotuloAssinatura(InfoExecutavel exe) => exe.Assinatura switch
     {

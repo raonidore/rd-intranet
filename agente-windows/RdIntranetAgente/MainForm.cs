@@ -47,7 +47,8 @@ public sealed class MainForm : Form
         Func<Config> configAtual,
         Action<Config> aplicarConfig,
         Func<Task> alternarServico,
-        MonitorRedeService monitorRede)
+        MonitorRedeService monitorRede,
+        MonitorDesempenhoService monitorDesempenho)
     {
         _estado = estado;
         _seguranca = seguranca;
@@ -179,7 +180,7 @@ public sealed class MainForm : Form
         Empilhar(_paginaAtividade, _listaAtividade, tituloAtividade, Espaco(8));
 
         _paginaNetwork = new NetworkPagina();
-        _paginaDesempenho = new DesempenhoPagina();
+        _paginaDesempenho = new DesempenhoPagina(monitorDesempenho);
 
         // Configurações dentro do próprio painel (antes era uma janela à parte):
         // a mesma tela de sempre, embutida -- validação e busca de unidades iguais.
@@ -374,8 +375,20 @@ public sealed class MainForm : Form
             e.Graphics.DrawLine(borda, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
             using var fonte = Tema.FonteSemibold(8.25F);
             var area = new Rectangle(e.Bounds.X + 6, e.Bounds.Y, e.Bounds.Width - 8, e.Bounds.Height);
-            TextRenderer.DrawText(e.Graphics, e.Header?.Text ?? "", fonte, area, Tema.TextoSecundario,
+            var ordenada = lista.ListViewItemSorter is ComparadorLista c && c.Coluna == e.ColumnIndex;
+            var seta = ordenada ? (((ComparadorLista)lista.ListViewItemSorter!).Crescente ? "  ▲" : "  ▼") : "";
+            TextRenderer.DrawText(e.Graphics, (e.Header?.Text ?? "") + seta, fonte, area, ordenada ? Tema.Acento : Tema.TextoSecundario,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        };
+
+        // Clique no cabeçalho ordena (de novo inverte). Fica valendo nas
+        // atualizações automáticas: a lista se reordena sozinha ao receber itens.
+        lista.ColumnClick += (s, e) =>
+        {
+            var atual = lista.ListViewItemSorter as ComparadorLista;
+            lista.ListViewItemSorter = new ComparadorLista(e.Column, atual?.Coluna == e.Column ? !atual.Crescente : true);
+            lista.Sort();
+            lista.Invalidate();
         };
         // Linhas desenhadas aqui (fundo, seleção, cor do texto) -- o desenho
         // padrão com tema escuro traz uma grade vertical entre as colunas.

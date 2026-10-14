@@ -19,6 +19,9 @@ public class ResultadoHeartbeat
 
     /// <summary>Monitor de conexões/processos (servidor com a versão nova); null = servidor antigo, monitor fica como está.</summary>
     public ConfigMonitorRede? MonitorRede { get; set; }
+
+    /// <summary>Coleta contínua de desempenho (1.0.61+); null = servidor antigo.</summary>
+    public ConfigMonitorRede? MonitorDesempenho { get; set; }
 }
 
 public sealed class ConfigMonitorRede
@@ -127,7 +130,8 @@ public class HeartbeatClient
                 Solicitacoes = corpo?.Solicitacoes ?? new List<SolicitacaoItem>(),
                 ChaveApiAtual = corpo?.ChaveApiAtual,
                 Ativo = corpo?.Ativo,
-                MonitorRede = corpo?.MonitorRede
+                MonitorRede = corpo?.MonitorRede,
+                MonitorDesempenho = corpo?.MonitorDesempenho
             };
         }
         catch
@@ -156,5 +160,8 @@ public class HeartbeatClient
 
         [JsonPropertyName("monitor_rede")]
         public ConfigMonitorRede? MonitorRede { get; set; }
+
+        [JsonPropertyName("monitor_desempenho")]
+        public ConfigMonitorRede? MonitorDesempenho { get; set; }
     }
 }

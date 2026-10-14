@@ -669,8 +669,30 @@ class AtivoController extends Controller
         echo json_encode([
             'success' => true,
             'monitor' => $modulos->monitorRedeParaAgente($id),
+            'desempenho' => $modulos->monitorDesempenhoParaAgente($id),
+            'desempenho_override' => array_intersect_key($modulos->overrides($id), array_flip(['desempenho', 'desempenho_intervalo'])),
+            'desempenho_padrao' => array_intersect_key($modulos->padrao(), array_flip(['desempenho', 'desempenho_intervalo'])),
             'retratos' => (new SegurancaRetratoService())->doAtivo($id),
         ], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+    }
+
+    /** Liga/desliga a coleta contínua de desempenho desta máquina (vale em segundos, pelo heartbeat). */
+    public function salvarDesempenhoAtivo(): void
+    {
+        AuthMiddleware::checkModulo('ativos_novo');
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $ativo = $this->service->buscar($id);
+        if (!$ativo) {
+            echo json_encode(['success' => false, 'message' => 'Máquina não encontrada.']);
+            return;
+        }
+        $modulos = new SegurancaModuloService();
+        $modulos->salvarDesempenho($id, (string)($_POST['ligado'] ?? 'padrao'), (string)($_POST['intervalo'] ?? ''));
+        $efetivo = $modulos->monitorDesempenhoParaAgente($id);
+        AuditService::registrar('Ativos', 'Desempenho', "{$ativo['codigo_patrimonio']} ({$ativo['nome']}): coleta contínua " . ($efetivo['ativo'] ? "ligada (a cada {$efetivo['intervalo']} s)" : 'desligada') . '.');
+        echo json_encode(['success' => true, 'message' => $efetivo['ativo'] ? "Coleta contínua ligada (a cada {$efetivo['intervalo']} s). A máquina começa em segundos." : 'Coleta contínua desligada.', 'desempenho' => $efetivo], JSON_UNESCAPED_UNICODE);
     }
 
     public function acaoMonitorSeguranca(): void
