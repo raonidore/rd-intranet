@@ -18,7 +18,16 @@ class SegurancaModuloService
         'canary' => 'Arquivos-isca (canary files)',
         'shadow_copy' => 'Exclusão de shadow copy / backup',
         'fim' => 'Mudança em massa de arquivos (FIM)',
+        // Agente 1.0.56+: varredura de rede, programa suspeito conversando com a
+        // internet, processo crítico e inicialização -- só detecta e alerta,
+        // nunca isola sozinho (ver SegurancaEventoService::TIPOS_SEM_ISOLAMENTO).
+        'rede' => 'Conexões, processos e inicialização',
     ];
+
+    /** Intervalo do monitor de conexões (segundos): padrão e faixa aceita. */
+    public const REDE_INTERVALO_PADRAO = 30;
+    public const REDE_INTERVALO_MIN = 5;
+    public const REDE_INTERVALO_MAX = 3600;
 
     public const MODOS_ISOLAMENTO = [
         'desligado' => 'Desligado -- nunca isola',
@@ -36,13 +45,17 @@ class SegurancaModuloService
         $this->pdo = Database::connection();
     }
 
-    /** Tudo desligado por padrão: nada acontece nas máquinas até alguém escolher ligar. */
+    /**
+     * Detectores anti-ransomware nascem desligados (podem isolar a máquina);
+     * o monitor de conexões nasce LIGADO -- só observa e alerta.
+     */
     public function padrao(): array
     {
         $padrao = [];
         foreach (array_keys(self::MODULOS) as $modulo) {
-            $padrao[$modulo] = ConfigService::get(self::PREFIXO . $modulo, '0') === '1';
+            $padrao[$modulo] = ConfigService::get(self::PREFIXO . $modulo, $modulo === 'rede' ? '1' : '0') === '1';
         }
+        $padrao['rede_intervalo'] = self::intervaloValido(ConfigService::get(self::PREFIXO . 'rede_intervalo', (string)self::REDE_INTERVALO_PADRAO));
 
         $modo = ConfigService::get(self::PREFIXO . 'isolamento_modo', 'alerta');
         $padrao['isolamento_modo'] = isset(self::MODOS_ISOLAMENTO[$modo]) ? $modo : 'alerta';
@@ -78,6 +91,7 @@ class SegurancaModuloService
         ConfigService::set(self::PREFIXO . 'fim_limiar_critico', (string)$critico);
         ConfigService::set(self::PREFIXO . 'fim_limiar_aviso', (string)$aviso);
         ConfigService::set(self::PREFIXO . 'fim_janela_segundos', (string)max(5, min(300, (int)($dados['fim_janela_segundos'] ?? 30))));
+        ConfigService::set(self::PREFIXO . 'rede_intervalo', (string)self::intervaloValido($dados['rede_intervalo'] ?? self::REDE_INTERVALO_PADRAO));
 
         ConfigService::set(self::PREFIXO . 'alerta_emails', trim((string)($dados['alerta_emails'] ?? '')));
         ConfigService::set(self::PREFIXO . 'alerta_whatsapp', trim((string)($dados['alerta_whatsapp'] ?? '')));
@@ -86,6 +100,11 @@ class SegurancaModuloService
         $urlPortal = rtrim(trim((string)($dados['alerta_url_portal'] ?? '')), '/');
         ConfigService::set(self::PREFIXO . 'alerta_url_portal', preg_match('#^https?://[^\s<>"\']+$#i', $urlPortal) ? $urlPortal : '');
         ConfigService::set(self::PREFIXO . 'isolamento_liberados', implode("\n", self::normalizarLiberados((string)($dados['isolamento_liberados'] ?? ''))));
+    }
+
+    public static function intervaloValido(mixed $valor): int
+    {
+        return max(self::REDE_INTERVALO_MIN, min(self::REDE_INTERVALO_MAX, (int)$valor ?: self::REDE_INTERVALO_PADRAO));
     }
 
     /**
@@ -209,6 +228,8 @@ class SegurancaModuloService
             'canary' => isset($linha['canary_habilitado']) ? (bool)$linha['canary_habilitado'] : null,
             'shadow_copy' => isset($linha['shadow_copy_habilitado']) ? (bool)$linha['shadow_copy_habilitado'] : null,
             'fim' => isset($linha['fim_habilitado']) ? (bool)$linha['fim_habilitado'] : null,
+            'rede' => isset($linha['rede_habilitado']) ? (bool)$linha['rede_habilitado'] : null,
+            'rede_intervalo' => isset($linha['rede_intervalo_segundos']) ? (int)$linha['rede_intervalo_segundos'] : null,
             'isolamento_modo' => $linha['isolamento_modo'] ?? null,
             'isolado_em' => $linha['isolado_em'] ?? null,
         ];
@@ -231,12 +252,17 @@ class SegurancaModuloService
         $modo = (string)($dados['isolamento_modo'] ?? 'padrao');
         $modo = isset(self::MODOS_ISOLAMENTO[$modo]) ? $modo : null;
 
+        $intervalo = trim((string)($dados['rede_intervalo'] ?? ''));
+        $intervalo = $intervalo === '' ? null : self::intervaloValido($intervalo);
+
         $stmt = $this->pdo->prepare(
-            'INSERT INTO ativos_seguranca_modulos (ativo_id, canary_habilitado, shadow_copy_habilitado, fim_habilitado, isolamento_modo)
-             VALUES (?, ?, ?, ?, ?)
+            'INSERT INTO ativos_seguranca_modulos (ativo_id, canary_habilitado, shadow_copy_habilitado, fim_habilitado, rede_habilitado, rede_intervalo_segundos, isolamento_modo)
+             VALUES (?, ?, ?, ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE canary_habilitado = VALUES(canary_habilitado),
                  shadow_copy_habilitado = VALUES(shadow_copy_habilitado),
                  fim_habilitado = VALUES(fim_habilitado),
+                 rede_habilitado = VALUES(rede_habilitado),
+                 rede_intervalo_segundos = VALUES(rede_intervalo_segundos),
                  isolamento_modo = VALUES(isolamento_modo)'
         );
         $stmt->execute([
@@ -244,6 +270,8 @@ class SegurancaModuloService
             $valor($dados['canary'] ?? 'padrao'),
             $valor($dados['shadow_copy'] ?? 'padrao'),
             $valor($dados['fim'] ?? 'padrao'),
+            $valor($dados['rede'] ?? 'padrao'),
+            $intervalo,
             $modo,
         ]);
     }
@@ -262,6 +290,9 @@ class SegurancaModuloService
         }
         if ($overrides['isolamento_modo'] !== null) {
             $efetivo['isolamento_modo'] = $overrides['isolamento_modo'];
+        }
+        if ($overrides['rede_intervalo'] !== null) {
+            $efetivo['rede_intervalo'] = self::intervaloValido($overrides['rede_intervalo']);
         }
         $efetivo['isolado_em'] = $overrides['isolado_em'];
 
@@ -290,6 +321,17 @@ class SegurancaModuloService
             // Agente 1.0.51+: regras de comportamento (limiares) -- baixa quando a versão muda.
             'regras_versao' => (new SegurancaRegrasService())->versao(),
         ];
+    }
+
+    /**
+     * Bloco "monitor_rede" do heartbeat (a cada poucos segundos): mudar o
+     * intervalo no portal vale na máquina em segundos, sem esperar check-in.
+     */
+    public function monitorRedeParaAgente(int $ativoId): array
+    {
+        $efetivo = $this->efetivo($ativoId);
+
+        return ['ativo' => (bool)$efetivo['rede'], 'intervalo' => (int)$efetivo['rede_intervalo']];
     }
 
     public function marcarIsolado(int $ativoId, bool $isolado): void

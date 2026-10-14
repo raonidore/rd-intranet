@@ -16,6 +16,19 @@ public class ResultadoHeartbeat
     /// <summary>Só vem preenchida quando o servidor tem uma chave mais nova marcada pra rollout automático -- ver TrayApplicationContext.</summary>
     public string? ChaveApiAtual { get; set; }
     public DadosAtivoHeartbeat? Ativo { get; set; }
+
+    /// <summary>Monitor de conexões/processos (servidor com a versão nova); null = servidor antigo, monitor fica como está.</summary>
+    public ConfigMonitorRede? MonitorRede { get; set; }
+}
+
+public sealed class ConfigMonitorRede
+{
+    [JsonPropertyName("ativo")]
+    public bool Ativo { get; set; }
+
+    /// <summary>Segundos entre verificações -- configurável na Central de Segurança (e por máquina).</summary>
+    [JsonPropertyName("intervalo")]
+    public int Intervalo { get; set; } = 30;
 }
 
 public sealed class DadosAtivoHeartbeat
@@ -113,7 +126,8 @@ public class HeartbeatClient
                 ForcarCheckin = corpo?.ForcarCheckin ?? false,
                 Solicitacoes = corpo?.Solicitacoes ?? new List<SolicitacaoItem>(),
                 ChaveApiAtual = corpo?.ChaveApiAtual,
-                Ativo = corpo?.Ativo
+                Ativo = corpo?.Ativo,
+                MonitorRede = corpo?.MonitorRede
             };
         }
         catch
@@ -139,5 +153,8 @@ public class HeartbeatClient
 
         [JsonPropertyName("ativo")]
         public DadosAtivoHeartbeat? Ativo { get; set; }
+
+        [JsonPropertyName("monitor_rede")]
+        public ConfigMonitorRede? MonitorRede { get; set; }
     }
 }

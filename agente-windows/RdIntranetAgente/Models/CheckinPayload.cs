@@ -467,4 +467,23 @@ public sealed class RegrasSeguranca
     public double ArquivosProporcaoExclusao { get; init; } = 0.8;
     public HashSet<string> ExtensoesComunsExtra { get; init; } = new(StringComparer.OrdinalIgnoreCase);
     public List<string> PastasIgnoradasExtra { get; init; } = new();
+
+    // ---- Monitor de rede / processos / inicialização (agente 1.0.56+) ----
+
+    /// <summary>IPs diferentes tentados (internet) dentro da janela pra contar como varredura.</summary>
+    public int RedeVarreduraIpsMinimo { get; init; } = 40;
+    /// <summary>Mesmo critério, só que dentro da rede local -- vale menos, porque é movimento lateral.</summary>
+    public int RedeVarreduraLanMinimo { get; init; } = 20;
+    public int RedeJanelaMinutos { get; init; } = 5;
+    /// <summary>De quanto em quanto tempo o retrato das conexões vai pro servidor (a detecção roda no intervalo do portal).</summary>
+    public int RedeRetratoMinutos { get; init; } = 5;
+    public int InicializacaoHoras { get; init; } = 6;
+    /// <summary>Portas que atacante procura (RDP e variantes, SMB, SSH, Telnet, bancos, VNC, WinRM).</summary>
+    public HashSet<int> RedePortasSensiveis { get; init; } = new()
+    {
+        21, 22, 23, 135, 139, 445, 1433, 1521, 3306, 3389, 5432, 5900, 5985, 5986,
+        3380, 3381, 3382, 3383, 3384, 3385, 3386, 3387, 3388, 3390, 3391, 3392, 3393, 3394, 3395, 3396, 3397, 3398, 3399
+    };
+    /// <summary>Trecho do caminho ou nome do .exe que nunca gera alerta de varredura (scanner de rede legítimo da TI).</summary>
+    public List<string> RedeProcessosIgnorados { get; init; } = new();
 }

@@ -4055,6 +4055,13 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
                                 </div>
                             <?php endforeach; ?>
                             <div class="col-md-3">
+                                <label class="form-label small mb-1" for="mod_rede_intervalo">Intervalo do monitor de conexões (s)</label>
+                                <input type="number" name="rede_intervalo" id="mod_rede_intervalo" class="form-control form-control-sm"
+                                       min="<?= \App\Services\SegurancaModuloService::REDE_INTERVALO_MIN ?>" max="<?= \App\Services\SegurancaModuloService::REDE_INTERVALO_MAX ?>"
+                                       value="<?= $segurancaOverrides['rede_intervalo'] !== null ? (int)$segurancaOverrides['rede_intervalo'] : '' ?>"
+                                       placeholder="Padrão (<?= (int)$padraoGlobal['rede_intervalo'] ?> s)" <?= $podeEditarAtivo ? '' : 'disabled' ?>>
+                            </div>
+                            <div class="col-md-3">
                                 <label class="form-label small mb-1" for="mod_isolamento_modo">Resposta a evento crítico</label>
                                 <select name="isolamento_modo" id="mod_isolamento_modo" class="form-select form-select-sm" <?= $podeEditarAtivo ? '' : 'disabled' ?>>
                                     <option value="padrao" <?= $segurancaOverrides['isolamento_modo'] === null ? 'selected' : '' ?>>Seguir padrão (<?= htmlspecialchars(strtok(\App\Services\SegurancaModuloService::MODOS_ISOLAMENTO[$padraoGlobal['isolamento_modo']], ' ')) ?>)</option>
@@ -4087,6 +4094,10 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
                     </div>
                 </div>
             </div>
+
+            <?php if (($ativo['origem'] ?? '') === 'agente'): ?>
+                <?php require __DIR__ . '/_monitor_seguranca.php'; ?>
+            <?php endif; ?>
 
             <div class="col-md-6">
                 <div class="card border-0 shadow-sm h-100">

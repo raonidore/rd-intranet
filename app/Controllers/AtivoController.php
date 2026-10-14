@@ -20,6 +20,7 @@ use App\Services\PoliticaService;
 use App\Services\SegurancaEventoService;
 use App\Services\SegurancaIsolamentoService;
 use App\Services\SegurancaModuloService;
+use App\Services\SegurancaRetratoService;
 use App\Services\UnidadeService;
 use App\Services\UnifiService;
 
@@ -473,7 +474,55 @@ class AtivoController extends Controller
             'eventos' => $eventos->listarTodos($filtros),
             'padraoSeguranca' => $modulos->padrao(),
             'podeEditarAtivo' => PermissionService::temAcesso('ativos_novo'),
+            'bloqueiosIp' => $this->bloqueiosIpAgrupados(),
+            'unifiConfigurado' => (new UnifiService())->configurado(),
         ]);
+    }
+
+    /**
+     * IPs que o RD.Intranet bloqueou no firewall de alguma máquina, agrupados
+     * por IP, marcando os que já estão bloqueados no gateway UniFi.
+     */
+    private function bloqueiosIpAgrupados(): array
+    {
+        $grupos = [];
+        foreach ((new SegurancaRetratoService())->bloqueiosDeIp() as $b) {
+            $grupos[$b['ip']]['ip'] = $b['ip'];
+            $grupos[$b['ip']]['maquinas'][$b['ativo_id']] = ['id' => $b['ativo_id'], 'codigo' => $b['codigo'], 'nome' => $b['nome']];
+            $grupos[$b['ip']]['descricao'] ??= $b['descricao'];
+        }
+        if (!$grupos) {
+            return [];
+        }
+
+        $noGateway = [];
+        $unifi = new UnifiService();
+        if ($unifi->configurado()) {
+            try {
+                $noGateway = $unifi->ipsBloqueadosPeloRd();
+            } catch (\Throwable) {
+                // Controller fora: mostra sem a marcação
+            }
+        }
+        foreach ($grupos as &$g) {
+            $g['no_gateway'] = in_array($g['ip'], $noGateway, true);
+            $g['maquinas'] = array_values($g['maquinas']);
+        }
+
+        return array_values($grupos);
+    }
+
+    public function bloquearIpGateway(): void
+    {
+        AuthMiddleware::checkModulo('ativos_novo');
+        header('Content-Type: application/json');
+
+        $ip = trim((string)($_POST['ip'] ?? ''));
+        $resultado = (new UnifiService())->bloquearIpDestino($ip);
+        if (!empty($resultado['success'])) {
+            AuditService::registrar('Segurança', 'Bloqueio no gateway', "IP {$ip} bloqueado no gateway UniFi (rede interna -> internet) pela Central de Segurança.");
+        }
+        echo json_encode($resultado, JSON_UNESCAPED_UNICODE);
     }
 
     /**
@@ -602,6 +651,36 @@ class AtivoController extends Controller
 
         header('Location: ' . url('/ativos/seguranca/configuracao'));
         exit;
+    }
+
+    /** Retratos do monitor de conexões/processos/inicialização da máquina (JSON pra aba Segurança). */
+    public function monitorSeguranca(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        $id = (int)($_GET['id'] ?? 0);
+        if (!$this->service->buscar($id)) {
+            echo json_encode(['success' => false, 'message' => 'Máquina não encontrada.']);
+            return;
+        }
+
+        $modulos = new SegurancaModuloService();
+        echo json_encode([
+            'success' => true,
+            'monitor' => $modulos->monitorRedeParaAgente($id),
+            'retratos' => (new SegurancaRetratoService())->doAtivo($id),
+        ], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+    }
+
+    public function acaoMonitorSeguranca(): void
+    {
+        $acao = (string)($_POST['acao'] ?? '');
+        AuthMiddleware::checkModulo($acao === 'atualizar' ? 'ativos_lista' : 'ativos_novo');
+        header('Content-Type: application/json');
+
+        $usuario = (string)($_SESSION['usuario']['nome'] ?? 'Portal');
+        echo json_encode($this->service->acaoMonitorSeguranca((int)($_POST['id'] ?? 0), $acao, $_POST, $usuario), JSON_UNESCAPED_UNICODE);
     }
 
     public function salvarModulosSeguranca(): void

@@ -64,8 +64,19 @@ public class SegurancaEventoClient
                     : new List<string>();
 
             var p = RegrasSeguranca.Padrao;
+            int Inteiro(string grupo, string nome, int padrao, int min, int max) => (int)Math.Clamp(Numero(grupo, nome, padrao), min, max);
+            var portas = raiz.TryGetProperty("rede", out var rede) && rede.TryGetProperty("portas_sensiveis", out var listaPortas) && listaPortas.ValueKind == JsonValueKind.Array
+                ? listaPortas.EnumerateArray().Where(i => i.ValueKind == JsonValueKind.Number && i.TryGetInt32(out var n) && n is > 0 and < 65536).Select(i => i.GetInt32()).ToHashSet()
+                : null;
             return new RegrasSeguranca
             {
+                RedeVarreduraIpsMinimo = Inteiro("rede", "varredura_ips_minimo", p.RedeVarreduraIpsMinimo, 10, 1000),
+                RedeVarreduraLanMinimo = Inteiro("rede", "varredura_lan_minimo", p.RedeVarreduraLanMinimo, 5, 500),
+                RedeJanelaMinutos = Inteiro("rede", "janela_minutos", p.RedeJanelaMinutos, 1, 60),
+                RedeRetratoMinutos = Inteiro("rede", "retrato_minutos", p.RedeRetratoMinutos, 1, 60),
+                InicializacaoHoras = Inteiro("rede", "inicializacao_horas", p.InicializacaoHoras, 1, 48),
+                RedePortasSensiveis = portas is { Count: > 0 } ? portas : p.RedePortasSensiveis,
+                RedeProcessosIgnorados = Lista("rede", "processos_ignorados"),
                 Versao = versao.GetString() ?? "padrao",
                 // O servidor já valida as faixas; aqui só garante que nunca fica absurdo.
                 ShadowFracaoMinimaRestante = Math.Clamp(Numero("shadow", "fracao_minima_restante", p.ShadowFracaoMinimaRestante), 0.1, 1),
@@ -120,6 +131,37 @@ public class SegurancaEventoClient
         }
     }
 
+    /// <summary>
+    /// Retrato do monitor (tipo "rede" = conexões/processos/firewall,
+    /// "inicializacao" = o que o Windows inicia sozinho). POST
+    /// /api/ativos/seguranca/retrato -- o servidor guarda só o último de cada.
+    /// </summary>
+    public async Task<bool> EnviarRetratoAsync(string machineGuid, string tipo, object dados)
+    {
+        if (!_config.EstaConfigurado || string.IsNullOrEmpty(machineGuid))
+        {
+            return false;
+        }
+
+        var json = JsonSerializer.Serialize(new { machine_guid = machineGuid, tipo, dados });
+        var handler = new HttpClientHandler { ServerCertificateCustomValidationCallback = (msg, cert, chain, erros) => true };
+        using var cliente = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(60) };
+        cliente.DefaultRequestHeaders.Add("X-RD-Agente-Chave", _config.ApiKey);
+
+        var conteudo = new ByteArrayContent(Encoding.UTF8.GetBytes(json));
+        conteudo.Headers.ContentType = new MediaTypeHeaderValue("application/json") { CharSet = "utf-8" };
+
+        try
+        {
+            var resposta = await cliente.PostAsync(_config.ServerUrl.TrimEnd('/') + "/api/ativos/seguranca/retrato", conteudo);
+            return resposta.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     public async Task<bool> EnviarAsync(string machineGuid, EventoSeguranca evento)
     {
         if (!_config.EstaConfigurado || string.IsNullOrEmpty(machineGuid))
@@ -132,6 +174,7 @@ public class SegurancaEventoClient
             machine_guid = machineGuid,
             tipo = evento.Tipo,
             severidade = evento.Severidade,
+            resumo = evento.Resumo,
             acao_automatica = "nenhuma",
             ocorrido_em = evento.OcorridoEm.ToString("o"),
             detalhes = evento.Detalhes

@@ -6062,6 +6062,14 @@ class AtivoService
             }, $solicitacoes),
         ];
 
+        // Monitor de conexões/processos (agente 1.0.56+): liga/desliga e
+        // intervalo vão no heartbeat pra mudança no portal valer em segundos.
+        try {
+            $resposta['monitor_rede'] = (new SegurancaModuloService())->monitorRedeParaAgente($ativoId);
+        } catch (\Throwable) {
+            // servidor sem a migração: o agente segue como está
+        }
+
         // Empurra a chave nova pro agente adotar sozinho -- só se ele ainda
         // não estiver usando ela (evita ficar reenviando à toa).
         $chaveRollout = $this->chaveParaRollout();
@@ -6141,7 +6149,94 @@ class AtivoService
     private const TIPOS_SOLICITACAO_VALIDOS = [
         'listar_arquivos', 'listar_processos', 'baixar_arquivo', 'executar_cmd', 'executar_powershell',
         'network_list', 'network_apply', 'network_revert', 'network_ping', 'network_speedtest', 'network_traceroute', 'network_mtr', 'mesh_install',
+        // Monitor de conexões/processos e firewall (agente 1.0.56+) -- criados por acaoMonitorSeguranca().
+        'seguranca_atualizar', 'firewall_bloquear', 'firewall_desbloquear', 'servico_desativar', 'processo_encerrar',
     ];
+
+    /**
+     * Ações da aba Segurança (monitor de conexões/processos). O agente
+     * valida de novo e monta o comando ele mesmo -- aqui só vai o pedido
+     * estruturado (nunca texto de comando).
+     *
+     * @return array{success: bool, message: string, id?: int}
+     */
+    public function acaoMonitorSeguranca(int $ativoId, string $acao, array $dados, string $usuario): array
+    {
+        $ativo = $this->buscar($ativoId);
+        if (!$ativo) {
+            return ['success' => false, 'message' => 'Máquina não encontrada.'];
+        }
+
+        $tipo = null;
+        $parametro = null;
+        $descricao = '';
+        switch ($acao) {
+            case 'atualizar':
+                $tipo = 'seguranca_atualizar';
+                $descricao = 'retrato e inventário agora';
+                break;
+
+            case 'bloquear_programa':
+            case 'bloquear_ip':
+                $valor = trim((string)($dados['valor'] ?? ''));
+                if ($acao === 'bloquear_ip' && !preg_match('#^[0-9a-fA-F:.]+(/\d{1,3})?$#', $valor)) {
+                    return ['success' => false, 'message' => 'IP inválido.'];
+                }
+                if ($acao === 'bloquear_programa' && !preg_match('#^[A-Za-z]:\\\\#', $valor)) {
+                    return ['success' => false, 'message' => 'Caminho de programa inválido.'];
+                }
+                $tipo = 'firewall_bloquear';
+                $parametro = json_encode([
+                    'tipo' => $acao === 'bloquear_ip' ? 'ip' : 'programa',
+                    'valor' => $valor,
+                    'motivo' => mb_substr(trim((string)($dados['motivo'] ?? '')), 0, 300),
+                    'por' => $usuario,
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                $descricao = ($acao === 'bloquear_ip' ? 'bloqueio do IP ' : 'bloqueio do programa ') . $valor . ' no firewall do Windows';
+                break;
+
+            case 'desbloquear':
+                $regra = trim((string)($dados['regra'] ?? ''));
+                if (!str_starts_with($regra, 'RD.Intranet - Bloqueio')) {
+                    return ['success' => false, 'message' => 'Só regras criadas pelo RD.Intranet podem ser removidas por aqui.'];
+                }
+                $tipo = 'firewall_desbloquear';
+                $parametro = $regra;
+                $descricao = 'remoção da regra "' . $regra . '"';
+                break;
+
+            case 'desativar_servico':
+                $servico = trim((string)($dados['servico'] ?? ''));
+                if (!preg_match('/^[A-Za-z0-9_.\- ]{1,80}$/', $servico)) {
+                    return ['success' => false, 'message' => 'Nome de serviço inválido.'];
+                }
+                $tipo = 'servico_desativar';
+                $parametro = $servico;
+                $descricao = 'desativação do serviço ' . $servico;
+                break;
+
+            case 'encerrar_processo':
+                $pid = (int)($dados['pid'] ?? 0);
+                if ($pid <= 4) {
+                    return ['success' => false, 'message' => 'Processo inválido.'];
+                }
+                $tipo = 'processo_encerrar';
+                $parametro = json_encode(['pid' => $pid, 'caminho' => (string)($dados['caminho'] ?? '')], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                $descricao = 'encerramento do processo ' . $pid . (!empty($dados['caminho']) ? ' (' . $dados['caminho'] . ')' : '');
+                break;
+        }
+
+        if ($tipo === null) {
+            return ['success' => false, 'message' => 'Ação desconhecida.'];
+        }
+
+        $resultado = $this->solicitarListagem($ativoId, $tipo, $parametro, $usuario, $tipo !== 'seguranca_atualizar');
+        if (!empty($resultado['success'])) {
+            AuditService::registrar('Segurança', 'Monitor de conexões', "{$ativo['codigo_patrimonio']} ({$ativo['nome']}): {$usuario} pediu {$descricao}.");
+        }
+
+        return $resultado + ['message' => 'Pedido enviado à máquina.'];
+    }
 
     public function solicitarListagem(int $ativoId, string $tipo, ?string $parametro, ?string $solicitadoPor = null, bool $elevado = false): array
     {

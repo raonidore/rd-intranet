@@ -27,6 +27,21 @@ internal static class Program
             return;
         }
 
+        // Diagnóstico local do monitor de conexões/processos/inicialização:
+        // grava o resultado em JSON e sai, sem falar com servidor nenhum.
+        // Uso: RdIntranetAgente.exe --teste-seguranca-rede C:\Temp\saida.json
+        var indiceTeste = Array.FindIndex(args, a => a.Equals("--teste-seguranca-rede", StringComparison.OrdinalIgnoreCase));
+        if (indiceTeste >= 0)
+        {
+            var saida = args.Length > indiceTeste + 1 ? args[indiceTeste + 1] : Path.Combine(Path.GetTempPath(), "rd-teste-seguranca-rede.json");
+            var extras = args.Skip(indiceTeste + 2).ToList();
+            var conteudo = extras.FirstOrDefault()?.Equals("--simular-varredura", StringComparison.OrdinalIgnoreCase) == true
+                ? System.Text.Json.JsonSerializer.Serialize(DiagnosticoSegurancaRede.SimularVarredura(), new System.Text.Json.JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping })
+                : extras.Count > 0 ? DiagnosticoSegurancaRede.AnalisarArquivos(extras) : DiagnosticoSegurancaRede.Executar();
+            File.WriteAllText(saida, conteudo, System.Text.Encoding.UTF8);
+            return;
+        }
+
         // Lançado pelo AgenteServico (SessaoUsuario.LancarProcessoNaSessao)
         // -- já chega com o token certo (elevado, se o usuário for admin),
         // então NÃO deve tentar se relançar com "runas" de novo. Só muda

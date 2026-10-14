@@ -108,13 +108,21 @@ public static class ExploradorService
 
     private const int TamanhoMaximoSaida = 100 * 1024; // 100KB por saida (stdout/stderr) -- corta o resto, evita um comando "solto" travar tudo
 
+    /// <summary>
+    /// Teto dos comandos remotos (cmd/PowerShell do portal). Era 30 s e
+    /// cortava levantamentos legítimos -- no ARIIS (Maurílio, 14/10/2026)
+    /// até um netstat+Get-NetRoute passou disso. Roda em segundo plano
+    /// (não segura o heartbeat), então pode ser mais folgado.
+    /// </summary>
+    public const int TempoLimiteComandoMs = 120_000;
+
     public static (string Saida, string Erro, int CodigoSaida) ExecutarCmd(string comando, bool elevado, string? usuarioElevacao = null, string? senhaElevacao = null)
     {
         // chcp 65001 forca UTF-8 na sessao do CMD antes do comando de
         // verdade rodar -- sem isso, acentos saem trocados (CMD usa a
         // codepage OEM do Windows por padrao, ex: 850/860, nao UTF-8).
         var argumentos = $"/c chcp 65001>nul & {comando}";
-        return elevado ? ExecutarElevado("cmd.exe", argumentos, usuarioElevacao, senhaElevacao) : ExecutarProcesso("cmd.exe", argumentos);
+        return elevado ? ExecutarElevado("cmd.exe", argumentos, usuarioElevacao, senhaElevacao) : ExecutarProcesso("cmd.exe", argumentos, TempoLimiteComandoMs);
     }
 
     public static (string Saida, string Erro, int CodigoSaida) ExecutarPowerShell(string comando, bool elevado, string? usuarioElevacao = null, string? senhaElevacao = null)
@@ -126,7 +134,7 @@ public static class ExploradorService
         var comandoBase64 = System.Convert.ToBase64String(Encoding.Unicode.GetBytes(comandoComEncoding));
         var argumentos = $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {comandoBase64}";
 
-        return elevado ? ExecutarElevado("powershell.exe", argumentos, usuarioElevacao, senhaElevacao) : ExecutarProcesso("powershell.exe", argumentos);
+        return elevado ? ExecutarElevado("powershell.exe", argumentos, usuarioElevacao, senhaElevacao) : ExecutarProcesso("powershell.exe", argumentos, TempoLimiteComandoMs);
     }
 
     private static string Truncar(string texto)
@@ -198,6 +206,22 @@ public static class ExploradorService
     /// /ru é usado, e o %TEMP% de um usuário normal não é acessível pelo
     /// perfil de outra conta.
     /// </summary>
+    /// <summary>Lê mesmo com outro processo ainda escrevendo (FileShare.ReadWrite); arquivo ausente = "".</summary>
+    private static string LerCompartilhado(string caminho)
+    {
+        try
+        {
+            if (!File.Exists(caminho)) return "";
+            using var fluxo = new FileStream(caminho, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var leitor = new StreamReader(fluxo, Encoding.UTF8);
+            return leitor.ReadToEnd();
+        }
+        catch (IOException ex)
+        {
+            return $"[não foi possível ler {Path.GetFileName(caminho)}: {ex.Message}]";
+        }
+    }
+
     private static (string Saida, string Erro, int CodigoSaida) ExecutarElevado(string arquivo, string argumentos, string? usuarioElevacao = null, string? senhaElevacao = null)
     {
         var nomeTarefa = $"RDIntranetElevado_{System.Guid.NewGuid():N}";
@@ -241,20 +265,29 @@ public static class ExploradorService
 
             // /run e assincrono -- espera o arquivo de codigo de saida
             // aparecer (sinal de que o .bat terminou), com um teto de tempo.
-            var limite = System.DateTime.Now.AddSeconds(30);
+            var limite = System.DateTime.Now.AddMilliseconds(TempoLimiteComandoMs);
             while (!File.Exists(arquivoCodigo) && System.DateTime.Now < limite)
             {
                 Thread.Sleep(500);
             }
 
-            var saida = File.Exists(arquivoSaida) ? Truncar(File.ReadAllText(arquivoSaida, Encoding.UTF8)) : "";
-            var erro = File.Exists(arquivoErro) ? Truncar(File.ReadAllText(arquivoErro, Encoding.UTF8)) : "";
-            var codigoTexto = File.Exists(arquivoCodigo) ? File.ReadAllText(arquivoCodigo).Trim() : "";
+            if (!File.Exists(arquivoCodigo))
+            {
+                // Estourou o tempo: encerra a tarefa ANTES de ler -- com o
+                // processo vivo o .bat ainda segura o arquivo de saída e a
+                // leitura dava "being used by another process" (ARIIS, 14/10/2026).
+                ExecutarProcesso("schtasks.exe", $"/end /tn \"{nomeTarefa}\"", 10000);
+                Thread.Sleep(1000);
+            }
+
+            var saida = Truncar(LerCompartilhado(arquivoSaida));
+            var erro = Truncar(LerCompartilhado(arquivoErro));
+            var codigoTexto = LerCompartilhado(arquivoCodigo).Trim();
 
             if (!int.TryParse(codigoTexto, out var codigo))
             {
                 codigo = -1;
-                erro += "\n[Tarefa elevada não terminou a tempo (30s) ou não foi possível confirmar a conclusão]";
+                erro += $"\n[Tarefa elevada não terminou em {TempoLimiteComandoMs / 1000}s -- encerrada; a saída acima é parcial]";
             }
 
             return (saida, erro, codigo);

@@ -1145,6 +1145,15 @@ public sealed class SegurancaService : IDisposable
     // Registro e envio
     // ------------------------------------------------------------------
 
+    /// <summary>Regras em vigor (limiares vindos do servidor) -- lidas pelo monitor de rede.</summary>
+    public RegrasSeguranca Regras
+    {
+        get { lock (_trava) { return _regras; } }
+    }
+
+    /// <summary>Detecção de outro monitor (rede/inicialização): mesma fila, balão e envio dos eventos anti-ransomware.</summary>
+    public void RegistrarExterno(EventoSeguranca evento) => Registrar(evento);
+
     private void Registrar(EventoSeguranca evento)
     {
         lock (_trava)

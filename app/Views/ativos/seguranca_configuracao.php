@@ -33,6 +33,7 @@ use App\Components\Alert;
                             'canary' => 'Cria 2 arquivos-isca ocultos em Documentos, Área de Trabalho e Documentos Públicos. Alterar, apagar ou renomear um deles = alerta crítico. Custo desprezível.',
             'shadow_copy' => 'Conta as shadow copies (pontos de restauração) a cada minuto. Crítico só quando somem 2 ou mais que o próprio Windows não explica: descontadas as limpezas registradas pelo Windows (Volsnap), as cópias temporárias de backup (menos de 2h) e os pontos expirados (mais de 55 dias). Não identifica o processo nem bloqueia nada.',
                             'fim' => 'Conta alterações de arquivo nas pastas do usuário; dispara quando passa do limiar abaixo. Arquivo novo não conta. Pode gerar aviso em sincronização grande (OneDrive, backup).',
+                            'rede' => 'Agente 1.0.56+. Olha as conexões de cada programa no intervalo abaixo: avisa varredura de rede, programa suspeito conversando com a internet, processo suspeito (oculto, sem assinatura, nome imitando o Windows) e item novo na inicialização. Só alerta, nunca isola sozinho. Bloquear no firewall, encerrar e desativar ficam na aba Segurança de cada máquina.',
                         ];
                     ?>
                     <?php foreach (\App\Services\SegurancaModuloService::MODULOS as $chave => $rotulo): ?>
@@ -55,6 +56,18 @@ use App\Components\Alert;
                     <div class="d-flex align-items-center gap-2 mb-3">
                         <label class="small text-muted mb-0" for="padrao_confirmacao_minutos">Prazo do modo confirmação (min)</label>
                         <input type="number" name="confirmacao_minutos" id="padrao_confirmacao_minutos" class="form-control form-control-sm" style="width:80px" min="1" max="60" value="<?= (int)$padraoSeguranca['confirmacao_minutos'] ?>">
+                    </div>
+
+                    <label class="form-label small fw-semibold mb-1" for="padrao_rede_intervalo">Intervalo do monitor de conexões</label>
+                    <div class="d-flex flex-wrap align-items-center gap-2 mb-1 small">
+                        a cada
+                        <input type="number" name="rede_intervalo" id="padrao_rede_intervalo" class="form-control form-control-sm" style="width:90px"
+                               min="<?= \App\Services\SegurancaModuloService::REDE_INTERVALO_MIN ?>" max="<?= \App\Services\SegurancaModuloService::REDE_INTERVALO_MAX ?>"
+                               value="<?= (int)$padraoSeguranca['rede_intervalo'] ?>"> segundos
+                    </div>
+                    <div class="form-text small mb-3">
+                        Padrão 30 s. Aumente se a máquina for fraca ou o cliente estranhar; diminua (mínimo 5 s) numa situação crítica para pegar
+                        varreduras curtas. Cada máquina pode ter o próprio valor na aba Segurança. Muda em segundos, sem esperar check-in.
                     </div>
 
                     <label class="form-label small fw-semibold mb-1">Limiar do FIM</label>

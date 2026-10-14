@@ -8,6 +8,7 @@ use App\Services\AtivoService;
 use App\Services\AcessoRemotoService;
 use App\Services\NotificationService;
 use App\Services\SegurancaEventoService;
+use App\Services\SegurancaRetratoService;
 
 /**
  * Endpoints usados pelo agente Windows -- NÃO passam por sessão/login,
@@ -107,6 +108,36 @@ class AtivoAgenteController extends Controller
         }
 
         echo json_encode((new SegurancaEventoService())->registrarDoAgente($ativoId, $payload));
+    }
+
+    /**
+     * Retrato do monitor de conexões/processos/inicialização (agente 1.0.56+):
+     * {"machine_guid", "tipo": "rede"|"inicializacao", "dados": {...}}.
+     */
+    public function retratoSeguranca(): void
+    {
+        header('Content-Type: application/json');
+
+        $chaveEnviada = $_SERVER['HTTP_X_RD_AGENTE_CHAVE'] ?? '';
+        if (!$this->service->chaveValida($chaveEnviada)) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'message' => 'Chave de API inválida.']);
+            return;
+        }
+
+        $payload = json_decode(file_get_contents('php://input'), true);
+        $ativoId = is_array($payload) ? $this->service->idPorMachineGuid(trim((string)($payload['machine_guid'] ?? ''))) : null;
+        if ($ativoId === null) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Ativo não encontrado para este machine_guid.']);
+            return;
+        }
+
+        $resultado = (new SegurancaRetratoService())->guardar($ativoId, (string)($payload['tipo'] ?? ''), $payload['dados'] ?? null);
+        if (!$resultado['success']) {
+            http_response_code(422);
+        }
+        echo json_encode($resultado);
     }
 
     /**

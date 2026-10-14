@@ -515,6 +515,56 @@ class UnifiService
         return ['success' => true, 'regras' => $regras];
     }
 
+    public const PREFIXO_BLOQUEIO_RD = 'RD.Intranet - Bloqueio IP ';
+
+    /** IPs já bloqueados por regra do RD.Intranet no gateway (nome "RD.Intranet - Bloqueio IP x"). */
+    public function ipsBloqueadosPeloRd(): array
+    {
+        $resultado = $this->listarPoliticasFirewall();
+        $ips = [];
+        foreach ($resultado['regras'] ?? [] as $regra) {
+            if (str_starts_with((string)($regra['nome'] ?? ''), self::PREFIXO_BLOQUEIO_RD)) {
+                $ips[] = trim(substr($regra['nome'], strlen(self::PREFIXO_BLOQUEIO_RD)));
+            }
+        }
+
+        return $ips;
+    }
+
+    /**
+     * Bloqueia a saída de toda a rede interna para um IP (zona Internal ->
+     * External), com a mesma criação de regra já confirmada ao vivo. Usado
+     * pela sugestão da Central de Segurança: IP bloqueado no firewall de uma
+     * máquina vira bloqueio da rede inteira.
+     */
+    public function bloquearIpDestino(string $ip): array
+    {
+        if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+            return ['success' => false, 'message' => 'IP inválido.'];
+        }
+        if (in_array($ip, $this->ipsBloqueadosPeloRd(), true)) {
+            return ['success' => true, 'message' => "O IP {$ip} já está bloqueado no gateway."];
+        }
+
+        $ref = $this->siteRefAtual();
+        $zonas = $ref !== null ? array_change_key_case(array_flip($this->nomesZonasFirewall($ref)), CASE_LOWER) : [];
+        if (!isset($zonas['internal'], $zonas['external'])) {
+            return ['success' => false, 'message' => 'Não achei as zonas "Internal" e "External" no firewall do UniFi (firewall por zonas desligado?).'];
+        }
+
+        return $this->criarPoliticaFirewall([
+            'nome' => self::PREFIXO_BLOQUEIO_RD . $ip,
+            'acao' => 'BLOCK',
+            'protocolo' => 'all',
+            'zona_origem_id' => $zonas['internal'],
+            'zona_destino_id' => $zonas['external'],
+            'ip_origem' => '',
+            'ip_destino' => $ip,
+            'porta_destino' => '',
+            'habilitada' => true,
+        ]);
+    }
+
     /** @return array{success:bool, message?:string, zonas?:array<int,array{id:string,nome:string}>} */
     public function listarZonasFirewallParaFormulario(): array
     {

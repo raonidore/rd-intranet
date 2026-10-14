@@ -32,6 +32,18 @@ class SegurancaRegrasService
         'assinaturas' => [
             'extensoes_ignoradas' => [],
         ],
+        // Agente 1.0.56+: monitor de conexões/processos/inicialização (o intervalo
+        // de verificação NÃO fica aqui -- é por servidor/máquina, na Central de Segurança).
+        'rede' => [
+            'varredura_ips_minimo' => 40,
+            'varredura_lan_minimo' => 20,
+            'janela_minutos' => 5,
+            'retrato_minutos' => 5,
+            'inicializacao_horas' => 6,
+            'portas_sensiveis' => [21, 22, 23, 135, 139, 445, 1433, 1521, 3306, 3389, 5432, 5900, 5985, 5986,
+                3380, 3381, 3382, 3383, 3384, 3385, 3386, 3387, 3388, 3390, 3391, 3392, 3393, 3394, 3395, 3396, 3397, 3398, 3399],
+            'processos_ignorados' => [],
+        ],
     ];
 
     /** [mínimo, máximo] aceitos pra cada número. */
@@ -41,6 +53,11 @@ class SegurancaRegrasService
         'shadow.expirada_dias' => [7, 365],
         'shadow.sem_explicacao_minimo' => [1, 20],
         'arquivos.proporcao_exclusao' => [0.5, 1.0],
+        'rede.varredura_ips_minimo' => [10, 1000],
+        'rede.varredura_lan_minimo' => [5, 500],
+        'rede.janela_minutos' => [1, 60],
+        'rede.retrato_minutos' => [1, 60],
+        'rede.inicializacao_horas' => [1, 48],
     ];
 
     private string $arquivoCache;
@@ -119,6 +136,13 @@ class SegurancaRegrasService
         $regras['arquivos']['extensoes_comuns_extra'] = $this->lista($bruto['arquivos']['extensoes_comuns_extra'] ?? [], '/^\.?[a-z0-9]{1,15}$/i', true);
         $regras['arquivos']['pastas_ignoradas_extra'] = $this->lista($bruto['arquivos']['pastas_ignoradas_extra'] ?? [], '/^[^<>"|?*]{3,200}$/', false);
         $regras['assinaturas']['extensoes_ignoradas'] = $this->lista($bruto['assinaturas']['extensoes_ignoradas'] ?? [], '/^\.?[a-z0-9_\-$~!]{1,40}$/i', true);
+
+        $portas = array_values(array_unique(array_filter(
+            array_map('intval', is_array($bruto['rede']['portas_sensiveis'] ?? null) ? array_slice($bruto['rede']['portas_sensiveis'], 0, 200) : []),
+            fn (int $p) => $p > 0 && $p < 65536
+        )));
+        $regras['rede']['portas_sensiveis'] = $portas ?: self::PADRAO['rede']['portas_sensiveis'];
+        $regras['rede']['processos_ignorados'] = $this->lista($bruto['rede']['processos_ignorados'] ?? [], '/^[^<>"|?*]{3,200}$/', false);
 
         return $regras;
     }

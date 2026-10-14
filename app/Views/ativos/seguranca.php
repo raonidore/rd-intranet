@@ -100,6 +100,63 @@ $numero = static fn ($v) => (int)($v ?? 0);
     </div>
 </div>
 
+<?php if (!empty($bloqueiosIp)): ?>
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white">
+        <strong><i class="bi bi-signpost-split"></i> Bloqueios sugeridos para o gateway / modem</strong>
+        <small class="text-muted ms-1">IPs bloqueados no firewall de alguma máquina -- bloquear no gateway protege a rede inteira</small>
+    </div>
+    <div class="card-body p-0">
+        <table class="table table-sm align-middle mb-0">
+            <thead><tr><th class="ps-3">IP</th><th>Bloqueado em</th><th>Motivo</th><th class="text-end pe-3">Gateway</th></tr></thead>
+            <tbody>
+                <?php foreach ($bloqueiosIp as $b): ?>
+                    <tr>
+                        <td class="ps-3 font-monospace"><?= htmlspecialchars($b['ip']) ?>
+                            <a class="small ms-1" target="_blank" rel="noopener" href="https://www.abuseipdb.com/check/<?= urlencode($b['ip']) ?>" title="Reputação do IP">reputação</a></td>
+                        <td class="small"><?php foreach ($b['maquinas'] as $m): ?>
+                            <a href="<?= url('/ativos/ver?id=' . (int)$m['id'] . '#abaSeguranca') ?>"><?= htmlspecialchars($m['nome']) ?></a><br>
+                        <?php endforeach; ?></td>
+                        <td class="small text-muted"><?= htmlspecialchars((string)($b['descricao'] ?? '')) ?></td>
+                        <td class="text-end pe-3">
+                            <?php if ($b['no_gateway']): ?>
+                                <span class="badge text-bg-success">bloqueado no UniFi</span>
+                            <?php elseif ($unifiConfigurado && $podeEditarAtivo): ?>
+                                <button type="button" class="btn btn-sm btn-outline-danger js-bloquear-gateway" data-ip="<?= htmlspecialchars($b['ip']) ?>">
+                                    <i class="bi bi-slash-circle"></i> Bloquear no UniFi
+                                </button>
+                            <?php else: ?>
+                                <span class="small text-muted" title="Crie no gateway/modem uma regra bloqueando a saída da rede interna para este IP">bloquear manualmente</span>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+<script>
+document.querySelectorAll('.js-bloquear-gateway').forEach((botao) => botao.addEventListener('click', async () => {
+    if (!confirm('Bloquear no gateway UniFi a saída de TODA a rede interna para ' + botao.dataset.ip + '?')) return;
+    botao.disabled = true;
+    const corpo = new FormData();
+    corpo.set('ip', botao.dataset.ip);
+    try {
+        const r = await (await fetch(<?= json_encode(url('/ativos/seguranca/gateway/bloquear-ip')) ?>, { method: 'POST', body: corpo })).json();
+        if (r.success) {
+            botao.outerHTML = '<span class="badge text-bg-success">bloqueado no UniFi</span>';
+        } else {
+            alert(r.message || 'Não foi possível bloquear.');
+            botao.disabled = false;
+        }
+    } catch (e) {
+        alert('Falha ao falar com o servidor.');
+        botao.disabled = false;
+    }
+}));
+</script>
+<?php endif; ?>
+
 <?php if ($pendentes): ?>
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-header bg-white"><strong><i class="bi bi-exclamation-octagon"></i> Aguardando análise</strong>

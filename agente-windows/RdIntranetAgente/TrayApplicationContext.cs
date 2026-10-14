@@ -25,6 +25,7 @@ public class TrayApplicationContext : ApplicationContext
     private readonly AppState _estado;
     private readonly PrintListener _printListener;
     private readonly SegurancaService _seguranca;
+    private readonly MonitorRedeService _monitorRede;
     private readonly MainForm _janelaPrincipal;
     private readonly SynchronizationContext? _contextoUi;
     private readonly ToolStripMenuItem _itemServico;
@@ -57,6 +58,7 @@ public class TrayApplicationContext : ApplicationContext
         _seguranca = new SegurancaService(() => _config, () => _machineGuid);
         _seguranca.Detectado += AoDetectarEventoSeguranca;
         _seguranca.Aplicar(_estado.UltimoModuloSeguranca);
+        _monitorRede = new MonitorRedeService(() => _config, () => _machineGuid, _seguranca);
 
         // Escuta local pra imprimir etiqueta sob demanda (sem esperar o
         // proximo checkin) -- sempre tenta iniciar; so imprime de verdade
@@ -220,6 +222,11 @@ public class TrayApplicationContext : ApplicationContext
                 LogAtividade.Registrar(NivelAtividade.Aviso, "HEARTBEAT", "Falha ao enviar heartbeat ao servidor.");
             }
 
+            if (resultado.Sucesso && resultado.MonitorRede != null)
+            {
+                _monitorRede.Aplicar(resultado.MonitorRede.Ativo, resultado.MonitorRede.Intervalo);
+            }
+
             if (resultado.Sucesso)
             {
                 ConsultarIpPublicoSeNecessario();
@@ -348,15 +355,28 @@ public class TrayApplicationContext : ApplicationContext
 
                     case "executar_cmd":
                     case "executar_powershell":
-                        var (saida, erro, codigo) = await Task.Run(() => solicitacao.Tipo == "executar_cmd"
-                            ? ExploradorService.ExecutarCmd(solicitacao.Parametro ?? "", solicitacao.Elevado, solicitacao.UsuarioElevacao, solicitacao.SenhaElevacao)
-                            : ExploradorService.ExecutarPowerShell(solicitacao.Parametro ?? "", solicitacao.Elevado, solicitacao.UsuarioElevacao, solicitacao.SenhaElevacao));
-
-                        await cliente.ResponderAsync(_machineGuid!, solicitacao.Id, new
+                        // Até 2 min (ExploradorService.TempoLimiteComandoMs): roda em paralelo
+                        // pra não segurar o heartbeat nem as outras solicitações.
+                        var pedidoComando = solicitacao;
+                        _ = Task.Run(async () =>
                         {
-                            saida,
-                            erro,
-                            codigo_saida = codigo
+                            try
+                            {
+                                var (saida, erro, codigo) = pedidoComando.Tipo == "executar_cmd"
+                                    ? ExploradorService.ExecutarCmd(pedidoComando.Parametro ?? "", pedidoComando.Elevado, pedidoComando.UsuarioElevacao, pedidoComando.SenhaElevacao)
+                                    : ExploradorService.ExecutarPowerShell(pedidoComando.Parametro ?? "", pedidoComando.Elevado, pedidoComando.UsuarioElevacao, pedidoComando.SenhaElevacao);
+
+                                await cliente.ResponderAsync(_machineGuid!, pedidoComando.Id, new
+                                {
+                                    saida,
+                                    erro,
+                                    codigo_saida = codigo
+                                });
+                            }
+                            catch (Exception ex)
+                            {
+                                await cliente.ResponderErroAsync(_machineGuid!, pedidoComando.Id, ex.Message);
+                            }
                         });
                         break;
 
@@ -399,6 +419,39 @@ public class TrayApplicationContext : ApplicationContext
 
                     case "network_speedtest":
                         await cliente.ResponderAsync(_machineGuid!, solicitacao.Id, await NetworkService.TestarVelocidadeAsync());
+                        break;
+
+                    // ---- Monitor de conexões/processos e firewall (1.0.56) ----
+                    case "seguranca_atualizar":
+                        _monitorRede.ForcarAtualizacao();
+                        await cliente.ResponderAsync(_machineGuid!, solicitacao.Id, new { sucesso = true, mensagem = "Retrato e inventário sendo coletados agora." });
+                        break;
+
+                    case "firewall_bloquear":
+                    case "firewall_desbloquear":
+                    case "servico_desativar":
+                    case "processo_encerrar":
+                        var pedidoAcao = solicitacao;
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                var resposta = pedidoAcao.Tipo switch
+                                {
+                                    "firewall_bloquear" => FirewallService.Bloquear(pedidoAcao.Parametro, pedidoAcao.UsuarioElevacao, pedidoAcao.SenhaElevacao),
+                                    "firewall_desbloquear" => FirewallService.Desbloquear(pedidoAcao.Parametro, pedidoAcao.UsuarioElevacao, pedidoAcao.SenhaElevacao),
+                                    "servico_desativar" => FirewallService.DesativarServico(pedidoAcao.Parametro, pedidoAcao.UsuarioElevacao, pedidoAcao.SenhaElevacao),
+                                    _ => FirewallService.EncerrarProcesso(pedidoAcao.Parametro, pedidoAcao.UsuarioElevacao, pedidoAcao.SenhaElevacao)
+                                };
+                                LogAtividade.Registrar(NivelAtividade.Seguranca, "SEGURANÇA", $"Ação do portal ({pedidoAcao.Tipo}): {System.Text.Json.JsonSerializer.Serialize(resposta)[..Math.Min(200, System.Text.Json.JsonSerializer.Serialize(resposta).Length)]}");
+                                await cliente.ResponderAsync(_machineGuid!, pedidoAcao.Id, resposta);
+                                _monitorRede.ForcarAtualizacao();
+                            }
+                            catch (Exception ex)
+                            {
+                                await cliente.ResponderErroAsync(_machineGuid!, pedidoAcao.Id, ex.Message);
+                            }
+                        });
                         break;
 
                     case "mesh_install":
@@ -1290,6 +1343,7 @@ del ""%~f0""
     {
         _timerBandeja.Stop();
         _seguranca.Detectado -= AoDetectarEventoSeguranca;
+        _monitorRede.Dispose();
         _seguranca.Dispose();
         _janelaPrincipal.Dispose();
         _icone.Visible = false;

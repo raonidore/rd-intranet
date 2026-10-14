@@ -22,7 +22,22 @@ class SegurancaEventoService
         // criptografia (mover pra outra unidade, apagar pasta) -- sempre INFO.
         'MASS_FILE_DELETE' => 'Exclusão/movimentação em massa',
         'RANSOM_NOTE_CREATED' => 'Nota de resgate criada',
+        // Agente 1.0.56+: monitor de conexões, processos e inicialização.
+        'NETWORK_SCAN' => 'Varredura de rede (internet)',
+        'NETWORK_SCAN_LAN' => 'Varredura da rede local',
+        'SUSPICIOUS_CONNECTION' => 'Programa suspeito conversando com a internet',
+        'SUSPICIOUS_PROCESS' => 'Processo suspeito em execução',
+        'SUSPICIOUS_STARTUP' => 'Item suspeito na inicialização do Windows',
     ];
+
+    /**
+     * Alertam (e-mail/WhatsApp quando CRITICAL) mas NUNCA isolam sozinhos:
+     * a máquina pode ser um servidor de produção -- o ARIIS do Maurílio,
+     * que originou o monitor, roda o sistema do laboratório. A reação
+     * (bloquear programa/IP no firewall, encerrar, isolar) é decisão da TI
+     * na aba Segurança do ativo.
+     */
+    public const TIPOS_SEM_ISOLAMENTO = ['NETWORK_SCAN', 'NETWORK_SCAN_LAN', 'SUSPICIOUS_CONNECTION', 'SUSPICIOUS_PROCESS', 'SUSPICIOUS_STARTUP'];
 
     public const TIPOS_SERVIDOR = [
         'NETWORK_ISOLATION_APPLIED' => 'Rede isolada',
@@ -76,6 +91,11 @@ class SegurancaEventoService
         }
         $ocorridoEm = strtotime((string)($payload['ocorrido_em'] ?? '')) ?: time();
 
+        // Monitor de rede (1.0.56+) já manda o resumo pronto -- é ele que sabe montar a frase.
+        if (in_array($tipo, self::TIPOS_SEM_ISOLAMENTO, true) && trim((string)($payload['resumo'] ?? '')) !== '') {
+            $detalhes['resumo_agente'] = mb_substr(trim(preg_replace('/\s+/', ' ', (string)$payload['resumo'])), 0, 240);
+        }
+
         $id = $this->inserir($ativoId, $tipo, $severidade, $this->montarResumo($tipo, $detalhes), $detalhes, $acao, $ocorridoEm);
 
         $ativo = (new AtivoService())->buscar($ativoId);
@@ -88,7 +108,9 @@ class SegurancaEventoService
         ));
 
         if ($severidade === 'CRITICAL') {
-            $decisao = (new SegurancaIsolamentoService())->reagirAEvento($ativoId, $id);
+            $decisao = in_array($tipo, self::TIPOS_SEM_ISOLAMENTO, true)
+                ? 'somente alerta -- este tipo de detecção nunca isola sozinho; decida na aba Segurança da máquina (bloquear no firewall, encerrar, isolar).'
+                : (new SegurancaIsolamentoService())->reagirAEvento($ativoId, $id);
             $this->notificar($ativoId, $tipo, $severidade, $this->montarResumo($tipo, $detalhes), $decisao, $detalhes, $id);
         }
 
@@ -372,6 +394,8 @@ class SegurancaEventoService
             'MASS_FILE_DELETE' => (int)($d['excluidos'] ?? 0) . ' arquivos excluídos/movidos em ' . (int)($d['janela_segundos'] ?? 0) . 's em ' . ($d['pasta'] ?? '?')
                 . (!empty($d['motivo']) ? ' -- ' . $d['motivo'] : ''),
             'RANSOM_NOTE_CREATED' => 'Nota de resgate conhecida "' . ($d['nota_resgate'] ?? '?') . '" criada em várias pastas (' . ($d['pasta'] ?? '?') . ')',
+            'NETWORK_SCAN', 'NETWORK_SCAN_LAN', 'SUSPICIOUS_CONNECTION', 'SUSPICIOUS_PROCESS', 'SUSPICIOUS_STARTUP'
+                => (string)($d['resumo_agente'] ?? self::rotuloTipo($tipo)) . (!empty($d['caminho']) ? ' -- ' . $d['caminho'] : ''),
             default => self::rotuloTipo($tipo),
         };
     }
