@@ -2961,6 +2961,8 @@ class AtivoService
             'omada_mem_pct' => $d['mem_pct'] !== null ? $d['mem_pct'] . '%' : '',
             'omada_portas_resumo' => "{$d['portas_ativas']} de {$d['portas_total']}",
             'omada_mac_total' => $d['mac_total'] !== null ? (string)$d['mac_total'] : '',
+            'omada_rotas' => $d['rotas'] ?? [],
+            'omada_interfaces_ip' => $d['interfaces_ip'] ?? [],
             'omada_portas' => $this->marcarPontaFisica($this->enriquecerDispositivosPortas($d['portas']), (string)$d['mac'], (int)$ativo['id']),
             'omada_vlans' => $d['vlans'],
             'omada_coletado_em' => date('Y-m-d H:i:s'),
@@ -4661,6 +4663,58 @@ class AtivoService
     public function listarRedesWifiConfiguradasUnifi(): array
     {
         return (new UnifiService())->listarRedesWifiConfiguradas();
+    }
+
+    /**
+     * Aba "Rotas" do gateway UniFi: redes conectadas, rotas estáticas e as
+     * rotas que existem nos switches (TP-Link L3) -- marcando as que o
+     * gateway não conhece. Caso real (Maurílio, 13/10/2026): o switch tinha
+     * 10.10.2.0/24 e 10.10.4.0/24 via 192.168.0.99, mas o DHCP entrega o UCG
+     * como gateway e o UCG não tinha rota nenhuma pra essas redes.
+     */
+    public function listarRotasGatewayUnifi(): array
+    {
+        $unifi = new UnifiService();
+        $estaticas = $unifi->listarRotasEstaticas();
+        if (!$estaticas['success']) {
+            return $estaticas;
+        }
+        $dhcp = $unifi->listarDhcp();
+        $conectadas = array_map(fn ($r) => ['nome' => $r['nome'], 'vlan' => $r['vlan'], 'rede' => $r['subnet']], $dhcp['redes'] ?? []);
+
+        $conhecidas = array_merge(
+            array_column($conectadas, 'rede'),
+            array_column(array_filter($estaticas['rotas'], fn ($r) => $r['habilitada']), 'rede_destino')
+        );
+        $gatewayConhece = function (string $destino) use ($conhecidas): bool {
+            [$ipDestino] = explode('/', $destino);
+            foreach ($conhecidas as $rede) {
+                if (str_contains($rede, '/') && self::ipNaRede($ipDestino, $rede) && (int)explode('/', $rede)[1] <= (int)(explode('/', $destino)[1] ?? 32)) {
+                    return true;
+                }
+            }
+
+            return false;
+        };
+
+        $deSwitches = [];
+        $sql = "SELECT a.id, a.nome, a.ip, a.detalhes FROM ativos a JOIN ativos_tipos t ON t.id = a.tipo_id WHERE t.slug = 'switch'";
+        foreach (Database::connection()->query($sql) as $sw) {
+            $detalhesSw = json_decode($sw['detalhes'] ?? '', true) ?: [];
+            foreach ($detalhesSw['omada_rotas'] ?? [] as $rota) {
+                if ($rota['tipo'] === 'conectada') {
+                    continue;
+                }
+                $deSwitches[] = $rota + [
+                    'switch_id' => (int)$sw['id'],
+                    'switch_nome' => $sw['nome'],
+                    'switch_ip' => $sw['ip'],
+                    'gateway_conhece' => $gatewayConhece($rota['destino']),
+                ];
+            }
+        }
+
+        return ['success' => true, 'conectadas' => $conectadas, 'estaticas' => $estaticas['rotas'], 'switches' => $deSwitches];
     }
 
     public function listarRotasEstaticasUnifi(): array

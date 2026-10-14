@@ -55,6 +55,9 @@ class OmadaSshService
         'show arp',
         'show interface switchport',
         'show lldp neighbor-information',
+        // Roteamento (L3): rotas e interfaces com IP. Firmware sem o comando só devolve erro -> lista vazia.
+        'show ip route',
+        'show ip interface brief',
     ];
 
     /**
@@ -372,6 +375,8 @@ class OmadaSshService
                 'mem_pct' => $this->extrairPrimeiroPercentual($saidas['show memory-utilization']),
                 'mac_total' => preg_match('/Total MAC Addresses\s*:\s*(\d+)/i', $saidas['show mac address-table count'], $m) ? (int)$m[1] : null,
                 'vlans' => array_map(fn ($v) => ['id' => $v['id'], 'nome' => $v['nome'], 'portas' => count($v['portas'])], $membros),
+                'rotas' => $this->interpretarRotas($saidas['show ip route']),
+                'interfaces_ip' => $this->interpretarInterfacesIp($saidas['show ip interface brief']),
                 'portas' => $portas,
                 'portas_total' => count($portas),
                 'portas_ativas' => count(array_filter($portas, fn ($p) => $p['link'])),
@@ -884,6 +889,53 @@ class OmadaSshService
         }
 
         return $this->aplicarConfiguracao($ip, ["ip dhcp server pool \"{$pool}\"", "no address {$ipReserva}", 'exit']);
+    }
+
+    /**
+     * "S   10.10.2.0/24 [1/0] via 192.168.0.99, VLAN1" e
+     * "C   192.168.0.0/24 is directly connected, VLAN1" (SG3428 2.30).
+     *
+     * @return array<int, array{tipo:string, destino:string, via:string, interface:string, distancia:?int}>
+     */
+    private function interpretarRotas(string $saida): array
+    {
+        $tipos = ['S' => 'estática', 'C' => 'conectada', 'O' => 'OSPF', 'R' => 'RIP'];
+        $rotas = [];
+        foreach (explode("\n", $saida) as $linha) {
+            if (!preg_match('#^\s*([SCOR])\*?\s+(\d+\.\d+\.\d+\.\d+/\d+)\s+(.*)$#', $linha, $m)) {
+                continue;
+            }
+            $via = preg_match('/via (\d+\.\d+\.\d+\.\d+)/', $m[3], $v) ? $v[1] : '';
+            $interface = preg_match('/,\s*(\S+)\s*$/', $m[3], $i) ? $i[1] : '';
+            $rotas[] = [
+                'tipo' => $tipos[$m[1]],
+                'destino' => $m[2],
+                'via' => $via,
+                'interface' => $interface,
+                'distancia' => preg_match('#\[(\d+)/\d+\]#', $m[3], $d) ? (int)$d[1] : null,
+            ];
+        }
+
+        return $rotas;
+    }
+
+    /** "VLAN1   up   up   no   192.168.0.245/24   Primary   Static" */
+    private function interpretarInterfacesIp(string $saida): array
+    {
+        $interfaces = [];
+        if (preg_match_all('#^\s*(\S+)\s+(up|down)\s+(up|down)\s+(yes|no)\s+(\d+\.\d+\.\d+\.\d+/\d+)\s+(\S+)\s+(\S+)#mi', $saida, $mm, PREG_SET_ORDER)) {
+            foreach ($mm as $m) {
+                $interfaces[] = [
+                    'interface' => $m[1],
+                    'ativa' => strtolower($m[2]) === 'up' && strtolower($m[3]) === 'up',
+                    'desligada' => strtolower($m[4]) === 'yes',
+                    'ip' => $m[5],
+                    'metodo' => $m[7],
+                ];
+            }
+        }
+
+        return $interfaces;
     }
 
     /** "59 day - 21 hour - 29 min - 35 sec" -> "59d 21h 29m 35s" (mesmo estilo do uptime do Controller). */

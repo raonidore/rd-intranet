@@ -1465,6 +1465,14 @@ class AtivoController extends Controller
         echo json_encode($this->service->listarRedesWifiConfiguradasUnifi());
     }
 
+    public function unifiRotasGateway(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+        header('Content-Type: application/json');
+
+        echo json_encode($this->service->listarRotasGatewayUnifi());
+    }
+
     public function unifiRotasEstaticas(): void
     {
         AuthMiddleware::checkModulo('ativos_lista');

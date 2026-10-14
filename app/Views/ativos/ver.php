@@ -449,6 +449,11 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
         </button>
     </li>
     <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaRotasUnifi" type="button">
+            <i class="bi bi-signpost-split"></i> Rotas
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaDhcpUnifi" type="button">
             <i class="bi bi-pin-map"></i> DHCP / IPs fixos
         </button>
@@ -1542,18 +1547,6 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                 </div>
             </div>
 
-            <div class="col-md-6">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-header bg-white"><strong>Rotas estáticas</strong></div>
-                    <div class="card-body p-0">
-                        <div class="small text-muted p-3 mb-0" id="rotasUnifiCarregando"><div class="spinner-border spinner-border-sm"></div> Consultando o Controller...</div>
-                        <table class="table table-sm mb-0" style="display:none" id="rotasUnifiTabela">
-                            <thead><tr><th>Nome</th><th>Rede de destino</th><th>Próximo salto</th><th>Status</th></tr></thead>
-                            <tbody id="rotasUnifiCorpo"></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
 
             <div class="col-12">
                 <div class="card border-0 shadow-sm">
@@ -1647,6 +1640,52 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                             </thead>
                             <tbody id="redesVizinhasUnifiCorpo"></tbody>
                         </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rotas do Gateway UniFi + rotas dos switches da rede -->
+    <div class="tab-pane fade" id="abaRotasUnifi">
+        <div class="d-flex justify-content-end mb-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="botaoAtualizarRotasGw"><i class="bi bi-arrow-repeat"></i> Atualizar</button>
+        </div>
+        <div class="small text-muted mb-3" id="rotasGwCarregando"><div class="spinner-border spinner-border-sm"></div> Consultando o Controller...</div>
+        <div id="rotasGwConteudo" style="display:none">
+            <div id="rotasGwAlerta"></div>
+            <div class="row g-3">
+                <div class="col-lg-6">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-header bg-white"><strong>Rotas estáticas do gateway</strong></div>
+                        <div class="card-body p-0">
+                            <table class="table table-sm align-middle mb-0">
+                                <thead><tr><th>Nome</th><th>Rede de destino</th><th>Próximo salto</th><th>Status</th></tr></thead>
+                                <tbody id="rotasGwEstaticas"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-header bg-white"><strong>Redes conectadas</strong> <span class="small text-muted">(o gateway entrega direto)</span></div>
+                        <div class="card-body p-0">
+                            <table class="table table-sm align-middle mb-0">
+                                <thead><tr><th>Rede</th><th>VLAN</th><th>Endereço</th></tr></thead>
+                                <tbody id="rotasGwConectadas"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-white"><strong>Rotas configuradas em switches da rede</strong></div>
+                        <div class="card-body p-0">
+                            <table class="table table-sm align-middle mb-0">
+                                <thead><tr><th>Switch</th><th>Rede de destino</th><th>Próximo salto</th><th>O gateway conhece?</th></tr></thead>
+                                <tbody id="rotasGwSwitches"></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1960,6 +1999,52 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     <?php if ($fontePortasSwitch !== null): ?>
     <!-- Portas do switch (TP-Link via SSH ou UniFi via Controller) -->
     <div class="tab-pane fade" id="abaPortasSwitch">
+        <?php
+        $rotasSwitch = $detalhes['omada_rotas'] ?? [];
+        $interfacesIpSwitch = $detalhes['omada_interfaces_ip'] ?? [];
+        $rotasEstaticasSwitch = array_filter($rotasSwitch, fn ($r) => $r['tipo'] !== 'conectada');
+        ?>
+        <?php if ($rotasEstaticasSwitch || count($interfacesIpSwitch) > 1): ?>
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white">
+                <strong><i class="bi bi-signpost-split"></i> Roteamento (L3) deste switch</strong>
+                <div class="small text-muted">O switch também roteia: quem usa ele como caminho para essas redes depende destas rotas.</div>
+            </div>
+            <div class="card-body p-0">
+                <div class="row g-0">
+                    <div class="col-lg-7 border-end">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead><tr><th>Rede de destino</th><th>Próximo salto</th><th>Interface</th><th>Tipo</th></tr></thead>
+                            <tbody>
+                                <?php foreach ($rotasSwitch as $rota): ?>
+                                    <tr>
+                                        <td class="font-monospace small"><?= htmlspecialchars($rota['destino']) ?></td>
+                                        <td class="font-monospace small"><?= $rota['via'] !== '' ? htmlspecialchars($rota['via']) : '<span class="text-muted">direto</span>' ?></td>
+                                        <td class="small"><?= htmlspecialchars($rota['interface']) ?></td>
+                                        <td><span class="badge <?= $rota['tipo'] === 'conectada' ? 'text-bg-light border' : 'text-bg-primary' ?>"><?= htmlspecialchars($rota['tipo']) ?></span></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="col-lg-5">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead><tr><th>Interface</th><th>IP</th><th>Status</th></tr></thead>
+                            <tbody>
+                                <?php foreach ($interfacesIpSwitch as $interfaceIp): ?>
+                                    <tr>
+                                        <td class="small"><?= htmlspecialchars($interfaceIp['interface']) ?></td>
+                                        <td class="font-monospace small"><?= htmlspecialchars($interfaceIp['ip']) ?></td>
+                                        <td><?= $interfaceIp['ativa'] ? '<span class="badge text-bg-success">no ar</span>' : '<span class="badge text-bg-secondary" title="Sem nenhuma porta ativa nessa VLAN">fora do ar</span>' ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
 <style>
 /* ---------- Painel do switch ---------- */
 .sw-resumo { display:flex; flex-wrap:wrap; gap:1.5rem; align-items:center; }
@@ -4651,7 +4736,7 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
     });
 })();
 
-// Saúde da rede + Redes Wi-Fi configuradas + Rotas estáticas + Info do
+// Saúde da rede + Redes Wi-Fi configuradas + Info do
 // Controller (UniFi Gateway) -- tudo carregado junto quando a aba Rede/WAN
 // é aberta, cada bloco só leitura.
 (function () {
@@ -4742,32 +4827,6 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
         tabela.style.display = '';
     }
 
-    async function carregarRotas() {
-        const carregando = document.getElementById('rotasUnifiCarregando');
-        const tabela = document.getElementById('rotasUnifiTabela');
-        const corpo = document.getElementById('rotasUnifiCorpo');
-
-        const res = await fetch(<?= json_encode(url('/ativos/unifi/rotas-estaticas')) ?>, { method: 'POST' });
-        const resultado = await res.json();
-
-        if (!resultado.success) {
-            carregando.innerHTML = '<span class="text-danger">' + escapeHtml(resultado.message || 'Falha ao consultar.') + '</span>';
-            return;
-        }
-
-        corpo.innerHTML = resultado.rotas.map(function (r) {
-            return '<tr>' +
-                '<td>' + escapeHtml(r.nome) + '</td>' +
-                '<td class="font-monospace small">' + escapeHtml(r.rede_destino) + '</td>' +
-                '<td class="font-monospace small">' + escapeHtml(r.proximo_salto) + '</td>' +
-                '<td>' + (r.habilitada ? '<span class="badge text-bg-success">Ativa</span>' : '<span class="badge text-bg-secondary">Desativada</span>') + '</td>' +
-            '</tr>';
-        }).join('') || '<tr><td colspan="4" class="text-muted small">Nenhuma rota estática configurada.</td></tr>';
-
-        carregando.style.display = 'none';
-        tabela.style.display = '';
-    }
-
     async function carregarInfoControlador() {
         const carregando = document.getElementById('infoControladorUnifiCarregando');
         const conteudo = document.getElementById('infoControladorUnifiConteudo');
@@ -4797,7 +4856,6 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
             carregadoUmaVez = true;
             carregarSaude();
             carregarWifiConfig();
-            carregarRotas();
             carregarInfoControlador();
         }
     });
@@ -4806,6 +4864,61 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
     if (botaoAtualizarSaude) {
         botaoAtualizarSaude.addEventListener('click', carregarSaude);
     }
+})();
+
+// Rotas do Gateway UniFi (estáticas + conectadas) cruzadas com as rotas dos switches L3.
+(function () {
+    const nav = document.querySelector('.nav-link[data-bs-target="#abaRotasUnifi"]');
+    if (!nav) return;
+    const esc = function (s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    };
+    const urlAtivo = <?= json_encode(url('/ativos/ver?id=')) ?>;
+
+    async function carregar() {
+        const carregando = document.getElementById('rotasGwCarregando');
+        carregando.style.display = '';
+        carregando.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Consultando o Controller...';
+        const res = await fetch(<?= json_encode(url('/ativos/unifi/rotas')) ?>, { method: 'POST' });
+        const r = await res.json();
+        if (!r.success) {
+            carregando.innerHTML = '<span class="text-danger">' + esc(r.message || 'Falha ao consultar.') + '</span>';
+            return;
+        }
+
+        document.getElementById('rotasGwEstaticas').innerHTML = r.estaticas.map(function (x) {
+            return '<tr><td>' + esc(x.nome) + '</td><td class="font-monospace small">' + esc(x.rede_destino) + '</td>' +
+                '<td class="font-monospace small">' + esc(x.proximo_salto || x.tipo) + '</td>' +
+                '<td>' + (x.habilitada ? '<span class="badge text-bg-success">Ativa</span>' : '<span class="badge text-bg-secondary">Desativada</span>') + '</td></tr>';
+        }).join('') || '<tr><td colspan="4" class="text-muted small p-3">Nenhuma rota estática configurada no gateway.</td></tr>';
+
+        document.getElementById('rotasGwConectadas').innerHTML = r.conectadas.map(function (x) {
+            return '<tr><td>' + esc(x.nome) + '</td><td>' + (x.vlan ? esc(x.vlan) : '<span class="text-muted small">nativa</span>') + '</td><td class="font-monospace small">' + esc(x.rede) + '</td></tr>';
+        }).join('') || '<tr><td colspan="3" class="text-muted small p-3">—</td></tr>';
+
+        document.getElementById('rotasGwSwitches').innerHTML = r.switches.map(function (x) {
+            return '<tr><td><a href="' + urlAtivo + x.switch_id + '#abaPortasSwitch">' + esc(x.switch_nome) + '</a> <span class="small text-muted font-monospace">' + esc(x.switch_ip) + '</span></td>' +
+                '<td class="font-monospace small">' + esc(x.destino) + '</td>' +
+                '<td class="font-monospace small">' + esc(x.via || x.interface) + '</td>' +
+                '<td>' + (x.gateway_conhece ? '<span class="badge text-bg-success">Sim</span>' : '<span class="badge text-bg-warning">Não</span>') + '</td></tr>';
+        }).join('') || '<tr><td colspan="4" class="text-muted small p-3">Nenhum switch cadastrado com rota estática.</td></tr>';
+
+        const faltando = r.switches.filter(function (x) { return !x.gateway_conhece; });
+        document.getElementById('rotasGwAlerta').innerHTML = faltando.length
+            ? '<div class="alert alert-warning small"><i class="bi bi-exclamation-triangle"></i> <strong>' + faltando.length + ' rede(s) só existem nas rotas de switch:</strong> ' +
+              faltando.map(function (x) { return esc(x.destino) + ' via ' + esc(x.via); }).join(', ') +
+              '. Aparelhos que usam este gateway como saída (o padrão do DHCP) não alcançam essas redes, a menos que o gateway também tenha a rota. Para corrigir, crie a rota estática no gateway apontando para o mesmo próximo salto.</div>'
+            : '';
+
+        carregando.style.display = 'none';
+        document.getElementById('rotasGwConteudo').style.display = '';
+    }
+
+    document.getElementById('botaoAtualizarRotasGw').addEventListener('click', carregar);
+    let carregou = false;
+    nav.addEventListener('shown.bs.tab', function () { if (!carregou) { carregou = true; carregar(); } });
 })();
 
 // DHCP do switch TP-Link (SSH): pools + IPs fixos (listar, criar, trocar, remover).

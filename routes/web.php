@@ -1103,6 +1103,7 @@ $router->post('/ativos/unifi/redes-vizinhas', [AtivoController::class, 'unifiRed
 $router->post('/ativos/unifi/port-forward', [AtivoController::class, 'unifiPortForward']);
 $router->post('/ativos/unifi/redes-wifi-configuradas', [AtivoController::class, 'unifiRedesWifiConfiguradas']);
 $router->post('/ativos/unifi/rotas-estaticas', [AtivoController::class, 'unifiRotasEstaticas']);
+$router->post('/ativos/unifi/rotas', [AtivoController::class, 'unifiRotasGateway']);
 $router->post('/ativos/unifi/info-controlador', [AtivoController::class, 'unifiInfoControlador']);
 $router->post('/ativos/unifi/dhcp', [AtivoController::class, 'unifiDhcp']);
 $router->post('/ativos/switch/dhcp', [AtivoController::class, 'switchDhcp']);
