@@ -284,7 +284,7 @@ public sealed class SegurancaPagina : Panel
 
     private void CarregarProcessos() => Carregar("Analisando os processos em execução...", () =>
     {
-        var processos = CatalogoProcessos.Obter(new[] { int.MaxValue }); // força atualizar
+        var processos = CatalogoProcessos.Obter(Array.Empty<int>(), forcar: true);
         return processos.Values
             .Where(p => !string.IsNullOrEmpty(p.Caminho))
             .Select(p =>
@@ -315,7 +315,7 @@ public sealed class SegurancaPagina : Panel
     private void CarregarConexoes() => Carregar("Lendo as conexões...", () =>
     {
         var conexoes = TabelaTcp.Ler();
-        var processos = CatalogoProcessos.Obter(conexoes.Select(c => c.Pid).Distinct());
+        var processos = CatalogoProcessos.Obter(conexoes.Select(c => c.Pid).Distinct(), forcar: true);
         return conexoes
             .Where(c => c.Estado is "ESTABLISHED" or "SYN_SENT" && !TabelaTcp.EhLocal(c.Remoto))
             .GroupBy(c => (c.Pid, c.Estado, Ip: TabelaTcp.Texto(c.Remoto), c.PortaRemota))

@@ -136,13 +136,14 @@ public static class CatalogoProcessos
     private static Dictionary<int, ProcessoInfo> _processos = new();
     private static DateTime _atualizadoEm = DateTime.MinValue;
 
-    public static Dictionary<int, ProcessoInfo> Obter(IEnumerable<int> pidsNecessarios)
+    /// <summary>forcar = relê agora (retrato e telas: processo encerrado não pode continuar aparecendo).</summary>
+    public static Dictionary<int, ProcessoInfo> Obter(IEnumerable<int> pidsNecessarios, bool forcar = false)
     {
         lock (Trava)
         {
             var faltando = pidsNecessarios.Any(p => p > 4 && !_processos.ContainsKey(p));
             var idade = DateTime.Now - _atualizadoEm;
-            if (idade > TimeSpan.FromMinutes(5) || (faltando && idade > TimeSpan.FromSeconds(15)))
+            if (forcar || idade > TimeSpan.FromMinutes(5) || (faltando && idade > TimeSpan.FromSeconds(15)))
             {
                 _processos = Consultar();
                 _atualizadoEm = DateTime.Now;
@@ -305,7 +306,7 @@ public sealed class MonitorRedeService : IDisposable
             if (_forcarRetrato || DateTime.Now >= _proximoRetrato)
             {
                 _forcarRetrato = false;
-                var retrato = MontarRetrato(conexoes, processos, regras);
+                var retrato = MontarRetrato(conexoes, CatalogoProcessos.Obter(Array.Empty<int>(), forcar: true), regras);
                 DetectarProcessosCriticos(retrato.suspeitos);
                 // Falhou (servidor fora ou ainda sem a versão nova): tenta de novo em 1 min.
                 _proximoRetrato = DateTime.Now + (Enviar("rede", retrato.dados) ? TimeSpan.FromMinutes(regras.RedeRetratoMinutos) : TimeSpan.FromMinutes(1));
