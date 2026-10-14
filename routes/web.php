@@ -1107,6 +1107,8 @@ $router->post('/ativos/unifi/rotas', [AtivoController::class, 'unifiRotasGateway
 $router->post('/ativos/unifi/info-controlador', [AtivoController::class, 'unifiInfoControlador']);
 $router->post('/ativos/unifi/dhcp', [AtivoController::class, 'unifiDhcp']);
 $router->post('/ativos/switch/dhcp', [AtivoController::class, 'switchDhcp']);
+$router->post('/ativos/switch/rota', [AtivoController::class, 'switchSalvarRota']);
+$router->post('/ativos/switch/rota/remover', [AtivoController::class, 'switchRemoverRota']);
 $router->post('/ativos/switch/dhcp/ip-fixo', [AtivoController::class, 'switchDefinirIpFixo']);
 $router->post('/ativos/switch/dhcp/remover-ip-fixo', [AtivoController::class, 'switchRemoverIpFixo']);
 $router->post('/ativos/unifi/dhcp/ip-fixo', [AtivoController::class, 'unifiDefinirIpFixo']);

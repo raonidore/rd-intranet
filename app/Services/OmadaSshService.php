@@ -850,6 +850,43 @@ class OmadaSshService
         ];
     }
 
+    /**
+     * Rota estática (switch L3). Sintaxe confirmada ao vivo no SG3428 do
+     * enzilab (13/10/2026): `ip route REDE MASCARA PROXIMO-SALTO [distância]`
+     * e `no ip route REDE MASCARA PROXIMO-SALTO`. $anterior = [rede, mascara,
+     * via] da rota sendo editada: sai primeiro, na mesma sessão.
+     */
+    public function salvarRotaEstatica(string $ip, string $rede, string $mascara, string $via, ?int $distancia, ?array $anterior = null): array
+    {
+        foreach (array_merge([$rede, $mascara, $via], $anterior ?? []) as $valor) {
+            if (!filter_var($valor, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+                return ['success' => false, 'message' => 'Endereço inválido na rota.'];
+            }
+        }
+        if ($distancia !== null && ($distancia < 1 || $distancia > 255)) {
+            return ['success' => false, 'message' => 'Distância deve ser de 1 a 255.'];
+        }
+
+        $comandos = [];
+        if ($anterior !== null) {
+            $comandos[] = "no ip route {$anterior[0]} {$anterior[1]} {$anterior[2]}";
+        }
+        $comandos[] = "ip route {$rede} {$mascara} {$via}" . ($distancia !== null ? " {$distancia}" : '');
+
+        return $this->aplicarConfiguracao($ip, $comandos);
+    }
+
+    public function removerRotaEstatica(string $ip, string $rede, string $mascara, string $via): array
+    {
+        foreach ([$rede, $mascara, $via] as $valor) {
+            if (!filter_var($valor, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+                return ['success' => false, 'message' => 'Endereço inválido na rota.'];
+            }
+        }
+
+        return $this->aplicarConfiguracao($ip, ["no ip route {$rede} {$mascara} {$via}"]);
+    }
+
     /** Nome de pool que dá pra mandar entre aspas na CLI sem escapar nada. */
     private static function nomePoolValido(string $nome): bool
     {

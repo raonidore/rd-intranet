@@ -1917,6 +1917,39 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     <?php endif; ?>
 
     <?php if ($dhcpSwitchTplink): ?>
+    <div class="modal fade" id="modalRotaSw" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <form class="modal-content" id="formRotaSw">
+                <div class="modal-header">
+                    <h6 class="modal-title" id="modalRotaSwTitulo">Nova rota estática</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-6">
+                            <label class="form-label small mb-1">Rede de destino</label>
+                            <input type="text" class="form-control form-control-sm font-monospace" id="rotaSwDestino" placeholder="10.10.2.0/24" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small mb-1">Próximo salto (gateway)</label>
+                            <input type="text" class="form-control form-control-sm font-monospace" id="rotaSwVia" placeholder="192.168.0.99" required>
+                        </div>
+                    </div>
+                    <div class="mb-2" style="max-width:160px">
+                        <label class="form-label small mb-1">Distância (opcional)</label>
+                        <input type="number" min="1" max="255" class="form-control form-control-sm" id="rotaSwDistancia" placeholder="1">
+                    </div>
+                    <div class="form-text">Use o endereço da rede (ex.: 10.10.2.0/24) e um próximo salto dentro de uma rede do switch. A alteração é gravada na inicialização do switch.</div>
+                    <div class="text-danger small mt-2" id="rotaSwErro"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-sm btn-primary" id="rotaSwSalvar">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- DHCP do switch TP-Link (SSH): pools + IPs fixos (manual-binding) -->
     <div class="tab-pane fade" id="abaDhcpSwitch">
         <div class="card border-0 shadow-sm mb-3">
@@ -2004,26 +2037,40 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
         $interfacesIpSwitch = $detalhes['omada_interfaces_ip'] ?? [];
         $rotasEstaticasSwitch = array_filter($rotasSwitch, fn ($r) => $r['tipo'] !== 'conectada');
         ?>
-        <?php if ($rotasEstaticasSwitch || count($interfacesIpSwitch) > 1): ?>
+        <?php if ($rotasEstaticasSwitch || count($interfacesIpSwitch) > 1 || $dhcpSwitchTplink): ?>
         <div class="card border-0 shadow-sm mb-3">
-            <div class="card-header bg-white">
-                <strong><i class="bi bi-signpost-split"></i> Roteamento (L3) deste switch</strong>
-                <div class="small text-muted">O switch também roteia: quem usa ele como caminho para essas redes depende destas rotas.</div>
+            <div class="card-header bg-white d-flex justify-content-between align-items-start gap-2">
+                <div>
+                    <strong><i class="bi bi-signpost-split"></i> Roteamento (L3) deste switch</strong>
+                    <div class="small text-muted">O switch também roteia: quem usa ele como caminho para essas redes depende destas rotas.</div>
+                </div>
+                <?php if ($dhcpSwitchTplink): ?>
+                    <button type="button" class="btn btn-sm btn-primary flex-shrink-0" id="botaoNovaRotaSw"><i class="bi bi-plus-lg"></i> Nova rota</button>
+                <?php endif; ?>
             </div>
             <div class="card-body p-0">
                 <div class="row g-0">
                     <div class="col-lg-7 border-end">
                         <table class="table table-sm align-middle mb-0">
-                            <thead><tr><th>Rede de destino</th><th>Próximo salto</th><th>Interface</th><th>Tipo</th></tr></thead>
+                            <thead><tr><th>Rede de destino</th><th>Próximo salto</th><th>Interface</th><th>Tipo</th><th></th></tr></thead>
                             <tbody>
                                 <?php foreach ($rotasSwitch as $rota): ?>
                                     <tr>
                                         <td class="font-monospace small"><?= htmlspecialchars($rota['destino']) ?></td>
                                         <td class="font-monospace small"><?= $rota['via'] !== '' ? htmlspecialchars($rota['via']) : '<span class="text-muted">direto</span>' ?></td>
                                         <td class="small"><?= htmlspecialchars($rota['interface']) ?></td>
-                                        <td><span class="badge <?= $rota['tipo'] === 'conectada' ? 'text-bg-light border' : 'text-bg-primary' ?>"><?= htmlspecialchars($rota['tipo']) ?></span></td>
+                                        <td><span class="badge <?= $rota['tipo'] === 'conectada' ? 'text-bg-light border' : 'text-bg-primary' ?>"><?= htmlspecialchars($rota['tipo']) ?></span><?= !empty($rota['distancia']) && $rota['distancia'] !== 1 && $rota['tipo'] !== 'conectada' ? ' <span class="small text-muted">dist. ' . (int)$rota['distancia'] . '</span>' : '' ?></td>
+                                        <td class="text-end text-nowrap">
+                                            <?php if ($dhcpSwitchTplink && $rota['tipo'] === 'estática'): ?>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary me-1 botao-editar-rota-sw" data-destino="<?= htmlspecialchars($rota['destino']) ?>" data-via="<?= htmlspecialchars($rota['via']) ?>" data-distancia="<?= (int)($rota['distancia'] ?? 1) ?>" title="Editar"><i class="bi bi-pencil"></i></button>
+                                                <button type="button" class="btn btn-sm btn-outline-danger botao-remover-rota-sw" data-destino="<?= htmlspecialchars($rota['destino']) ?>" data-via="<?= htmlspecialchars($rota['via']) ?>" title="Remover"><i class="bi bi-trash"></i></button>
+                                            <?php endif; ?>
+                                        </td>
                                     </tr>
                                 <?php endforeach; ?>
+                                <?php if (!$rotasSwitch): ?>
+                                    <tr><td colspan="5" class="text-muted small p-3">Nenhuma rota coletada ainda -- use "Coletar" ou crie a primeira.</td></tr>
+                                <?php endif; ?>
                             </tbody>
                         </table>
                     </div>
@@ -4919,6 +4966,86 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
     document.getElementById('botaoAtualizarRotasGw').addEventListener('click', carregar);
     let carregou = false;
     nav.addEventListener('shown.bs.tab', function () { if (!carregou) { carregou = true; carregar(); } });
+})();
+
+// Rotas estáticas do switch TP-Link (criar, editar, remover) -- recarrega a página na aba Portas.
+(function () {
+    const botaoNova = document.getElementById('botaoNovaRotaSw');
+    const modalEl = document.getElementById('modalRotaSw');
+    if (!botaoNova || !modalEl) return;
+    const ativoId = <?= (int)$ativo['id'] ?>;
+    let anterior = null;
+
+    function recarregar() {
+        window.location.hash = 'abaPortasSwitch';
+        window.location.reload();
+    }
+
+    function abrir(destino, via, distancia) {
+        anterior = destino ? { destino: destino, via: via } : null;
+        document.getElementById('modalRotaSwTitulo').textContent = destino ? 'Editar rota estática' : 'Nova rota estática';
+        document.getElementById('rotaSwDestino').value = destino || '';
+        document.getElementById('rotaSwVia').value = via || '';
+        document.getElementById('rotaSwDistancia').value = distancia && distancia !== '1' ? distancia : '';
+        document.getElementById('rotaSwErro').textContent = '';
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+
+    botaoNova.addEventListener('click', function () { abrir(null); });
+    document.addEventListener('click', async function (ev) {
+        const editar = ev.target.closest('.botao-editar-rota-sw');
+        if (editar) {
+            abrir(editar.dataset.destino, editar.dataset.via, editar.dataset.distancia);
+            return;
+        }
+        const remover = ev.target.closest('.botao-remover-rota-sw');
+        if (!remover || !confirm('Remover a rota ' + remover.dataset.destino + ' via ' + remover.dataset.via + ' do switch?\nQuem depende dela para chegar nessa rede perde o caminho.')) return;
+        remover.disabled = true;
+        remover.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        const corpo = new FormData();
+        corpo.set('id', ativoId);
+        corpo.set('destino', remover.dataset.destino);
+        corpo.set('via', remover.dataset.via);
+        const res = await fetch(<?= json_encode(url('/ativos/switch/rota/remover')) ?>, { method: 'POST', body: corpo });
+        const resultado = await res.json();
+        if (!resultado.success) {
+            alert(resultado.message || 'Falha ao remover.');
+            remover.disabled = false;
+            remover.innerHTML = '<i class="bi bi-trash"></i>';
+            return;
+        }
+        recarregar();
+    });
+
+    document.getElementById('formRotaSw').addEventListener('submit', async function (ev) {
+        ev.preventDefault();
+        const botao = document.getElementById('rotaSwSalvar');
+        const erro = document.getElementById('rotaSwErro');
+        erro.textContent = '';
+        botao.disabled = true;
+        botao.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Gravando no switch...';
+        const corpo = new FormData();
+        corpo.set('id', ativoId);
+        corpo.set('destino', document.getElementById('rotaSwDestino').value.trim());
+        corpo.set('via', document.getElementById('rotaSwVia').value.trim());
+        corpo.set('distancia', document.getElementById('rotaSwDistancia').value.trim());
+        if (anterior) {
+            corpo.set('anterior_destino', anterior.destino);
+            corpo.set('anterior_via', anterior.via);
+        }
+        try {
+            const res = await fetch(<?= json_encode(url('/ativos/switch/rota')) ?>, { method: 'POST', body: corpo });
+            const resultado = await res.json();
+            if (!resultado.success) {
+                erro.textContent = resultado.message || 'Falha ao salvar.';
+                return;
+            }
+            recarregar();
+        } finally {
+            botao.disabled = false;
+            botao.textContent = 'Salvar';
+        }
+    });
 })();
 
 // DHCP do switch TP-Link (SSH): pools + IPs fixos (listar, criar, trocar, remover).

@@ -1481,6 +1481,32 @@ class AtivoController extends Controller
         echo json_encode($this->service->listarRotasEstaticasUnifi());
     }
 
+    public function switchSalvarRota(): void
+    {
+        AuthMiddleware::checkModulo('ativos_novo');
+        header('Content-Type: application/json');
+        set_time_limit(90);
+
+        $distancia = trim((string)($_POST['distancia'] ?? ''));
+        echo json_encode($this->service->salvarRotaSwitch(
+            (int)($_POST['id'] ?? 0),
+            (string)($_POST['destino'] ?? ''),
+            (string)($_POST['via'] ?? ''),
+            $distancia === '' ? null : (int)$distancia,
+            trim((string)($_POST['anterior_destino'] ?? '')),
+            trim((string)($_POST['anterior_via'] ?? ''))
+        ));
+    }
+
+    public function switchRemoverRota(): void
+    {
+        AuthMiddleware::checkModulo('ativos_novo');
+        header('Content-Type: application/json');
+        set_time_limit(90);
+
+        echo json_encode($this->service->removerRotaSwitch((int)($_POST['id'] ?? 0), trim((string)($_POST['destino'] ?? '')), trim((string)($_POST['via'] ?? ''))));
+    }
+
     public function switchDhcp(): void
     {
         AuthMiddleware::checkModulo('ativos_lista');
@@ -1491,7 +1517,7 @@ class AtivoController extends Controller
 
     public function switchDefinirIpFixo(): void
     {
-        AuthMiddleware::checkModulo('ativos_lista');
+        AuthMiddleware::checkModulo('ativos_novo');
         header('Content-Type: application/json');
 
         echo json_encode($this->service->definirReservaDhcpSwitch(
@@ -1504,7 +1530,7 @@ class AtivoController extends Controller
 
     public function switchRemoverIpFixo(): void
     {
-        AuthMiddleware::checkModulo('ativos_lista');
+        AuthMiddleware::checkModulo('ativos_novo');
         header('Content-Type: application/json');
 
         echo json_encode($this->service->removerReservaDhcpSwitch((int)($_POST['id'] ?? 0), (string)($_POST['ip'] ?? '')));
@@ -1520,7 +1546,7 @@ class AtivoController extends Controller
 
     public function unifiDefinirIpFixo(): void
     {
-        AuthMiddleware::checkModulo('ativos_lista');
+        AuthMiddleware::checkModulo('ativos_novo');
         header('Content-Type: application/json');
 
         echo json_encode($this->service->definirIpFixoUnifi(
@@ -1533,7 +1559,7 @@ class AtivoController extends Controller
 
     public function unifiRemoverIpFixo(): void
     {
-        AuthMiddleware::checkModulo('ativos_lista');
+        AuthMiddleware::checkModulo('ativos_novo');
         header('Content-Type: application/json');
 
         echo json_encode($this->service->removerIpFixoUnifi((string)($_POST['mac'] ?? '')));

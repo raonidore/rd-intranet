@@ -4908,6 +4908,110 @@ class AtivoService
         return ['success' => false, 'message' => 'Esse IP não tem reserva no switch.'];
     }
 
+    /** "10.10.2.0/24" -> ['10.10.2.0', '255.255.255.0'] (ou null se não for endereço de rede). */
+    private static function redeEMascara(string $cidr): ?array
+    {
+        if (!preg_match('#^(\d{1,3}(?:\.\d{1,3}){3})/(\d{1,2})$#', trim($cidr), $m) || !filter_var($m[1], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) || (int)$m[2] > 32) {
+            return null;
+        }
+        $mascara = (-1 << (32 - (int)$m[2])) & 0xFFFFFFFF;
+        if ((ip2long($m[1]) & $mascara) !== ip2long($m[1])) {
+            return null;
+        }
+
+        return [$m[1], long2ip($mascara)];
+    }
+
+    /**
+     * Cria ou edita (quando vem $anteriorDestino/$anteriorVia) uma rota
+     * estática no switch TP-Link L3, e coleta de novo pra tela refletir.
+     */
+    public function salvarRotaSwitch(int $id, string $destino, string $via, ?int $distancia, string $anteriorDestino = '', string $anteriorVia = ''): array
+    {
+        [$ativo, $erro] = $this->switchDhcp($id);
+        if ($erro) {
+            return ['success' => false, 'message' => $erro];
+        }
+        $detalhes = json_decode($ativo['detalhes'] ?? '', true) ?: [];
+        $destino = trim($destino);
+        $via = trim($via);
+
+        $redeMascara = self::redeEMascara($destino);
+        if ($redeMascara === null) {
+            return ['success' => false, 'message' => 'Rede de destino inválida -- use o endereço da rede com o prefixo, ex.: 10.10.2.0/24 (não um IP de dentro dela).'];
+        }
+        if (!filter_var($via, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+            return ['success' => false, 'message' => 'Próximo salto inválido.'];
+        }
+
+        // O próximo salto precisa estar numa rede em que o switch tem IP (senão ele não sabe chegar nele).
+        $interfaces = $detalhes['omada_interfaces_ip'] ?? [];
+        $alcancavel = false;
+        foreach ($interfaces as $interface) {
+            if (explode('/', $interface['ip'])[0] === $via) {
+                return ['success' => false, 'message' => "{$via} é o próprio switch ({$interface['interface']})."];
+            }
+            if (self::ipNaRede($via, $interface['ip'])) {
+                $alcancavel = true;
+            }
+            if ($destino !== '0.0.0.0/0' && self::ipNaRede($redeMascara[0], $interface['ip']) && (int)explode('/', $destino)[1] >= (int)explode('/', $interface['ip'])[1]) {
+                return ['success' => false, 'message' => "{$destino} já é uma rede ligada direto ao switch ({$interface['interface']} {$interface['ip']})."];
+            }
+        }
+        if ($interfaces && !$alcancavel) {
+            return ['success' => false, 'message' => "O próximo salto {$via} não está em nenhuma rede do switch (" . implode(', ', array_column($interfaces, 'ip')) . ').'];
+        }
+
+        $anterior = null;
+        if ($anteriorDestino !== '') {
+            $redeAnterior = self::redeEMascara($anteriorDestino);
+            if ($redeAnterior === null || !filter_var($anteriorVia, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+                return ['success' => false, 'message' => 'Rota original inválida.'];
+            }
+            $anterior = [$redeAnterior[0], $redeAnterior[1], $anteriorVia];
+        }
+        foreach ($detalhes['omada_rotas'] ?? [] as $rota) {
+            $mesma = $rota['destino'] === $destino && $rota['via'] === $via;
+            $ehAnterior = $rota['destino'] === $anteriorDestino && $rota['via'] === $anteriorVia;
+            if ($mesma && !$ehAnterior) {
+                return ['success' => false, 'message' => "Já existe a rota {$destino} via {$via}."];
+            }
+        }
+
+        $resultado = (new OmadaSshService())->salvarRotaEstatica($ativo['ip'], $redeMascara[0], $redeMascara[1], $via, $distancia, $anterior);
+        if (!$resultado['success']) {
+            return $resultado;
+        }
+        $descricao = $anterior
+            ? "Rota {$anteriorDestino} via {$anteriorVia} alterada para {$destino} via {$via}" . ($distancia ? " (distância {$distancia})" : '') . '.'
+            : "Rota {$destino} via {$via}" . ($distancia ? " (distância {$distancia})" : '') . ' criada.';
+        AuditService::registrar('Ativos', 'Switch - Rota estática', "{$ativo['codigo_patrimonio']} ({$ativo['nome']}): {$descricao}");
+        $this->coletarOmada($id);
+
+        return ['success' => true, 'message' => $descricao];
+    }
+
+    public function removerRotaSwitch(int $id, string $destino, string $via): array
+    {
+        [$ativo, $erro] = $this->switchDhcp($id);
+        if ($erro) {
+            return ['success' => false, 'message' => $erro];
+        }
+        $redeMascara = self::redeEMascara($destino);
+        if ($redeMascara === null || !filter_var($via, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+            return ['success' => false, 'message' => 'Rota inválida.'];
+        }
+
+        $resultado = (new OmadaSshService())->removerRotaEstatica($ativo['ip'], $redeMascara[0], $redeMascara[1], $via);
+        if (!$resultado['success']) {
+            return $resultado;
+        }
+        AuditService::registrar('Ativos', 'Switch - Rota estática', "{$ativo['codigo_patrimonio']} ({$ativo['nome']}): rota {$destino} via {$via} removida.");
+        $this->coletarOmada($id);
+
+        return ['success' => true, 'message' => "Rota {$destino} via {$via} removida."];
+    }
+
     public function definirIpFixoUnifi(string $mac, string $ip, string $redeId, string $nome): array
     {
         $mac = OmadaSshService::normalizarMac($mac);
