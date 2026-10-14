@@ -4,5 +4,5 @@
 -- (histórico, picos, consumidores, tráfego por IP) chega como retrato
 -- "desempenho" em ativos_seguranca_retratos.
 ALTER TABLE ativos_seguranca_modulos
-    ADD COLUMN IF NOT EXISTS desempenho_habilitado TINYINT(1) NULL DEFAULT NULL AFTER rede_intervalo_segundos,
-    ADD COLUMN IF NOT EXISTS desempenho_intervalo_segundos INT NULL DEFAULT NULL AFTER desempenho_habilitado;
+    ADD COLUMN IF NOT EXISTS desempenho_habilitado TINYINT(1) NULL DEFAULT NULL,
+    ADD COLUMN IF NOT EXISTS desempenho_intervalo_segundos INT NULL DEFAULT NULL;
