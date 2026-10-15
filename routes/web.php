@@ -1041,6 +1041,8 @@ $router->post('/ativos/coletar-snmp', [AtivoController::class, 'coletarSnmp']);
 $router->post('/ativos/snmp/config', [AtivoController::class, 'salvarConfigSnmp']);
 $router->get('/ativos/seguranca', [AtivoController::class, 'seguranca']);
 $router->get('/ativos/seguranca/excecoes', [AtivoController::class, 'segurancaExcecoes']);
+$router->post('/ativos/seguranca/confiaveis/adicionar', [AtivoController::class, 'adicionarConfiavelGlobal']);
+$router->post('/ativos/seguranca/confiaveis/remover', [AtivoController::class, 'removerConfiavelGlobal']);
 $router->get('/ativos/seguranca/configuracao', [AtivoController::class, 'segurancaConfiguracao']);
 $router->post('/ativos/seguranca/excecoes', [AtivoController::class, 'salvarExcecoesSeguranca']);
 $router->post('/ativos/seguranca/assinaturas', [AtivoController::class, 'configurarAssinaturasSeguranca']);

@@ -81,6 +81,12 @@ class SegurancaEventoService
         $detalhes = is_array($payload['detalhes'] ?? null) ? $payload['detalhes'] : [];
         $severidade = $this->rebaixarRodizioShadowDeAgenteAntigo($tipo, $severidade, $detalhes);
 
+        // Programa confiável em todas as máquinas (Central de Segurança > Exceções): nem grava.
+        // Vale também para agente antigo, que ainda não recebe a lista.
+        if ((new SegurancaConfiavelService())->filtrarEvento($tipo, $detalhes)) {
+            return ['success' => true, 'message' => 'Programa confiável do cliente -- alerta descartado.'];
+        }
+
         if ($this->contarRecentes($ativoId) >= self::MAX_EVENTOS_JANELA) {
             return ['success' => true, 'message' => 'Limite de eventos da janela atingido -- descartado.'];
         }

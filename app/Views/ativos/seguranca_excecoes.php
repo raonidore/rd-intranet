@@ -158,6 +158,55 @@ $taxaFp = $totalGeral > 0 ? round($totalFp * 100 / $totalGeral) : 0;
             </div>
         </div>
 
+        <div class="card border-0 shadow-sm mb-3" id="confiaveis">
+            <div class="card-header bg-white">
+                <strong><i class="bi bi-shield-check"></i> Programas confiáveis em todas as máquinas</strong>
+            </div>
+            <div class="card-body">
+                <p class="small text-muted mb-2">
+                    Sistemas legítimos que o monitor acusa (ex.: um ERP em Java). Os alertas de <strong>processo</strong>, <strong>inicialização</strong> e
+                    <strong>conexão</strong> desses caminhos deixam de chegar, em todas as máquinas e já, mesmo com agente antigo. <strong>Varredura de rede continua alertando</strong>.
+                    Ao adicionar, os alertas abertos do programa são encerrados como falso positivo.
+                </p>
+                <?php if ($confiaveisGlobais): ?>
+                    <ul class="list-group list-group-flush mb-3">
+                        <?php foreach ($confiaveisGlobais as $c): ?>
+                            <li class="list-group-item px-0 d-flex gap-2 align-items-start">
+                                <i class="bi bi-patch-check-fill text-success mt-1"></i>
+                                <div class="flex-grow-1 small" style="min-width:0">
+                                    <code class="text-break"><?= htmlspecialchars($c['padrao']) ?></code>
+                                    <div><?= htmlspecialchars($c['descricao']) ?></div>
+                                    <div class="text-muted"><?= htmlspecialchars($c['criado_por'] ?? '') ?> · <?= htmlspecialchars(data_br($c['criado_em'], 'd/m/Y H:i')) ?></div>
+                                </div>
+                                <?php if ($podeEditar): ?>
+                                    <form method="post" action="<?= url('/ativos/seguranca/confiaveis/remover') ?>" onsubmit="return confirm('Deixar de confiar? Os alertas desse programa voltam a aparecer.')">
+                                        <input type="hidden" name="id" value="<?= (int)$c['id'] ?>">
+                                        <button class="btn btn-sm btn-outline-danger" title="Remover"><i class="bi bi-x-lg"></i></button>
+                                    </form>
+                                <?php endif; ?>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                <?php else: ?>
+                    <p class="small text-muted fst-italic">Nenhum programa na lista.</p>
+                <?php endif; ?>
+                <?php if ($podeEditar): ?>
+                    <form method="post" action="<?= url('/ativos/seguranca/confiaveis/adicionar') ?>">
+                        <label class="form-label small fw-semibold mb-1" for="padrao_confiavel">Caminho</label>
+                        <input name="padrao" id="padrao_confiavel" class="form-control form-control-sm font-monospace mb-1" placeholder="C:\Program Files (x86)\ShiftApp\*" required>
+                        <div class="form-text small mb-2">
+                            Arquivo exato ou pasta com <code>*</code> (vale para tudo dentro dela, inclusive subpastas).
+                            <code>C:\Users\*\AppData\Local\Programs\Sistema\*</code> pega todos os usuários.
+                            Pasta temporária, Downloads e Área de Trabalho não são aceitas.
+                        </div>
+                        <label class="form-label small fw-semibold mb-1" for="descricao_confiavel">O que é</label>
+                        <input name="descricao" id="descricao_confiavel" class="form-control form-control-sm mb-2" maxlength="300" placeholder="ShiftApp -- sistema do ERP (Java)" required>
+                        <button class="btn btn-sm btn-success"><i class="bi bi-shield-check"></i> Confiar em todas as máquinas</button>
+                    </form>
+                <?php endif; ?>
+            </div>
+        </div>
+
         <div class="card border-0 shadow-sm">
             <div class="card-header bg-white d-flex justify-content-between align-items-center">
                 <strong><i class="bi bi-cloud-download"></i> Lista pública de extensões de ransomware</strong>

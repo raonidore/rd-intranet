@@ -229,6 +229,7 @@ public class TrayApplicationContext : ApplicationContext
             if (resultado.Sucesso && resultado.MonitorRede != null)
             {
                 _monitorRede.Aplicar(resultado.MonitorRede.Ativo, resultado.MonitorRede.Intervalo);
+                if (resultado.MonitorRede.Confiaveis != null) ConfiaveisService.DefinirGlobais(resultado.MonitorRede.Confiaveis);
             }
 
             if (resultado.Sucesso && resultado.MonitorDesempenho != null)

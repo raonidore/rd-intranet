@@ -32,6 +32,20 @@ public sealed class ConfigMonitorRede
     /// <summary>Segundos entre verificações -- configurável na Central de Segurança (e por máquina).</summary>
     [JsonPropertyName("intervalo")]
     public int Intervalo { get; set; } = 30;
+
+    /// <summary>Programas confiáveis em todas as máquinas do cliente (Central de Segurança > Exceções); null = servidor antigo.</summary>
+    [JsonPropertyName("confiaveis")]
+    public List<ConfiavelGlobal>? Confiaveis { get; set; }
+}
+
+public sealed class ConfiavelGlobal
+{
+    /// <summary>Caminho exato ou com * (ex.: C:\Program Files (x86)\ShiftApp\*).</summary>
+    [JsonPropertyName("padrao")]
+    public string Padrao { get; set; } = "";
+
+    [JsonPropertyName("descricao")]
+    public string Descricao { get; set; } = "";
 }
 
 public sealed class DadosAtivoHeartbeat

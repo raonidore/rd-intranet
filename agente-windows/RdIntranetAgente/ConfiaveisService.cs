@@ -48,12 +48,63 @@ public static class ConfiaveisService
         }
     }
 
-    /// <summary>Confiável pelo caminho do executável (null se não for).</summary>
+    /// <summary>Id dos itens que vêm do portal (não dá pra "deixar de confiar" pela máquina).</summary>
+    public const string IdGlobal = "global";
+
+    // Programas confiáveis em TODAS as máquinas do cliente: vêm no heartbeat (agente 1.0.66+).
+    private static List<(Regex regex, ProgramaConfiavel item)> _globais = new();
+    private static string _assinaturaGlobais = "";
+
+    public static void DefinirGlobais(List<ConfiavelGlobal> lista)
+    {
+        var assinatura = string.Join("\n", lista.Select(c => c.Padrao + "|" + c.Descricao));
+        if (assinatura == _assinaturaGlobais) return;
+
+        var novos = new List<(Regex, ProgramaConfiavel)>();
+        foreach (var c in lista.Where(c => !string.IsNullOrWhiteSpace(c.Padrao)))
+        {
+            var padrao = Normalizar(c.Padrao);
+            var regex = new Regex("^" + Regex.Escape(padrao).Replace("\\*", ".*") + "$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            novos.Add((regex, new ProgramaConfiavel(IdGlobal, padrao, c.Descricao, "", "Portal (todas as máquinas)", DateTime.MinValue)));
+        }
+        lock (Trava)
+        {
+            _globais = novos;
+            _assinaturaGlobais = assinatura;
+        }
+        LogAtividade.Registrar(NivelAtividade.Seguranca, "SEGURANÇA", $"Programas confiáveis do cliente atualizados pelo portal: {novos.Count} item(ns).");
+    }
+
+    public static IReadOnlyList<ProgramaConfiavel> Globais()
+    {
+        lock (Trava) { return _globais.Select(g => g.item).ToList(); }
+    }
+
+    /// <summary>Confiável pelo caminho do executável (null se não for): primeiro o "Confiar" desta máquina, depois a lista do cliente.</summary>
     public static ProgramaConfiavel? Buscar(string? caminho)
     {
         if (string.IsNullOrEmpty(caminho)) return null;
         Listar();
-        lock (Trava) { return _cache!.TryGetValue(caminho, out var c) ? c : null; }
+        lock (Trava)
+        {
+            if (_cache!.TryGetValue(caminho, out var c)) return c;
+            var normalizado = Normalizar(caminho);
+            foreach (var (regex, item) in _globais)
+            {
+                if (regex.IsMatch(normalizado)) return item;
+            }
+            return null;
+        }
+    }
+
+    /// <summary>Mesmo critério do portal: aspas fora, "\\?\" fora, "\.\" e barras repetidas colapsados.</summary>
+    private static string Normalizar(string caminho)
+    {
+        caminho = caminho.Trim().Trim('"', '\'');
+        if (caminho.StartsWith(@"\\?\")) caminho = caminho[4..];
+        caminho = caminho.Replace('/', '\\');
+        caminho = Regex.Replace(caminho, @"\\\.(?=\\)", "");
+        return Regex.Replace(caminho, @"\\{2,}", @"\");
     }
 
     /// <summary>portas: "8234, 9009" (TCP, entrada) -- opcional.</summary>

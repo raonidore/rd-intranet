@@ -8,7 +8,22 @@
  */
 
 use App\Components\Badge;
+use App\Services\PermissionService;
+use App\Services\SegurancaConfiavelService;
 use App\Services\SegurancaEventoService;
+
+// "Confiar em todas as máquinas" (Central de Segurança > Exceções) -- mesma permissão de editar as exceções.
+$podeConfiarGlobal = PermissionService::temAcesso('ativos_dashboard');
+/** Botão que abre a janela de confiança global, já com o caminho e a pasta do programa sugerida. */
+$botaoConfiarGlobal = static function (string $caminho, string $nome, bool $pequeno = false) use ($podeConfiarGlobal): string {
+    if (!$podeConfiarGlobal || $caminho === '' || !preg_match('#^[a-z]:\\\\#i', $caminho)) {
+        return '';
+    }
+    $pasta = SegurancaConfiavelService::pastaDoPrograma($caminho) ?? '';
+    return '<button type="button" class="btn ' . ($pequeno ? 'btn-link btn-sm p-0 small' : 'btn-sm btn-outline-success') . ' js-confiar-global"'
+        . ' data-caminho="' . htmlspecialchars($caminho) . '" data-pasta="' . htmlspecialchars($pasta) . '" data-nome="' . htmlspecialchars($nome) . '"'
+        . ' title="Para de alertar sobre este programa em todas as máquinas do cliente"><i class="bi bi-shield-check"></i> Confiar em todas as máquinas</button>';
+};
 
 $rotulosAcao = [
     'nenhuma' => '—',
@@ -95,7 +110,7 @@ $corNivel = ['critico' => 'danger', 'suspeito' => 'warning', 'atencao' => 'info'
 /** Lista de objetos do agente (itens, destinos...) vira algo legível em vez de JSON cru. */
 $ehListaDeObjetos = static fn ($v): bool => is_array($v) && $v !== [] && array_is_list($v) && is_array($v[0]);
 
-$renderItemAnalisado = static function (array $item) use ($rotulosTipoItem, $rotulosAssinatura, $corNivel, $rotulosDetalhe): string {
+$renderItemAnalisado = static function (array $item, bool $comBotaoConfiar = false) use ($rotulosTipoItem, $rotulosAssinatura, $corNivel, $rotulosDetalhe, $botaoConfiarGlobal): string {
     $h = static fn ($v) => htmlspecialchars((string)$v);
     $nivel = (string)($item['nivel'] ?? '');
     $html = '<div class="border rounded p-2 mb-2 bg-body-tertiary">';
@@ -168,6 +183,10 @@ $renderItemAnalisado = static function (array $item) use ($rotulosTipoItem, $rot
             $html .= '<tr><td class="text-muted text-nowrap pe-2 py-0" style="width:1%">' . $h($rot) . '</td><td class="py-0">' . $valor . '</td></tr>';
         }
         $html .= '</tbody></table>';
+    }
+
+    if ($comBotaoConfiar && !empty($item['caminho'])) {
+        $html .= '<div class="mt-1">' . $botaoConfiarGlobal((string)$item['caminho'], (string)($item['nome'] ?? ''), true) . '</div>';
     }
 
     return $html . '</div>';
@@ -260,7 +279,7 @@ $formatarValor = static function ($valor): string {
                                     <?php if (!$detalheEhItem && !empty($detalhes['itens']) && $ehListaDeObjetos($detalhes['itens'])): ?>
                                         <div class="mt-2">
                                             <?php foreach ($detalhes['itens'] as $item): ?>
-                                                <?= $renderItemAnalisado($item) ?>
+                                                <?= $renderItemAnalisado($item, $ev['resolvido_em'] === null) ?>
                                             <?php endforeach; ?>
                                         </div>
                                     <?php endif; ?>
@@ -324,6 +343,9 @@ $formatarValor = static function ($valor): string {
                                     <button type="button" class="btn btn-outline-secondary js-seguranca-acao" data-acao="resolver-evento" data-resolucao="resolvido"
                                             data-ativo="<?= (int)$ev['ativo_id'] ?>" data-evento="<?= (int)$ev['id'] ?>">Resolvido</button>
                                 </div>
+                                <?php if (in_array($ev['tipo'], ['SUSPICIOUS_PROCESS', 'SUSPICIOUS_CONNECTION'], true) && !empty($detalhes['caminho'])): ?>
+                                    <div class="mt-1"><?= $botaoConfiarGlobal((string)$detalhes['caminho'], (string)($detalhes['nome'] ?? '')) ?></div>
+                                <?php endif; ?>
                             <?php elseif ($ev['resolvido_em']): ?>
                                 <?php
                                     $resolucao = $ev['resolucao'] ?? null;
@@ -343,4 +365,59 @@ $formatarValor = static function ($valor): string {
             </tbody>
         </table>
     </div>
+<?php endif; ?>
+
+<?php if ($podeConfiarGlobal && !defined('RD_MODAL_CONFIAR_GLOBAL')): define('RD_MODAL_CONFIAR_GLOBAL', true); ?>
+    <div class="modal fade" id="modalConfiarGlobal" tabindex="-1">
+        <div class="modal-dialog">
+            <form class="modal-content" method="post" action="<?= url('/ativos/seguranca/confiaveis/adicionar') ?>">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-shield-check text-success"></i> Confiar em todas as máquinas</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted">Os alertas de processo, inicialização e conexão deste programa param de chegar <strong>em todas as máquinas do cliente</strong>, e os alertas abertos dele são encerrados como falso positivo. Varredura de rede continua alertando.</p>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="escopo" id="confiarPasta" value="pasta" checked>
+                        <label class="form-check-label" for="confiarPasta"><strong>Pasta do programa</strong> <span class="text-muted small">(recomendado)</span>
+                            <div><code class="small text-break" id="confiarPastaTexto"></code></div>
+                            <div class="small text-muted">Vale para o executável e os componentes dele (ex.: o Java embutido), inclusive depois de atualizar.</div></label>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="radio" name="escopo" id="confiarArquivo" value="arquivo">
+                        <label class="form-check-label" for="confiarArquivo"><strong>Só este arquivo</strong>
+                            <div><code class="small text-break" id="confiarArquivoTexto"></code></div></label>
+                    </div>
+                    <input type="hidden" name="padrao" id="confiarPadrao">
+                    <input type="hidden" name="voltar" value="<?= htmlspecialchars(preg_replace('#^/rd\.intranet#', '', parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '') . (!empty($_SERVER['QUERY_STRING']) ? '?' . $_SERVER['QUERY_STRING'] : '')) ?>">
+                    <label class="form-label small fw-semibold" for="confiarDescricao">O que é este programa</label>
+                    <input class="form-control" name="descricao" id="confiarDescricao" maxlength="300" required placeholder="ex.: ShiftApp -- sistema do ERP (Java)">
+                    <div class="form-text">Fica registrado na aba Exceções, onde dá para desfazer.</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button class="btn btn-success"><i class="bi bi-shield-check"></i> Confiar em todas as máquinas</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <script>
+    document.addEventListener('click', function (e) {
+        const botao = e.target.closest('.js-confiar-global');
+        if (!botao) return;
+        const pasta = botao.dataset.pasta || '';
+        document.getElementById('confiarPastaTexto').textContent = pasta;
+        document.getElementById('confiarArquivoTexto').textContent = botao.dataset.caminho;
+        document.getElementById('confiarPasta').disabled = !pasta;
+        document.getElementById(pasta ? 'confiarPasta' : 'confiarArquivo').checked = true;
+        document.getElementById('confiarDescricao').value = botao.dataset.nome ? botao.dataset.nome + ' -- ' : '';
+        const atualizar = function () {
+            document.getElementById('confiarPadrao').value = document.getElementById('confiarPasta').checked ? pasta : botao.dataset.caminho;
+        };
+        document.querySelectorAll('#modalConfiarGlobal [name=escopo]').forEach(function (r) { r.onchange = atualizar; });
+        atualizar();
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalConfiarGlobal')).show();
+        setTimeout(function () { const d = document.getElementById('confiarDescricao'); d.focus(); d.setSelectionRange(d.value.length, d.value.length); }, 400);
+    });
+    </script>
 <?php endif; ?>

@@ -353,7 +353,12 @@ class SegurancaModuloService
     {
         $efetivo = $this->efetivo($ativoId);
 
-        return ['ativo' => (bool)$efetivo['rede'], 'intervalo' => (int)$efetivo['rede_intervalo']];
+        return [
+            'ativo' => (bool)$efetivo['rede'],
+            'intervalo' => (int)$efetivo['rede_intervalo'],
+            // Agente 1.0.66+: programas confiáveis em todas as máquinas (Central de Segurança > Exceções).
+            'confiaveis' => (new SegurancaConfiavelService())->paraAgente(),
+        ];
     }
 
     /** Bloco "monitor_desempenho" do heartbeat. */

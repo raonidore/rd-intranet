@@ -20,6 +20,7 @@ use App\Services\PdfTabelaService;
 use App\Services\PermissionService;
 use App\Services\PlanilhaXlsxService;
 use App\Services\PoliticaService;
+use App\Services\SegurancaConfiavelService;
 use App\Services\SegurancaEventoService;
 use App\Services\SegurancaIsolamentoService;
 use App\Services\SegurancaModuloService;
@@ -600,7 +601,43 @@ class AtivoController extends Controller
             'versaoAgenteDistribuida' => (string)\App\Services\ConfigService::get('ativos_agente_exe_versao', ''),
             'agenteAtualizacaoAutomatica' => $this->service->atualizacaoAutomaticaAgente(),
             'agenteVersaoDisponivel' => $this->service->versaoAgenteDisponivelNaoBaixada(),
+            'confiaveisGlobais' => (new SegurancaConfiavelService())->listar(),
         ]);
+    }
+
+    /** Programa confiável em todas as máquinas -- da aba Exceções ou do botão no próprio alerta. */
+    public function adicionarConfiavelGlobal(): void
+    {
+        AuthMiddleware::checkModulo('ativos_dashboard');
+
+        $resultado = (new SegurancaConfiavelService())->adicionar(
+            (string)($_POST['padrao'] ?? ''),
+            (string)($_POST['descricao'] ?? ''),
+            (string)($_SESSION['usuario']['nome'] ?? 'usuário')
+        );
+        $resultado['success'] ? NotificationService::success($resultado['message']) : NotificationService::error($resultado['message']);
+
+        header('Location: ' . $this->voltarParaSeguranca());
+        exit;
+    }
+
+    public function removerConfiavelGlobal(): void
+    {
+        AuthMiddleware::checkModulo('ativos_dashboard');
+
+        (new SegurancaConfiavelService())->remover((int)($_POST['id'] ?? 0));
+        NotificationService::success('Removido da lista. Os alertas desse programa voltam a aparecer.');
+
+        header('Location: ' . url('/ativos/seguranca/excecoes#confiaveis'));
+        exit;
+    }
+
+    /** Volta para a tela de onde o pedido veio (Central, Exceções ou ficha da máquina) -- só caminhos do próprio painel. */
+    private function voltarParaSeguranca(): string
+    {
+        $voltar = (string)($_POST['voltar'] ?? '');
+
+        return preg_match('#^/ativos/(seguranca|ver)[\w/?=&\#.-]*$#', $voltar) ? url($voltar) : url('/ativos/seguranca/excecoes#confiaveis');
     }
 
     /** Botão "Sincronizar agora" -- o mesmo que o cron "rd agente:sincronizar" faz a cada 30 min. */

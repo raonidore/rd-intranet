@@ -734,6 +734,11 @@ public sealed class SegurancaPagina : Panel
     {
         if (string.IsNullOrEmpty(caminho)) return;
         var atual = ConfiaveisService.Buscar(caminho);
+        if (atual?.Id == ConfiaveisService.IdGlobal)
+        {
+            MessageBox.Show(FindForm(), $"{Path.GetFileName(caminho)} já é confiável em todas as máquinas do cliente ({atual.Descricao}).\n\nRegra: {atual.Caminho}\nPara mudar, use o portal: Central de Segurança > Exceções.", "RD Intranet - Segurança", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
         if (atual != null)
         {
             if (Confirmar($"{Path.GetFileName(caminho)} já é confiável ({atual.Descricao}).\n\nDeixar de confiar? As regras de permissão são removidas."))
