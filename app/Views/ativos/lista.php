@@ -95,6 +95,19 @@ function thOrdenavel(string $coluna, string $label, ?string $ordenarChave, array
                 <?php endforeach; ?>
             </div>
         </div>
+        <div class="dropdown">
+            <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" title="Exporta o que está na tela: filtros, ordem e colunas visíveis">
+                <i class="bi bi-download"></i> Exportar
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item link-exportar" href="#" data-formato="xlsx"><i class="bi bi-file-earmark-excel text-success me-1"></i> Excel (.xlsx)
+                    <div class="small text-muted ms-4">colunas da tela + marca, modelo, série e hardware</div></a></li>
+                <li><a class="dropdown-item link-exportar" href="#" data-formato="pdf"><i class="bi bi-file-earmark-pdf text-danger me-1"></i> PDF
+                    <div class="small text-muted ms-4">relatório em A4 paisagem, pronto para imprimir</div></a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><span class="dropdown-item-text small text-muted" id="dicaExportar">Exporta os <?= count($ativos) ?> ativo(s) desta lista.</span></li>
+            </ul>
+        </div>
         <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalPanoramaFrota">
             <i class="bi bi-graph-up"></i> Panorama da Frota
         </button>
@@ -473,6 +486,29 @@ window.addEventListener('load', function () {
 
     const colunasAtuais = colunasSalvas();
     aplicarVisibilidade(colunasAtuais);
+
+    // Exportar: mesmos filtros/ordem da URL + colunas visíveis + (se houver) só os marcados.
+    function marcados() {
+        return Array.from(document.querySelectorAll('.checkbox-ativo:checked')).map(function (c) { return c.value; });
+    }
+    document.querySelectorAll('.link-exportar').forEach(function (link) {
+        link.addEventListener('click', function (e) {
+            e.preventDefault();
+            const params = new URLSearchParams(window.location.search);
+            params.set('formato', link.dataset.formato);
+            params.set('colunas', colunasSalvas().join(','));
+            const ids = marcados();
+            if (ids.length) params.set('ids', ids.join(',')); else params.delete('ids');
+            const url = '<?= url('/ativos/exportar') ?>?' + params.toString();
+            if (link.dataset.formato === 'pdf') window.open(url, '_blank'); else window.location.href = url;
+        });
+    });
+    document.addEventListener('change', function (e) {
+        if (!e.target.matches('.checkbox-ativo, #marcarTodos')) return;
+        const dica = document.getElementById('dicaExportar');
+        const n = marcados().length;
+        if (dica) dica.textContent = n ? 'Exporta só os ' + n + ' ativo(s) marcado(s).' : 'Exporta os <?= count($ativos) ?> ativo(s) desta lista.';
+    });
 
     document.querySelectorAll('.campo-coluna').forEach(function (checkbox) {
         checkbox.checked = colunasAtuais.includes(checkbox.value);

@@ -1020,6 +1020,7 @@ $router->post('/banco-dados/console/sql', [DbConsoleController::class, 'sqlExecu
  */
 $router->get('/ativos', [AtivoController::class, 'dashboard']);
 $router->get('/ativos/lista', [AtivoController::class, 'index']);
+$router->get('/ativos/exportar', [AtivoController::class, 'exportar']);
 $router->get('/ativos/relatorio-frota', [AtivoController::class, 'relatorioFrota']);
 $router->get('/ativos/ver', [AtivoController::class, 'verForm']);
 $router->get('/ativos/novo', [AtivoController::class, 'novoForm']);

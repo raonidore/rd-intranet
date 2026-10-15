@@ -5,6 +5,7 @@ namespace App\Controllers;
 use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
 use App\Services\AtivoCatalogoService;
+use App\Services\AtivoExportacaoService;
 use App\Services\AtivoService;
 use App\Services\AtivoTipoService;
 use App\Services\AuditService;
@@ -15,7 +16,9 @@ use App\Services\CronService;
 use App\Services\EtiquetaService;
 use App\Services\IntelbrasDvrService;
 use App\Services\NotificationService;
+use App\Services\PdfTabelaService;
 use App\Services\PermissionService;
+use App\Services\PlanilhaXlsxService;
 use App\Services\PoliticaService;
 use App\Services\SegurancaEventoService;
 use App\Services\SegurancaIsolamentoService;
@@ -130,6 +133,55 @@ class AtivoController extends Controller
             'versaoAgenteExeAtual' => $this->service->versaoAgenteExe(),
             'discosCriticos' => $this->service->volumesCriticos(),
         ]);
+    }
+
+    /**
+     * Ativos > Lista > Exportar: Excel (.xlsx) ou PDF com os mesmos filtros e
+     * ordenação da tela, as colunas visíveis (colunas=) e, se houver ativos
+     * marcados na lista, só eles (ids=).
+     */
+    public function exportar(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+
+        $formato = ($_GET['formato'] ?? '') === 'pdf' ? 'pdf' : 'xlsx';
+        $filtros = [
+            'tipo_id' => $_GET['tipo_id'] ?? '',
+            'unidade_id' => $_GET['unidade_id'] ?? '',
+            'status' => $_GET['status'] ?? '',
+            'busca' => trim($_GET['busca'] ?? ''),
+            'ordenar' => $_GET['ordenar'] ?? '',
+            'direcao' => $_GET['direcao'] ?? '',
+        ];
+
+        $ativos = $this->service->listar($filtros);
+        $ids = array_filter(array_map('intval', explode(',', (string)($_GET['ids'] ?? ''))));
+        if ($ids) {
+            $ativos = array_values(array_filter($ativos, fn (array $a) => in_array((int)$a['id'], $ids, true)));
+        }
+
+        $exportacao = new AtivoExportacaoService();
+        $colunas = $exportacao->colunasPedidas((string)($_GET['colunas'] ?? ''));
+        $tabela = $exportacao->tabela($ativos, $colunas, $formato === 'xlsx');
+        $descricaoFiltros = $exportacao->descreverFiltros($filtros, $this->tipoService->listarAtivos(), $this->unidadeService->listarAtivas())
+            . ($ids ? ' · ' . count($ativos) . ' selecionado(s)' : '');
+
+        AuditService::registrar('Ativos', 'Exportar lista', strtoupper($formato) . ' com ' . count($ativos) . " ativo(s) -- {$descricaoFiltros}.");
+
+        $nomeArquivo = 'ativos-' . date('Y-m-d-Hi') . '.' . $formato;
+        if ($formato === 'pdf') {
+            $conteudo = (new PdfTabelaService())->gerar('Ativos', $descricaoFiltros, $this->service->nomeEmpresa(), $tabela['cabecalho'], $tabela['linhas']);
+            header('Content-Type: application/pdf');
+            // inline: abre no visualizador do navegador, de onde dá pra imprimir ou salvar.
+            header('Content-Disposition: inline; filename="' . $nomeArquivo . '"');
+        } else {
+            $conteudo = (new PlanilhaXlsxService())->gerar('Ativos', $tabela['cabecalho'], $tabela['linhas'], [], 'Ativos -- ' . $descricaoFiltros);
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment; filename="' . $nomeArquivo . '"');
+        }
+        header('Content-Length: ' . strlen($conteudo));
+        echo $conteudo;
+        exit;
     }
 
     /** JSON pro modal "Panorama da Frota" -- carregado sob demanda quando o modal abre, não no load da lista inteira. */
