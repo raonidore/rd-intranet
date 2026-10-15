@@ -195,7 +195,7 @@ public sealed class SegurancaPagina : Panel
                 Botao("Encerrar", () => AcaoProcesso("encerrar"), BotaoTema.Variante.Perigo);
                 Botao("Quarentena", () => AcaoProcesso("quarentena"), BotaoTema.Variante.Perigo);
                 Botao("Bloquear rede", () => AcaoProcesso("bloquear"));
-                Botao("Confiar...", () => Confiar(Selecionado<LinhaProcesso>()?.Processo.Caminho));
+                Botao("Confiar...", () => Confiar(Selecionado<LinhaProcesso>()?.Processo is { } p ? AnaliseExecutavel.ProgramaReal(p.Caminho, p.LinhaComando) : null));
                 Botao("Abrir local", () => AbrirLocal(Selecionado<LinhaProcesso>()?.Processo.Caminho));
                 Botao("VirusTotal", () => VirusTotal(Selecionado<LinhaProcesso>()?.Processo.Caminho));
                 CarregarProcessos();
@@ -208,7 +208,7 @@ public sealed class SegurancaPagina : Panel
                 Botao("Desativar", () => AcaoInicializacao(false), BotaoTema.Variante.Perigo);
                 Botao("Reativar", () => AcaoInicializacao(true));
                 Botao("Quarentena do arquivo", () => AcaoInicializacaoQuarentena(), BotaoTema.Variante.Perigo);
-                Botao("Confiar...", () => Confiar(Selecionado<ItemInicializacao>()?.Exe.Caminho));
+                Botao("Confiar...", () => Confiar(Selecionado<ItemInicializacao>() is { } i ? AnaliseExecutavel.ProgramaReal(i.Exe.Caminho, i.Comando) : null));
                 Botao("Abrir local", () => AbrirLocal(Selecionado<ItemInicializacao>()?.Exe.Caminho));
                 CarregarInicializacao(false);
                 break;
@@ -742,7 +742,7 @@ public sealed class SegurancaPagina : Panel
         }
         var (descricao, portas) = PerguntarConfianca(caminho);
         if (descricao == null) return;
-        Executar("Criando as permissões no firewall...", () => ConfiaveisService.Confiar(caminho, descricao, portas ?? "", Environment.UserName), RecarregarAba);
+        Executar("Marcando como confiável...", () => ConfiaveisService.Confiar(caminho, descricao, portas ?? "", Environment.UserName), RecarregarAba);
     }
 
     private void PermitirProgramaManual()

@@ -182,6 +182,14 @@ public static class AnaliseExecutavel
             avaliacao.Somar(10, "roda como SYSTEM sem assinatura digital");
         }
 
+        if (!string.IsNullOrEmpty(linhaComando)
+            && ProgramaReal(exe.Caminho, linhaComando) is var alvoConfiavel && alvoConfiavel != exe.Caminho
+            && ConfiaveisService.Buscar(alvoConfiavel) is { } scriptConfiavel)
+        {
+            avaliacao.Motivos.Add($"confiável (TI): {scriptConfiavel.Descricao}");
+            return avaliacao;
+        }
+
         if (!string.IsNullOrEmpty(linhaComando))
         {
             foreach (var (padrao, pontos, motivo) in PadroesLinhaComando)
@@ -258,7 +266,14 @@ public static class AnaliseExecutavel
         candidato = Normalizar(candidato) ?? candidato;
         if (!Path.IsPathRooted(candidato))
         {
-            foreach (var pasta in new[] { Path.Combine(PastaWindows, "System32"), PastaWindows.TrimEnd('\\') })
+            // Além de System32/Windows, o PATH -- powershell.exe fica em
+            // System32\WindowsPowerShell\v1.0 e wmic em System32\wbem; sem isso
+            // o item aparecia como "arquivo não existe" e o Confiar falhava.
+            var pastasPath = (Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.Machine) ?? "")
+                .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(Environment.ExpandEnvironmentVariables)
+                .Where(p => Path.IsPathRooted(p));
+            foreach (var pasta in new[] { Path.Combine(PastaWindows, "System32"), PastaWindows.TrimEnd('\\') }.Concat(pastasPath))
             {
                 var tentativa = Path.Combine(pasta, candidato.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || candidato.Contains('.') ? candidato : candidato + ".exe");
                 if (File.Exists(tentativa)) return tentativa;
@@ -356,6 +371,17 @@ public static class AnaliseExecutavel
 
         return null;
     }
+
+    /// <summary>
+    /// O que de fato é "o programa" de uma linha de comando: o script/jar
+    /// quando o executável é um interpretador (powershell -File x.ps1), senão
+    /// o próprio executável. Confiar no powershell.exe inteiro liberaria
+    /// qualquer script -- o certo é confiar no x.ps1.
+    /// </summary>
+    public static string ProgramaReal(string exe, string? linha)
+        => (string.IsNullOrEmpty(linha) ? null : AlvoDeInterpretador(exe, linha)) is { } alvo
+           ? Normalizar(alvo) ?? alvo
+           : exe;
 
     private static string? AlvoDeInterpretador(string exe, string linha)
     {

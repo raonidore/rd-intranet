@@ -64,7 +64,7 @@ public static class ConfiaveisService
         if (descricao.Length > 300) descricao = descricao[..300];
         if (!File.Exists(caminho) || !Path.IsPathRooted(caminho) || caminho.IndexOfAny(new[] { '\'', '`', '$', '"', '\r', '\n' }) >= 0)
         {
-            return new ResultadoAcao(false, "Programa não encontrado nesta máquina.");
+            return new ResultadoAcao(false, $"Arquivo não encontrado nesta máquina: {caminho}");
         }
         if (descricao.Length < 3) return new ResultadoAcao(false, "Escreva para que serve o programa (fica na regra e na lista de confiáveis).");
 
@@ -82,8 +82,12 @@ New-NetFirewallRule -DisplayName ($nome + ' (entrada)') -Group '{FirewallService
 New-NetFirewallRule -DisplayName ($nome + ' (saída)') -Group '{FirewallService.Grupo}' -Description '{desc.Replace("'", "''")}' -Direction Outbound -Program '{caminho}' -Action Allow -Profile Any | Out-Null
 {(listaPortas.Count > 0 ? $"New-NetFirewallRule -DisplayName ($nome + ' (portas {portasTexto})') -Group '{FirewallService.Grupo}' -Description '{desc.Replace("'", "''")}' -Direction Inbound -Protocol TCP -LocalPort {portasTexto} -Action Allow -Profile Any | Out-Null" : "")}
 'ok'";
-        var (saida, erro, codigo) = ExploradorService.ExecutarPowerShell(script, !Program.EstaElevado());
-        if (codigo != 0 || !saida.Contains("ok")) return new ResultadoAcao(false, FirewallService.MensagemDeErro(erro, codigo));
+        var ehPrograma = Path.GetExtension(caminho).ToLowerInvariant() is ".exe" or ".com" or ".scr";
+        if (ehPrograma)
+        {
+            var (saida, erro, codigo) = ExploradorService.ExecutarPowerShell(script, !Program.EstaElevado());
+            if (codigo != 0 || !saida.Contains("ok")) return new ResultadoAcao(false, FirewallService.MensagemDeErro(erro, codigo));
+        }
 
         var id = Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(System.Text.Encoding.UTF8.GetBytes(caminho.ToLowerInvariant())))[..16];
         using (var item = Registry.LocalMachine.CreateSubKey($@"{Chave}\{id}"))
@@ -97,6 +101,7 @@ New-NetFirewallRule -DisplayName ($nome + ' (saída)') -Group '{FirewallService.
         }
         lock (Trava) { _cache = null; }
         LogAtividade.Registrar(NivelAtividade.Seguranca, "SEGURANÇA", $"Programa marcado como confiável: {caminho} ({descricao}){(portasTexto != "" ? $"; portas liberadas: {portasTexto}" : "")}.");
+        if (!ehPrograma) return new ResultadoAcao(true, $"{Path.GetFileName(caminho)} agora é confiável: sai da análise de risco (script não precisa de regra no firewall).");
         return new ResultadoAcao(true, $"{Path.GetFileName(caminho)} agora é confiável: liberado no firewall (entrada e saída{(portasTexto != "" ? $", portas {portasTexto}" : "")}) e fora da análise de risco.");
     }
 
