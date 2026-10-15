@@ -48,7 +48,157 @@ $rotulosDetalhe = [
     'amostrados' => 'Arquivos amostrados',
     'extensao_ransomware' => 'Com extensão conhecida de ransomware',
     'nota_resgate' => 'Nota de resgate',
+    'novos' => 'Situação',
+    'itens' => 'Itens',
+    'nome' => 'Nome',
+    'nivel' => 'Nível',
+    'pontos' => 'Pontuação de risco',
+    'motivos' => 'Por que é suspeito',
+    'assinatura' => 'Assinatura digital',
+    'assinante' => 'Assinado por',
+    'arquivo_criado_em' => 'Arquivo criado em',
+    'oculto' => 'Arquivo oculto',
+    'pai_nome' => 'Iniciado por',
+    'pai_pid' => 'PID do pai',
+    'iniciado_em' => 'Iniciado em',
+    'como_system' => 'Roda como SYSTEM',
+    'servico' => 'Serviço',
+    'ips_distintos' => 'IPs diferentes',
+    'janela_minutos' => 'Janela (min)',
+    'tentativas' => 'Tentativas',
+    'portas' => 'Portas',
+    'portas_sensiveis' => 'Portas sensíveis',
+    'destinos' => 'Destinos',
+    'amostra_ips' => 'Amostra de IPs',
+    'faixas' => 'Faixas',
+    'estabelecidas' => 'Conexões estabelecidas',
+    'estabelecidas_total' => 'Conexões estabelecidas (total)',
+    'escutando' => 'Portas abertas (escutando)',
+    'internet' => 'Na internet',
+    'lan' => 'Na rede local',
+    'filhos' => 'Processos filhos',
+    'sha256' => 'SHA-256',
 ];
+
+// Item da inicialização / processo analisado pelo agente (agente 1.0.56+).
+$rotulosTipoItem = [
+    'servico' => 'Serviço', 'tarefa' => 'Tarefa agendada', 'registro' => 'Registro (Run)', 'pasta_inicializar' => 'Pasta Inicializar',
+    'winlogon' => 'Winlogon', 'ifeo' => 'IFEO -- sequestro de programa', 'wmi' => 'Assinatura WMI', 'appinit' => 'AppInit', 'politica' => 'Política que trava o Windows',
+];
+$rotulosAssinatura = [
+    'valida' => ['assinado', 'success'], 'catalogo' => ['assinado (catálogo do Windows)', 'success'], 'pacote' => ['app da Microsoft Store', 'success'],
+    'expirada' => ['assinatura expirada', 'warning'], 'nao_confiavel' => ['assinatura de emissor não confiável', 'warning'],
+    'invalida' => ['assinatura INVÁLIDA', 'danger'], 'ausente' => ['sem assinatura', 'danger'],
+];
+$corNivel = ['critico' => 'danger', 'suspeito' => 'warning', 'atencao' => 'info', 'ok' => 'success'];
+
+/** Lista de objetos do agente (itens, destinos...) vira algo legível em vez de JSON cru. */
+$ehListaDeObjetos = static fn ($v): bool => is_array($v) && $v !== [] && array_is_list($v) && is_array($v[0]);
+
+$renderItemAnalisado = static function (array $item) use ($rotulosTipoItem, $rotulosAssinatura, $corNivel, $rotulosDetalhe): string {
+    $h = static fn ($v) => htmlspecialchars((string)$v);
+    $nivel = (string)($item['nivel'] ?? '');
+    $html = '<div class="border rounded p-2 mb-2 bg-body-tertiary">';
+    $html .= '<div class="d-flex flex-wrap align-items-center gap-2 mb-1">';
+    if ($nivel !== '') {
+        $html .= Badge::make(['critico' => 'CRÍTICO', 'suspeito' => 'SUSPEITO', 'atencao' => 'ATENÇÃO'][$nivel] ?? mb_strtoupper($nivel), $corNivel[$nivel] ?? 'secondary');
+    }
+    $html .= '<strong>' . $h($item['nome'] ?? '?') . '</strong>';
+    if (!empty($item['tipo'])) {
+        $html .= '<span class="text-muted">· ' . $h($rotulosTipoItem[$item['tipo']] ?? $item['tipo']) . '</span>';
+    }
+    if (isset($item['pontos'])) {
+        $html .= '<span class="ms-auto text-muted">risco ' . (int)$item['pontos'] . '/100</span>';
+    }
+    $html .= '</div>';
+
+    if (!empty($item['motivos']) && is_array($item['motivos'])) {
+        $html .= '<ul class="mb-1 ps-3">';
+        foreach ($item['motivos'] as $m) {
+            $html .= '<li>' . $h($m) . '</li>';
+        }
+        $html .= '</ul>';
+    }
+
+    $linhas = [];
+    if (!empty($item['caminho'])) {
+        $linhas['Arquivo'] = '<code class="text-break">' . $h($item['caminho']) . '</code>' . (isset($item['existe']) && !$item['existe'] ? ' <span class="text-danger">(não existe mais)</span>' : '');
+    }
+    if (!empty($item['comando']) && ($item['comando'] ?? '') !== ($item['caminho'] ?? '')) {
+        $linhas['Comando'] = '<code class="text-break">' . $h($item['comando']) . '</code>';
+    }
+    if (!empty($item['linha_comando'])) {
+        $linhas['Linha de comando'] = '<code class="text-break">' . $h($item['linha_comando']) . '</code>';
+    }
+    if (!empty($item['assinatura'])) {
+        [$txt, $cor] = $rotulosAssinatura[$item['assinatura']] ?? [$item['assinatura'], 'secondary'];
+        $linhas['Assinatura'] = '<span class="text-' . $cor . '">' . $h($txt) . '</span>' . (!empty($item['assinante']) ? ' -- ' . $h($item['assinante']) : '');
+    }
+    foreach (['conta' => 'Conta', 'pai_nome' => 'Iniciado por', 'pid' => 'PID', 'estado' => 'Estado', 'inicio' => 'Início'] as $k => $rot) {
+        if (isset($item[$k]) && $item[$k] !== '' && $item[$k] !== null) {
+            $linhas[$rot] = $h($item[$k]);
+        }
+    }
+    if (!empty($item['arquivo_criado_em'])) {
+        $linhas['Arquivo criado em'] = $h(data_br($item['arquivo_criado_em'], 'd/m/Y H:i'));
+    }
+    if (!empty($item['oculto'])) {
+        $linhas['Arquivo oculto'] = '<span class="text-danger">sim</span>';
+    }
+    if (!empty($item['origem'])) {
+        $linhas['Onde está registrado'] = '<code class="text-break text-muted">' . $h($item['origem']) . '</code>';
+    }
+    if (!empty($item['sha256'])) {
+        $linhas['SHA-256'] = '<code class="text-break text-muted" style="font-size:.75em">' . $h($item['sha256']) . '</code>'
+            . ' <a href="https://www.virustotal.com/gui/file/' . $h(strtolower($item['sha256'])) . '" target="_blank" rel="noopener">VirusTotal</a>';
+    }
+    // Campos que não têm lugar acima (ex.: detecção de rede) aparecem do jeito simples.
+    $conhecidos = ['tipo', 'nome', 'id', 'caminho', 'existe', 'comando', 'linha_comando', 'assinatura', 'assinante', 'conta', 'pai_nome', 'pid', 'estado', 'inicio',
+                   'arquivo_criado_em', 'oculto', 'origem', 'sha256', 'nivel', 'pontos', 'motivos', 'ms'];
+    foreach ($item as $k => $v) {
+        if (in_array($k, $conhecidos, true) || $v === null || $v === '' || $v === [] || $v === false || is_array($v)) {
+            continue;
+        }
+        $linhas[$rotulosDetalhe[$k] ?? $k] = $h(is_bool($v) ? 'sim' : $v);
+    }
+
+    if ($linhas) {
+        $html .= '<table class="table table-sm table-borderless mb-0 small"><tbody>';
+        foreach ($linhas as $rot => $valor) {
+            $html .= '<tr><td class="text-muted text-nowrap pe-2 py-0" style="width:1%">' . $h($rot) . '</td><td class="py-0">' . $valor . '</td></tr>';
+        }
+        $html .= '</tbody></table>';
+    }
+
+    return $html . '</div>';
+};
+
+/** Lista de objetos genérica (destinos, portas, tentativas...) vira tabelinha. */
+$renderTabela = static function (array $lista) use ($rotulosDetalhe): string {
+    $h = static fn ($v) => htmlspecialchars((string)$v);
+    $colunas = [];
+    foreach ($lista as $linha) {
+        foreach ((array)$linha as $k => $v) {
+            if (!is_array($v)) {
+                $colunas[$k] = true;
+            }
+        }
+    }
+    $html = '<div class="table-responsive"><table class="table table-sm table-bordered mb-0 small"><thead><tr>';
+    foreach (array_keys($colunas) as $c) {
+        $html .= '<th class="fw-normal text-muted">' . $h($rotulosDetalhe[$c] ?? $c) . '</th>';
+    }
+    $html .= '</tr></thead><tbody>';
+    foreach ($lista as $linha) {
+        $html .= '<tr>';
+        foreach (array_keys($colunas) as $c) {
+            $v = $linha[$c] ?? '';
+            $html .= '<td>' . $h(is_bool($v) ? ($v ? 'sim' : 'não') : $v) . '</td>';
+        }
+        $html .= '</tr>';
+    }
+    return $html . '</tbody></table></div>';
+};
 
 $formatarValor = static function ($valor): string {
     if (is_bool($valor)) {
@@ -95,16 +245,39 @@ $formatarValor = static function ($valor): string {
                             <?= Badge::make($ev['severidade'], $corSeveridade) ?>
                             <?= htmlspecialchars(SegurancaEventoService::rotuloTipo($ev['tipo'])) ?>
                         </td>
-                        <td class="small align-top" style="max-width:520px; word-break:break-word">
+                        <td class="small align-top" style="min-width:420px; max-width:640px; word-break:break-word">
                             <?= htmlspecialchars($ev['resumo']) ?>
                             <?php if ($detalhes || $execucao): ?>
                                 <details class="mt-1">
                                     <summary class="text-primary" style="cursor:pointer">Ver detalhes</summary>
+                                    <?php
+                                        // Evento de processo suspeito: os próprios detalhes SÃO o item analisado.
+                                        $detalheEhItem = isset($detalhes['nivel'], $detalhes['motivos']) && !isset($detalhes['itens']);
+                                    ?>
+                                    <?php if ($detalheEhItem): ?>
+                                        <div class="mt-2"><?= $renderItemAnalisado($detalhes) ?></div>
+                                    <?php endif; ?>
+                                    <?php if (!$detalheEhItem && !empty($detalhes['itens']) && $ehListaDeObjetos($detalhes['itens'])): ?>
+                                        <div class="mt-2">
+                                            <?php foreach ($detalhes['itens'] as $item): ?>
+                                                <?= $renderItemAnalisado($item) ?>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    <?php endif; ?>
                                     <dl class="row small mb-0 mt-2">
-                                        <?php foreach ($detalhes as $chave => $valor): ?>
-                                            <?php if ($valor === null || $valor === '' || $valor === []) continue; ?>
+                                        <?php foreach ($detalheEhItem ? [] : $detalhes as $chave => $valor): ?>
+                                            <?php if ($valor === null || $valor === '' || $valor === [] || ($chave === 'itens' && $ehListaDeObjetos($valor))) continue; ?>
+                                            <?php if ($chave === 'novos'): ?>
+                                                <dt class="col-sm-4 fw-normal text-muted">Situação</dt>
+                                                <dd class="col-sm-8 mb-1"><?= $valor ? 'itens novos ou que pioraram desde a última análise' : 'primeira análise desta máquina (tudo que já existia)' ?></dd>
+                                                <?php continue; ?>
+                                            <?php endif; ?>
                                             <dt class="col-sm-4 fw-normal text-muted"><?= htmlspecialchars($rotulosDetalhe[$chave] ?? $chave) ?></dt>
-                                            <dd class="col-sm-8 mb-1" style="white-space:pre-line"><?= htmlspecialchars($formatarValor($valor)) ?></dd>
+                                            <?php if ($ehListaDeObjetos($valor)): ?>
+                                                <dd class="col-sm-8 mb-1"><?= $renderTabela($valor) ?></dd>
+                                            <?php else: ?>
+                                                <dd class="col-sm-8 mb-1" style="white-space:pre-line"><?= htmlspecialchars($formatarValor($valor)) ?></dd>
+                                            <?php endif; ?>
                                         <?php endforeach; ?>
                                         <dt class="col-sm-4 fw-normal text-muted">Recebido pelo portal</dt>
                                         <dd class="col-sm-8 mb-1"><?= htmlspecialchars(data_br($ev['recebido_em'], 'd/m/Y H:i:s')) ?></dd>

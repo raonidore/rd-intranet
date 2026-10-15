@@ -120,7 +120,12 @@ public static class AnaliseExecutavel
         }
 
         // App da Microsoft Store/MSIX: o Windows só instala em WindowsApps com o pacote assinado.
-        var (assinatura, assinante) = caminho.Contains(@"\Program Files\WindowsApps\", StringComparison.OrdinalIgnoreCase)
+        // "Alias de execução" (AppData\Local\Microsoft\WindowsApps\ms-teams.exe):
+        // atalho de 0 byte do próprio Windows para um app da loja -- não tem
+        // assinatura própria, e conferir dava "inválida" (Teams no MDA-PC-0006).
+        var alias = arquivo.Attributes.HasFlag(FileAttributes.ReparsePoint)
+                    && caminho.Contains(@"\AppData\Local\Microsoft\WindowsApps\", StringComparison.OrdinalIgnoreCase);
+        var (assinatura, assinante) = caminho.Contains(@"\Program Files\WindowsApps\", StringComparison.OrdinalIgnoreCase) || alias
             ? ("pacote", PublicadorDoPacote(caminho))
             : VerificarAssinatura(caminho);
         var info = new InfoExecutavel
@@ -310,6 +315,14 @@ public static class AnaliseExecutavel
             Somar(15, "dentro da pasta do Windows sem assinatura");
         }
 
+        // Ativadores piratas de Windows/Office: não são "o vírus" em si, mas
+        // deixam a licença irregular, rodam como serviço sem assinatura e vêm
+        // de sites que costumam embutir trojan (KMS-R@1n no MDA-PC-0006).
+        if (Regex.IsMatch(caminho, @"KMS-?R@1n|KMSAuto|AutoKMS|KMSpico|KMS_VL_ALL|SECOH-QAD|KMSELDI|KMS-QADhook", RegexOptions.IgnoreCase))
+        {
+            Somar(20, "ativador pirata de Windows/Office (KMS) -- licença irregular e origem comum de vírus");
+        }
+
         if (ImitaWindows(nome, caminho, info.Microsoft) is { } imitado)
         {
             Somar(50, $"nome \"{nome}\" imita o {imitado} do Windows");
@@ -433,7 +446,8 @@ public static class AnaliseExecutavel
         var m = Regex.Match(caminho, @"\\WindowsApps\\([^\\_]+)_", RegexOptions.IgnoreCase);
         if (!m.Success) return null;
         var nome = m.Groups[1].Value;
-        return nome.StartsWith("Microsoft.", StringComparison.OrdinalIgnoreCase) ? "Microsoft Corporation (pacote)" : nome.Split('.')[0] + " (pacote da loja)";
+        // 8wekyb3d8bbwe = identificador de publicador da própria Microsoft (ex.: MSTeams_8wekyb3d8bbwe).
+        return nome.StartsWith("Microsoft.", StringComparison.OrdinalIgnoreCase) || caminho.Contains("_8wekyb3d8bbwe", StringComparison.OrdinalIgnoreCase) ? "Microsoft Corporation (pacote)" : nome.Split('.')[0] + " (pacote da loja)";
     }
 
     private static string? NomeDoAssinante(string caminho)

@@ -74,7 +74,9 @@ class NetworkConfigService
             if (!$this->validarCidr($ipCidr)) {
                 return ['success' => false, 'message' => 'Endereço IP/CIDR inválido. Use o formato 192.168.1.10/24.'];
             }
-            if (!$this->validarIp($gateway)) {
+            // Gateway é opcional: placa só de rede interna não leva rota default.
+            $gateway = trim($gateway);
+            if ($gateway !== '' && !$this->validarIp($gateway)) {
                 return ['success' => false, 'message' => 'Gateway inválido.'];
             }
             foreach (array_filter(array_map('trim', explode(',', $dnsCsv))) as $dns) {

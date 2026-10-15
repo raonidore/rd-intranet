@@ -139,13 +139,13 @@ $ipAtual = $atual['ipv4'][0] ?? '';
                         <div class="field-help">Formato: endereço/prefixo, ex: 192.168.1.15/24</div>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">Gateway</label>
-                        <input type="text" class="form-control" name="gateway" placeholder="192.168.1.1" value="<?= htmlspecialchars($detalhes['gateway']) ?>">
-                        <div class="field-help">Endereço do roteador padrão desta rede</div>
+                        <label class="form-label">Gateway <span class="text-muted fw-normal">(opcional)</span></label>
+                        <input type="text" class="form-control" name="gateway" placeholder="deixe vazio se for só rede interna" value="<?= htmlspecialchars($detalhes['gateway']) ?>">
+                        <div class="field-help">Roteador para a internet. Só uma placa do servidor deve ter gateway -- numa placa extra, usada só para falar com equipamentos da rede local, deixe vazio.</div>
                     </div>
                     <div class="col-md-12">
                         <label class="form-label">Servidores DNS</label>
-                        <input type="text" class="form-control" name="dns" placeholder="8.8.8.8, 1.1.1.1" value="<?= htmlspecialchars($detalhes['dns']) ?>">
+                        <input type="text" class="form-control" name="dns" placeholder="opcional -- ex.: 8.8.8.8, 1.1.1.1" value="<?= htmlspecialchars($detalhes['dns']) ?>">
                         <div class="field-help">Separe múltiplos endereços por vírgula</div>
                     </div>
                 </div>
