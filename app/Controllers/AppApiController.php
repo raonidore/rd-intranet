@@ -582,7 +582,14 @@ class AppApiController extends Controller
 
     private function token(): string
     {
-        return trim((string)($_SERVER['HTTP_X_RD_TOKEN'] ?? ''));
+        $token = trim((string)($_SERVER['HTTP_X_RD_TOKEN'] ?? ''));
+
+        // Só o download de anexo aceita o token na URL -- é o que deixa a foto aparecer num <img> do app.
+        if ($token === '' && str_ends_with(parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '', '/api/app/chamados/anexo')) {
+            $token = trim((string)($_GET['token'] ?? ''));
+        }
+
+        return $token;
     }
 
     private function exigirUsuario(): array
@@ -637,6 +644,8 @@ class AppApiController extends Controller
     private function json(array $dados): never
     {
         header('Content-Type: application/json; charset=utf-8');
+        // Hora do servidor: o app calcula "há 5 min" e o SLA mesmo com o relógio/fuso do celular diferente.
+        $dados['agora'] = date('Y-m-d H:i:s');
         echo json_encode($dados, JSON_UNESCAPED_UNICODE);
         exit;
     }

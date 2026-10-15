@@ -1,0 +1,13 @@
+{
+  "appId": "br.com.rdtecnologia.intranet",
+  "appName": "RD.Intranet",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": true
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
+}

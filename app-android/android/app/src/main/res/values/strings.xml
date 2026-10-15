@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">RD.Intranet</string>
+    <string name="title_activity_main">RD.Intranet</string>
+    <string name="package_name">br.com.rdtecnologia.intranet</string>
+    <string name="custom_url_scheme">br.com.rdtecnologia.intranet</string>
+</resources>
