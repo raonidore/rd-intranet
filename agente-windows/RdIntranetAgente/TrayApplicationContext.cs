@@ -338,12 +338,26 @@ public class TrayApplicationContext : ApplicationContext
     /// volta por um endpoint separado (SolicitacaoClient), sem atrasar
     /// os próximos heartbeats.
     /// </summary>
+    /// <summary>
+    /// Pedidos já iniciados (id -> quando). O portal reentrega o pedido a cada
+    /// heartbeat até chegar a resposta; sem isso, um comando de 2 min rodava
+    /// ~12 vezes em paralelo (TS-DOREMED, 14/10/2026: PowerShells empilhados
+    /// somando CPU num servidor que já estava em 100%).
+    /// </summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, DateTime> SolicitacoesIniciadas = new();
+
     private async Task ProcessarSolicitacoesAsync(List<SolicitacaoItem> solicitacoes)
     {
         var cliente = new SolicitacaoClient(_config);
 
+        foreach (var antiga in SolicitacoesIniciadas.Where(x => DateTime.Now - x.Value > TimeSpan.FromMinutes(15)).ToList())
+        {
+            SolicitacoesIniciadas.TryRemove(antiga.Key, out _);
+        }
+
         foreach (var solicitacao in solicitacoes)
         {
+            if (!SolicitacoesIniciadas.TryAdd(solicitacao.Id, DateTime.Now)) continue; // já está rodando (ou acabou de responder)
             try
             {
                 switch (solicitacao.Tipo)
