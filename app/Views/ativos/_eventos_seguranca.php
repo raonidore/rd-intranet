@@ -266,7 +266,7 @@ $formatarValor = static function ($valor): string {
                                     <?php endif; ?>
                                     <dl class="row small mb-0 mt-2">
                                         <?php foreach ($detalheEhItem ? [] : $detalhes as $chave => $valor): ?>
-                                            <?php if ($valor === null || $valor === '' || $valor === [] || ($chave === 'itens' && $ehListaDeObjetos($valor))) continue; ?>
+                                            <?php if ($valor === null || $valor === '' || $valor === [] || ($chave === 'itens' && $ehListaDeObjetos($valor)) || ($chave === 'resumo_agente' && $valor === $ev['resumo'])) continue; ?>
                                             <?php if ($chave === 'novos'): ?>
                                                 <dt class="col-sm-4 fw-normal text-muted">Situação</dt>
                                                 <dd class="col-sm-8 mb-1"><?= $valor ? 'itens novos ou que pioraram desde a última análise' : 'primeira análise desta máquina (tudo que já existia)' ?></dd>
