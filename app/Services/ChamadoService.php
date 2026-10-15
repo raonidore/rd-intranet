@@ -58,7 +58,7 @@ class ChamadoService
     /** $usuarioAberturaId: quem abriu, quando não há sessão web (ex.: login feito dentro do agente); null = usuário da sessão, se houver. */
     public function abrir(array $post, string $canal = 'painel', ?int $usuarioAberturaId = null): array
     {
-        if (!in_array($canal, ['painel', 'email', 'whatsapp', 'portal', 'sistema', 'agente'], true)) {
+        if (!in_array($canal, ['painel', 'email', 'whatsapp', 'portal', 'sistema', 'agente', 'app'], true)) {
             $canal = 'painel';
         }
 
@@ -96,7 +96,7 @@ class ChamadoService
             if (!$subcategoria || (int)$subcategoria['categoria_id'] !== $categoriaId || !$subcategoria['ativo']) {
                 return ['success' => false, 'message' => 'Subcategoria inválida para a categoria escolhida.'];
             }
-        } elseif (!empty($categoria['exige_subcategoria']) && in_array($canal, ['painel', 'portal', 'agente'], true)
+        } elseif (!empty($categoria['exige_subcategoria']) && in_array($canal, ['painel', 'portal', 'agente', 'app'], true)
             && $subcategoriaService->contarAtivasDaCategoria($categoriaId) > 0) {
             return ['success' => false, 'message' => 'Escolha uma subcategoria para "' . $categoria['nome'] . '".'];
         }
@@ -112,7 +112,7 @@ class ChamadoService
             return ['success' => false, 'message' => 'Setor do solicitante inválido para a unidade escolhida.'];
         }
         // Exigir: painel e agente que tem o campo (manda a chave); WhatsApp/e-mail/agente antigo não têm como escolher.
-        $temCampoSetor = $canal === 'painel' || ($canal === 'agente' && array_key_exists('setor_solicitante_id', $post));
+        $temCampoSetor = in_array($canal, ['painel', 'app'], true) || ($canal === 'agente' && array_key_exists('setor_solicitante_id', $post));
         if ($setorSolicitanteId === null && $temCampoSetor && $setorSolicitanteService->obrigatorio()
             && $setorSolicitanteService->existeAtivoParaUnidade($unidadeId)) {
             return ['success' => false, 'message' => 'Informe de qual setor da unidade o chamado está vindo.'];

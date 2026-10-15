@@ -90,6 +90,37 @@ class ChamadoAnexoService
         return ['success' => true, 'message' => 'Anexo enviado.'];
     }
 
+    /**
+     * Mesmo que salvar(), mas com o conteúdo já em memória -- app Android
+     * manda a foto/arquivo em base64 no JSON (não é upload de formulário,
+     * então move_uploaded_file não serve).
+     *
+     * @return array{success: bool, message: string}
+     */
+    public function salvarConteudo(int $chamadoId, string $nomeOriginal, string $conteudo, ?int $usuarioId, ?int $comentarioId = null): array
+    {
+        if (strlen($conteudo) > self::TAMANHO_MAXIMO) {
+            return ['success' => false, 'message' => 'Arquivo maior que 16MB.'];
+        }
+
+        $mimetype = (new \finfo(FILEINFO_MIME_TYPE))->buffer($conteudo) ?: 'application/octet-stream';
+        $extensao = self::extensaoPorMimetype($mimetype);
+        if ($extensao === null) {
+            return ['success' => false, 'message' => 'Tipo de arquivo não suportado.'];
+        }
+
+        $nomeArquivo = self::gerarNomeArquivo($extensao);
+        if (file_put_contents(self::diretorio() . '/' . $nomeArquivo, $conteudo) === false) {
+            return ['success' => false, 'message' => 'Falha ao salvar o arquivo.'];
+        }
+
+        $this->pdo->prepare(
+            'INSERT INTO chamados_anexos (chamado_id, comentario_id, caminho_arquivo, nome_original, tipo_mime, tamanho_bytes, usuario_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        )->execute([$chamadoId, $comentarioId, $nomeArquivo, $nomeOriginal, $mimetype, strlen($conteudo), $usuarioId]);
+
+        return ['success' => true, 'message' => 'Anexo enviado.'];
+    }
+
     public function listarPorChamado(int $chamadoId): array
     {
         $stmt = $this->pdo->prepare(

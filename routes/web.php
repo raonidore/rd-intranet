@@ -1161,6 +1161,27 @@ $router->get('/api/agente/chamados/meus', [\App\Controllers\AgenteChamadoControl
 $router->get('/api/agente/chamados/ver', [\App\Controllers\AgenteChamadoController::class, 'ver']);
 $router->post('/api/agente/chamados/responder', [\App\Controllers\AgenteChamadoController::class, 'responder']);
 
+// App Android (equipe de TI -- módulo Chamados). Autenticação pelo cabeçalho X-RD-Token.
+$router->get('/api/app/info', [\App\Controllers\AppApiController::class, 'info']);
+$router->get('/api/app/logo', [\App\Controllers\AppApiController::class, 'logo']);
+$router->post('/api/app/login', [\App\Controllers\AppApiController::class, 'login']);
+$router->post('/api/app/logout', [\App\Controllers\AppApiController::class, 'logout']);
+$router->get('/api/app/eu', [\App\Controllers\AppApiController::class, 'eu']);
+$router->get('/api/app/chamados/resumo', [\App\Controllers\AppApiController::class, 'resumo']);
+$router->get('/api/app/chamados', [\App\Controllers\AppApiController::class, 'chamados']);
+$router->get('/api/app/chamados/ver', [\App\Controllers\AppApiController::class, 'ver']);
+$router->post('/api/app/chamados/assumir', [\App\Controllers\AppApiController::class, 'assumir']);
+$router->post('/api/app/chamados/responder', [\App\Controllers\AppApiController::class, 'responder']);
+$router->post('/api/app/chamados/status', [\App\Controllers\AppApiController::class, 'status']);
+$router->post('/api/app/chamados/transferir', [\App\Controllers\AppApiController::class, 'transferir']);
+$router->post('/api/app/chamados/anexar', [\App\Controllers\AppApiController::class, 'anexar']);
+$router->get('/api/app/chamados/anexo', [\App\Controllers\AppApiController::class, 'baixarAnexo']);
+$router->get('/api/app/chamados/atendentes', [\App\Controllers\AppApiController::class, 'atendentes']);
+$router->get('/api/app/chamados/formulario', [\App\Controllers\AppApiController::class, 'formulario']);
+$router->get('/api/app/chamados/ativos', [\App\Controllers\AppApiController::class, 'buscarAtivos']);
+$router->get('/api/app/chamados/usuarios', [\App\Controllers\AppApiController::class, 'buscarUsuarios']);
+$router->post('/api/app/chamados/abrir', [\App\Controllers\AppApiController::class, 'abrir']);
+
 $router->post('/api/whatsapp/webhook', [WhatsAppWebhookController::class, 'receber']);
 $router->get('/api/whatsapp/webhook/meta', [WhatsAppWebhookController::class, 'verificarMeta']);
 $router->post('/api/whatsapp/webhook/meta', [WhatsAppWebhookController::class, 'receberMeta']);
