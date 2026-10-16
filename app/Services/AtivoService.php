@@ -6432,11 +6432,17 @@ class AtivoService
 
         if (!empty($payload['erro'])) {
             $this->repository->marcarSolicitacaoErro($id, (string)$payload['erro']);
-            return ['success' => true];
+        } else {
+            $resultado = is_array($payload['resultado'] ?? null) ? $payload['resultado'] : [];
+            $this->repository->marcarSolicitacaoConcluida($id, json_encode($resultado, JSON_UNESCAPED_UNICODE));
         }
 
-        $resultado = is_array($payload['resultado'] ?? null) ? $payload['resultado'] : [];
-        $this->repository->marcarSolicitacaoConcluida($id, json_encode($resultado, JSON_UNESCAPED_UNICODE));
+        // Isolar/remover isolamento: só vale se a máquina confirmar (antes o portal marcava ao enviar).
+        try {
+            (new SegurancaIsolamentoService())->conferirResposta((int)$ativo['id'], $id, $payload);
+        } catch (\Throwable) {
+            // conferência é complementar: nunca pode impedir o registro da resposta
+        }
 
         return ['success' => true];
     }

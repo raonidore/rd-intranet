@@ -518,6 +518,8 @@ class AtivoController extends Controller
 
         $eventos = new SegurancaEventoService();
         $modulos = new SegurancaModuloService();
+        // "Isolada" só se a máquina confirmou -- desfaz marcações de comandos que falharam lá.
+        (new SegurancaIsolamentoService())->reconciliarIsoladas();
 
         $this->view('ativos/seguranca', [
             'filtros' => $filtros,

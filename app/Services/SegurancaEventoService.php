@@ -43,6 +43,9 @@ class SegurancaEventoService
         'NETWORK_ISOLATION_APPLIED' => 'Rede isolada',
         'NETWORK_ISOLATION_REMOVED' => 'Isolamento removido',
         'NETWORK_ISOLATION_CANCELLED' => 'Isolamento cancelado',
+        // O portal só fica sabendo se o isolamento funcionou quando a máquina responde o comando.
+        'NETWORK_ISOLATION_FAILED' => 'Isolamento FALHOU',
+        'NETWORK_ISOLATION_REMOVE_FAILED' => 'Remoção do isolamento falhou',
     ];
 
     public const ACOES_AGENTE = ['nenhuma', 'processo_encerrado'];
@@ -153,9 +156,28 @@ class SegurancaEventoService
         return $severidade;
     }
 
-    public function registrarDoServidor(int $ativoId, string $tipo, string $resumo, array $detalhes = []): int
+    public function registrarDoServidor(int $ativoId, string $tipo, string $resumo, array $detalhes = [], string $severidade = 'INFO'): int
     {
-        return $this->inserir($ativoId, $tipo, 'INFO', $resumo, $detalhes, 'nenhuma', time());
+        $id = $this->inserir($ativoId, $tipo, $severidade, $resumo, $detalhes, 'nenhuma', time());
+        if ($severidade === 'CRITICAL') {
+            $this->notificar($ativoId, $tipo, $severidade, $resumo, (string)($detalhes['decisao'] ?? 'verifique a máquina na Central de Segurança.'), $detalhes, $id);
+        }
+
+        return $id;
+    }
+
+    /** Último evento do servidor sobre um comando (isolar/remover) enviado à máquina. */
+    public function buscarPorSolicitacao(int $ativoId, int $solicitacaoId, array $tipos): ?array
+    {
+        $marcadores = implode(',', array_fill(0, count($tipos), '?'));
+        $stmt = $this->pdo->prepare(
+            "SELECT * FROM ativos_eventos_seguranca WHERE ativo_id = ? AND tipo IN ({$marcadores})
+             AND JSON_VALUE(detalhes, '$.solicitacao_id') = ? ORDER BY id DESC LIMIT 1"
+        );
+        $stmt->execute(array_merge([$ativoId], $tipos, [(string)$solicitacaoId]));
+        $evento = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $evento ?: null;
     }
 
     public function listarDoAtivo(int $ativoId, int $limite = 50): array

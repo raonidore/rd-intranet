@@ -129,7 +129,91 @@ class SegurancaIsolamentoService
             'por' => $usuario ?? self::SOLICITANTE,
         ]);
 
-        return ['success' => true, 'message' => 'Isolamento enviado para a máquina (aplicado no próximo heartbeat, em segundos).'];
+        return ['success' => true, 'message' => 'Isolamento enviado para a máquina (aplicado no próximo heartbeat, em segundos). Se o comando falhar lá, a Central avisa e desfaz a marcação.'];
+    }
+
+    /**
+     * A máquina respondeu um comando: se era isolar/remover isolamento,
+     * confere se deu certo. Antes o portal marcava "isolada" ao ENVIAR o
+     * comando -- em 13/10/2026 o AV-RECEPCAO (Enzilab Prime) ficou 3 dias
+     * "isolado" no portal com a internet liberada, porque o comando abortou
+     * por tempo na máquina (agente antigo, limite de 30 s).
+     */
+    public function conferirResposta(int $ativoId, int $solicitacaoId, array $payload): void
+    {
+        $evento = $this->eventos->buscarPorSolicitacao($ativoId, $solicitacaoId, ['NETWORK_ISOLATION_APPLIED', 'NETWORK_ISOLATION_REMOVED']);
+        if ($evento === null) {
+            return;
+        }
+
+        $resultado = is_array($payload['resultado'] ?? null) ? $payload['resultado'] : [];
+        $saida = (string)($resultado['saida'] ?? '');
+        $erro = trim((string)($payload['erro'] ?? '') . ' ' . preg_replace('/<[^>]+>/', ' ', (string)($resultado['erro'] ?? '')));
+        $codigo = (int)($resultado['codigo_saida'] ?? -1);
+        $isolar = $evento['tipo'] === 'NETWORK_ISOLATION_APPLIED';
+
+        $deuCerto = $codigo === 0 && ($isolar
+            ? str_contains($saida, 'Rede isolada')
+            : (str_contains($saida, 'Isolamento removido') || str_contains($saida, 'saida liberada')));
+        if ($deuCerto) {
+            return;
+        }
+
+        $motivo = mb_substr(trim(preg_replace('/\s+/', ' ', $erro !== '' ? $erro : ($saida !== '' ? $saida : 'sem resposta'))), 0, 300);
+        if ($isolar) {
+            $this->modulos->marcarIsolado($ativoId, false);
+            $this->eventos->registrarDoServidor($ativoId, 'NETWORK_ISOLATION_FAILED', 'Isolamento NÃO foi aplicado na máquina -- a rede continua liberada', [
+                'solicitacao_id' => $solicitacaoId,
+                'evento_origem' => $evento['id'],
+                'motivo' => $motivo,
+                'codigo_saida' => $codigo,
+                'decisao' => 'o isolamento falhou na máquina e ela continua com a rede liberada -- isole de novo pela Central de Segurança ou desligue o cabo.',
+            ], 'CRITICAL');
+        } else {
+            $this->modulos->marcarIsolado($ativoId, true);
+            $this->eventos->registrarDoServidor($ativoId, 'NETWORK_ISOLATION_REMOVE_FAILED', 'Remoção do isolamento falhou -- a máquina continua sem rede', [
+                'solicitacao_id' => $solicitacaoId,
+                'evento_origem' => $evento['id'],
+                'motivo' => $motivo,
+                'codigo_saida' => $codigo,
+            ], 'WARNING');
+        }
+    }
+
+    /**
+     * Confere de novo as máquinas marcadas como isoladas cujo comando já
+     * voltou (Central de Segurança, a cada abertura) -- pega casos antigos,
+     * de antes da conferência existir.
+     */
+    public function reconciliarIsoladas(): void
+    {
+        foreach ($this->modulos->listarIsoladas() as $isolada) {
+            $ativoId = (int)$isolada['ativo_id'];
+            $stmt = $this->pdo()->prepare(
+                "SELECT JSON_VALUE(detalhes, '$.solicitacao_id') FROM ativos_eventos_seguranca
+                 WHERE ativo_id = ? AND tipo = 'NETWORK_ISOLATION_APPLIED' ORDER BY id DESC LIMIT 1"
+            );
+            $stmt->execute([$ativoId]);
+            $solicitacaoId = (int)$stmt->fetchColumn();
+            if ($solicitacaoId <= 0) {
+                continue;
+            }
+            $stmt = $this->pdo()->prepare("SELECT status, resultado, erro_mensagem FROM ativos_solicitacoes WHERE id = ? AND status IN ('concluido', 'erro')");
+            $stmt->execute([$solicitacaoId]);
+            $solicitacao = $stmt->fetch(\PDO::FETCH_ASSOC);
+            if (!$solicitacao) {
+                continue; // máquina ainda não respondeu
+            }
+            $this->conferirResposta($ativoId, $solicitacaoId, [
+                'resultado' => json_decode((string)$solicitacao['resultado'], true) ?: [],
+                'erro' => (string)($solicitacao['erro_mensagem'] ?? ''),
+            ]);
+        }
+    }
+
+    private function pdo(): \PDO
+    {
+        return \App\Core\Database::connection();
     }
 
     /** @return array{success: bool, message: string} */
