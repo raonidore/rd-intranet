@@ -120,12 +120,12 @@ class SegurancaConfiavelService
         }
 
         if ($tipo !== 'SUSPICIOUS_STARTUP') {
-            return $this->corresponde($detalhes['caminho'] ?? null) !== null;
+            return $this->itemConfiavel($detalhes);
         }
 
         // Inicialização: tira só os itens confiáveis; descarta se não sobrar nenhum.
         $itens = is_array($detalhes['itens'] ?? null) ? $detalhes['itens'] : [];
-        $restantes = array_values(array_filter($itens, fn ($i) => !is_array($i) || $this->corresponde($i['caminho'] ?? null) === null));
+        $restantes = array_values(array_filter($itens, fn ($i) => !is_array($i) || !$this->itemConfiavel($i)));
         if (count($restantes) === count($itens)) {
             return false;
         }
@@ -140,6 +140,34 @@ class SegurancaConfiavelService
             . (count($restantes) > 3 ? ' e mais ' . (count($restantes) - 3) : '');
 
         return false;
+    }
+
+    /**
+     * Item/processo é confiável se o executável OU o script que ele roda estiver na lista:
+     * "powershell.exe -File C:\ARSistemas\IDLE.ps1" casa com a regra "C:\ARSistemas\IDLE.ps1"
+     * (Doremedicina, 16/10/2026 -- antes só o caminho do powershell era comparado).
+     */
+    public function itemConfiavel(array $item): bool
+    {
+        foreach (self::caminhosDoItem($item) as $caminho) {
+            if ($this->corresponde($caminho) !== null) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** @return list<string> executável + script (campo "alvo" do agente 1.0.67+, ou tirado da linha de comando) */
+    public static function caminhosDoItem(array $item): array
+    {
+        $caminhos = array_filter([(string)($item['caminho'] ?? ''), (string)($item['alvo'] ?? '')]);
+        $linha = (string)($item['comando'] ?? $item['linha_comando'] ?? '');
+        if ($linha !== '' && preg_match_all('#"?([a-z]:\\\\[^"]+?\.(?:ps1|vbs|vbe|js|jse|bat|cmd|hta|jar))(?="|\s|$)#i', $linha, $m)) {
+            array_push($caminhos, ...$m[1]);
+        }
+
+        return array_values(array_unique($caminhos));
     }
 
     /** Pasta "do programa" sugerida para confiar: a primeira abaixo de Program Files / ProgramData / AppData\Local\Programs. */
@@ -223,12 +251,10 @@ class SegurancaConfiavelService
         $total = 0;
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $e) {
             $detalhes = json_decode((string)$e['detalhes'], true) ?: [];
-            $caminhos = $e['tipo'] === 'SUSPICIOUS_STARTUP'
-                ? array_map(fn ($i) => is_array($i) ? (string)($i['caminho'] ?? '') : '', (array)($detalhes['itens'] ?? []))
-                : [(string)($detalhes['caminho'] ?? '')];
-            $caminhos = array_filter($caminhos);
+            $itens = $e['tipo'] === 'SUSPICIOUS_STARTUP' ? array_filter((array)($detalhes['itens'] ?? []), 'is_array') : [$detalhes];
+            $cobre = fn (array $i) => (bool)array_filter(self::caminhosDoItem($i), fn ($c) => self::casa($padrao, self::normalizarCaminho($c)));
             // Inicialização com vários itens: só encerra se TODOS forem cobertos.
-            if ($caminhos && count(array_filter($caminhos, fn ($c) => self::casa($padrao, self::normalizarCaminho($c)))) === count($caminhos)) {
+            if ($itens && count(array_filter($itens, $cobre)) === count($itens)) {
                 $eventos->marcarResolvido((int)$e['id'], $usuario, 'falso_positivo', $nota);
                 $total++;
             }
