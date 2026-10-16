@@ -1003,6 +1003,25 @@ public sealed class SegurancaService : IDisposable
             return;
         }
 
+        // Rodízio por falta de espaço (AV-RECEPCAO, Enzilab Prime, 13/10/2026): o próprio Windows
+        // (taskhostw) criou a cópia do dia com a área de sombra lotada (8,4 de 9 GB) e descartou
+        // as DUAS antigas para caber -- 2 -> 1, nenhuma antiga sobrou, e a regra tratava como ataque.
+        // Ransomware apaga e não cria cópia; aqui houve cópia nova, só as mais antigas saíram e
+        // a criação veio do sistema ou a área estava cheia: alerta sem isolar, com a explicação.
+        var motivoRodizioEspaco = "";
+        if (classificacao == "ataque" && novasCount > 0 && maisAntigasPrimeiro)
+        {
+            var criadorSistema = CriacaoDeSombraPeloSistema(verificadoAntes);
+            var usoArea = UsoDaAreaDeSombra();
+            if (criadorSistema != null || usoArea >= 0.85)
+            {
+                motivoRodizioEspaco = criadorSistema != null
+                    ? $"cópia nova criada pelo próprio Windows ({criadorSistema}) e as antigas descartadas para caber"
+                    : $"área de cópias de sombra {usoArea:P0} cheia: o Windows descartou as antigas para criar a nova";
+                classificacao = "parcial";
+            }
+        }
+
         var parcialDasAntigas = classificacao == "parcial";
 
         Registrar(new EventoSeguranca
@@ -1022,9 +1041,71 @@ public sealed class SegurancaService : IDisposable
                 ["sem_explicacao"] = semExplicacao,
                 ["removidas"] = removidas.Count,
                 ["novas"] = novasCount,
-                ["mais_antigas_primeiro"] = maisAntigasPrimeiro
+                ["mais_antigas_primeiro"] = maisAntigasPrimeiro,
+                ["rodizio_por_espaco"] = motivoRodizioEspaco == "" ? null : motivoRodizioEspaco
             }
         });
+    }
+
+    /// <summary>
+    /// Processo que pediu a criação de cópia de sombra nos últimos minutos (log Aplicação,
+    /// VSS 8231 "Linha de comando do processo: ...") -- só se for do próprio Windows
+    /// (agendador/serviços/Restauração do Sistema). vssadmin/wmic/powershell não contam:
+    /// é por eles que um atacante mexeria. null = nenhuma criação do sistema.
+    /// </summary>
+    private static string? CriacaoDeSombraPeloSistema(DateTime? desde)
+    {
+        try
+        {
+            var janelaMs = (long)Math.Clamp(((DateTime.Now - (desde ?? DateTime.Now.AddMinutes(-2))).TotalMilliseconds) + 180000, 120000, 900000);
+            var consulta = new System.Diagnostics.Eventing.Reader.EventLogQuery(
+                "Application",
+                System.Diagnostics.Eventing.Reader.PathType.LogName,
+                $"*[System[Provider[@Name='VSS'] and EventID=8231 and TimeCreated[timediff(@SystemTime) <= {janelaMs}]]]");
+            using var leitor = new System.Diagnostics.Eventing.Reader.EventLogReader(consulta);
+            for (var registro = leitor.ReadEvent(); registro != null; registro = leitor.ReadEvent())
+            {
+                using (registro)
+                {
+                    var texto = string.Join(" ", registro.Properties.Select(p => p.Value?.ToString() ?? ""));
+                    var m = System.Text.RegularExpressions.Regex.Match(texto, @"(taskhostw|svchost|srtasks|rstrui|wbengine|sdclt)\.exe", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    if (m.Success && !System.Text.RegularExpressions.Regex.IsMatch(texto, @"vssadmin|wmic|powershell|cmd\.exe|diskshadow", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                    {
+                        return m.Value.ToLowerInvariant();
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // sem acesso ao log: decide só pelo espaço
+        }
+        return null;
+    }
+
+    /// <summary>Maior ocupação (usado/máximo) entre as áreas de cópia de sombra; 0 se não der pra ler.</summary>
+    private static double UsoDaAreaDeSombra()
+    {
+        try
+        {
+            using var busca = new ManagementObjectSearcher(@"root\cimv2", "SELECT UsedSpace, MaxSpace FROM Win32_ShadowStorage");
+            using var resultados = busca.Get();
+            var maior = 0.0;
+            foreach (ManagementObject area in resultados)
+            {
+                using (area)
+                {
+                    var usado = Convert.ToDouble(area["UsedSpace"] ?? 0);
+                    var maximo = Convert.ToDouble(area["MaxSpace"] ?? 0);
+                    if (maximo > 0 && maximo < 1e18) maior = Math.Max(maior, usado / maximo);
+                }
+            }
+            return maior;
+        }
+        catch
+        {
+            return 0;
+        }
     }
 
     /// <summary>
