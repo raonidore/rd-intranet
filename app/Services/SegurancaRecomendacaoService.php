@@ -292,7 +292,9 @@ class SegurancaRecomendacaoService
                 'severidade' => 'media',
                 'link' => ['rotulo' => 'Ver na máquina', 'aba' => 'abaSeguranca'],
                 'por_maquina' => function (array $a, array $d, array $itens) {
-                    $nomes = array_map(fn ($i) => $i['nome'] ?? '?', array_filter($itens, fn ($i) => ($i['tipo'] ?? '') === 'politica'));
+                    // Políticas aplicadas pelo próprio portal (Ativos > Políticas) não entram.
+                    $nomes = array_map(fn ($i) => $i['nome'] ?? '?', array_filter($itens, fn ($i) => ($i['tipo'] ?? '') === 'politica'
+                        && !PoliticaService::aplicadaPeloPortal((int)$a['id'], PoliticaService::valorDoItemPolitica($i))));
                     return $nomes ? implode(', ', array_slice($nomes, 0, 4)) : null;
                 },
             ],

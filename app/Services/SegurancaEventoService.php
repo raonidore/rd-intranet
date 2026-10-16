@@ -90,6 +90,22 @@ class SegurancaEventoService
             return ['success' => true, 'message' => 'Programa confiável do cliente -- alerta descartado.'];
         }
 
+        // Política que o próprio portal aplicou (Ativos > Políticas, ex.: bloquear Prompt) não é trava de malware.
+        if ($tipo === 'SUSPICIOUS_STARTUP' && is_array($detalhes['itens'] ?? null)) {
+            $itens = $detalhes['itens'];
+            $restantes = array_values(array_filter($itens, fn ($i) => !(is_array($i) && ($i['tipo'] ?? '') === 'politica'
+                && PoliticaService::aplicadaPeloPortal($ativoId, PoliticaService::valorDoItemPolitica($i)))));
+            if (!$restantes) {
+                return ['success' => true, 'message' => 'Política aplicada pelo portal -- alerta descartado.'];
+            }
+            if (count($restantes) < count($itens)) {
+                $detalhes['itens'] = $restantes;
+                $nomes = array_slice(array_map(fn ($i) => (string)($i['nome'] ?? '?'), $restantes), 0, 3);
+                $payload['resumo'] = count($restantes) . ' item(ns) suspeito(s) na inicialização do Windows: ' . implode(', ', $nomes)
+                    . (count($restantes) > 3 ? ' e mais ' . (count($restantes) - 3) : '');
+            }
+        }
+
         if ($this->contarRecentes($ativoId) >= self::MAX_EVENTOS_JANELA) {
             return ['success' => true, 'message' => 'Limite de eventos da janela atingido -- descartado.'];
         }

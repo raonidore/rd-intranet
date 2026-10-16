@@ -87,6 +87,37 @@ function Set-RdRestrictRunEntry {
 }
 PS1;
 
+    /**
+     * Valor de registro que o detector de "política que trava o Windows" do agente vê ->
+     * regra deste módulo que grava esse valor. MDA-PC-0011/0012 (Maurílio): o cmd_bloqueado
+     * aplicado aqui em 21/07/2026 virou alerta "malware travando o Prompt" em 14/10.
+     */
+    public const VALORES_DO_DETECTOR = ['DisableCMD' => 'cmd_bloqueado', 'NoControlPanel' => 'painel_controle_bloqueado'];
+
+    /** O valor (ex.: "DisableCMD") foi gravado por uma regra deste módulo aplicada na máquina? */
+    public static function aplicadaPeloPortal(int $ativoId, string $valor): bool
+    {
+        $regra = self::VALORES_DO_DETECTOR[$valor] ?? null;
+        if ($regra === null) {
+            return false;
+        }
+        try {
+            $stmt = \App\Core\Database::connection()->prepare(
+                "SELECT 1 FROM ativos_politicas_estado WHERE ativo_id = ? AND regra_id = ? AND desejado = 1 AND status = 'aplicado' LIMIT 1"
+            );
+            $stmt->execute([$ativoId, $regra]);
+            return (bool)$stmt->fetchColumn();
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /** Item de inicialização tipo "politica" do agente: "DisableCMD (todos os usuários)" -> "DisableCMD". */
+    public static function valorDoItemPolitica(array $item): string
+    {
+        return (string)preg_replace('/\s*\(.*$/', '', (string)($item['nome'] ?? ''));
+    }
+
     private const REGRAS_QUE_USAM_RESTRICT_RUN = ['powershell_bloqueado', 'navegadores_bloqueados'];
 
     /** @return array{aplicar: ?string, reverter: ?string} PowerShell de uma regra -- null em 'reverter' = regra "só aplicar" (ver CATALOGO). */
