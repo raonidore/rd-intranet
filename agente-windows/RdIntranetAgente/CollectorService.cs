@@ -1215,6 +1215,36 @@ public static class CollectorService
             // Defender ausente/substituído por outro antivírus
         }
 
+        // Outro antivírus registrado na Central de Segurança do Windows (ex.: Acronis Cyber Protect no
+        // Sidore): com ele ativo o Windows desliga o Defender -- não é falta de proteção.
+        try
+        {
+            var outros = new List<string>();
+            var algumLigado = false;
+            using var busca = new ManagementObjectSearcher(new ManagementScope(@"root\SecurityCenter2"), new ObjectQuery("SELECT displayName, productState FROM AntiVirusProduct"));
+            foreach (ManagementObject av in busca.Get())
+            {
+                using (av)
+                {
+                    var nome = av["displayName"]?.ToString() ?? "";
+                    if (nome == "" || nome.Contains("Windows Defender", StringComparison.OrdinalIgnoreCase) || nome.Contains("Microsoft Defender", StringComparison.OrdinalIgnoreCase)) continue;
+                    var estado = Convert.ToUInt32(av["productState"] ?? 0u);
+                    var ligado = ((estado >> 8) & 0xFF) is 0x10 or 0x11;
+                    if (!outros.Contains(nome)) outros.Add(nome);
+                    algumLigado |= ligado;
+                }
+            }
+            if (outros.Count > 0)
+            {
+                protecao["antivirus_outro"] = string.Join(", ", outros);
+                protecao["antivirus_outro_ligado"] = algumLigado;
+            }
+        }
+        catch
+        {
+            // SecurityCenter2 não existe em Windows Server
+        }
+
         return protecao;
     }
 

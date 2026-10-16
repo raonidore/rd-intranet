@@ -38,6 +38,11 @@ class SegurancaRecomendacaoService
             fn (array $a) => $a['origem'] === 'agente' && !in_array($a['status'], ['baixado', 'estoque'], true)
         ));
         $retratos = $this->retratosInicializacao();
+        $outroAntivirus = $this->outroAntivirusPorAtivo();
+        foreach ($ativos as &$a) {
+            $a['_outro_av'] = $outroAntivirus[(int)$a['id']] ?? null;
+        }
+        unset($a);
         $ignoradas = $this->ignoradas();
         $acoes = $this->ultimasAcoes();
 
@@ -231,11 +236,16 @@ class SegurancaRecomendacaoService
                 },
             ],
             'defender_desligado' => [
-                'titulo' => 'Proteção em tempo real do Defender desligada',
-                'porque' => 'O antivírus só age quando você manda verificar. Se a máquina usa outro antivírus, ignore esta recomendação para ela.',
+                'titulo' => 'Sem antivírus ativo',
+                'porque' => 'O Defender está desligado e não há outro antivírus ativo registrado no Windows -- nada impede um programa malicioso de rodar. (Com outro antivírus ativo, como o Acronis Cyber Protect, o Windows desliga o Defender e isso é normal: essas máquinas não aparecem aqui.)',
                 'severidade' => 'alta',
-                'acao' => ['tipo' => 'script', 'rotulo' => 'Ligar a proteção em tempo real', 'script' => self::scriptLigarDefender()],
-                'por_maquina' => fn (array $a, array $d) => ($d['defender_tempo_real'] ?? null) === 'Nao' ? (($d['defender_ativo'] ?? '') === 'Nao' ? 'antivírus do Defender desligado' : 'tempo real desligado') : null,
+                'acao' => ['tipo' => 'script', 'rotulo' => 'Ligar a proteção em tempo real do Defender', 'script' => self::scriptLigarDefender()],
+                'por_maquina' => function (array $a, array $d) {
+                    if (($d['defender_tempo_real'] ?? null) !== 'Nao' || $a['_outro_av'] !== null) {
+                        return null;
+                    }
+                    return ($d['defender_ativo'] ?? '') === 'Nao' ? 'Defender desligado, nenhum outro antivírus encontrado' : 'Defender ligado, mas sem proteção em tempo real';
+                },
             ],
             'assinaturas_antigas' => [
                 'titulo' => 'Assinaturas do antivírus desatualizadas (mais de 7 dias)',
@@ -244,7 +254,7 @@ class SegurancaRecomendacaoService
                 'acao' => ['tipo' => 'script', 'rotulo' => 'Atualizar as assinaturas agora', 'script' => self::scriptAtualizarAssinaturas()],
                 'por_maquina' => function (array $a, array $d) use ($diasDesde) {
                     $dias = $diasDesde($d['defender_assinatura_data'] ?? null);
-                    return $dias !== null && $dias > 7 && ($d['defender_ativo'] ?? '') === 'Sim' ? "última atualização há {$dias} dias" : null;
+                    return $dias !== null && $dias > 7 && ($d['defender_ativo'] ?? '') === 'Sim' && $a['_outro_av'] === null ? "última atualização há {$dias} dias" : null;
                 },
             ],
             'sem_verificacao_completa' => [
@@ -254,7 +264,7 @@ class SegurancaRecomendacaoService
                 'acao' => ['tipo' => 'script', 'rotulo' => 'Iniciar verificação completa (em segundo plano)', 'script' => self::scriptVerificacaoCompleta()],
                 'por_maquina' => function (array $a, array $d) use ($diasDesde) {
                     $p = $d['protecao'] ?? null;
-                    if (!is_array($p) || !array_key_exists('defender_ultima_completa', $p) || ($d['defender_ativo'] ?? '') !== 'Sim') {
+                    if (!is_array($p) || !array_key_exists('defender_ultima_completa', $p) || ($d['defender_ativo'] ?? '') !== 'Sim' || $a['_outro_av'] !== null) {
                         return null;
                     }
                     $dias = $diasDesde($p['defender_ultima_completa']);
@@ -374,6 +384,36 @@ PS;
     }
 
     // ------------------------------------------------------------ apoio
+
+    /**
+     * Outro antivírus ativo na máquina: o que o agente 1.0.70+ lê da Central de Segurança do
+     * Windows ou, para agente mais antigo, um antivírus conhecido na lista de programas.
+     * @return array<int, string> ativo_id -> nome
+     */
+    private function outroAntivirusPorAtivo(): array
+    {
+        $mapa = [];
+        try {
+            foreach ($this->pdo->query("SELECT id, detalhes FROM ativos WHERE origem = 'agente'")->fetchAll(PDO::FETCH_ASSOC) as $a) {
+                $p = (json_decode((string)$a['detalhes'], true) ?: [])['protecao'] ?? [];
+                if (!empty($p['antivirus_outro']) && !empty($p['antivirus_outro_ligado'])) {
+                    $mapa[(int)$a['id']] = (string)$p['antivirus_outro'];
+                }
+            }
+            $linhas = $this->pdo->query(
+                "SELECT ativo_id, MIN(nome) nome FROM ativos_programas
+                 WHERE nome REGEXP 'acronis cyber protect|kaspersky|eset (endpoint|nod32|internet|smart|security)|bitdefender|avast|^avg |norton|mcafee (endpoint|total|livesafe|antivirus)|sophos|trend micro|panda (dome|endpoint|adaptive)|avira|webroot|sentinel ?one|crowdstrike|cylance|f-secure|g data|emsisoft|malwarebytes'
+                 GROUP BY ativo_id"
+            )->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($linhas as $l) {
+                $mapa[(int)$l['ativo_id']] ??= (string)$l['nome'];
+            }
+        } catch (\Throwable) {
+            // tabela de programas ausente: decide só pelo agente
+        }
+
+        return $mapa;
+    }
 
     /** Itens do último retrato de inicialização de cada máquina. */
     private function retratosInicializacao(): array
