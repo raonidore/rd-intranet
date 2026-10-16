@@ -105,19 +105,15 @@ class AtivoExportacaoService
         };
     }
 
-    /** Mesma regra da coluna "Condição" da tela: agente pelo heartbeat; UniFi/Omada/periférico pela última coleta. */
+    private ?array $varreduras = null;
+
+    /** Mesma regra da coluna "Condição" da tela (AtivoService::condicao). */
     private function condicao(array $a, array $detalhes): string
     {
-        if ($a['origem'] === 'agente') {
-            return AtivoService::estaLigada($a) ? 'Ligado' : 'Desligado';
-        }
-        foreach (['unifi_status', 'omada_status', 'periferico_status'] as $campo) {
-            if (!empty($detalhes[$campo])) {
-                return $detalhes[$campo] === 'Online' ? 'Ligado' : 'Desligado';
-            }
-        }
+        $this->varreduras ??= (new AtivoService())->varredurasRecentes();
+        $c = AtivoService::condicao($a, $detalhes, $this->varreduras);
 
-        return '';
+        return $c === null ? '' : ($c['ligado'] ? 'Ligado' : 'Desligado');
     }
 
     private function valorExtra(string $campo, array $a, array $detalhes): string

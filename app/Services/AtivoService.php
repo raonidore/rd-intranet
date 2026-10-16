@@ -5657,6 +5657,102 @@ class AtivoService
      * e insere os alertas enviados (o agente já manda só os novos desde
      * o último checkin, via um bookmark local dele).
      */
+    /**
+     * Última varredura do IP Scanner de cada faixa (até 26 h) -- base da coluna
+     * "Condição" para equipamento sem agente nem API (impressora, monitor de rede,
+     * câmera solta...). Carregado uma vez por página.
+     *
+     * @return list<array{inicio: int, fim: int, quando: string, ips: array<string, true>}>
+     */
+    public function varredurasRecentes(): array
+    {
+        try {
+            $linhas = \App\Core\Database::connection()->query(
+                "SELECT e.cidr, e.executado_em, e.hosts FROM ip_scanner_execucoes e
+                 JOIN (SELECT cidr, MAX(id) id FROM ip_scanner_execucoes WHERE executado_em > DATE_SUB(NOW(), INTERVAL 26 HOUR) GROUP BY cidr) u ON u.id = e.id"
+            )->fetchAll(\PDO::FETCH_ASSOC);
+        } catch (\Throwable) {
+            return [];
+        }
+        $varreduras = [];
+        foreach ($linhas as $l) {
+            [$rede, $bits] = array_pad(explode('/', (string)$l['cidr']), 2, '32');
+            $inicio = ip2long($rede);
+            if ($inicio === false) {
+                continue;
+            }
+            $tamanho = 2 ** (32 - max(0, min(32, (int)$bits)));
+            $ips = [];
+            foreach (json_decode((string)$l['hosts'], true) ?: [] as $h) {
+                if (!empty($h['ip'])) {
+                    $ips[$h['ip']] = true;
+                }
+            }
+            $varreduras[] = ['inicio' => $inicio, 'fim' => $inicio + $tamanho - 1, 'quando' => $l['executado_em'], 'ips' => $ips];
+        }
+
+        return $varreduras;
+    }
+
+    /**
+     * Ligado/desligado de QUALQUER ativo, pela melhor evidência disponível:
+     * agente (heartbeat) > status do fabricante (UniFi/Omada/Protect/ping de
+     * periférico) com coleta recente > coleta SNMP/API ok nas últimas 2 h >
+     * IP Scanner (respondeu ou não na última varredura da faixa). null = sem dado.
+     *
+     * @return array{ligado: bool, dica: string}|null
+     */
+    public static function condicao(array $a, array $detalhes, array $varreduras): ?array
+    {
+        $ha = static fn (?string $quando) => $quando ? self::duracaoLegivel(max(0, time() - strtotime($quando))) : '?';
+
+        if ($a['origem'] === 'agente') {
+            $segundos = self::segundosDesdeUltimoHeartbeat($a);
+            $dica = $segundos !== null
+                ? 'Agente -- último sinal há ' . self::duracaoLegivel($segundos)
+                : ((($minutos = self::minutosDesdeUltimoCheckin($a)) !== null) ? 'Agente antigo -- último check-in há ' . self::duracaoLegivel($minutos * 60) : 'Agente nunca se comunicou');
+            return ['ligado' => self::estaLigada($a), 'dica' => $dica];
+        }
+
+        foreach ([
+            ['unifi_status', 'unifi_coletado_em', 'UniFi Controller', ['Online']],
+            ['omada_status', 'omada_coletado_em', 'Omada Controller', ['Online']],
+            ['protect_status', 'protect_coletado_em', 'UniFi Protect', ['Conectada']],
+            ['periferico_status', null, 'ping do RD.Intranet', ['Online']],
+        ] as [$campo, $campoData, $fonte, $valoresLigado]) {
+            if (empty($detalhes[$campo])) {
+                continue;
+            }
+            $quando = $campoData ? ($detalhes[$campoData] ?? $a['ultimo_checkin'] ?? null) : ($a['ultimo_checkin'] ?? null);
+            if ($quando && time() - strtotime($quando) > 3 * 3600) {
+                continue; // dado velho: tenta outra evidência
+            }
+            return ['ligado' => in_array($detalhes[$campo], $valoresLigado, true), 'dica' => "{$fonte}: {$detalhes[$campo]} -- última coleta há " . $ha($quando)];
+        }
+
+        if (in_array($a['origem'], ['snmp', 'api'], true) && !empty($a['ultimo_checkin']) && time() - strtotime($a['ultimo_checkin']) <= 2 * 3600) {
+            return ['ligado' => true, 'dica' => ($a['origem'] === 'snmp' ? 'Respondeu ao SNMP' : 'Respondeu à coleta') . ' há ' . $ha($a['ultimo_checkin'])];
+        }
+
+        $ip = trim((string)($a['ip'] ?? ''));
+        $ipLong = $ip !== '' ? ip2long($ip) : false;
+        if ($ipLong !== false) {
+            foreach ($varreduras as $v) {
+                if ($ipLong >= $v['inicio'] && $ipLong <= $v['fim']) {
+                    return isset($v['ips'][$ip])
+                        ? ['ligado' => true, 'dica' => 'Respondeu ao IP Scanner há ' . $ha($v['quando'])]
+                        : ['ligado' => false, 'dica' => 'Não respondeu ao IP Scanner de ' . date('d/m H:i', strtotime($v['quando']))];
+                }
+            }
+        }
+
+        if (in_array($a['origem'], ['snmp', 'api'], true) && !empty($a['ultimo_checkin'])) {
+            return ['ligado' => false, 'dica' => 'Sem resposta à coleta desde ' . date('d/m H:i', strtotime($a['ultimo_checkin']))];
+        }
+
+        return null;
+    }
+
     public function checkinAgente(array $payload, string $chaveUsada = ''): array
     {
         $machineGuid = trim((string)($payload['machine_guid'] ?? ''));

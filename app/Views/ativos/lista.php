@@ -124,15 +124,12 @@ function thOrdenavel(string $coluna, string $label, ?string $ordenarChave, array
 $resumoOnline = 0;
 $resumoOffline = 0;
 $resumoMonitorado = 0;
+$condicoes = []; // ativo_id -> AtivoService::condicao() (agente, fabricante, SNMP/API ou IP Scanner)
 foreach ($ativos as $a) {
     $detalhesResumo = json_decode($a['detalhes'] ?? '', true) ?: [];
-    $temStatusVendor = !empty($detalhesResumo['unifi_status']) || !empty($detalhesResumo['omada_status']) || !empty($detalhesResumo['periferico_status']);
-
-    if ($a['origem'] === 'agente') {
-        AtivoService::estaLigada($a) ? $resumoOnline++ : $resumoOffline++;
-    } elseif ($temStatusVendor) {
-        $online = ($detalhesResumo['unifi_status'] ?? '') === 'Online' || ($detalhesResumo['omada_status'] ?? '') === 'Online' || ($detalhesResumo['periferico_status'] ?? '') === 'Online';
-        $online ? $resumoOnline++ : $resumoOffline++;
+    $condicoes[(int)$a['id']] = AtivoService::condicao($a, $detalhesResumo, $varreduras ?? []);
+    if ($condicoes[(int)$a['id']] !== null) {
+        $condicoes[(int)$a['id']]['ligado'] ? $resumoOnline++ : $resumoOffline++;
     }
 
     if ($a['origem'] === 'agente' || $a['origem'] === 'snmp' || $a['origem'] === 'api') {
@@ -265,37 +262,13 @@ foreach ($ativos as $a) {
                                 <td data-col="tipo"><i class="bi <?= htmlspecialchars($a['tipo_icone']) ?>"></i> <?= htmlspecialchars($a['tipo_nome']) ?></td>
                                 <td data-col="status"><?= Badge::make(htmlspecialchars(AtivoService::STATUS[$a['status']] ?? $a['status']), $statusCores[$a['status']] ?? 'secondary') ?></td>
                                 <td data-col="condicao">
-                                    <?php if ($a['origem'] === 'agente'): ?>
-                                        <?php
-                                            $segundosHeartbeat = AtivoService::segundosDesdeUltimoHeartbeat($a);
-                                            if ($segundosHeartbeat !== null) {
-                                                $dicaStatus = 'Ao vivo -- último ping há ' . AtivoService::duracaoLegivel($segundosHeartbeat);
-                                            } else {
-                                                $minutosAtras = AtivoService::minutosDesdeUltimoCheckin($a);
-                                                $dicaStatus = $minutosAtras !== null
-                                                    ? 'Sem heartbeat ainda (agente antigo) -- baseado no último check-in completo, há ' . AtivoService::duracaoLegivel($minutosAtras * 60)
-                                                    : 'Nunca se comunicou';
-                                            }
-                                        ?>
-                                        <span data-bs-toggle="tooltip" title="<?= htmlspecialchars($dicaStatus) ?>">
-                                            <?= Badge::make(AtivoService::estaLigada($a) ? 'Ligado' : 'Desligado', AtivoService::estaLigada($a) ? 'success' : 'secondary') ?>
-                                        </span>
-                                    <?php elseif (in_array($a['tipo_slug'] ?? '', ['ponto_acesso', 'roteador'], true) && !empty($detalhesLinha['unifi_status'])): ?>
-                                        <?php
-                                            // Não é ping ao vivo (como o heartbeat do agente) -- reflete o status
-                                            // ONLINE/OFFLINE que o UniFi Controller reportou na última coleta
-                                            // (a cada 30 min via cron, ou manual pelo botão na ficha do ativo).
-                                            $ligadoUnifi = $detalhesLinha['unifi_status'] === 'Online';
-                                            $minutosAtrasUnifi = AtivoService::minutosDesdeUltimoCheckin($a);
-                                            $dicaStatusUnifi = 'Via UniFi Controller -- ' . ($minutosAtrasUnifi !== null
-                                                ? 'última coleta há ' . AtivoService::duracaoLegivel($minutosAtrasUnifi * 60)
-                                                : 'ainda sem coleta');
-                                        ?>
-                                        <span data-bs-toggle="tooltip" title="<?= htmlspecialchars($dicaStatusUnifi) ?>">
-                                            <?= Badge::make($ligadoUnifi ? 'Ligado' : 'Desligado', $ligadoUnifi ? 'success' : 'secondary') ?>
+                                    <?php $cond = $condicoes[(int)$a['id']] ?? null; ?>
+                                    <?php if ($cond !== null): ?>
+                                        <span data-bs-toggle="tooltip" title="<?= htmlspecialchars($cond['dica']) ?>">
+                                            <?= Badge::make($cond['ligado'] ? 'Ligado' : 'Desligado', $cond['ligado'] ? 'success' : 'secondary') ?>
                                         </span>
                                     <?php else: ?>
-                                        <span class="text-muted small">—</span>
+                                        <span class="text-muted small" data-bs-toggle="tooltip" title="Sem agente, sem coleta e fora das faixas do IP Scanner">—</span>
                                     <?php endif; ?>
                                 </td>
                                 <td class="small text-muted" data-col="setor"><?= htmlspecialchars($a['setor_nome'] ?? '—') ?></td>

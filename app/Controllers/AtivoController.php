@@ -134,6 +134,7 @@ class AtivoController extends Controller
             'unidades' => $this->unidadeService->listarAtivas(),
             'versaoAgenteExeAtual' => $this->service->versaoAgenteExe(),
             'discosCriticos' => $this->service->volumesCriticos(),
+            'varreduras' => $this->service->varredurasRecentes(),
         ]);
     }
 
