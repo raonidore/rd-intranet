@@ -24,6 +24,7 @@ use App\Services\SegurancaConfiavelService;
 use App\Services\SegurancaEventoService;
 use App\Services\SegurancaIsolamentoService;
 use App\Services\SegurancaModuloService;
+use App\Services\SegurancaRecomendacaoService;
 use App\Services\SegurancaRetratoService;
 use App\Services\UnidadeService;
 use App\Services\UnifiService;
@@ -605,6 +606,61 @@ class AtivoController extends Controller
             'agenteVersaoDisponivel' => $this->service->versaoAgenteDisponivelNaoBaixada(),
             'confiaveisGlobais' => (new SegurancaConfiavelService())->listar(),
         ]);
+    }
+
+    /** Central de Segurança > Recomendações: verificações automáticas com ação de um clique. */
+    public function segurancaRecomendacoes(): void
+    {
+        AuthMiddleware::checkModulo('ativos_lista');
+
+        $servico = new SegurancaRecomendacaoService();
+        $this->view('ativos/seguranca_recomendacoes', [
+            'recomendacoes' => $servico->gerar(),
+            'ignoradas' => $servico->listarIgnoradas(),
+            'podeAgir' => PermissionService::temAcesso('ativos_dashboard'),
+        ]);
+    }
+
+    public function aplicarRecomendacao(): void
+    {
+        AuthMiddleware::checkModulo('ativos_dashboard');
+
+        $resultado = (new SegurancaRecomendacaoService())->aplicar(
+            (string)($_POST['chave'] ?? ''),
+            array_map('intval', (array)($_POST['ativos'] ?? [])),
+            (string)($_SESSION['usuario']['nome'] ?? 'usuário')
+        );
+        $resultado['success'] ? NotificationService::success($resultado['message']) : NotificationService::error($resultado['message']);
+
+        header('Location: ' . url('/ativos/seguranca/recomendacoes'));
+        exit;
+    }
+
+    public function ignorarRecomendacao(): void
+    {
+        AuthMiddleware::checkModulo('ativos_dashboard');
+
+        $resultado = (new SegurancaRecomendacaoService())->ignorar(
+            (string)($_POST['chave'] ?? ''),
+            (int)($_POST['ativo_id'] ?? 0) ?: null,
+            (string)($_POST['motivo'] ?? ''),
+            (string)($_SESSION['usuario']['nome'] ?? 'usuário')
+        );
+        $resultado['success'] ? NotificationService::success($resultado['message']) : NotificationService::error($resultado['message']);
+
+        header('Location: ' . url('/ativos/seguranca/recomendacoes'));
+        exit;
+    }
+
+    public function reativarRecomendacao(): void
+    {
+        AuthMiddleware::checkModulo('ativos_dashboard');
+
+        (new SegurancaRecomendacaoService())->reativar((int)($_POST['id'] ?? 0));
+        NotificationService::success('A recomendação volta a aparecer.');
+
+        header('Location: ' . url('/ativos/seguranca/recomendacoes'));
+        exit;
     }
 
     /** Programa confiável em todas as máquinas -- da aba Exceções ou do botão no próprio alerta. */

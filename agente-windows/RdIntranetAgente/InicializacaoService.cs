@@ -177,6 +177,7 @@ public static class InicializacaoService
                         string programa = acao.Path ?? "";
                         string argumentos = acao.Arguments ?? "";
                         var comando = programa.Contains(' ') && !programa.StartsWith('"') ? $"\"{programa}\" {argumentos}" : $"{programa} {argumentos}";
+                        if (EhTarefaElevadaDoAgente(caminhoTarefa, comando)) continue;
                         itens.Add(Item("tarefa", caminhoTarefa, caminhoTarefa, caminhoTarefa, comando.Trim(), conta, habilitada ? "Habilitada" : "Desativada"));
                     }
                 }
@@ -189,6 +190,19 @@ public static class InicializacaoService
         }
 
         Pasta(agendador.GetFolder("\\"), 0);
+    }
+
+    /// <summary>
+    /// \RDIntranetElevado_&lt;32 hex&gt; rodando o .bat de mesmo nome em Windows\Temp\RDIntranetAgenteExec --
+    /// exatamente o que ExploradorService.ExecutarElevado cria e apaga. Nome e caminho precisam bater
+    /// os dois (um malware que só copiasse o nome continua aparecendo).
+    /// </summary>
+    private static bool EhTarefaElevadaDoAgente(string caminhoTarefa, string comando)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(caminhoTarefa, @"^\\RDIntranetElevado_([0-9a-f]{32})$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (!m.Success) return false;
+        var bat = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Temp", "RDIntranetAgenteExec", $"RDIntranetElevado_{m.Groups[1].Value}.bat");
+        return comando.Contains(bat, StringComparison.OrdinalIgnoreCase);
     }
 
     private static void Registro(List<ItemInicializacao> itens)

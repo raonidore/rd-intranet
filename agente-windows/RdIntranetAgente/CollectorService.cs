@@ -278,6 +278,7 @@ public static class CollectorService
 
         (payload.FirewallDominio, payload.FirewallPrivado, payload.FirewallPublico) = ObterFirewallStatus();
         (payload.DefenderAtivo, payload.DefenderTempoReal, payload.DefenderAssinaturaData) = ObterDefenderStatus();
+        payload.Protecao = ObterProtecao();
         payload.Processos = ObterProcessos();
 
         return payload;
@@ -1134,6 +1135,89 @@ public static class CollectorService
     /// que desligou o Defender por completo cai direto no catch, mesmo
     /// raciocinio do namespace de storage acima).
     /// </summary>
+    /// <summary>
+    /// Cópias de sombra do disco do sistema (quantas, área usada/máxima e % do disco) e
+    /// datas das últimas verificações do Defender. Cada parte falha sozinha (null).
+    /// </summary>
+    private static Dictionary<string, object?> ObterProtecao()
+    {
+        var protecao = new Dictionary<string, object?>();
+        var unidade = (Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows)) ?? "C:\\").TrimEnd('\\');
+        try
+        {
+            var tamanhoDisco = new DriveInfo(unidade).TotalSize;
+            using (var busca = new ManagementObjectSearcher(@"root\cimv2", "SELECT UsedSpace, MaxSpace, Volume FROM Win32_ShadowStorage"))
+            {
+                foreach (ManagementObject area in busca.Get())
+                {
+                    using (area)
+                    {
+                        var maximo = Convert.ToDouble(area["MaxSpace"] ?? 0);
+                        var usado = Convert.ToDouble(area["UsedSpace"] ?? 0);
+                        // MaxSpace "sem limite" vem como UInt64.MaxValue.
+                        protecao["sombra_max_gb"] = maximo >= 1e18 ? null : Math.Round(maximo / 1073741824d, 1);
+                        protecao["sombra_usado_gb"] = Math.Round(usado / 1073741824d, 1);
+                        protecao["sombra_max_pct_disco"] = maximo >= 1e18 ? 100 : Math.Round(maximo * 100 / tamanhoDisco, 1);
+                        break;
+                    }
+                }
+            }
+            var copias = 0;
+            DateTime? ultima = null;
+            using (var busca = new ManagementObjectSearcher(@"root\cimv2", "SELECT InstallDate FROM Win32_ShadowCopy"))
+            {
+                foreach (ManagementObject copia in busca.Get())
+                {
+                    using (copia)
+                    {
+                        copias++;
+                        try
+                        {
+                            var data = ManagementDateTimeConverter.ToDateTime(copia["InstallDate"]?.ToString() ?? "");
+                            if (ultima == null || data > ultima) ultima = data;
+                        }
+                        catch { }
+                    }
+                }
+            }
+            protecao["sombra_copias"] = copias;
+            protecao["sombra_ultima"] = ultima?.ToString("yyyy-MM-dd HH:mm");
+            protecao["disco_gb"] = Math.Round(tamanhoDisco / 1073741824d, 0);
+        }
+        catch
+        {
+            protecao["sombra_erro"] = "sem acesso às cópias de sombra";
+        }
+
+        try
+        {
+            var escopo = new ManagementScope(@"root\Microsoft\Windows\Defender");
+            using var busca = new ManagementObjectSearcher(escopo, new ObjectQuery("SELECT FullScanEndTime, QuickScanEndTime FROM MSFT_MpComputerStatus"));
+            foreach (ManagementObject status in busca.Get())
+            {
+                using (status)
+                {
+                    foreach (var (campo, chave) in new[] { ("FullScanEndTime", "defender_ultima_completa"), ("QuickScanEndTime", "defender_ultima_rapida") })
+                    {
+                        try
+                        {
+                            var data = ManagementDateTimeConverter.ToDateTime(status[campo]?.ToString());
+                            protecao[chave] = data.Year > 2000 ? data.ToString("yyyy-MM-dd HH:mm") : null;
+                        }
+                        catch { protecao[chave] = null; }
+                    }
+                    break;
+                }
+            }
+        }
+        catch
+        {
+            // Defender ausente/substituído por outro antivírus
+        }
+
+        return protecao;
+    }
+
     private static (string? ativo, string? tempoReal, string? assinaturaData) ObterDefenderStatus()
     {
         string? ativo = null, tempoReal = null, assinaturaData = null;

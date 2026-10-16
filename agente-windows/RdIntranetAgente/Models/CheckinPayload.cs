@@ -127,6 +127,10 @@ public class CheckinPayload
     [JsonPropertyName("defender_assinatura_data")]
     public string? DefenderAssinaturaData { get; set; }
 
+    /// <summary>Agente 1.0.69+: cópias de sombra e verificações do Defender -- base das Recomendações da Central.</summary>
+    [JsonPropertyName("protecao")]
+    public Dictionary<string, object?>? Protecao { get; set; }
+
     /// <summary>
     /// Snapshot dos processos em execucao no momento do checkin -- mesmo
     /// dado de ExploradorService.ListarProcessos() (sob demanda), mas

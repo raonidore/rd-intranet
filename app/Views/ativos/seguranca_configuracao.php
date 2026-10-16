@@ -13,6 +13,7 @@ use App\Components\Alert;
 
 <ul class="nav nav-pills mb-4">
     <li class="nav-item"><a class="nav-link" href="<?= url('/ativos/seguranca') ?>"><i class="bi bi-speedometer2"></i> Visão geral</a></li>
+    <li class="nav-item"><a class="nav-link" href="<?= url('/ativos/seguranca/recomendacoes') ?>"><i class="bi bi-lightbulb"></i> Recomendações</a></li>
     <li class="nav-item"><a class="nav-link" href="<?= url('/ativos/seguranca/excecoes') ?>"><i class="bi bi-funnel"></i> Exceções e falsos positivos</a></li>
     <li class="nav-item"><a class="nav-link active" href="<?= url('/ativos/seguranca/configuracao') ?>"><i class="bi bi-gear"></i> Configuração</a></li>
 </ul>

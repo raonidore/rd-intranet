@@ -196,8 +196,16 @@ public static class AnaliseExecutavel
 
         if (!string.IsNullOrEmpty(linhaComando))
         {
+            // Script do próprio Windows (assinado pela Microsoft, dentro da pasta do Windows) rodado
+            // pelo PowerShell do Windows: "oculto"/"Unrestricted" é como a Microsoft escreve as
+            // tarefas dela (\Microsoft\Windows\SMB\UninstallSMB1*Task -- falso alerta no 1.0.67).
+            var scriptDoWindows = exe.Microsoft && ProgramaReal(exe.Caminho, linhaComando) is var alvoW && alvoW != exe.Caminho
+                && alvoW.StartsWith(PastaWindows + "System32\\", StringComparison.OrdinalIgnoreCase) && Analisar(alvoW).Assinado;
+            // (Assinado, não Microsoft: o nome de quem assinou um .ps1 não sai pela API de executável --
+            // e em System32 só administrador grava, então script assinado ali é do Windows/fabricante.)
             foreach (var (padrao, pontos, motivo) in PadroesLinhaComando)
             {
+                if (scriptDoWindows && (motivo.Contains("janela oculta") || motivo.Contains("política de execução"))) continue;
                 if (padrao.IsMatch(" " + linhaComando + " ")) avaliacao.Somar(pontos, motivo);
             }
 

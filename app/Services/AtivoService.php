@@ -5680,6 +5680,14 @@ class AtivoService
 
         $camposTecnicos = $this->extrairDetalhes($slugTipo, $payload);
 
+        // Agente 1.0.69+: cópias de sombra e verificações do Defender (Central de Segurança > Recomendações).
+        if (is_array($payload['protecao'] ?? null)) {
+            $camposTecnicos['protecao'] = array_map(
+                fn ($v) => is_scalar($v) || $v === null ? (is_string($v) ? mb_substr($v, 0, 60) : $v) : null,
+                array_slice($payload['protecao'], 0, 20, true)
+            );
+        }
+
         if ($existente) {
             $id = (int)$existente['id'];
             $detalhesAtuais = json_decode($existente['detalhes'] ?? '', true) ?: [];
