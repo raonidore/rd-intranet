@@ -303,6 +303,8 @@
                 + (s.arquivo_criado_em ? '<b>Arquivo criado</b> ' + esc(new Date(s.arquivo_criado_em).toLocaleDateString('pt-BR')) : '') + '</div>'
                 + (s.linha_comando ? '<div class="mon-caminho mt-1">' + esc(s.linha_comando) + '</div>' : '')
                 + (s.sha256 ? '<div class="mon-kv mt-1"><b>SHA256</b> <span class="font-monospace small">' + esc(s.sha256) + '</span> <a class="small" target="_blank" rel="noopener" href="https://www.virustotal.com/gui/file/' + esc(s.sha256) + '">consultar no VirusTotal</a></div>' : '')
+                + (s.alvo ? '<div class="mon-kv mt-1"><b>Script executado</b> <span class="font-monospace small">' + esc(s.alvo) + '</span>' + (s.alvo_existe === false ? ' <span class="text-danger small">(não existe mais)</span>' : '') + '</div>' : '')
+                + (s.alvo_sha256 ? '<div class="mon-kv mt-1"><b>SHA256 do script</b> <span class="font-monospace small">' + esc(s.alvo_sha256) + '</span> <a class="small" target="_blank" rel="noopener" href="https://www.virustotal.com/gui/file/' + esc(s.alvo_sha256) + '">consultar no VirusTotal</a></div>' : '')
                 + '</div>';
         }).join('') || '<div class="mon-vazio p-0"><i class="bi bi-check-circle text-success"></i> Nenhum processo suspeito em execução no último retrato.</div>';
     }
@@ -339,6 +341,8 @@
                 + (i.comando ? '<div class="mon-caminho">' + esc(i.comando) + '</div>' : '')
                 + (i.origem ? '<div class="mon-kv mt-1"><b>Configurado em</b> ' + esc(i.origem) + (i.conta ? ' · <b>conta</b> ' + esc(i.conta) : '') + '</div>' : '')
                 + (i.sha256 ? '<div class="mon-kv mt-1"><b>SHA256</b> <span class="font-monospace small">' + esc(i.sha256) + '</span> <a class="small" target="_blank" rel="noopener" href="https://www.virustotal.com/gui/file/' + esc(i.sha256) + '">VirusTotal</a></div>' : '')
+                + (i.alvo ? '<div class="mon-kv mt-1"><b>Script executado</b> <span class="font-monospace small">' + esc(i.alvo) + '</span>' + (i.alvo_existe === false ? ' <span class="text-danger small">(não existe mais)</span>' : '') + '</div>' : '')
+                + (i.alvo_sha256 ? '<div class="mon-kv mt-1"><b>SHA256 do script</b> <span class="font-monospace small">' + esc(i.alvo_sha256) + '</span> <a class="small" target="_blank" rel="noopener" href="https://www.virustotal.com/gui/file/' + esc(i.alvo_sha256) + '">consultar no VirusTotal</a></div>' : '')
                 + '</td></tr>';
         }).join('') || '<tr><td class="mon-vazio">' + (inicio ? 'Nada com esse filtro.' : 'Inventário ainda não recebido (agente 1.0.56+).') + '</td></tr>';
     }

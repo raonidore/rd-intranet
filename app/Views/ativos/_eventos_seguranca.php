@@ -145,6 +145,16 @@ $renderItemAnalisado = static function (array $item, bool $comBotaoConfiar = fal
     if (!empty($item['linha_comando'])) {
         $linhas['Linha de comando'] = '<code class="text-break">' . $h($item['linha_comando']) . '</code>';
     }
+    // Interpretador rodando script (agente 1.0.67+): o arquivo que importa é o script, não o powershell.exe.
+    if (!empty($item['alvo'])) {
+        $linhas['Script executado'] = '<code class="text-break">' . $h($item['alvo']) . '</code>'
+            . (isset($item['alvo_existe']) && !$item['alvo_existe'] ? ' <span class="text-danger">(não existe mais)</span>' : '')
+            . (!empty($item['alvo_assinatura']) ? ' · <span class="text-' . ($rotulosAssinatura[$item['alvo_assinatura']][1] ?? 'secondary') . '">' . $h($rotulosAssinatura[$item['alvo_assinatura']][0] ?? $item['alvo_assinatura']) . '</span>' : '');
+        if (!empty($item['alvo_sha256'])) {
+            $linhas['SHA-256 do script'] = '<code class="text-break text-muted" style="font-size:.75em">' . $h($item['alvo_sha256']) . '</code>'
+                . ' <a href="https://www.virustotal.com/gui/file/' . $h(strtolower($item['alvo_sha256'])) . '" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right"></i> VirusTotal</a>';
+        }
+    }
     if (!empty($item['assinatura'])) {
         [$txt, $cor] = $rotulosAssinatura[$item['assinatura']] ?? [$item['assinatura'], 'secondary'];
         $linhas['Assinatura'] = '<span class="text-' . $cor . '">' . $h($txt) . '</span>' . (!empty($item['assinante']) ? ' -- ' . $h($item['assinante']) : '');
@@ -169,7 +179,7 @@ $renderItemAnalisado = static function (array $item, bool $comBotaoConfiar = fal
     }
     // Campos que não têm lugar acima (ex.: detecção de rede) aparecem do jeito simples.
     $conhecidos = ['tipo', 'nome', 'id', 'caminho', 'existe', 'comando', 'linha_comando', 'assinatura', 'assinante', 'conta', 'pai_nome', 'pid', 'estado', 'inicio',
-                   'arquivo_criado_em', 'oculto', 'origem', 'sha256', 'nivel', 'pontos', 'motivos', 'ms'];
+                   'arquivo_criado_em', 'oculto', 'origem', 'sha256', 'nivel', 'pontos', 'motivos', 'ms', 'alvo', 'alvo_existe', 'alvo_assinatura', 'alvo_sha256', 'alvo_criado_em', 'confiaveis_removidos'];
     foreach ($item as $k => $v) {
         if (in_array($k, $conhecidos, true) || $v === null || $v === '' || $v === [] || $v === false || is_array($v)) {
             continue;

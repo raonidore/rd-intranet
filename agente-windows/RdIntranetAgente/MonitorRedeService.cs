@@ -560,7 +560,7 @@ public sealed class MonitorRedeService : IDisposable
         ProcessoInfo? pai = null;
         if (proc != null) CatalogoProcessos.Obter(Array.Empty<int>()).TryGetValue(proc.PaiPid, out pai);
 
-        return new Dictionary<string, object?>
+        var detalhes = new Dictionary<string, object?>
         {
             ["pid"] = pid,
             ["nome"] = proc?.Nome ?? (pid == 4 ? "System" : $"PID {pid}"),
@@ -579,6 +579,11 @@ public sealed class MonitorRedeService : IDisposable
             ["nivel"] = avaliacao.Nivel,
             ["motivos"] = avaliacao.Motivos
         };
+        if (AnaliseExecutavel.ScriptExecutado(proc?.Caminho, proc?.LinhaComando) is { } script)
+        {
+            foreach (var (chave, valor) in script) detalhes[chave] = valor;
+        }
+        return detalhes;
     }
 
     /// <summary>Faixas /24 (IPv4) mais tentadas -- mostra o "varrer faixa inteira".</summary>

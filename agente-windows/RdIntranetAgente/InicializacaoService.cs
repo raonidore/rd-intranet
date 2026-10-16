@@ -54,6 +54,10 @@ public sealed class ItemInicializacao
         item["nivel"] = Avaliacao.Nivel;
         item["motivos"] = Avaliacao.Motivos;
         if (Avaliacao.Pontos >= 35 && Exe.Existe) item["sha256"] = AnaliseExecutavel.Sha256(Exe.Caminho);
+        if (AnaliseExecutavel.ScriptExecutado(Exe.Caminho, Comando) is { } script)
+        {
+            foreach (var (chave, valor) in script) item[chave] = valor;
+        }
         return item;
     }
 }

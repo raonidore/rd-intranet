@@ -85,7 +85,11 @@ public static class AnaliseExecutavel
         (new Regex(@"regsvr32(\.exe)?\s.*/i:\s*https?:", RegexOptions.IgnoreCase), 45, "regsvr32 carregando script remoto"),
         (new Regex(@"rundll32(\.exe)?\s.*javascript:", RegexOptions.IgnoreCase), 45, "rundll32 executando javascript"),
         (new Regex(@"\\(windows\\)?temp\\[^""]*\.(bat|cmd|vbs|js|ps1)\b", RegexOptions.IgnoreCase), 25, "executa script de pasta temporária"),
-        (new Regex(@"-jar\s+""?[^""]+\.exe\b", RegexOptions.IgnoreCase), 40, "Java executando arquivo .exe como pacote .jar")
+        (new Regex(@"-jar\s+""?[^""]+\.exe\b", RegexOptions.IgnoreCase), 40, "Java executando arquivo .exe como pacote .jar"),
+        (new Regex(@"(powershell|pwsh)(\.exe)?[""']?\s(.*\s)?-ex(ecutionpolicy)?\s+(bypass|unrestricted)\b", RegexOptions.IgnoreCase), 10, "ignora a política de execução do PowerShell (-ExecutionPolicy Bypass)"),
+        // Tarefa \Morvarith (EP-PC-000006, Enzilab Prime): "...\Cloudbase\78812229\Morvarith.ps1" -- pasta só de números
+        // com nome aleatório é marca de instalador de adware/malware, programa legítimo não se instala assim.
+        (new Regex(@"\\\d{6,}\\[^\\""]+\.(ps1|vbs|vbe|js|jse|bat|cmd|hta)\b", RegexOptions.IgnoreCase), 15, "script dentro de pasta com nome só de números (padrão de instalador malicioso)")
     };
 
     public static InfoExecutavel Analisar(string? caminho)
@@ -370,6 +374,28 @@ public static class AnaliseExecutavel
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Script/jar que um interpretador executa (powershell -File x.ps1, wscript x.vbs, java -jar x):
+    /// caminho, assinatura e SHA-256 dele -- o SHA-256 do powershell.exe não diz nada,
+    /// o do script é o que dá pra checar no VirusTotal. null = não é interpretador rodando arquivo.
+    /// </summary>
+    public static Dictionary<string, object?>? ScriptExecutado(string? exe, string? linhaComando)
+    {
+        if (string.IsNullOrEmpty(exe) || string.IsNullOrEmpty(linhaComando)) return null;
+        var alvo = ProgramaReal(exe, linhaComando);
+        if (string.Equals(alvo, exe, StringComparison.OrdinalIgnoreCase)) return null;
+
+        var info = Analisar(alvo);
+        return new Dictionary<string, object?>
+        {
+            ["alvo"] = alvo,
+            ["alvo_existe"] = info.Existe,
+            ["alvo_assinatura"] = info.Existe ? info.Assinatura : null,
+            ["alvo_criado_em"] = info.CriadoEm?.ToString("o"),
+            ["alvo_sha256"] = info.Existe ? Sha256(alvo) : null
+        };
     }
 
     /// <summary>
