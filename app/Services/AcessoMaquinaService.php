@@ -34,7 +34,9 @@ class AcessoMaquinaService
         2 => 'No teclado da máquina',
         7 => 'Desbloqueio',
         10 => 'Remoto (Área de Trabalho Remota)',
-        11 => 'No teclado (sem internet, credencial guardada)',
+        // Tipo 11 (credencial em cache) é o normal de máquina no Entra, mesmo com internet -- o registro
+        // do Entra no mesmo segundo confirma a autenticação online (EN-TI-01-D, 17/10/2026).
+        11 => 'No teclado (conta do Entra)',
     ];
 
     /** Motivos de falha do 4625 (Status/SubStatus). */
