@@ -45,7 +45,7 @@ $listaUsuarios = function (string $prefixo, array $marcados) use ($usuariosOrden
         <div class="card-body text-center py-5">
             <i class="bi bi-plug display-6 text-muted d-block mb-3"></i>
             <p class="text-muted mb-3">Módulo ainda não configurado.</p>
-            <a href="<?= url('/entra/configuracao') ?>" class="btn btn-primary"><i class="bi bi-gear"></i> Configurar</a>
+            <a href="<?= url('/administracao/integracoes/entra') ?>" class="btn btn-primary"><i class="bi bi-gear"></i> Configurar</a>
         </div>
     </div>
 <?php else: ?>

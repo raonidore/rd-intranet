@@ -94,7 +94,7 @@ use App\Components\Badge;
         <div class="card-body text-center py-5">
             <i class="bi bi-plug display-6 text-muted d-block mb-3"></i>
             <p class="text-muted mb-3">Módulo ainda não configurado.</p>
-            <a href="<?= url('/entra/configuracao') ?>" class="btn btn-primary"><i class="bi bi-gear"></i> Configurar</a>
+            <a href="<?= url('/administracao/integracoes/entra') ?>" class="btn btn-primary"><i class="bi bi-gear"></i> Configurar</a>
         </div>
     </div>
 <?php else: ?>
@@ -259,7 +259,7 @@ use App\Components\Badge;
                         <code>DeviceManagementManagedDevices.Read.All</code> e <code>DeviceManagementManagedDevices.ReadWrite.All</code>.</li>
                     <li>Clique em <strong>"Grant admin consent for [tenant]"</strong> -- sem isso a permissão fica pendente e continua dando esse erro.</li>
                 </ol>
-                <a href="<?= url('/entra/configuracao') ?>" class="small"><i class="bi bi-arrow-right-short"></i> Ver o passo a passo completo em Configuração</a>
+                <a href="<?= url('/administracao/integracoes/entra') ?>" class="small"><i class="bi bi-arrow-right-short"></i> Ver o passo a passo completo em Configuração</a>
             </div>
         </div>
     <?php endif; ?>

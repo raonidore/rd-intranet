@@ -927,9 +927,10 @@ $router->get('/administracao/configuracoes/restaurar-status', [ConfiguracoesCont
 $router->post('/administracao/configuracoes/restaurar-finalizar', [ConfiguracoesController::class, 'restaurarFinalizar']);
 
 $router->get('/entra/dashboard', [EntraController::class, 'dashboard']);
-$router->get('/entra/configuracao', [EntraController::class, 'configuracaoForm']);
-$router->post('/entra/configuracao/salvar', [EntraController::class, 'configuracaoSalvar']);
-$router->post('/entra/configuracao/remover', [EntraController::class, 'configuracaoRemover']);
+$router->get('/entra/configuracao', [EntraController::class, 'configuracaoRedirecionar']);
+$router->get('/administracao/integracoes/entra', [EntraController::class, 'configuracaoForm']);
+$router->post('/administracao/integracoes/entra/salvar', [EntraController::class, 'configuracaoSalvar']);
+$router->post('/administracao/integracoes/entra/remover', [EntraController::class, 'configuracaoRemover']);
 $router->get('/entra/usuarios', [EntraController::class, 'usuarios']);
 $router->post('/entra/usuarios/novo', [EntraController::class, 'usuarioNovo']);
 $router->post('/entra/usuarios/resetar-senha', [EntraController::class, 'resetarSenha']);

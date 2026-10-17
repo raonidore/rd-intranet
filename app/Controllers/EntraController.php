@@ -25,54 +25,86 @@ class EntraController extends Controller
         AuthMiddleware::checkModulo('entra_dashboard');
 
         $configurado = $this->service->configurado();
-        $usuarios = [];
-        $skus = [];
-
-        if ($configurado) {
-            $usuarios = $this->service->listarUsuarios();
-            $skus = $this->service->listarSkus();
+        if (!$configurado) {
+            $this->view('entra/dashboard', ['configurado' => false]);
+            return;
         }
 
-        $this->view('entra/dashboard', [
-            'configurado' => $configurado,
-            'totalUsuarios' => count($usuarios),
-            'totalAtivos' => count(array_filter($usuarios, fn($u) => $u['accountEnabled'] ?? false)),
-            'skus' => $skus,
-        ]);
+        // ~6 consultas ao Graph (algumas lentas): guarda 5 min na sessão; "Atualizar" força.
+        $cache = $_SESSION['entra_dashboard'] ?? null;
+        if (!empty($_GET['atualizar']) || !$cache || $cache['em'] < time() - 300) {
+            $usuarios = $this->service->listarUsuarios();
+            $grupos = $this->service->listarGruposSeguranca();
+            $cache = [
+                'em' => time(),
+                'totalUsuarios' => count($usuarios),
+                'totalAtivos' => count(array_filter($usuarios, fn($u) => $u['accountEnabled'] ?? false)),
+                'totalGrupos' => count($grupos),
+                'skus' => $this->service->listarSkus(),
+                'dispositivos' => $this->service->dispositivosNoEntra(),
+                'contasParadas' => $this->service->contasParadas(),
+                'semMfa' => $this->service->semMfa(),
+                'avisos' => $this->service->avisosMicrosoft(),
+                'secretVence' => $this->service->vencimentoDoSecret(),
+                'permissoes' => $this->service->permissoesConcedidas(),
+            ];
+            $_SESSION['entra_dashboard'] = $cache;
+        }
+
+        $ultimosAcessos = (new \App\Services\AcessoMaquinaService())->listar(['de' => date('Y-m-d', strtotime('-30 days')), 'ate' => date('Y-m-d'), 'evento' => 'login'], 8);
+
+        $this->view('entra/dashboard', ['configurado' => true, 'ultimosAcessos' => $ultimosAcessos] + $cache);
     }
+
+    /*
+     | Configuração do tenant -- fica em Administração > Integrações (padrão
+     | das outras integrações); /entra/configuracao só redireciona pra lá.
+     */
 
     public function configuracaoForm(): void
     {
-        AuthMiddleware::checkModulo('entra_configuracao');
+        AuthMiddleware::checkAdmin();
 
-        $this->view('entra/configuracao', [
-            'configurado' => $this->service->configurado(),
+        $configurado = $this->service->configurado();
+
+        $this->view('administracao/integracoes_entra', [
+            'configurado' => $configurado,
             'tenantIdAtual' => $this->service->tenantIdAtual(),
             'clientIdAtual' => $this->service->clientIdAtual(),
+            'permissoes' => $configurado ? $this->service->permissoesConcedidas() : null,
+            'secretVence' => $configurado ? $this->service->vencimentoDoSecret() : null,
         ]);
+    }
+
+    public function configuracaoRedirecionar(): void
+    {
+        header('Location: ' . url('/administracao/integracoes/entra'));
+        exit;
     }
 
     public function configuracaoSalvar(): void
     {
-        AuthMiddleware::checkModulo('entra_configuracao');
+        AuthMiddleware::checkAdmin();
 
         $this->service->salvarConfiguracao(
             $_POST['tenant_id'] ?? '',
             $_POST['client_id'] ?? '',
             $_POST['client_secret'] ?? ''
         );
+        unset($_SESSION['entra_dashboard']);
 
-        header('Location: ' . url('/entra/configuracao'));
+        header('Location: ' . url('/administracao/integracoes/entra'));
         exit;
     }
 
     public function configuracaoRemover(): void
     {
-        AuthMiddleware::checkModulo('entra_configuracao');
+        AuthMiddleware::checkAdmin();
 
         $this->service->removerConfiguracao();
+        unset($_SESSION['entra_dashboard']);
 
-        header('Location: ' . url('/entra/configuracao'));
+        header('Location: ' . url('/administracao/integracoes/entra'));
         exit;
     }
 

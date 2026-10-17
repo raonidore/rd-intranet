@@ -759,11 +759,6 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
             <i class="bi bi-sliders me-2"></i> Perfis de Configuração
         </a>
         <?php endif; ?>
-        <?php if (PermissionService::temAcesso('entra_configuracao')): ?>
-        <a href="<?= url('/entra/configuracao') ?>" class="<?= str_starts_with($uriAtual, '/entra/configuracao') ? 'active' : '' ?>">
-            <i class="bi bi-gear me-2"></i> Configuração
-        </a>
-        <?php endif; ?>
     </div>
     <?php endif; ?>
 

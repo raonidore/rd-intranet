@@ -500,7 +500,9 @@ class EntraService
             if (!($u['accountEnabled'] ?? false) || empty($u['assignedLicenses'])) {
                 continue;
             }
-            $ultimo = $u['signInActivity']['lastSignInDateTime'] ?? null;
+            // Outlook/Teams abertos renovam o login sozinhos (não interativo) -- conta como uso.
+            $datas = array_filter([$u['signInActivity']['lastSignInDateTime'] ?? null, $u['signInActivity']['lastNonInteractiveSignInDateTime'] ?? null]);
+            $ultimo = $datas ? max($datas) : null;
             if ($ultimo === null ? strtotime($u['createdDateTime'] ?? 'now') < $limite : strtotime($ultimo) < $limite) {
                 $paradas[] = ['nome' => $u['displayName'], 'upn' => $u['userPrincipalName'], 'ultimo' => $ultimo];
             }

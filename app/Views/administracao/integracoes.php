@@ -100,6 +100,19 @@ ob_start();
         </a>
     </div>
     <div class="col-md-4">
+        <a href="<?= url('/administracao/integracoes/entra') ?>" class="metodo-card">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="mb-2" style="font-size:28px; color:#0078D4;"><i class="bi bi-microsoft"></i></div>
+                    <h6 class="mb-1">Microsoft Entra ID / Microsoft 365</h6>
+                    <p class="text-muted small mb-0">
+                        App Registration do tenant do cliente -- usuários, licenças, grupos, acesso às máquinas, Intune e trilha de acesso (logins no Windows).
+                    </p>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-4">
         <a href="<?= url('/administracao/integracoes/intelbras-dvr') ?>" class="metodo-card">
             <div class="card h-100 border-0 shadow-sm">
                 <div class="card-body">
