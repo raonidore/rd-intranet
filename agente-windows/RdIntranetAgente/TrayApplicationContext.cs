@@ -796,7 +796,9 @@ public class TrayApplicationContext : ApplicationContext
             var novoExe = Path.Combine(pastaAtualizacao, "RdIntranetAgente.new.exe");
             var logPath = Path.Combine(pastaAtualizacao, "atualizar.log");
 
-            GarantirExclusaoDefender(pastaAtualizacao);
+            // Sem exclusão do Defender aqui: %TEMP% é gravável pelo usuário (até a
+            // 1.0.74 ela era excluída -- ProtecaoInstalacao agora remove). O retry
+            // do .bat já cobre o Defender segurando o arquivo novo por uns segundos.
 
             if (!await cliente.BaixarNovaVersaoAsync(novoExe))
             {
@@ -812,10 +814,12 @@ public class TrayApplicationContext : ApplicationContext
             _icone.ShowBalloonTip(4000, "RD Intranet", $"Atualizando para a versão {versaoServidor}...", ToolTipIcon.Info);
 
             var exeAtual = Application.ExecutablePath;
+            // Só a pasta padrão, que ProtecaoInstalacao deixa gravável apenas por
+            // administrador. Rodando de Downloads/Desktop/pendrive, nada de exclusão.
             var pastaInstalacao = Path.GetDirectoryName(exeAtual);
-            if (!string.IsNullOrEmpty(pastaInstalacao))
+            if (string.Equals(pastaInstalacao?.TrimEnd('\\'), @"C:\RDTecnologia", StringComparison.OrdinalIgnoreCase))
             {
-                GarantirExclusaoDefender(pastaInstalacao);
+                GarantirExclusaoDefender(pastaInstalacao!);
             }
 
             var scriptPath = Path.Combine(pastaAtualizacao, "atualizar.bat");

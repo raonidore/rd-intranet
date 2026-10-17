@@ -46,6 +46,16 @@ public static class ProtecaoInstalacao
             TravarPasta(pastaAgente, "pasta do agente");
         }
 
+        // Conserta a pasta padrão mesmo quando o agente está rodando de outro
+        // lugar: é o caso de quem, com o exe travado pela 1.0.74, passou a
+        // rodar o agente de Downloads (o serviço continua apontando pra cá).
+        else if (Directory.Exists(PastaInstalacaoPadrao))
+        {
+            TravarPasta(PastaInstalacaoPadrao, "pasta do agente");
+        }
+
+        RemoverExclusoesIndevidas();
+
         Directory.CreateDirectory(PastaInstaladorMesh);
         TravarPasta(PastaInstaladorMesh, "pasta do instalador do MeshAgent");
 
@@ -67,14 +77,61 @@ public static class ProtecaoInstalacao
     public static void ExcluirProcessoTemporario(string exe, bool adicionar) =>
         Rodar("powershell.exe", $"-NoProfile -WindowStyle Hidden -Command \"{(adicionar ? "Add" : "Remove")}-MpPreference -ExclusionProcess '{exe}' -ErrorAction SilentlyContinue\"");
 
-    /// <summary>Administradores e SYSTEM controle total, Usuários ler/executar, sem herdar do pai (pelos SIDs: funciona em qualquer idioma).</summary>
+    /// <summary>
+    /// Administradores e SYSTEM controle total, Usuários ler/executar, sem
+    /// herdar do pai (pelos SIDs: funciona em qualquer idioma).
+    ///
+    /// Em duas etapas de propósito. A 1.0.74 fazia tudo num comando só com
+    /// /T: em cada ARQUIVO o /inheritance:r tirava as permissões herdadas e o
+    /// /grant:r com (OI)(CI) -- que só vale pra pasta -- falhava, e o /C
+    /// seguia em frente. O RdIntranetAgente.exe ficava com a lista de
+    /// permissões VAZIA: nem o SYSTEM lia, o serviço não subia mais e
+    /// parecia que "algo apagava o agente" (MDA-PC-0010, 17/10/2026).
+    /// Agora: ACL explícita só na pasta; o conteúdo volta a herdar dela
+    /// (/reset), o que também conserta quem já tinha ficado travado.
+    /// </summary>
     private static void TravarPasta(string pasta, string descricao)
     {
+        var raiz = pasta.TrimEnd('\\');
+
+        // Dono = Administradores: garante que dá pra reescrever a ACL de arquivo que ficou sem nenhuma permissão.
+        Rodar("icacls.exe", $"\"{raiz}\" /setowner *S-1-5-32-544 /T /C /Q");
+
         var (codigo, saida) = Rodar("icacls.exe",
-            $"\"{pasta.TrimEnd('\\')}\" /inheritance:r /grant:r *S-1-5-32-544:(OI)(CI)F *S-1-5-18:(OI)(CI)F *S-1-5-32-545:(OI)(CI)RX /T /C /Q");
+            $"\"{raiz}\" /inheritance:r /grant:r *S-1-5-32-544:(OI)(CI)F *S-1-5-18:(OI)(CI)F *S-1-5-32-545:(OI)(CI)RX /C /Q");
         if (codigo != 0)
         {
             LogAtividade.Registrar(NivelAtividade.Aviso, "SEGURANÇA", $"Não consegui restringir a permissão da {descricao}: {saida.Trim()}");
+            return;
+        }
+
+        if (Directory.EnumerateFileSystemEntries(raiz).Any())
+        {
+            var (codigoFilhos, saidaFilhos) = Rodar("icacls.exe", $"\"{raiz}\\*\" /reset /T /C /Q");
+            if (codigoFilhos != 0)
+            {
+                LogAtividade.Registrar(NivelAtividade.Aviso, "SEGURANÇA", $"Não consegui normalizar a permissão dos arquivos da {descricao}: {saidaFilhos.Trim()}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Versões até a 1.0.74 excluíam do Defender a pasta %TEMP%\RDIntranetAgenteUpdate
+    /// do usuário e a pasta de onde o agente rodava (inclusive Downloads) a
+    /// cada atualização pela bandeja -- pasta que usuário comum grava não pode
+    /// ficar fora do antivírus. Remove essas exclusões; as da pasta padrão
+    /// (já travada) e do MeshAgent ficam.
+    /// </summary>
+    private static void RemoverExclusoesIndevidas()
+    {
+        var (codigo, saida) = Rodar("powershell.exe",
+            "-NoProfile -WindowStyle Hidden -Command \"" +
+            "$r = @(); foreach ($p in @((Get-MpPreference).ExclusionPath)) { " +
+            "if ($p -and ($p -match '\\\\RDIntranetAgenteUpdate\\\\?$' -or ($p -match '^[A-Za-z]:\\\\Users\\\\' -and (Test-Path (Join-Path $p 'RdIntranetAgente.exe'))))) { " +
+            "Remove-MpPreference -ExclusionPath $p -ErrorAction SilentlyContinue; $r += $p } }; $r -join '; '\"");
+        if (codigo == 0 && !string.IsNullOrWhiteSpace(saida))
+        {
+            LogAtividade.Registrar(NivelAtividade.Seguranca, "SEGURANÇA", "Exclusões do Defender em pasta de usuário removidas: " + saida.Trim());
         }
     }
 
