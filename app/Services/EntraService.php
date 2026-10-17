@@ -432,7 +432,7 @@ class EntraService
     /** Grupos de segurança do tenant (os únicos que entram no token de login do Windows). */
     public function listarGruposSeguranca(): array
     {
-        $resultado = $this->chamarGraph('GET', '/groups?$filter=securityEnabled eq true&$select=id,displayName,description&$top=999');
+        $resultado = $this->chamarGraph('GET', '/groups?$filter=securityEnabled%20eq%20true&$select=id,displayName,description&$top=999');
 
         if (!$resultado['sucesso']) {
             NotificationService::error('Erro ao listar grupos do Entra.', $resultado['mensagem']);
