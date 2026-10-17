@@ -1124,6 +1124,9 @@ $router->post('/ativos/unifi/clientes-rede', [AtivoController::class, 'unifiClie
 $router->post('/ativos/unifi/saude', [AtivoController::class, 'unifiSaude']);
 $router->post('/ativos/unifi/redes-vizinhas', [AtivoController::class, 'unifiRedesVizinhas']);
 $router->post('/ativos/unifi/port-forward', [AtivoController::class, 'unifiPortForward']);
+$router->post('/ativos/unifi/port-forward/criar', [AtivoController::class, 'unifiCriarPortForward']);
+$router->post('/ativos/unifi/port-forward/alterar', [AtivoController::class, 'unifiAlterarPortForward']);
+$router->post('/ativos/unifi/port-forward/excluir', [AtivoController::class, 'unifiExcluirPortForward']);
 $router->post('/ativos/unifi/redes-wifi-configuradas', [AtivoController::class, 'unifiRedesWifiConfiguradas']);
 $router->post('/ativos/unifi/rotas-estaticas', [AtivoController::class, 'unifiRotasEstaticas']);
 $router->post('/ativos/unifi/rotas', [AtivoController::class, 'unifiRotasGateway']);

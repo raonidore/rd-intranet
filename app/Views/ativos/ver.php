@@ -1829,12 +1829,19 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
         <div class="card border-0 shadow-sm mt-3">
             <div class="card-header bg-white d-flex justify-content-between align-items-center">
                 <strong>Redirecionamento de portas</strong>
-                <button type="button" class="btn btn-sm btn-outline-secondary" id="botaoAtualizarPortForwardUnifi">
-                    <i class="bi bi-arrow-repeat"></i> Atualizar
-                </button>
+                <div class="d-flex gap-2">
+                    <?php if ($podeAlterarRedeRemota): ?>
+                        <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalNovoPortForward">
+                            <i class="bi bi-plus-lg"></i> Novo redirecionamento
+                        </button>
+                    <?php endif; ?>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="botaoAtualizarPortForwardUnifi">
+                        <i class="bi bi-arrow-repeat"></i> Atualizar
+                    </button>
+                </div>
             </div>
             <div class="card-body">
-                <div class="form-text mb-2">Regras de NAT (port-forward) -- separadas das regras de firewall acima, só leitura.</div>
+                <div class="form-text mb-2">Regras de NAT (port-forward): abrem uma porta da internet para um equipamento da rede interna -- separadas das regras de firewall acima.</div>
                 <div class="small text-muted mb-3" id="portForwardUnifiCarregando"><div class="spinner-border spinner-border-sm"></div> Consultando o Controller...</div>
                 <div class="table-responsive" style="display:none" id="portForwardUnifiTabelaWrap">
                     <table class="table table-sm align-middle mb-0">
@@ -1845,6 +1852,7 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                                 <th>Protocolo</th>
                                 <th>Destino</th>
                                 <th>Status</th>
+                                <?php if ($podeAlterarRedeRemota): ?><th class="text-end">Ações</th><?php endif; ?>
                             </tr>
                         </thead>
                         <tbody id="portForwardUnifiCorpo"></tbody>
@@ -1853,6 +1861,56 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
             </div>
         </div>
     </div>
+
+    <?php if ($podeAlterarRedeRemota): ?>
+    <!-- Novo redirecionamento de porta (NAT, UniFi Gateway) -->
+    <div class="modal fade" id="modalNovoPortForward" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <form class="modal-content" id="formNovoPortForward">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-signpost-split"></i> Novo redirecionamento de porta</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning small py-2">
+                        <i class="bi bi-exclamation-triangle"></i> Isso deixa o serviço acessível <strong>por qualquer pessoa na internet</strong>.
+                        Abra só o necessário e desative quando não precisar mais.
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small">Nome</label>
+                        <input type="text" name="nome" class="form-control form-control-sm" required maxlength="60" placeholder="Ex.: MeshCentral">
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <label class="form-label small">Porta externa (internet)</label>
+                            <input type="text" name="porta_externa" class="form-control form-control-sm font-monospace" required placeholder="4430">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small">Protocolo</label>
+                            <select name="protocolo" class="form-select form-select-sm">
+                                <option value="tcp">TCP</option>
+                                <option value="udp">UDP</option>
+                                <option value="tcp_udp">TCP e UDP</option>
+                            </select>
+                        </div>
+                        <div class="col-7">
+                            <label class="form-label small">IP de destino (rede interna)</label>
+                            <input type="text" name="ip_destino" class="form-control form-control-sm font-monospace" required placeholder="192.168.1.223">
+                        </div>
+                        <div class="col-5">
+                            <label class="form-label small">Porta de destino</label>
+                            <input type="text" name="porta_destino" class="form-control form-control-sm font-monospace" placeholder="igual à externa">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-check-lg"></i> Criar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <?php endif; ?>
 
     <!-- Nova regra de firewall (UniFi Gateway) -->
     <div class="modal fade" id="modalNovaRegraFirewall" tabindex="-1">
@@ -5888,11 +5946,56 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
                 '<td>' + escapeHtml(r.protocolo) + '</td>' +
                 '<td class="font-monospace small">' + escapeHtml(r.destino_ip) + ':' + escapeHtml(String(r.destino_porta)) + '</td>' +
                 '<td>' + (r.habilitada ? '<span class="badge text-bg-success">Ativa</span>' : '<span class="badge text-bg-secondary">Desativada</span>') + '</td>' +
+                (podeAlterar ? '<td class="text-end text-nowrap">' +
+                    '<button type="button" class="btn btn-sm btn-outline-secondary pf-alternar" data-id="' + escapeHtml(r.id) + '" data-habilitar="' + (r.habilitada ? '0' : '1') + '">' + (r.habilitada ? 'Desativar' : 'Ativar') + '</button> ' +
+                    '<button type="button" class="btn btn-sm btn-outline-danger pf-excluir" data-id="' + escapeHtml(r.id) + '" data-nome="' + escapeHtml(r.nome) + '"><i class="bi bi-trash"></i></button>' +
+                '</td>' : '') +
             '</tr>';
-        }).join('') || '<tr><td colspan="5" class="text-muted small">Nenhum redirecionamento configurado.</td></tr>';
+        }).join('') || '<tr><td colspan="6" class="text-muted small">Nenhum redirecionamento configurado.</td></tr>';
 
         carregando.style.display = 'none';
         tabelaWrap.style.display = '';
+    }
+
+    const podeAlterar = <?= $podeAlterarRedeRemota ? 'true' : 'false' ?>;
+
+    async function enviar(url, dados) {
+        const res = await fetch(url, { method: 'POST', body: dados });
+        const r = await res.json();
+        alert(r.message || (r.success ? 'Feito.' : 'Falhou.'));
+        if (r.success) carregar();
+        return r.success;
+    }
+
+    corpo.addEventListener('click', function (e) {
+        const alternar = e.target.closest('.pf-alternar');
+        const excluir = e.target.closest('.pf-excluir');
+        if (alternar) {
+            const dados = new FormData();
+            dados.append('id', alternar.dataset.id);
+            dados.append('habilitar', alternar.dataset.habilitar);
+            enviar(<?= json_encode(url('/ativos/unifi/port-forward/alterar')) ?>, dados);
+        } else if (excluir && confirm('Excluir o redirecionamento "' + excluir.dataset.nome + '"? O serviço deixa de ser acessível pela internet.')) {
+            const dados = new FormData();
+            dados.append('id', excluir.dataset.id);
+            dados.append('nome', excluir.dataset.nome);
+            enviar(<?= json_encode(url('/ativos/unifi/port-forward/excluir')) ?>, dados);
+        }
+    });
+
+    const formNovo = document.getElementById('formNovoPortForward');
+    if (formNovo) {
+        formNovo.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            const botao = formNovo.querySelector('button[type="submit"]');
+            botao.disabled = true;
+            const ok = await enviar(<?= json_encode(url('/ativos/unifi/port-forward/criar')) ?>, new FormData(formNovo));
+            botao.disabled = false;
+            if (ok) {
+                formNovo.reset();
+                bootstrap.Modal.getInstance(document.getElementById('modalNovoPortForward'))?.hide();
+            }
+        });
     }
 
     nav.addEventListener('shown.bs.tab', function () {

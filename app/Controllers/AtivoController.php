@@ -1706,6 +1706,50 @@ class AtivoController extends Controller
         echo json_encode($this->service->listarPortForwardUnifi());
     }
 
+    /** Novo redirecionamento de porta (NAT) no gateway UniFi -- abre um serviço interno para a internet. */
+    public function unifiCriarPortForward(): void
+    {
+        AuthMiddleware::checkModulo('ativos_novo');
+        header('Content-Type: application/json');
+
+        $r = (new \App\Services\UnifiService())->criarPortForward(
+            (string)($_POST['nome'] ?? ''),
+            (string)($_POST['porta_externa'] ?? ''),
+            trim((string)($_POST['ip_destino'] ?? '')),
+            (string)($_POST['porta_destino'] ?? ''),
+            (string)($_POST['protocolo'] ?? 'tcp')
+        );
+        if ($r['success']) {
+            AuditService::registrar('Ativos', 'Redirecionamento de porta criado', $r['message']);
+        }
+        echo json_encode($r);
+    }
+
+    public function unifiAlterarPortForward(): void
+    {
+        AuthMiddleware::checkModulo('ativos_novo');
+        header('Content-Type: application/json');
+
+        $r = (new \App\Services\UnifiService())->alterarPortForward((string)($_POST['id'] ?? ''), ($_POST['habilitar'] ?? '') === '1');
+        if ($r['success']) {
+            AuditService::registrar('Ativos', 'Redirecionamento de porta alterado', $r['message']);
+        }
+        echo json_encode($r);
+    }
+
+    public function unifiExcluirPortForward(): void
+    {
+        AuthMiddleware::checkModulo('ativos_novo');
+        header('Content-Type: application/json');
+
+        $nome = trim((string)($_POST['nome'] ?? ''));
+        $r = (new \App\Services\UnifiService())->excluirPortForward((string)($_POST['id'] ?? ''));
+        if ($r['success']) {
+            AuditService::registrar('Ativos', 'Redirecionamento de porta excluído', "Redirecionamento \"{$nome}\" excluído do gateway.");
+        }
+        echo json_encode($r);
+    }
+
     public function unifiRedesWifiConfiguradas(): void
     {
         AuthMiddleware::checkModulo('ativos_lista');

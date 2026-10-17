@@ -577,7 +577,9 @@ class UnifiService
         $nomes = $this->nomesZonasFirewall($ref);
 
         if (empty($nomes)) {
-            return ['success' => false, 'message' => 'Não foi possível consultar as zonas do firewall no Controller.'];
+            // Controller sem a migração para o firewall por zonas (Network 9+): zone-matrix e
+            // firewall-policies respondem OK mas vazios (UDM Pro do NTO, Network 10.6, 17/10/2026).
+            return ['success' => false, 'message' => 'Este gateway não usa o firewall por zonas (Zone-Based Firewall), então regras de firewall não podem ser criadas por aqui -- crie pelo UniFi Controller. Para liberar acesso externo a um serviço interno, use "Novo redirecionamento" em Redirecionamento de portas, logo abaixo.'];
         }
 
         $zonas = [];
@@ -946,6 +948,7 @@ class UnifiService
         $regras = [];
         foreach ($resultado['dados']['data'] ?? [] as $p) {
             $regras[] = [
+                'id' => $p['_id'] ?? '',
                 'nome' => $p['name'] ?? '',
                 'habilitada' => (bool)($p['enabled'] ?? false),
                 'protocolo' => strtoupper((string)($p['proto'] ?? '')),
@@ -956,6 +959,102 @@ class UnifiService
         }
 
         return ['success' => true, 'regras' => $regras];
+    }
+
+    /**
+     * Novo redirecionamento de porta (rest/portforward, API clássica -- a
+     * mesma que lista). A interface de entrada copia a de uma regra já
+     * existente (no UDM com várias WANs é "all" + destination_ips por WAN);
+     * sem nenhuma, vale a WAN principal.
+     *
+     * @return array{success:bool, message:string}
+     */
+    public function criarPortForward(string $nome, string $portaExterna, string $ipDestino, string $portaDestino, string $protocolo): array
+    {
+        $ref = $this->siteRefAtual();
+        if ($ref === null) {
+            return ['success' => false, 'message' => 'Site do UniFi Controller ainda não identificado -- use "Testar conexão" em Integrações > UniFi.'];
+        }
+
+        $nome = trim($nome);
+        $portaDestino = trim($portaDestino) === '' ? trim($portaExterna) : trim($portaDestino);
+        $porta = '/^\d{1,5}(-\d{1,5})?$/';
+        if ($nome === '' || !preg_match($porta, trim($portaExterna)) || !preg_match($porta, $portaDestino)) {
+            return ['success' => false, 'message' => 'Informe nome, porta externa e porta de destino (número ou faixa, ex.: 4430 ou 5000-5010).'];
+        }
+        if (!filter_var($ipDestino, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) || filter_var($ipDestino, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE)) {
+            return ['success' => false, 'message' => 'O destino precisa ser um IP da rede interna (ex.: 192.168.1.223).'];
+        }
+        if (!in_array($protocolo, ['tcp', 'udp', 'tcp_udp'], true)) {
+            $protocolo = 'tcp';
+        }
+
+        $existentes = $this->chamarApi('GET', "/proxy/network/api/s/{$ref}/rest/portforward");
+        $modelo = $existentes['sucesso'] ? ($existentes['dados']['data'][0] ?? null) : null;
+        foreach ($existentes['dados']['data'] ?? [] as $p) {
+            if (($p['dst_port'] ?? '') === trim($portaExterna) && in_array($p['proto'] ?? '', [$protocolo, 'tcp_udp'], true) && ($p['enabled'] ?? false)) {
+                return ['success' => false, 'message' => "A porta externa {$portaExterna} já está em uso pelo redirecionamento \"{$p['name']}\"."];
+            }
+        }
+
+        $payload = [
+            'name' => $nome,
+            'enabled' => true,
+            'src' => 'any',
+            'dst_port' => trim($portaExterna),
+            'fwd' => $ipDestino,
+            'fwd_port' => $portaDestino,
+            'proto' => $protocolo,
+            'log' => false,
+            'pfwd_interface' => $modelo['pfwd_interface'] ?? 'wan',
+        ];
+        if (!empty($modelo['destination_ips'])) {
+            $payload['destination_ips'] = $modelo['destination_ips'];
+        }
+
+        $resultado = $this->chamarApi('POST', "/proxy/network/api/s/{$ref}/rest/portforward", $payload);
+        if (!$resultado['sucesso']) {
+            return ['success' => false, 'message' => 'O Controller recusou o redirecionamento: ' . $resultado['mensagem']];
+        }
+
+        return ['success' => true, 'message' => "Redirecionamento \"{$nome}\" criado: porta {$portaExterna} da internet → {$ipDestino}:{$portaDestino}."];
+    }
+
+    /** Ativa/desativa um redirecionamento (PUT do objeto inteiro, só com "enabled" trocado). */
+    public function alterarPortForward(string $id, bool $habilitar): array
+    {
+        $ref = $this->siteRefAtual();
+        $lista = $ref ? $this->chamarApi('GET', "/proxy/network/api/s/{$ref}/rest/portforward") : ['sucesso' => false];
+        $regra = null;
+        foreach ($lista['dados']['data'] ?? [] as $p) {
+            if (($p['_id'] ?? '') === $id) {
+                $regra = $p;
+            }
+        }
+        if ($regra === null) {
+            return ['success' => false, 'message' => 'Redirecionamento não encontrado no Controller.'];
+        }
+
+        $regra['enabled'] = $habilitar;
+        $resultado = $this->chamarApi('PUT', "/proxy/network/api/s/{$ref}/rest/portforward/{$id}", $regra);
+
+        return $resultado['sucesso']
+            ? ['success' => true, 'message' => "Redirecionamento \"{$regra['name']}\" " . ($habilitar ? 'ativado.' : 'desativado.'), 'nome' => $regra['name']]
+            : ['success' => false, 'message' => 'O Controller recusou: ' . $resultado['mensagem']];
+    }
+
+    public function excluirPortForward(string $id): array
+    {
+        $ref = $this->siteRefAtual();
+        if ($ref === null || !preg_match('/^[0-9a-f]{24}$/', $id)) {
+            return ['success' => false, 'message' => 'Redirecionamento inválido.'];
+        }
+
+        $resultado = $this->chamarApi('DELETE', "/proxy/network/api/s/{$ref}/rest/portforward/{$id}");
+
+        return $resultado['sucesso']
+            ? ['success' => true, 'message' => 'Redirecionamento excluído.']
+            : ['success' => false, 'message' => 'O Controller recusou: ' . $resultado['mensagem']];
     }
 
     /**
