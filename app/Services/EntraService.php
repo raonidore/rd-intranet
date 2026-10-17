@@ -429,6 +429,122 @@ class EntraService
         return 'S-1-12-1-' . implode('-', unpack('V4', $bytes));
     }
 
+    /*
+     |---------------------------------------------------------
+     | Dashboard e conferência da integração -- consultas que nunca
+     | notificam erro (a tela mostra "sem permissão"/vazio no card), pra
+     | um dashboard com uma permissão faltando não virar uma chuva de
+     | alertas.
+     |---------------------------------------------------------
+     */
+
+    /** Permissões (de aplicativo) do App Registration e pra que cada uma serve no portal. */
+    public const PERMISSOES = [
+        'User.ReadWrite.All' => ['Usuários: ver, criar, resetar senha, ativar/desativar, licenças', true],
+        'Directory.Read.All' => ['Leitura geral do diretório (usuários, grupos, vencimento do secret)', true],
+        'Organization.Read.All' => ['Dados da organização e licenças do tenant', true],
+        'Group.ReadWrite.All' => ['Grupos: criar e definir quem acessa as máquinas de cada unidade', true],
+        'AuditLog.Read.All' => ['Trilha de acesso (logins no Windows), último login de cada conta e MFA', true],
+        'Device.ReadWrite.All' => ['Máquinas no Entra: ver se a máquina está no domínio, desativar máquina perdida', false],
+        'DeviceLocalCredential.Read.All' => ['Senha do Administrador local (LAPS) de cada máquina', false],
+        'BitlockerKey.Read.All' => ['Chave de recuperação do BitLocker', false],
+        'UserAuthenticationMethod.ReadWrite.All' => ['Ver quem tem MFA e resetar o MFA de quem trocou de celular', false],
+        'Reports.Read.All' => ['Uso do Microsoft 365 (caixa de e-mail, OneDrive, contas paradas)', false],
+        'ServiceHealth.Read.All' => ['Avisos de instabilidade da Microsoft (Teams, Outlook) no dashboard', false],
+        'DeviceManagementManagedDevices.Read.All' => ['Dispositivos (Intune): listar', false],
+        'DeviceManagementManagedDevices.ReadWrite.All' => ['Dispositivos (Intune): sincronizar, reiniciar, bloquear, retirar', false],
+        'DeviceManagementManagedDevices.PrivilegedOperations.All' => ['Dispositivos (Intune): exigida até pra "Sincronizar"', false],
+        'DeviceManagementConfiguration.ReadWrite.All' => ['Perfis de Configuração (Intune)', false],
+    ];
+
+    /** Permissões concedidas ao app (lidas do próprio token) -- null se nem autenticou. */
+    public function permissoesConcedidas(): ?array
+    {
+        $token = $this->obterToken();
+        if ($token === null) {
+            return null;
+        }
+        $partes = explode('.', $token);
+        $dados = json_decode((string)base64_decode(strtr($partes[1] ?? '', '-_', '+/')), true);
+
+        return is_array($dados['roles'] ?? null) ? $dados['roles'] : [];
+    }
+
+    /** Validade do client secret em uso (casando a "dica" -- 3 primeiros caracteres -- com os secrets do app). */
+    public function vencimentoDoSecret(): ?string
+    {
+        $secret = $this->clientSecretAtual();
+        $r = $this->chamarGraph('GET', '/applications?$filter=' . rawurlencode("appId eq '{$this->clientIdAtual()}'") . '&$select=passwordCredentials');
+        if (!$r['sucesso'] || $secret === null) {
+            return null;
+        }
+        foreach ($r['dados']['value'][0]['passwordCredentials'] ?? [] as $c) {
+            if (($c['hint'] ?? '') === substr($secret, 0, 3)) {
+                return $c['endDateTime'] ?? null;
+            }
+        }
+
+        return null;
+    }
+
+    /** Contas ativas e com licença sem login há $dias ou mais (null = sem permissão de leitura do último login). */
+    public function contasParadas(int $dias = 30): ?array
+    {
+        $r = $this->chamarGraph('GET', '/users?$select=displayName,userPrincipalName,accountEnabled,assignedLicenses,signInActivity,createdDateTime&$top=999', null, 60);
+        if (!$r['sucesso']) {
+            return null;
+        }
+        $limite = time() - $dias * 86400;
+        $paradas = [];
+        foreach ($r['dados']['value'] ?? [] as $u) {
+            if (!($u['accountEnabled'] ?? false) || empty($u['assignedLicenses'])) {
+                continue;
+            }
+            $ultimo = $u['signInActivity']['lastSignInDateTime'] ?? null;
+            if ($ultimo === null ? strtotime($u['createdDateTime'] ?? 'now') < $limite : strtotime($ultimo) < $limite) {
+                $paradas[] = ['nome' => $u['displayName'], 'upn' => $u['userPrincipalName'], 'ultimo' => $ultimo];
+            }
+        }
+
+        return $paradas;
+    }
+
+    /** Contas sem MFA cadastrado (null = sem permissão). */
+    public function semMfa(): ?array
+    {
+        $r = $this->chamarGraph('GET', '/reports/authenticationMethods/userRegistrationDetails?$top=999', null, 60);
+        if (!$r['sucesso']) {
+            return null;
+        }
+
+        return array_values(array_map(
+            fn($u) => ['nome' => $u['userDisplayName'] ?? '', 'upn' => $u['userPrincipalName'] ?? ''],
+            array_filter($r['dados']['value'] ?? [], fn($u) => !($u['isMfaRegistered'] ?? false) && ($u['userType'] ?? 'member') === 'member')
+        ));
+    }
+
+    /** Máquinas registradas no Entra, por tipo de vínculo (null = sem permissão). */
+    public function dispositivosNoEntra(): ?array
+    {
+        $r = $this->chamarGraph('GET', '/devices?$select=displayName,trustType,operatingSystem,approximateLastSignInDateTime,accountEnabled&$top=999');
+        if (!$r['sucesso']) {
+            return null;
+        }
+
+        return array_values(array_filter($r['dados']['value'] ?? [], fn($d) => stripos($d['operatingSystem'] ?? '', 'windows') !== false));
+    }
+
+    /** Incidentes abertos nos serviços da Microsoft (null = sem permissão). */
+    public function avisosMicrosoft(): ?array
+    {
+        $r = $this->chamarGraph('GET', '/admin/serviceAnnouncement/issues?$filter=' . rawurlencode('isResolved eq false') . '&$select=title,service,status,classification,startDateTime&$top=50');
+        if (!$r['sucesso']) {
+            return null;
+        }
+
+        return $r['dados']['value'] ?? [];
+    }
+
     /** SID -> UPN de todos os usuários do tenant (pra trilha de acesso mostrar a conta do Entra no log do Windows). Sem notificação: roda também pelo cron. */
     public function mapaSidUpn(): array
     {
