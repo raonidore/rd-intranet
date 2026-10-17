@@ -315,6 +315,24 @@ class SegurancaRecomendacaoService
                 'link' => ['rotulo' => 'Abrir a configuração', 'url' => '/ativos/seguranca/configuracao'],
                 'geral' => fn () => empty($padrao['canary']) || empty($padrao['shadow_copy']) || empty($padrao['fim']),
             ],
+            'bitdefender_bloqueou_rd' => [
+                'titulo' => 'Bitdefender bloqueou o agente RD.Intranet',
+                'porque' => 'O Controle de Ameaças do Bitdefender colocou arquivos do agente em quarentena -- nessas máquinas o RD.Intranet para de monitorar e de proteger. Inclua as exclusões do RD na política do GravityZone e restaure os arquivos.',
+                'severidade' => 'alta',
+                'link' => ['rotulo' => 'Abrir Segurança > Bitdefender', 'url' => '/seguranca/bitdefender#quarentena'],
+                'por_maquina' => function (array $a) {
+                    static $bloqueadas = null;
+                    if ($bloqueadas === null) {
+                        $bloqueadas = [];
+                        foreach ((new BitdefenderService())->quarentena() as $q) {
+                            if ($q['do_rd'] && $q['ativo_id']) {
+                                $bloqueadas[(int)$q['ativo_id']][] = basename(str_replace('\\', '/', (string)$q['arquivo']));
+                            }
+                        }
+                    }
+                    return isset($bloqueadas[(int)$a['id']]) ? 'em quarentena: ' . implode(', ', $bloqueadas[(int)$a['id']]) : null;
+                },
+            ],
             'criticos_antigos' => [
                 'titulo' => 'Alertas críticos sem análise há mais de 24 horas',
                 'porque' => 'Alerta crítico parado é o tipo de coisa que vira incidente. Analise e marque como resolvido, falso positivo ou ataque confirmado.',

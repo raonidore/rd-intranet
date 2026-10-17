@@ -46,6 +46,9 @@ class SegurancaEventoService
         // O portal só fica sabendo se o isolamento funcionou quando a máquina responde o comando.
         'NETWORK_ISOLATION_FAILED' => 'Isolamento FALHOU',
         'NETWORK_ISOLATION_REMOVE_FAILED' => 'Remoção do isolamento falhou',
+        // Integração Bitdefender GravityZone (Segurança > Bitdefender).
+        'BITDEFENDER_QUARENTENA' => 'Bitdefender: arquivo em quarentena',
+        'BITDEFENDER_INFECTADA' => 'Bitdefender: ameaça ativa',
     ];
 
     public const ACOES_AGENTE = ['nenhuma', 'processo_encerrado'];

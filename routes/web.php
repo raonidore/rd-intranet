@@ -522,6 +522,15 @@ $router->get('/administracao/integracoes/unifi', [IntegracoesController::class, 
 $router->post('/administracao/integracoes/unifi/salvar', [IntegracoesController::class, 'unifiSalvar']);
 $router->post('/administracao/integracoes/unifi/remover', [IntegracoesController::class, 'unifiRemover']);
 $router->post('/administracao/integracoes/unifi/testar', [IntegracoesController::class, 'unifiTestar']);
+$router->get('/administracao/integracoes/bitdefender', [IntegracoesController::class, 'bitdefenderForm']);
+$router->post('/administracao/integracoes/bitdefender/salvar', [IntegracoesController::class, 'bitdefenderSalvar']);
+$router->post('/administracao/integracoes/bitdefender/remover', [IntegracoesController::class, 'bitdefenderRemover']);
+$router->post('/administracao/integracoes/bitdefender/testar', [IntegracoesController::class, 'bitdefenderTestar']);
+$router->get('/seguranca/bitdefender', [\App\Controllers\BitdefenderController::class, 'index']);
+$router->post('/seguranca/bitdefender/sincronizar', [\App\Controllers\BitdefenderController::class, 'sincronizar']);
+$router->post('/seguranca/bitdefender/verificar', [\App\Controllers\BitdefenderController::class, 'verificar']);
+$router->post('/seguranca/bitdefender/isolar', [\App\Controllers\BitdefenderController::class, 'isolar']);
+$router->post('/seguranca/bitdefender/quarentena', [\App\Controllers\BitdefenderController::class, 'quarentena']);
 $router->get('/administracao/integracoes/omada', [IntegracoesController::class, 'omadaForm']);
 $router->post('/administracao/integracoes/omada/salvar', [IntegracoesController::class, 'omadaSalvar']);
 $router->post('/administracao/integracoes/omada/remover', [IntegracoesController::class, 'omadaRemover']);

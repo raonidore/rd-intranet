@@ -6,6 +6,7 @@ use App\Core\Controller;
 use App\Core\Database;
 use App\Middleware\AuthMiddleware;
 use App\Services\AuditService;
+use App\Services\BitdefenderService;
 use App\Services\KbService;
 use App\Services\NotificationService;
 use App\Services\IntelbrasDvrService;
@@ -97,6 +98,54 @@ class IntegracoesController extends Controller
         set_time_limit(30);
 
         echo json_encode((new UnifiService())->testarConexao());
+    }
+
+    public function bitdefenderForm(): void
+    {
+        AuthMiddleware::checkAdmin();
+
+        $service = new BitdefenderService();
+        $this->view('administracao/integracoes_bitdefender', [
+            'urlAtual' => $service->urlAtual() ?: BitdefenderService::URL_PADRAO,
+            'configurado' => $service->configurado(),
+            'ultimaSincronizacao' => $service->ultimaSincronizacao(),
+            'ultimoErro' => $service->ultimoErro(),
+        ]);
+    }
+
+    public function bitdefenderSalvar(): void
+    {
+        AuthMiddleware::checkAdmin();
+
+        if ((new BitdefenderService())->salvarConfiguracao($_POST['url'] ?? '', $_POST['api_key'] ?? '')) {
+            try {
+                (new BitdefenderService())->sincronizar(); // primeira cópia na hora, sem esperar o cron
+            } catch (\RuntimeException $e) {
+                NotificationService::error('Salvo, mas a primeira sincronização falhou: ' . $e->getMessage());
+            }
+        }
+
+        header('Location: ' . url('/administracao/integracoes/bitdefender'));
+        exit;
+    }
+
+    public function bitdefenderRemover(): void
+    {
+        AuthMiddleware::checkAdmin();
+
+        (new BitdefenderService())->removerConfiguracao();
+
+        header('Location: ' . url('/administracao/integracoes/bitdefender'));
+        exit;
+    }
+
+    public function bitdefenderTestar(): void
+    {
+        AuthMiddleware::checkAdmin();
+        header('Content-Type: application/json');
+        set_time_limit(40);
+
+        echo json_encode((new BitdefenderService())->testarConexao());
     }
 
     public function omadaForm(): void

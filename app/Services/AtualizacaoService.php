@@ -188,6 +188,7 @@ class AtualizacaoService
             $this->garantirCronAgenteSincronizar();
             $this->garantirCronWhatsappInatividade();
             $this->garantirCronChamadosDistribuicao();
+            $this->garantirCronBitdefender();
             $this->garantirCronChamadosSlaExpediente();
             $this->garantirCronProjetosPrazos();
             $this->garantirCronProjetosLixeira();
@@ -426,6 +427,20 @@ class AtualizacaoService
      * avisos de vencimento, anonimização LGPD, filtro). Só existe onde o
      * portal foi ligado -- criado também na hora de ligar (WifiController).
      */
+    /** Integração Bitdefender GravityZone: só cria o cron se a integração estiver configurada. */
+    public function garantirCronBitdefender(): void
+    {
+        if (!(new BitdefenderService())->configurado()) {
+            return;
+        }
+        $this->garantirCronJob(
+            'Sincronizar Bitdefender GravityZone',
+            'Copia do console do GravityZone as máquinas, o estado da proteção e a quarentena; itens novos de quarentena viram alerta na Central de Segurança.',
+            '*/15 * * * *',
+            'php ' . $this->repoDir() . '/rd bitdefender:sincronizar'
+        );
+    }
+
     public function garantirCronWifi(): void
     {
         if ((new WifiConfigService())->get('portal_ativo') !== '1') {

@@ -87,6 +87,19 @@ ob_start();
         </a>
     </div>
     <div class="col-md-4">
+        <a href="<?= url('/administracao/integracoes/bitdefender') ?>" class="metodo-card">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="mb-2" style="font-size:28px; color:#ED1C24;"><i class="bi bi-shield-fill-check"></i></div>
+                    <h6 class="mb-1">Bitdefender GravityZone</h6>
+                    <p class="text-muted small mb-0">
+                        Chave de API do console do antivírus -- máquinas protegidas, quarentena e ações (verificar, restaurar, isolar) em Segurança &gt; Bitdefender, com alertas na Central de Segurança.
+                    </p>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-4">
         <a href="<?= url('/administracao/integracoes/intelbras-dvr') ?>" class="metodo-card">
             <div class="card h-100 border-0 shadow-sm">
                 <div class="card-body">

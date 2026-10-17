@@ -54,6 +54,7 @@ class ModuloCatalogo
         'seguranca_auditoria_credenciais' => ['label' => 'Auditoria de Credenciais', 'grupo' => 'Segurança'],
         'seguranca_cofre_senhas' => ['label' => 'Cofre de Senhas', 'grupo' => 'Segurança'],
         'seguranca_cofre_senhas_gerenciar' => ['label' => 'Cofre de Senhas - Gerenciar Cofres', 'grupo' => 'Segurança'],
+        'seguranca_bitdefender' => ['label' => 'Bitdefender GravityZone', 'grupo' => 'Segurança'],
         'ativos_dashboard' => ['label' => 'Ativos - Dashboard', 'grupo' => 'Ativos'],
         'ativos_lista' => ['label' => 'Ativos - Lista', 'grupo' => 'Ativos'],
         'ativos_novo' => ['label' => 'Ativos - Novo/Editar', 'grupo' => 'Ativos'],

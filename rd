@@ -385,6 +385,19 @@ switch ($comando) {
 
         break;
 
+    case 'bitdefender:sincronizar':
+        try {
+            $r = (new \App\Services\BitdefenderService())->sincronizar();
+            echo "OK: Bitdefender -- {$r['endpoints']} máquina(s), {$r['quarentena']} item(ns) em quarentena, {$r['alertas']} alerta(s) novo(s).
+";
+        } catch (\RuntimeException $e) {
+            echo 'ERRO: ' . $e->getMessage() . "
+";
+            exit(1);
+        }
+
+        break;
+
     case 'ativos:coletar-omada':
         $resultado = (new \App\Services\AtivoService())->coletarOmadaTodos();
         echo "OK: Omada coletado em {$resultado['sucesso']}/{$resultado['total']} ativo(s).\n";
