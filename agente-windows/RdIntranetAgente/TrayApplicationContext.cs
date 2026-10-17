@@ -27,6 +27,7 @@ public class TrayApplicationContext : ApplicationContext
     private readonly SegurancaService _seguranca;
     private readonly MonitorRedeService _monitorRede;
     private readonly MonitorDesempenhoService _monitorDesempenho;
+    private readonly AcessosService _acessos;
     private readonly MainForm _janelaPrincipal;
     private readonly SynchronizationContext? _contextoUi;
     private readonly ToolStripMenuItem _itemServico;
@@ -61,6 +62,7 @@ public class TrayApplicationContext : ApplicationContext
         _seguranca.Aplicar(_estado.UltimoModuloSeguranca);
         _monitorRede = new MonitorRedeService(() => _config, () => _machineGuid, _seguranca);
         _monitorDesempenho = new MonitorDesempenhoService(() => _config, () => _machineGuid);
+        _acessos = new AcessosService(() => _config, () => _machineGuid);
 
         // Escuta local pra imprimir etiqueta sob demanda (sem esperar o
         // proximo checkin) -- sempre tenta iniciar; so imprime de verdade
@@ -1400,6 +1402,7 @@ del ""%~f0""
         _seguranca.Detectado -= AoDetectarEventoSeguranca;
         _monitorRede.Dispose();
         _monitorDesempenho.Dispose();
+        _acessos.Dispose();
         _seguranca.Dispose();
         _janelaPrincipal.Dispose();
         _icone.Visible = false;

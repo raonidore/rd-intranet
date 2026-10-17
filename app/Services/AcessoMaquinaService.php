@@ -172,9 +172,12 @@ class AcessoMaquinaService
      */
     private function duplicado(array $l): bool
     {
-        if ($l['evento'] === 'logoff' && $l['logon_id']) {
-            $stmt = $this->db->prepare("SELECT 1 FROM acessos_maquinas WHERE ativo_id = ? AND logon_id = ? AND evento = 'logoff' LIMIT 1");
-            $stmt->execute([$l['ativo_id'], $l['logon_id']]);
+        // Logoff: o 4647 e o 4634 da mesma sessão, e o 4634 da sessão "elevada" gêmea
+        // que o Windows cria pra administrador (logon_id diferente, mesmo usuário e segundo).
+        if ($l['evento'] === 'logoff') {
+            $stmt = $this->db->prepare("SELECT 1 FROM acessos_maquinas WHERE ativo_id = ? AND evento = 'logoff'
+                AND (logon_id = ? OR (sid = ? AND ocorrido_em BETWEEN DATE_SUB(?, INTERVAL 15 SECOND) AND DATE_ADD(?, INTERVAL 15 SECOND))) LIMIT 1");
+            $stmt->execute([$l['ativo_id'], $l['logon_id'] ?? '', $l['sid'] ?? '', $l['ocorrido_em'], $l['ocorrido_em']]);
             return (bool)$stmt->fetchColumn();
         }
 

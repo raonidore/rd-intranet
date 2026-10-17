@@ -49,6 +49,16 @@ internal static class Program
             return;
         }
 
+        // Trilha de acesso: o que seria enviado ao servidor, sem enviar.
+        // Uso (como administrador): RdIntranetAgente.exe --teste-trilha C:\Temp	rilha.json
+        var indiceTrilha = Array.FindIndex(args, a => a.Equals("--teste-trilha", StringComparison.OrdinalIgnoreCase));
+        if (indiceTrilha >= 0)
+        {
+            var saida = args.Length > indiceTrilha + 1 ? args[indiceTrilha + 1] : Path.Combine(Path.GetTempPath(), "rd-teste-trilha.json");
+            File.WriteAllText(saida, System.Text.Json.JsonSerializer.Serialize(AcessosService.LerParaTeste(), new System.Text.Json.JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }), System.Text.Encoding.UTF8);
+            return;
+        }
+
         // Lançado pelo AgenteServico (SessaoUsuario.LancarProcessoNaSessao)
         // -- já chega com o token certo (elevado, se o usuário for admin),
         // então NÃO deve tentar se relançar com "runas" de novo. Só muda
