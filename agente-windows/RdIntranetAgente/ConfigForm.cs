@@ -140,6 +140,9 @@ public class ConfigForm : Form
         AdicionarLinha(gradeAvancado, LinhaCampo, Campo("Identificador da máquina", _campoMachineGuidOverride));
         var cartaoAvancado = Cartao(new CabecalhoSecao("5", "Avançado", "Só ao restaurar uma máquina reformatada, pra ela continuar sendo o mesmo ativo."), gradeAvancado, 30 + 50 + LinhaCampo);
 
+        // ---------------------------------------------------------- 6. acesso remoto (MeshCentral)
+        var cartaoMesh = CriarCartaoMesh(configAtual);
+
         // ---------------------------------------------------------- rodapé
         var (textoServico, corServico) = StatusServico();
         var info = new Label
@@ -181,7 +184,7 @@ public class ConfigForm : Form
             BackColor = Tema.Fundo,
             Margin = Padding.Empty
         };
-        _pilha.Controls.AddRange(new Control[] { cartaoConexao, cartaoLocal, cartaoColeta, cartaoEtiquetas, cartaoAvancado, rodape });
+        _pilha.Controls.AddRange(new Control[] { cartaoConexao, cartaoLocal, cartaoColeta, cartaoEtiquetas, cartaoAvancado, cartaoMesh, rodape });
         _rolagem.Controls.Add(_pilha);
         _rolagem.Resize += (s, e) => AjustarLarguras();
         Controls.Add(_rolagem);
@@ -195,6 +198,7 @@ public class ConfigForm : Form
             // Janela própria (primeira configuração): margem interna; embutida no painel: encosta nas bordas.
             if (TopLevel) _rolagem.Padding = new Padding(20, 16, 12, 0);
             AjustarLarguras();
+            _ = AtualizarMeshAsync();
 
             // Reconfiguração de um agente já configurado -- busca sozinho, sem
             // precisar clicar, pra já mostrar as escolhas anteriores nas listas.
@@ -295,6 +299,165 @@ public class ConfigForm : Form
         }
 
         lista.DefinirItens(new object[] { rotuloVazio }.Concat(itens), indice >= 0 ? indice + 1 : 0);
+    }
+
+    // ================================================================ acesso remoto (MeshCentral)
+
+    private readonly Dictionary<string, Label> _valoresMesh = new();
+    private readonly ToolTip _dicaMesh = new();
+    private Label? _resumoMesh;
+    private BotaoTema? _botaoReiniciarMesh;
+
+    private static readonly (string chave, string rotulo)[] CamposMesh =
+    {
+        ("status", "Status atual do agente"), ("conexao", "Conexão com o servidor"), ("versao", "Versão"),
+        ("url", "URL do servidor"), ("idServidor", "Identificador do servidor"), ("grupo", "Nome do grupo"),
+        ("idGrupo", "Identificador do grupo"), ("maquina", "Nome da máquina"), ("assinatura", "Assinado por"),
+    };
+
+    /// <summary>
+    /// O mesmo "Connection Details" do instalador do MeshCentral, lido da
+    /// máquina (MeshAgentInfo), mais conexão e origem do MeshAgent -- e os
+    /// instaladores do grupo da unidade (os mesmos de Ativos > Acesso Remoto
+    /// no portal) pra baixar sem abrir o navegador.
+    /// </summary>
+    private CartaoSecao CriarCartaoMesh(Config config)
+    {
+        var grade = new TableLayoutPanel { ColumnCount = 2, BackColor = Tema.Superficie, Margin = Padding.Empty, Padding = Padding.Empty };
+        grade.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210));
+        grade.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+        foreach (var (chave, rotulo) in CamposMesh)
+        {
+            var linha = grade.RowCount++;
+            grade.RowStyles.Add(new RowStyle(SizeType.Absolute, 25));
+            grade.Controls.Add(new Label { Text = rotulo, Dock = DockStyle.Fill, ForeColor = Tema.TextoSecundario, Font = Tema.Fonte(9F), TextAlign = ContentAlignment.MiddleLeft }, 0, linha);
+            var valor = new Label { Text = "...", Dock = DockStyle.Fill, ForeColor = Tema.Texto, Font = Tema.Fonte(9F), TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true };
+            _valoresMesh[chave] = valor;
+            grade.Controls.Add(valor, 1, linha);
+        }
+
+        _resumoMesh = new Label { Dock = DockStyle.Fill, ForeColor = Tema.TextoSecundario, Font = Tema.Fonte(8.5F), TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true };
+        var linhaResumo = grade.RowCount++;
+        grade.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+        grade.Controls.Add(_resumoMesh, 0, linhaResumo);
+        grade.SetColumnSpan(_resumoMesh, 2);
+
+        var botoes = new FlowLayoutPanel { Dock = DockStyle.Fill, BackColor = Tema.Superficie, WrapContents = false, Margin = Padding.Empty, Padding = new Padding(0, 6, 0, 0) };
+        var botaoAtualizar = new BotaoTema("Atualizar", BotaoTema.Variante.Secundario) { Width = 100, Height = 34 };
+        _botaoReiniciarMesh = new BotaoTema("Reiniciar serviço", BotaoTema.Variante.Secundario) { Width = 150, Height = 34 };
+        botaoAtualizar.Click += async (s, e) => await AtualizarMeshAsync();
+        _botaoReiniciarMesh.Click += async (s, e) => await ReiniciarMeshAsync();
+        botoes.Controls.Add(botaoAtualizar);
+        botoes.Controls.Add(_botaoReiniciarMesh);
+        foreach (var (arquitetura, rotulo) in new[] { ("x64", "Instalador 64 bits"), ("x86", "32 bits"), ("arm64", "ARM64") })
+        {
+            var botao = new BotaoTema(rotulo, BotaoTema.Variante.Fantasma) { Width = arquitetura == "x64" ? 150 : 90, Height = 34, Enabled = config.EstaConfigurado };
+            botao.Click += async (s, e) => await BaixarInstaladorMeshAsync(config, arquitetura, botao);
+            botoes.Controls.Add(botao);
+        }
+        var linhaBotoes = grade.RowCount++;
+        grade.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+        grade.Controls.Add(botoes, 0, linhaBotoes);
+        grade.SetColumnSpan(botoes, 2);
+
+        return Cartao(new CabecalhoSecao("6", "Acesso remoto (MeshCentral)", "O suporte remoto da RD nesta máquina -- os mesmos dados do instalador do MeshAgent."),
+            grade, 30 + 50 + CamposMesh.Length * 25 + 28 + 46 + 8);
+    }
+
+    private async Task AtualizarMeshAsync()
+    {
+        foreach (var v in _valoresMesh.Values) { v.Text = "..."; v.ForeColor = Tema.Texto; }
+        MeshAgentInfo info;
+        try
+        {
+            info = await Task.Run(MeshAgentInfo.Ler);
+        }
+        catch (Exception ex)
+        {
+            if (_resumoMesh != null) { _resumoMesh.Text = "Não foi possível ler o MeshAgent: " + ex.Message; _resumoMesh.ForeColor = Tema.Perigo; }
+            return;
+        }
+
+        void Mostrar(string chave, string texto, Color? cor = null)
+        {
+            var rotulo = _valoresMesh[chave];
+            rotulo.Text = string.IsNullOrEmpty(texto) ? "--" : texto;
+            rotulo.ForeColor = cor ?? Tema.Texto;
+            _dicaMesh.SetToolTip(rotulo, texto);
+        }
+
+        Mostrar("status", info.Status, info.Executando ? Tema.Sucesso : info.Instalado ? Tema.Alerta : Tema.TextoSecundario);
+        Mostrar("conexao", !info.Instalado ? "" : info.Conectado switch { true => "Conectado", false => "Sem conexão", _ => "Não foi possível verificar" },
+            info.Conectado == true ? Tema.Sucesso : info.Conectado == false ? Tema.Perigo : Tema.TextoSecundario);
+        Mostrar("versao", info.Versao);
+        Mostrar("url", info.UrlServidor);
+        Mostrar("idServidor", info.IdServidor);
+        Mostrar("grupo", info.NomeGrupo);
+        Mostrar("idGrupo", info.IdGrupo);
+        Mostrar("maquina", info.NomeMaquina);
+        Mostrar("assinatura", info.Assinatura, !info.Instalado ? null : info.DaRd ? Tema.Sucesso : Tema.Alerta);
+
+        if (_botaoReiniciarMesh != null) _botaoReiniciarMesh.Enabled = info.Instalado;
+        if (_resumoMesh != null)
+        {
+            (_resumoMesh.Text, _resumoMesh.ForeColor) = !info.Instalado
+                ? ("MeshAgent não instalado -- baixe o instalador abaixo e execute nesta máquina.", Tema.TextoSecundario)
+                : !info.DaRd
+                    ? ("Atenção: este MeshAgent não foi assinado pelo MeshCentral da RD. Se ninguém da TI instalou, avise o suporte.", Tema.Alerta)
+                    : info.Conectado == false
+                        ? ("Instalado, mas sem conexão com o servidor -- tente \"Reiniciar serviço\" ou confira a rede.", Tema.Alerta)
+                        : ("Tudo certo: o suporte da RD consegue acessar esta máquina.", Tema.Sucesso);
+        }
+    }
+
+    private async Task ReiniciarMeshAsync()
+    {
+        if (_botaoReiniciarMesh == null) return;
+        _botaoReiniciarMesh.Enabled = false;
+        if (_resumoMesh != null) { _resumoMesh.Text = "Reiniciando o serviço do MeshAgent..."; _resumoMesh.ForeColor = Tema.TextoSecundario; }
+        try
+        {
+            await Task.Run(MeshAgentInfo.ReiniciarServico);
+            LogAtividade.Registrar(NivelAtividade.Info, "ACESSO REMOTO", "Serviço do MeshAgent reiniciado pela tela Configurações.");
+            await Task.Delay(4000); // tempo pra reconectar ao servidor
+        }
+        catch (Exception ex)
+        {
+            if (_resumoMesh != null) { _resumoMesh.Text = "Não foi possível reiniciar: " + ex.Message; _resumoMesh.ForeColor = Tema.Perigo; }
+            _botaoReiniciarMesh.Enabled = true;
+            return;
+        }
+        await AtualizarMeshAsync();
+    }
+
+    private async Task BaixarInstaladorMeshAsync(Config config, string arquitetura, BotaoTema botao)
+    {
+        using var dialogo = new SaveFileDialog
+        {
+            FileName = $"MeshAgent-{arquitetura}.exe",
+            Filter = "Instalador (*.exe)|*.exe",
+            InitialDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads"),
+        };
+        if (dialogo.ShowDialog(this) != DialogResult.OK) return;
+
+        botao.Enabled = false;
+        try
+        {
+            var guid = CollectorService.ObterMachineGuid();
+            var bytes = await new MeshAgentInstallerService(config, guid).BaixarParaSalvarAsync(arquitetura);
+            await File.WriteAllBytesAsync(dialogo.FileName, bytes);
+            if (_resumoMesh != null) { _resumoMesh.Text = $"Instalador salvo em {dialogo.FileName}."; _resumoMesh.ForeColor = Tema.Sucesso; }
+            LogAtividade.Registrar(NivelAtividade.Info, "ACESSO REMOTO", $"Instalador do MeshAgent ({arquitetura}) baixado em {dialogo.FileName}.");
+        }
+        catch (Exception ex)
+        {
+            if (_resumoMesh != null) { _resumoMesh.Text = "Falha ao baixar: " + ex.Message; _resumoMesh.ForeColor = Tema.Perigo; }
+        }
+        finally
+        {
+            botao.Enabled = true;
+        }
     }
 
     // ================================================================ layout

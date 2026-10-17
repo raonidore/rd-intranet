@@ -123,7 +123,10 @@ public sealed class MeshAgentInstallerService
         }
     }
 
-    private async Task<byte[]> BaixarInstallerAsync(string arquitetura)
+    /// <summary>Instalador do grupo desta unidade (x86, x64 ou arm64) pra salvar -- botões do card "Acesso remoto" em Configurações.</summary>
+    public Task<byte[]> BaixarParaSalvarAsync(string arquitetura) => BaixarInstallerAsync(arquitetura, "/api/ativos/agente/meshagent/instalador");
+
+    private async Task<byte[]> BaixarInstallerAsync(string arquitetura, string caminho = "/api/ativos/agente/meshagent")
     {
         var handler = new HttpClientHandler
         {
@@ -133,7 +136,7 @@ public sealed class MeshAgentInstallerService
         cliente.DefaultRequestHeaders.Add("X-RD-Agente-Chave", _config.ApiKey);
         var payload = JsonSerializer.Serialize(new { machine_guid = _machineGuid, arquitetura });
         using var conteudo = new StringContent(payload, System.Text.Encoding.UTF8, "application/json");
-        using var resposta = await cliente.PostAsync(_config.ServerUrl.TrimEnd('/') + "/api/ativos/agente/meshagent", conteudo);
+        using var resposta = await cliente.PostAsync(_config.ServerUrl.TrimEnd('/') + caminho, conteudo);
         if (!resposta.IsSuccessStatusCode)
         {
             var jsonErro = await resposta.Content.ReadAsStringAsync();

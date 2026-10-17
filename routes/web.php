@@ -1172,6 +1172,7 @@ $router->post('/ativos/desempenho/config', [AtivoController::class, 'salvarDesem
 $router->post('/ativos/seguranca/gateway/bloquear-ip', [AtivoController::class, 'bloquearIpGateway']);
 $router->post('/api/ativos/suporte/pedido', [AtivoAgenteController::class, 'pedidoSuporte']);
 $router->post('/api/ativos/agente/meshagent', [AtivoAgenteController::class, 'baixarInstaladorMeshAgent']);
+$router->post('/api/ativos/agente/meshagent/instalador', [AtivoAgenteController::class, 'baixarInstaladorMeshAgentAvulso']);
 $router->post('/api/ativos/solicitacoes/resultado', [AtivoAgenteController::class, 'responderSolicitacao']);
 $router->post('/api/ativos/solicitacoes/arquivo', [AtivoAgenteController::class, 'responderSolicitacaoArquivo']);
 $router->get('/api/ativos/comandos/anexo', [AtivoAgenteController::class, 'baixarAnexoComando']);

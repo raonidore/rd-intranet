@@ -286,6 +286,56 @@ class AtivoAgenteController extends Controller
         readfile($caminho);
     }
 
+    /**
+     * Instalador do MeshAgent para SALVAR (botões do card "Acesso remoto" em
+     * Configurações do agente 1.0.73+) -- os mesmos de Ativos > Acesso Remoto.
+     * Diferente do de cima, não exige instalação pendente: só agente
+     * cadastrado. O instalador só coloca a máquina no grupo da RD.
+     */
+    public function baixarInstaladorMeshAgentAvulso(): void
+    {
+        $responderErro = function (int $codigo, string $mensagem): void {
+            http_response_code($codigo);
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'message' => $mensagem]);
+        };
+
+        if (!$this->service->chaveValida($_SERVER['HTTP_X_RD_AGENTE_CHAVE'] ?? '')) {
+            $responderErro(401, 'Chave de API inválida.');
+            return;
+        }
+
+        $payload = json_decode(file_get_contents('php://input'), true);
+        $machineGuid = is_array($payload) ? trim((string)($payload['machine_guid'] ?? '')) : '';
+        $arquitetura = is_array($payload) ? trim((string)($payload['arquitetura'] ?? '')) : '';
+        $ativoId = $machineGuid !== '' ? $this->service->idPorMachineGuid($machineGuid) : null;
+        if ($ativoId === null) {
+            $responderErro(400, 'Máquina não cadastrada para esta chave.');
+            return;
+        }
+        if (!isset(AcessoRemotoService::ARQUITETURAS_MESH_AGENTE[$arquitetura])) {
+            $responderErro(400, 'Arquitetura inválida.');
+            return;
+        }
+
+        $caminho = (new AcessoRemotoService())->caminhoMeshAgentePublico($arquitetura);
+        $tamanho = $caminho !== null ? filesize($caminho) : false;
+        if ($caminho === null || $tamanho === false || $tamanho < 500000 || $tamanho > 40 * 1024 * 1024) {
+            $responderErro($caminho === null ? 404 : 422, $caminho === null
+                ? 'Esse instalador ainda não foi gerado no portal (Ativos > Acesso Remoto > Instaladores do MeshAgent).'
+                : 'O instalador armazenado no portal tem tamanho inválido.');
+            return;
+        }
+
+        \App\Services\AuditService::registrar('Ativos', 'Acesso Remoto', "Instalador do MeshAgent ({$arquitetura}) baixado pelo agente da máquina #{$ativoId}.");
+
+        header('Content-Type: application/octet-stream');
+        header('Content-Length: ' . $tamanho);
+        header('X-MeshAgent-SHA256: ' . hash_file('sha256', $caminho));
+        header('Content-Disposition: attachment; filename="MeshAgent-' . $arquitetura . '.exe"');
+        readfile($caminho);
+    }
+
     /** Agente devolve o resultado de uma solicitação (listar arquivos/processos) recebida no heartbeat. */
     public function responderSolicitacao(): void
     {

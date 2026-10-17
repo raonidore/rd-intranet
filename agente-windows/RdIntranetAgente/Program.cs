@@ -30,6 +30,13 @@ internal static class Program
         // Diagnóstico local do monitor de conexões/processos/inicialização:
         // grava o resultado em JSON e sai, sem falar com servidor nenhum.
         // Uso: RdIntranetAgente.exe --teste-seguranca-rede C:\Temp\saida.json
+        var indiceCardMesh = Array.FindIndex(args, a => a.Equals("--teste-tela-config", StringComparison.OrdinalIgnoreCase));
+        if (indiceCardMesh >= 0)
+        {
+            DiagnosticoSegurancaRede.PrintCardMesh(args.Length > indiceCardMesh + 1 ? args[indiceCardMesh + 1] : Path.Combine(Path.GetTempPath(), "rd-card-mesh.png"));
+            return;
+        }
+
         var indicePrints = Array.FindIndex(args, a => a.Equals("--teste-tela-seguranca", StringComparison.OrdinalIgnoreCase));
         if (indicePrints >= 0)
         {

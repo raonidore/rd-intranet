@@ -38,6 +38,24 @@ public static class DiagnosticoSegurancaRede
     }
 
     /// <summary>Desenha a página Segurança (cada aba) em PNG -- conferência visual sem abrir o agente.</summary>
+    /// <summary>Card "Acesso remoto (MeshCentral)" de Configurações, renderizado em PNG (--teste-tela-config).</summary>
+    public static void PrintCardMesh(string arquivo)
+    {
+        System.Windows.Forms.Application.EnableVisualStyles();
+        using var form = new ConfigForm(new Config()) { ShowInTaskbar = false, StartPosition = System.Windows.Forms.FormStartPosition.Manual, Location = new System.Drawing.Point(-3000, 0), ClientSize = new System.Drawing.Size(860, 720) };
+        form.Show();
+        var ate = DateTime.Now.AddSeconds(6);
+        while (DateTime.Now < ate) { System.Windows.Forms.Application.DoEvents(); Thread.Sleep(100); }
+        System.Windows.Forms.Control? pilha = null;
+        void Procurar(System.Windows.Forms.Control c) { foreach (System.Windows.Forms.Control f in c.Controls) { if (f is System.Windows.Forms.FlowLayoutPanel) pilha ??= f; Procurar(f); } }
+        Procurar(form);
+        var cartao = pilha!.Controls[pilha.Controls.Count - 2];
+        using var imagem = new System.Drawing.Bitmap(cartao.Width, cartao.Height);
+        cartao.DrawToBitmap(imagem, new System.Drawing.Rectangle(System.Drawing.Point.Empty, cartao.Size));
+        imagem.Save(arquivo);
+        File.WriteAllText(arquivo + ".json", System.Text.Json.JsonSerializer.Serialize(MeshAgentInfo.Ler(), new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+    }
+
     public static void PrintsDaTela(string pasta)
     {
         Directory.CreateDirectory(pasta);
