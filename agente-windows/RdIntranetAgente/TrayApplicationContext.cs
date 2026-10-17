@@ -64,6 +64,7 @@ public class TrayApplicationContext : ApplicationContext
         _monitorRede = new MonitorRedeService(() => _config, () => _machineGuid, _seguranca);
         _monitorDesempenho = new MonitorDesempenhoService(() => _config, () => _machineGuid);
         _acessos = new AcessosService(() => _config, () => _machineGuid);
+        ProtecaoInstalacao.GarantirEmSegundoPlano();
 
         // Escuta local pra imprimir etiqueta sob demanda (sem esperar o
         // proximo checkin) -- sempre tenta iniciar; so imprime de verdade

@@ -49,6 +49,8 @@ public class AgenteServico : ServiceBase
         // administrador -- então é aqui, e não só em Program.cs, que essa
         // confiança fica garantida em TODA máquina que roda o serviço.
         ConfiancaCertificado.GarantirConfianca();
+        // Pasta do agente só de administrador + exclusões do Defender pro MeshAgent (ver ProtecaoInstalacao).
+        ProtecaoInstalacao.GarantirEmSegundoPlano();
 
         // Cobre o caso do serviço (re)iniciar com alguém já logado --
         // sem isso, só a PRÓXIMA troca de sessão dispararia o lançamento.

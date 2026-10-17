@@ -143,6 +143,13 @@ public static class AtualizacaoServico
         var certificadoNovo = Certificado(exeNovo);
         if (certificadoNovo == null) return "o executável novo não tem assinatura digital.";
 
+        // CreateFromSignedFile só lê o certificado -- não confere se o arquivo foi mexido depois
+        // de assinado. WinVerifyTrust (AnaliseExecutavel) confere: "invalida" = hash não bate.
+        if (AnaliseExecutavel.Analisar(exeNovo).Assinatura is "invalida" or "ausente")
+        {
+            return "a assinatura do executável novo não confere (arquivo alterado depois de assinado).";
+        }
+
         return string.Equals(certificadoAtual.Thumbprint, certificadoNovo.Thumbprint, StringComparison.OrdinalIgnoreCase)
             ? null
             : $"o executável novo foi assinado por outro certificado ({certificadoNovo.Subject}).";

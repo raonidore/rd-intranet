@@ -307,6 +307,7 @@ public class ConfigForm : Form
     private readonly ToolTip _dicaMesh = new();
     private Label? _resumoMesh;
     private BotaoTema? _botaoReiniciarMesh;
+    private BotaoTema? _botaoInstalarMesh;
 
     private static readonly (string chave, string rotulo)[] CamposMesh =
     {
@@ -348,11 +349,15 @@ public class ConfigForm : Form
         _botaoReiniciarMesh = new BotaoTema("Reiniciar serviço", BotaoTema.Variante.Secundario) { Width = 150, Height = 34 };
         botaoAtualizar.Click += async (s, e) => await AtualizarMeshAsync();
         _botaoReiniciarMesh.Click += async (s, e) => await ReiniciarMeshAsync();
+        _botaoInstalarMesh = new BotaoTema("Instalar nesta máquina", BotaoTema.Variante.Primario) { Width = 180, Height = 34, Visible = false, Enabled = config.EstaConfigurado };
+        _botaoInstalarMesh.Click += async (s, e) => await InstalarMeshAsync(config);
         botoes.Controls.Add(botaoAtualizar);
         botoes.Controls.Add(_botaoReiniciarMesh);
-        foreach (var (arquitetura, rotulo) in new[] { ("x64", "Instalador 64 bits"), ("x86", "32 bits"), ("arm64", "ARM64") })
+        botoes.Controls.Add(_botaoInstalarMesh);
+        // "Salvar" é pra levar a OUTRA máquina; nesta, "Instalar nesta máquina" passa pelas exclusões do Defender.
+        foreach (var (arquitetura, rotulo) in new[] { ("x64", "Salvar 64 bits"), ("x86", "32 bits"), ("arm64", "ARM64") })
         {
-            var botao = new BotaoTema(rotulo, BotaoTema.Variante.Fantasma) { Width = arquitetura == "x64" ? 150 : 90, Height = 34, Enabled = config.EstaConfigurado };
+            var botao = new BotaoTema(rotulo, BotaoTema.Variante.Fantasma) { Width = arquitetura == "x64" ? 130 : 80, Height = 34, Enabled = config.EstaConfigurado };
             botao.Click += async (s, e) => await BaixarInstaladorMeshAsync(config, arquitetura, botao);
             botoes.Controls.Add(botao);
         }
@@ -398,16 +403,38 @@ public class ConfigForm : Form
         Mostrar("maquina", info.NomeMaquina);
         Mostrar("assinatura", info.Assinatura, !info.Instalado ? null : info.DaRd ? Tema.Sucesso : Tema.Alerta);
 
-        if (_botaoReiniciarMesh != null) _botaoReiniciarMesh.Enabled = info.Instalado;
+        if (_botaoReiniciarMesh != null) _botaoReiniciarMesh.Visible = info.Instalado;
+        if (_botaoInstalarMesh != null) _botaoInstalarMesh.Visible = !info.Instalado;
         if (_resumoMesh != null)
         {
             (_resumoMesh.Text, _resumoMesh.ForeColor) = !info.Instalado
-                ? ("MeshAgent não instalado -- baixe o instalador abaixo e execute nesta máquina.", Tema.TextoSecundario)
+                ? ("MeshAgent não instalado -- use \"Instalar nesta máquina\". \"Salvar\" é para levar o instalador a outra máquina.", Tema.TextoSecundario)
                 : !info.DaRd
                     ? ("Atenção: este MeshAgent não foi assinado pelo MeshCentral da RD. Se ninguém da TI instalou, avise o suporte.", Tema.Alerta)
                     : info.Conectado == false
                         ? ("Instalado, mas sem conexão com o servidor -- tente \"Reiniciar serviço\" ou confira a rede.", Tema.Alerta)
                         : ("Tudo certo: o suporte da RD consegue acessar esta máquina.", Tema.Sucesso);
+        }
+    }
+
+    private async Task InstalarMeshAsync(Config config)
+    {
+        if (_botaoInstalarMesh == null) return;
+        _botaoInstalarMesh.Enabled = false;
+        if (_resumoMesh != null) { _resumoMesh.Text = "Baixando e instalando o MeshAgent (até 1 minuto)..."; _resumoMesh.ForeColor = Tema.TextoSecundario; }
+        try
+        {
+            await new MeshAgentInstallerService(config, CollectorService.ObterMachineGuid()).InstalarAsync(avulso: true);
+            await Task.Delay(4000); // tempo pra conectar ao servidor
+            await AtualizarMeshAsync();
+        }
+        catch (Exception ex)
+        {
+            if (_resumoMesh != null) { _resumoMesh.Text = "Falha ao instalar: " + ex.Message; _resumoMesh.ForeColor = Tema.Perigo; }
+        }
+        finally
+        {
+            _botaoInstalarMesh.Enabled = true;
         }
     }
 

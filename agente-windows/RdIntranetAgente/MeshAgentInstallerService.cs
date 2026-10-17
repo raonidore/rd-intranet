@@ -31,7 +31,8 @@ public sealed class MeshAgentInstallerService
         _machineGuid = machineGuid;
     }
 
-    public async Task<object> InstalarAsync()
+    /// <summary>$avulso: pedido pela própria máquina (card Acesso remoto), não pelo portal -- usa o download sem "instalação pendente".</summary>
+    public async Task<object> InstalarAsync(bool avulso = false)
     {
         var arquitetura = RuntimeInformation.OSArchitecture == Architecture.Arm64 ? "arm64" : "x64";
 
@@ -54,11 +55,15 @@ public sealed class MeshAgentInstallerService
         try
         {
             LogAtividade.Registrar(NivelAtividade.Info, "ACESSO REMOTO", $"Solicitando instalador MeshAgent para Windows {arquitetura}.");
-            var binario = await BaixarInstallerAsync(arquitetura);
-            var pasta = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RDIntranetAgent", "MeshInstall");
+            // Pasta só de administrador e excluída do Defender (ProtecaoInstalacao): no AppData o
+            // Defender apagava o instalador ("Behavior:Win32/Persistence.A!ml") e qualquer usuário poderia trocá-lo.
+            ProtecaoInstalacao.Garantir();
+            var binario = avulso ? await BaixarParaSalvarAsync(arquitetura) : await BaixarInstallerAsync(arquitetura);
+            var pasta = ProtecaoInstalacao.PastaInstaladorMesh;
             Directory.CreateDirectory(pasta);
             arquivoTemporario = Path.Combine(pasta, $"MeshAgent-{Guid.NewGuid():N}.exe");
             await File.WriteAllBytesAsync(arquivoTemporario, binario);
+            ProtecaoInstalacao.ExcluirProcessoTemporario(arquivoTemporario, adicionar: true);
 
             using var processo = new Process
             {
@@ -117,6 +122,7 @@ public sealed class MeshAgentInstallerService
         {
             if (arquivoTemporario != null)
             {
+                ProtecaoInstalacao.ExcluirProcessoTemporario(arquivoTemporario, adicionar: false);
                 try { File.Delete(arquivoTemporario); } catch { }
             }
             TravaInstalacao.Release();
