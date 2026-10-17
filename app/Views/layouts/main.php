@@ -740,6 +740,9 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         <a href="<?= url('/entra/usuarios') ?>" class="<?= str_starts_with($uriAtual, '/entra/usuarios') ? 'active' : '' ?>">
             <i class="bi bi-people me-2"></i> Usuários
         </a>
+        <a href="<?= url('/entra/grupos') ?>" class="<?= str_starts_with($uriAtual, '/entra/grupos') ? 'active' : '' ?>">
+            <i class="bi bi-diagram-2 me-2"></i> Grupos
+        </a>
         <?php endif; ?>
         <?php if (PermissionService::temAcesso('entra_usuarios') && PermissionService::temAcesso('ativos_novo')): ?>
         <a href="<?= url('/entra/acesso-maquinas') ?>" class="<?= str_starts_with($uriAtual, '/entra/acesso-maquinas') ? 'active' : '' ?>">

@@ -389,12 +389,19 @@ class EntraService
      | máquina, não do tenant). Gera um script PowerShell que mexe no
      | "User Rights Assignment" local (SeInteractiveLogonRight, o mesmo
      | direito da política "Allow log on locally") via secedit, já que
-     | funciona sem precisar de Intune/licença adicional -- confirmado:
-     | Windows aceita referenciar contas do Entra individualmente nessa
-     | política via "AzureAD\usuario@tenant.com", só não aceita GRUPOS do
-     | Entra por essa via (isso sim exigiria Intune). O script é entregue
-     | pra cada ativo pelo mesmo canal de comando remoto já existente
-     | (AtivoService::solicitarListagem, executar_powershell, elevado).
+     | funciona sem precisar de Intune/licença adicional. O script é
+     | entregue pra cada ativo pelo mesmo canal de comando remoto já
+     | existente (AtivoService::solicitarListagem, executar_powershell,
+     | elevado).
+     |
+     | Contas e grupos entram pelo SID, nunca pelo nome: nome
+     | ("AzureAD\usuario@tenant.com") só resolve pra quem já logou
+     | naquela máquina, e grupo do Entra não resolve por nome nenhum. O
+     | SID de usuário/grupo do Entra numa máquina ingressada é derivado
+     | do objectId (S-1-12-1-...), e o token de login já traz os SIDs dos
+     | grupos de segurança do usuário -- então autorizar um GRUPO funciona
+     | e incluir/tirar alguém vira só editar o grupo no Entra (vale no
+     | próximo login; sessão aberta renova os grupos em até 4h).
      |
      | Rede de segurança: o grupo local "Administradores" (SID universal
      | *S-1-5-32-544) SEMPRE entra na lista, então essa ação nunca tranca
@@ -409,27 +416,169 @@ class EntraService
     private const SID_ADMINISTRADORES_LOCAIS = '*S-1-5-32-544';
     private const SID_USUARIOS_LOCAIS = '*S-1-5-32-545';
 
-    private static function validarUpns(array $upns): array
+    /** SID que o Windows usa pra um usuário/grupo do Entra numa máquina ingressada: S-1-12-1 + os 16 bytes do objectId (ordem do .NET Guid.ToByteArray) lidos como 4 inteiros de 32 bits. */
+    public static function sidDoObjeto(string $objectId): ?string
     {
-        return array_values(array_filter(array_map(function ($upn) {
-            $upn = trim((string)$upn);
-            return preg_match('/^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$/', $upn) === 1 ? $upn : null;
-        }, $upns)));
+        $objectId = strtolower(trim($objectId));
+        if (!preg_match('/^([0-9a-f]{8})-([0-9a-f]{4})-([0-9a-f]{4})-([0-9a-f]{4})-([0-9a-f]{12})$/', $objectId, $p)) {
+            return null;
+        }
+
+        $bytes = strrev(hex2bin($p[1])) . strrev(hex2bin($p[2])) . strrev(hex2bin($p[3])) . hex2bin($p[4] . $p[5]);
+
+        return 'S-1-12-1-' . implode('-', unpack('V4', $bytes));
     }
 
-    /** Script que aplica a restrição -- só os UPNs informados (+ administradores locais, sempre) podem logar localmente. */
-    public static function gerarScriptRestricaoLogin(array $upnsPermitidos): string
+    /** Grupos de segurança do tenant (os únicos que entram no token de login do Windows). */
+    public function listarGruposSeguranca(): array
     {
-        $upns = self::validarUpns($upnsPermitidos);
+        $resultado = $this->chamarGraph('GET', '/groups?$filter=securityEnabled eq true&$select=id,displayName,description&$top=999');
 
-        $direitos = array_merge(
-            [self::SID_ADMINISTRADORES_LOCAIS],
-            array_map(fn($upn) => 'AzureAD\\' . $upn, $upns)
-        );
+        if (!$resultado['sucesso']) {
+            NotificationService::error('Erro ao listar grupos do Entra.', $resultado['mensagem']);
+            return [];
+        }
+
+        $grupos = $resultado['dados']['value'] ?? [];
+        usort($grupos, fn($a, $b) => strcasecmp($a['displayName'] ?? '', $b['displayName'] ?? ''));
+
+        return $grupos;
+    }
+
+    /** Membros diretos de um grupo (id, nome, UPN), pra mostrar na tela quem o grupo libera. */
+    public function membrosDoGrupo(string $grupoId): array
+    {
+        $resultado = $this->chamarGraph('GET', '/groups/' . rawurlencode($grupoId) . '/members?$select=id,displayName,userPrincipalName&$top=999');
+
+        return $resultado['sucesso'] ? ($resultado['dados']['value'] ?? []) : [];
+    }
+
+    /** Ajuda pra quando o App Registration ainda não tem Group.ReadWrite.All (só lê grupos). */
+    private function mensagemPermissaoGrupos(string $mensagem): string
+    {
+        return stripos($mensagem, 'privileges') !== false || stripos($mensagem, 'authorization') !== false
+            ? 'O App Registration do portal não tem permissão para alterar grupos. No Entra: Registros de aplicativo > (app do RD.Intranet) > Permissões de API > Adicionar > Microsoft Graph > Permissões de aplicativo > Group.ReadWrite.All, e depois "Conceder consentimento do administrador".'
+            : $mensagem;
+    }
+
+    public function criarGrupo(string $nome, string $descricao): ?string
+    {
+        $nome = trim($nome);
+        if ($nome === '') {
+            NotificationService::error('Informe o nome do grupo.');
+            return null;
+        }
+
+        // mailNickname é obrigatório mesmo em grupo sem e-mail -- só letras/números, único no tenant.
+        $apelido = substr(preg_replace('/[^a-z0-9]/', '', strtolower(iconv('UTF-8', 'ASCII//TRANSLIT', $nome) ?: '')), 0, 40) ?: 'grupo';
+        $apelido .= substr(bin2hex(random_bytes(3)), 0, 6);
+
+        $corpo = ['displayName' => $nome, 'mailEnabled' => false, 'mailNickname' => $apelido, 'securityEnabled' => true];
+        if (trim($descricao) !== '') {
+            $corpo['description'] = trim($descricao);
+        }
+
+        $resultado = $this->chamarGraph('POST', '/groups', $corpo);
+        if (!$resultado['sucesso']) {
+            NotificationService::error('Erro ao criar o grupo.', $this->mensagemPermissaoGrupos($resultado['mensagem']));
+            return null;
+        }
+
+        AuditService::registrar('Microsoft Entra', 'Criar grupo', "Grupo de segurança \"{$nome}\" criado.");
+        NotificationService::success("Grupo \"{$nome}\" criado. Agora defina os membros.");
+
+        return $resultado['dados']['id'] ?? null;
+    }
+
+    /** Deixa o grupo com exatamente os membros informados (adiciona os que faltam, remove os que sobram). */
+    public function definirMembros(string $grupoId, string $nomeGrupo, array $usuarioIds): bool
+    {
+        $desejados = array_values(array_unique(array_filter($usuarioIds, fn($id) => self::sidDoObjeto((string)$id) !== null)));
+        // Só mexe em membros que são usuários -- grupo aninhado/dispositivo posto pelo console fica.
+        $atuais = array_column(array_filter($this->membrosDoGrupo($grupoId), fn($m) => ($m['@odata.type'] ?? '') === '#microsoft.graph.user'), 'id');
+
+        $adicionar = array_diff($desejados, $atuais);
+        $remover = array_diff($atuais, $desejados);
+        $erros = [];
+
+        foreach ($adicionar as $id) {
+            $r = $this->chamarGraph('POST', '/groups/' . rawurlencode($grupoId) . '/members/$ref', ['@odata.id' => self::GRAPH_BASE . '/directoryObjects/' . $id]);
+            if (!$r['sucesso']) {
+                $erros[] = $r['mensagem'];
+            }
+        }
+        foreach ($remover as $id) {
+            $r = $this->chamarGraph('DELETE', '/groups/' . rawurlencode($grupoId) . '/members/' . rawurlencode($id) . '/$ref');
+            if (!$r['sucesso']) {
+                $erros[] = $r['mensagem'];
+            }
+        }
+
+        if ($erros) {
+            NotificationService::error('Nem todos os membros foram alterados.', $this->mensagemPermissaoGrupos($erros[0]));
+            return false;
+        }
+
+        if ($adicionar || $remover) {
+            AuditService::registrar('Microsoft Entra', 'Membros do grupo', "Grupo \"{$nomeGrupo}\": " . count($adicionar) . ' adicionado(s), ' . count($remover) . ' removido(s).');
+        }
+        NotificationService::success("Membros do grupo \"{$nomeGrupo}\" atualizados -- vale no próximo login de cada pessoa.");
+
+        return true;
+    }
+
+    public function excluirGrupo(string $grupoId, string $nomeGrupo): bool
+    {
+        $resultado = $this->chamarGraph('DELETE', '/groups/' . rawurlencode($grupoId));
+        if (!$resultado['sucesso']) {
+            NotificationService::error('Erro ao excluir o grupo.', $this->mensagemPermissaoGrupos($resultado['mensagem']));
+            return false;
+        }
+
+        AuditService::registrar('Microsoft Entra', 'Excluir grupo', "Grupo \"{$nomeGrupo}\" excluído.");
+        NotificationService::success("Grupo \"{$nomeGrupo}\" excluído (fica 30 dias na lixeira do Entra).");
+
+        return true;
+    }
+
+    /*
+     | O que foi aplicado em cada máquina (pela tela Acesso às Máquinas) --
+     | o resultado de cada comando fica no histórico do ativo; aqui só o
+     | último pedido, pra tela mostrar que restrição cada máquina tem.
+     */
+
+    /** @param array<int,array{id:string,nome:string,tipo:string}>|null $autorizados null = restrição removida */
+    public static function registrarAcessoAplicado(int $ativoId, ?array $autorizados, ?string $por): void
+    {
+        \App\Core\Database::connection()->prepare(
+            'INSERT INTO entra_acesso_maquinas (ativo_id, autorizados, aplicado_por, aplicado_em) VALUES (?, ?, ?, NOW())
+             ON DUPLICATE KEY UPDATE autorizados = VALUES(autorizados), aplicado_por = VALUES(aplicado_por), aplicado_em = NOW()'
+        )->execute([$ativoId, $autorizados === null ? null : json_encode($autorizados, JSON_UNESCAPED_UNICODE), $por]);
+    }
+
+    /** @return array<int,array{autorizados:?array,aplicado_por:?string,aplicado_em:string}> por ativo_id */
+    public static function acessosAplicados(): array
+    {
+        $linhas = [];
+        foreach (\App\Core\Database::connection()->query('SELECT * FROM entra_acesso_maquinas')->fetchAll(\PDO::FETCH_ASSOC) as $l) {
+            $l['autorizados'] = $l['autorizados'] !== null ? json_decode($l['autorizados'], true) : null;
+            $linhas[(int)$l['ativo_id']] = $l;
+        }
+
+        return $linhas;
+    }
+
+    /**
+     * Script que aplica a restrição -- só os usuários/grupos do Entra informados (pelo objectId)
+     * + administradores locais (sempre) podem logar localmente.
+     */
+    public static function gerarScriptRestricaoLogin(array $objectIds): string
+    {
+        $sids = array_values(array_unique(array_filter(array_map([self::class, 'sidDoObjeto'], $objectIds))));
 
         return self::scriptSeceditLogonRight(
-            implode(',', $direitos),
-            'Restricao aplicada -- administradores locais + ' . count($upns) . ' conta(s) do Entra autorizadas.'
+            implode(',', array_merge([self::SID_ADMINISTRADORES_LOCAIS], array_map(fn($sid) => '*' . $sid, $sids))),
+            'Restricao aplicada -- administradores locais + ' . count($sids) . ' usuario(s)/grupo(s) do Entra autorizados.'
         );
     }
 
@@ -482,13 +631,24 @@ try {
     Set-Content -Path $tempCfg -Value $novasLinhas -Encoding Unicode
 
     $configureOut = secedit /configure /db $tempDb /cfg $tempCfg /areas USER_RIGHTS 2>&1
+    $codigo = $LASTEXITCODE
 
-    if ($LASTEXITCODE -ne 0) {
-        Write-Output "ERRO: secedit /configure falhou -- $configureOut"
+    # Confere relendo a política: o secedit sai com código de aviso quando não acha nome pra
+    # algum SID (grupo do Entra que ainda não logou ali), mas grava do mesmo jeito.
+    Remove-Item $tempCfg -ErrorAction SilentlyContinue
+    secedit /export /cfg $tempCfg /areas USER_RIGHTS 2>&1 | Out-Null
+    $gravado = (Get-Content $tempCfg -ErrorAction SilentlyContinue | Where-Object { $_ -match '^SeInteractiveLogonRight\s*=' }) -replace '^SeInteractiveLogonRight\s*=\s*', ''
+    $esperado = $listaCompleta -split ','
+    $atual = $gravado -split ','
+    $faltando = $esperado | Where-Object { $atual -notcontains $_ }
+
+    if ($faltando) {
+        Write-Output "ERRO: politica nao ficou como esperado (codigo $codigo) -- faltando: $($faltando -join ', '). Saida: $configureOut"
         exit 1
     }
 
     Write-Output "__MENSAGEM__"
+    Write-Output "Permitidos agora: $gravado"
 } finally {
     Remove-Item $tempCfg -ErrorAction SilentlyContinue
     Remove-Item $tempDb -ErrorAction SilentlyContinue

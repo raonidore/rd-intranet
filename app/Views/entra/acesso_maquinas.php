@@ -81,12 +81,12 @@ use App\Services\EntraService;
                 <div class="pop-step">
                     <div class="pop-step-num">2</div>
                     <div>
-                        <div class="pop-step-title"><i class="bi bi-people"></i> Contas autorizadas (coluna esquerda)</div>
+                        <div class="pop-step-title"><i class="bi bi-people"></i> Quem pode entrar (coluna esquerda)</div>
                         <div class="pop-step-text">
-                            Lista todo mundo cadastrado no Entra ID do tenant. Marque só quem <strong>deve conseguir
-                            logar</strong> nas máquinas que você vai selecionar a seguir -- quem não tem o Entra
-                            configurado no perfil (ou está com a conta desativada) pode ser marcado, mas não vai
-                            conseguir entrar até resolver isso do lado do Entra.
+                            Marque o <strong>grupo da unidade</strong> (criado em Entra &gt; Grupos). Os membros do
+                            grupo passam a conseguir entrar; incluir ou tirar alguém depois é só mudar os membros do
+                            grupo, sem reaplicar aqui (vale no próximo login da pessoa). <strong>Usuários avulsos</strong>
+                            servem pra exceção numa máquina específica -- esses só mudam reaplicando.
                         </div>
                     </div>
                 </div>
@@ -210,10 +210,17 @@ use App\Services\EntraService;
     </div>
 <?php else: ?>
 
+    <div class="alert alert-warning small">
+        <i class="bi bi-exclamation-triangle"></i>
+        Só aplique em máquina que <strong>já entrou no Entra</strong> (Configurações &gt; Contas &gt; Acesso corporativo
+        &gt; "Conectado ao Azure AD/Entra ID"). Numa máquina fora do Entra ninguém consegue entrar com conta do Entra --
+        a restrição deixaria só os administradores locais.
+    </div>
+
     <div class="alert alert-info small">
         <i class="bi bi-info-circle"></i>
         Restringe quem consegue <strong>logar localmente</strong> (na tela de login do Windows) nas máquinas
-        selecionadas -- só as contas do Entra marcadas abaixo passam a conseguir entrar. Os
+        selecionadas -- só os membros dos grupos (ou os usuários) do Entra marcados abaixo passam a conseguir entrar. Os
         <strong>administradores locais de cada máquina sempre continuam permitidos</strong>, mesmo sem marcar
         nada (rede de segurança pra nunca travar o acesso). Não afeta acesso remoto (RDP, comando remoto daqui
         do portal) nem exige Intune/licença adicional. O resultado de cada máquina aparece no histórico de
@@ -227,25 +234,43 @@ use App\Services\EntraService;
             <div class="col-md-6">
                 <div class="card border-0 shadow-sm h-100">
                     <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                        <strong>Contas autorizadas</strong>
-                        <span class="text-muted small"><?= count($usuarios) ?> usuário(s) no tenant</span>
+                        <strong>Quem pode entrar</strong>
+                        <a href="<?= url('/entra/grupos') ?>" class="small"><i class="bi bi-diagram-2"></i> Gerenciar grupos</a>
                     </div>
                     <div class="card-body" style="max-height:420px; overflow-y:auto">
-                        <?php if (empty($usuarios)): ?>
-                            <p class="text-muted small mb-0">Nenhum usuário encontrado.</p>
+                        <div class="text-muted small fw-semibold text-uppercase mb-1">Grupos do Entra <span class="fw-normal text-lowercase">(recomendado)</span></div>
+                        <?php if (empty($grupos)): ?>
+                            <p class="text-muted small">Nenhum grupo de segurança -- crie um por unidade em <a href="<?= url('/entra/grupos') ?>">Grupos</a>.</p>
                         <?php else: ?>
+                            <?php foreach ($grupos as $g): ?>
+                                <div class="form-check mb-1">
+                                    <input class="form-check-input campo-autorizado" type="checkbox" name="grupos[]" value="<?= htmlspecialchars($g['id']) ?>" id="grupo-<?= htmlspecialchars($g['id']) ?>">
+                                    <label class="form-check-label small" for="grupo-<?= htmlspecialchars($g['id']) ?>">
+                                        <strong><?= htmlspecialchars($g['displayName']) ?></strong>
+                                        <span class="text-muted">(<?= count($g['membros']) ?> membro(s))</span>
+                                        <?php if ($g['membros']): ?>
+                                            <br><span class="text-muted"><?= htmlspecialchars(implode(', ', array_map(fn($m) => $m['displayName'] ?? $m['userPrincipalName'] ?? '', $g['membros']))) ?></span>
+                                        <?php endif; ?>
+                                    </label>
+                                </div>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+
+                        <details class="mt-3">
+                            <summary class="text-muted small fw-semibold text-uppercase">Usuários avulsos (<?= count($usuarios) ?>)</summary>
+                            <p class="text-muted small mt-1 mb-2">Pra uma exceção numa máquina específica. No dia a dia prefira o grupo -- usuário avulso só muda reaplicando na máquina.</p>
                             <?php foreach ($usuarios as $u): ?>
                                 <?php $upn = $u['userPrincipalName'] ?? ''; ?>
                                 <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="upns[]" value="<?= htmlspecialchars($upn) ?>" id="upn-<?= htmlspecialchars($upn) ?>">
-                                    <label class="form-check-label small" for="upn-<?= htmlspecialchars($upn) ?>">
+                                    <input class="form-check-input campo-autorizado" type="checkbox" name="usuarios[]" value="<?= htmlspecialchars($u['id']) ?>" id="usuario-<?= htmlspecialchars($u['id']) ?>">
+                                    <label class="form-check-label small" for="usuario-<?= htmlspecialchars($u['id']) ?>">
                                         <?= htmlspecialchars($u['displayName'] ?? $upn) ?>
                                         <span class="text-muted font-monospace">(<?= htmlspecialchars($upn) ?>)</span>
                                         <?php if (!($u['accountEnabled'] ?? true)): ?><span class="badge text-bg-secondary">desativado</span><?php endif; ?>
                                     </label>
                                 </div>
                             <?php endforeach; ?>
-                        <?php endif; ?>
+                        </details>
                     </div>
                 </div>
             </div>
@@ -268,6 +293,15 @@ use App\Services\EntraService;
                                         <span class="text-muted font-monospace">(<?= htmlspecialchars($c['codigo_patrimonio']) ?>)</span>
                                         <?php if (!empty($c['usuario_logado_atual'])): ?>
                                             <br><span class="text-muted">Logado agora: <span class="font-monospace"><?= htmlspecialchars($c['usuario_logado_atual']) ?></span></span>
+                                        <?php endif; ?>
+                                        <?php $ap = $aplicados[(int)$c['id']] ?? null; ?>
+                                        <?php if ($ap && $ap['autorizados'] !== null): ?>
+                                            <br><span class="text-success"><i class="bi bi-shield-check"></i> Restrita a: <?= htmlspecialchars(implode(', ', array_column($ap['autorizados'], 'nome'))) ?></span>
+                                            <span class="text-muted">(<?= date('d/m H:i', strtotime($ap['aplicado_em'])) ?>)</span>
+                                        <?php elseif ($ap): ?>
+                                            <br><span class="text-muted"><i class="bi bi-shield-slash"></i> Restrição removida em <?= date('d/m H:i', strtotime($ap['aplicado_em'])) ?></span>
+                                        <?php else: ?>
+                                            <br><span class="text-warning"><i class="bi bi-unlock"></i> Sem restrição pelo portal</span>
                                         <?php endif; ?>
                                     </label>
                                 </div>
@@ -330,12 +364,12 @@ use App\Services\EntraService;
     }
 
     document.getElementById('botaoAplicarRestricao').addEventListener('click', function (e) {
-        if (!algumMarcado('input[name="upns[]"]') || !algumMarcado('.campo-ativo-restricao')) {
+        if (!algumMarcado('.campo-autorizado') || !algumMarcado('.campo-ativo-restricao')) {
             e.preventDefault();
-            alert('Selecione ao menos uma conta e uma máquina.');
+            alert('Selecione ao menos um grupo (ou usuário) e uma máquina.');
             return;
         }
-        if (!confirm('Aplicar a restrição de login nas máquinas selecionadas? Só as contas marcadas (+ administradores locais) vão conseguir logar localmente nelas a partir de agora.')) {
+        if (!confirm('Aplicar a restrição de login nas máquinas selecionadas? Só os membros dos grupos/usuários marcados (+ administradores) vão conseguir entrar nelas a partir de agora.')) {
             e.preventDefault();
         }
     });

@@ -271,11 +271,79 @@ class EntraController extends Controller
         }
         unset($c);
 
+        $grupos = $configurado ? $this->service->listarGruposSeguranca() : [];
+        foreach ($grupos as &$g) {
+            $g['membros'] = $this->service->membrosDoGrupo($g['id']);
+        }
+        unset($g);
+
         $this->view('entra/acesso_maquinas', [
             'configurado' => $configurado,
             'usuarios' => $usuarios,
+            'grupos' => $grupos,
             'computadores' => $computadores,
+            'aplicados' => EntraService::acessosAplicados(),
         ]);
+    }
+
+    /*
+     |---------------------------------------------------------
+     | Grupos de segurança do Entra -- quem pode entrar em quais
+     | máquinas (um grupo por unidade, aplicado em Acesso às Máquinas).
+     | Alterar grupo exige Group.ReadWrite.All no App Registration;
+     | sem ela a tela só lista (o erro explica o que liberar).
+     |---------------------------------------------------------
+     */
+
+    public function grupos(): void
+    {
+        AuthMiddleware::checkModulo('entra_usuarios');
+
+        $configurado = $this->service->configurado();
+        $grupos = $configurado ? $this->service->listarGruposSeguranca() : [];
+        foreach ($grupos as &$g) {
+            $g['membros'] = $this->service->membrosDoGrupo($g['id']);
+        }
+        unset($g);
+
+        $this->view('entra/grupos', [
+            'configurado' => $configurado,
+            'grupos' => $grupos,
+            'usuarios' => $configurado ? $this->service->listarUsuarios() : [],
+        ]);
+    }
+
+    public function grupoNovo(): void
+    {
+        AuthMiddleware::checkModulo('entra_usuarios');
+
+        $id = $this->service->criarGrupo((string)($_POST['nome'] ?? ''), (string)($_POST['descricao'] ?? ''));
+        if ($id !== null && !empty($_POST['membros'])) {
+            $this->service->definirMembros($id, trim((string)$_POST['nome']), (array)$_POST['membros']);
+        }
+
+        header('Location: ' . url('/entra/grupos'));
+        exit;
+    }
+
+    public function grupoMembros(): void
+    {
+        AuthMiddleware::checkModulo('entra_usuarios');
+
+        $this->service->definirMembros((string)($_POST['grupo_id'] ?? ''), (string)($_POST['nome'] ?? ''), (array)($_POST['membros'] ?? []));
+
+        header('Location: ' . url('/entra/grupos'));
+        exit;
+    }
+
+    public function grupoExcluir(): void
+    {
+        AuthMiddleware::checkModulo('entra_usuarios');
+
+        $this->service->excluirGrupo((string)($_POST['grupo_id'] ?? ''), (string)($_POST['nome'] ?? ''));
+
+        header('Location: ' . url('/entra/grupos'));
+        exit;
     }
 
     public function acessoMaquinasAplicar(): void
@@ -283,16 +351,33 @@ class EntraController extends Controller
         AuthMiddleware::checkModulo('entra_usuarios');
         AuthMiddleware::checkModulo('ativos_novo');
 
-        $upns = $_POST['upns'] ?? [];
+        $grupos = array_values(array_filter((array)($_POST['grupos'] ?? []), fn($id) => EntraService::sidDoObjeto((string)$id) !== null));
+        $usuarios = array_values(array_filter((array)($_POST['usuarios'] ?? []), fn($id) => EntraService::sidDoObjeto((string)$id) !== null));
         $ativoIds = array_map('intval', $_POST['ativos'] ?? []);
 
-        if (empty($upns) || empty($ativoIds)) {
-            NotificationService::error('Selecione ao menos um usuário e uma máquina.');
+        if ((empty($grupos) && empty($usuarios)) || empty($ativoIds)) {
+            NotificationService::error('Selecione ao menos um grupo ou usuário e uma máquina.');
             header('Location: ' . url('/entra/acesso-maquinas'));
             exit;
         }
 
-        $this->enviarScriptParaAtivos(EntraService::gerarScriptRestricaoLogin($upns), $ativoIds, 'Restrição de login aplicada', count($upns) . ' conta(s) autorizada(s)');
+        // Nomes só pra tela/auditoria -- o script usa os objectIds (viram SID).
+        $nomesGrupos = array_column($this->service->listarGruposSeguranca(), 'displayName', 'id');
+        $nomesUsuarios = array_column($this->service->listarUsuarios(), 'userPrincipalName', 'id');
+        $autorizados = array_merge(
+            array_map(fn($id) => ['id' => $id, 'nome' => $nomesGrupos[$id] ?? $id, 'tipo' => 'grupo'], $grupos),
+            array_map(fn($id) => ['id' => $id, 'nome' => $nomesUsuarios[$id] ?? $id, 'tipo' => 'usuario'], $usuarios)
+        );
+
+        $enviados = $this->enviarScriptParaAtivos(
+            EntraService::gerarScriptRestricaoLogin(array_merge($grupos, $usuarios)),
+            $ativoIds,
+            'Restrição de login aplicada',
+            'autorizados: ' . implode(', ', array_column($autorizados, 'nome'))
+        );
+        foreach ($enviados as $ativoId) {
+            EntraService::registrarAcessoAplicado($ativoId, $autorizados, $_SESSION['usuario']['nome'] ?? null);
+        }
 
         header('Location: ' . url('/entra/acesso-maquinas'));
         exit;
@@ -311,7 +396,10 @@ class EntraController extends Controller
             exit;
         }
 
-        $this->enviarScriptParaAtivos(EntraService::gerarScriptRemoverRestricaoLogin(), $ativoIds, 'Restrição de login removida', 'login liberado pra todo mundo de novo');
+        $enviados = $this->enviarScriptParaAtivos(EntraService::gerarScriptRemoverRestricaoLogin(), $ativoIds, 'Restrição de login removida', 'login liberado pra todo mundo de novo');
+        foreach ($enviados as $ativoId) {
+            EntraService::registrarAcessoAplicado($ativoId, null, $_SESSION['usuario']['nome'] ?? null);
+        }
 
         header('Location: ' . url('/entra/acesso-maquinas'));
         exit;
@@ -907,18 +995,20 @@ class EntraController extends Controller
         exit;
     }
 
-    private function enviarScriptParaAtivos(string $script, array $ativoIds, string $rotuloAuditoria, string $detalheAuditoria): void
+    /** @return int[] ativos que receberam o comando */
+    private function enviarScriptParaAtivos(string $script, array $ativoIds, string $rotuloAuditoria, string $detalheAuditoria): array
     {
         $solicitadoPor = $_SESSION['usuario']['nome'] ?? null;
         $ativoService = new AtivoService();
 
-        $enviados = 0;
+        $ok = [];
         foreach ($ativoIds as $ativoId) {
             $resultado = $ativoService->solicitarListagem($ativoId, 'executar_powershell', $script, $solicitadoPor, true);
             if ($resultado['success'] ?? false) {
-                $enviados++;
+                $ok[] = $ativoId;
             }
         }
+        $enviados = count($ok);
 
         AuditService::registrar('Microsoft Entra', $rotuloAuditoria, "{$rotuloAuditoria} em {$enviados} máquina(s) -- {$detalheAuditoria}.");
 
@@ -927,5 +1017,7 @@ class EntraController extends Controller
         } else {
             NotificationService::error('Não foi possível enviar pra nenhuma máquina selecionada.');
         }
+
+        return $ok;
     }
 }
