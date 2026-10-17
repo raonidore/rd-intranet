@@ -138,7 +138,7 @@ class EntraService
      * @param array<string,mixed>|null $corpo
      * @return array{sucesso:bool, dados:mixed, mensagem:string}
      */
-    private function chamarGraph(string $metodo, string $caminho, ?array $corpo = null): array
+    private function chamarGraph(string $metodo, string $caminho, ?array $corpo = null, int $timeout = 20): array
     {
         if (!$this->configurado()) {
             return ['sucesso' => false, 'dados' => null, 'mensagem' => 'Módulo Entra ainda não configurado -- veja Configuração.'];
@@ -162,7 +162,7 @@ class EntraService
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_CUSTOMREQUEST => $metodo,
             CURLOPT_HTTPHEADER => $cabecalhos,
-            CURLOPT_TIMEOUT => 20,
+            CURLOPT_TIMEOUT => $timeout,
         ]);
 
         // Sempre seta POSTFIELDS (mesmo vazio) em métodos com corpo -- CUSTOMREQUEST sozinho não
@@ -462,11 +462,12 @@ class EntraService
     public function entradasNoWindows(string $desdeUtc): array
     {
         $filtro = rawurlencode("appId eq '" . self::APP_WINDOWS_SIGN_IN . "' and createdDateTime ge {$desdeUtc}");
-        $proxima = '/auditLogs/signIns?$filter=' . $filtro . '&$top=500';
+        $proxima = '/auditLogs/signIns?$filter=' . $filtro . '&$top=200';
         $itens = [];
 
+        // signIns é lento (a primeira leitura, de 30 dias, passa fácil de 20 s).
         while ($proxima !== null) {
-            $r = $this->chamarGraph('GET', $proxima);
+            $r = $this->chamarGraph('GET', $proxima, null, 120);
             if (!$r['sucesso']) {
                 return ['sucesso' => false, 'itens' => $itens, 'mensagem' => $r['mensagem']];
             }
