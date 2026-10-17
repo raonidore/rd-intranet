@@ -358,6 +358,11 @@ class SegurancaModuloService
             'intervalo' => (int)$efetivo['rede_intervalo'],
             // Agente 1.0.66+: programas confiáveis em todas as máquinas (Central de Segurança > Exceções).
             'confiaveis' => (new SegurancaConfiavelService())->paraAgente(),
+            // Agente 1.0.72+: certificado do MeshCentral da RD (MeshAgent não é "assinatura desconhecida").
+            'assinantes' => array_map(
+                fn($impressao) => ['impressao' => $impressao, 'descricao' => 'MeshCentral da RD (acesso remoto)'],
+                AcessoRemotoService::impressoesAssinaturaMeshAgent()
+            ),
         ];
     }
 

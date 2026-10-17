@@ -238,6 +238,30 @@ class AcessoRemotoService
      * broadcast/multicast local -- nunca atravessam VLAN roteada, mesmo com
      * a porta acessível. Ver scripts/system/meshcentral_configurar_rede_web.sh.
      */
+    /**
+     * Impressões digitais (SHA-1, como o Windows mostra) do certificado com
+     * que ESTE MeshCentral assina o MeshAgent -- atual e o anterior
+     * (-old, guardado quando o MeshCentral troca o certificado: MeshAgent já
+     * instalado continua assinado pelo antigo). Vão pro agente (bloco
+     * monitor_rede do heartbeat), que passa a tratar só esse MeshAgent como
+     * assinado -- MeshAgent de outro MeshCentral (porta dos fundos comum)
+     * continua chamando atenção.
+     *
+     * @return string[]
+     */
+    public static function impressoesAssinaturaMeshAgent(): array
+    {
+        $impressoes = [];
+        foreach (['codesign-cert-public.crt', 'codesign-cert-public.crt-old'] as $arquivo) {
+            $pem = @file_get_contents('/opt/meshcentral/meshcentral-data/' . $arquivo);
+            if ($pem !== false && ($impressao = @openssl_x509_fingerprint($pem, 'sha1'))) {
+                $impressoes[] = strtoupper($impressao);
+            }
+        }
+
+        return $impressoes;
+    }
+
     public function modoRedeAtual(): string
     {
         $config = @file_get_contents('/opt/meshcentral/meshcentral-data/config.json');

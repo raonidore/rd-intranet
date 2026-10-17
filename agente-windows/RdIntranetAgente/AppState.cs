@@ -36,6 +36,9 @@ public class AppState
     /// </summary>
     public RdIntranetAgente.Models.ModuloSeguranca? UltimoModuloSeguranca { get; set; }
 
+    /// <summary>Certificados da RD (MeshCentral) recebidos do portal, "impressão|descrição" -- valem desde a abertura do agente.</summary>
+    public List<string>? AssinantesConfiaveis { get; set; }
+
     private static string PastaDados => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "RDIntranetAgent");

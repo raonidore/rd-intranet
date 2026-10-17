@@ -36,6 +36,20 @@ public sealed class ConfigMonitorRede
     /// <summary>Programas confiáveis em todas as máquinas do cliente (Central de Segurança > Exceções); null = servidor antigo.</summary>
     [JsonPropertyName("confiaveis")]
     public List<ConfiavelGlobal>? Confiaveis { get; set; }
+
+    /// <summary>Certificados próprios da RD (MeshCentral) que assinam programas nossos; null = servidor antigo.</summary>
+    [JsonPropertyName("assinantes")]
+    public List<AssinanteConfiavel>? Assinantes { get; set; }
+}
+
+public sealed class AssinanteConfiavel
+{
+    /// <summary>SHA-1 do certificado (impressão digital, como o Windows mostra), sem separadores.</summary>
+    [JsonPropertyName("impressao")]
+    public string Impressao { get; set; } = "";
+
+    [JsonPropertyName("descricao")]
+    public string Descricao { get; set; } = "";
 }
 
 public sealed class ConfiavelGlobal

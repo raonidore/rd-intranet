@@ -92,6 +92,49 @@ public static class AnaliseExecutavel
         (new Regex(@"\\\d{6,}\\[^\\""]+\.(ps1|vbs|vbe|js|jse|bat|cmd|hta)\b", RegexOptions.IgnoreCase), 15, "script dentro de pasta com nome só de números (padrão de instalador malicioso)")
     };
 
+    /// <summary>
+    /// Certificados que a RD controla e que o Windows não conhece -- hoje o
+    /// do MeshCentral, que assina o MeshAgent com certificado gerado por ele
+    /// mesmo ("192.168.1.223-4da529"). Vêm do portal pela impressão digital:
+    /// só o MeshAgent do NOSSO MeshCentral deixa de chamar atenção; MeshAgent
+    /// de outro servidor (porta dos fundos comum em ataque) continua.
+    /// </summary>
+    private static Dictionary<string, string> _assinantesConfiaveis = new(StringComparer.OrdinalIgnoreCase);
+
+    public static void DefinirAssinantesConfiaveis(IEnumerable<(string impressao, string descricao)> lista)
+    {
+        var novos = lista.Where(a => !string.IsNullOrWhiteSpace(a.impressao))
+            .GroupBy(a => a.impressao.Replace(":", "").Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().descricao, StringComparer.OrdinalIgnoreCase);
+        lock (Trava)
+        {
+            if (novos.Count == _assinantesConfiaveis.Count && novos.All(n => _assinantesConfiaveis.ContainsKey(n.Key))) return;
+            _assinantesConfiaveis = novos;
+            Cache.Clear(); // reavalia quem já tinha sido analisado com a lista antiga
+        }
+    }
+
+    public static IReadOnlyCollection<string> ImpressoesConfiaveis()
+    {
+        lock (Trava) { return _assinantesConfiaveis.Select(a => a.Key + "|" + a.Value).ToList(); }
+    }
+
+    /// <summary>Assinatura que o Windows não reconhece, mas de um certificado da RD (pela impressão digital).</summary>
+    private static string? AssinanteDaRd(string caminho)
+    {
+        try
+        {
+#pragma warning disable SYSLIB0057
+            var impressao = X509Certificate.CreateFromSignedFile(caminho).GetCertHashString();
+#pragma warning restore SYSLIB0057
+            lock (Trava) { return _assinantesConfiaveis.TryGetValue(impressao, out var descricao) ? descricao : null; }
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     public static InfoExecutavel Analisar(string? caminho)
     {
         caminho = Normalizar(caminho);
@@ -487,6 +530,12 @@ public static class AnaliseExecutavel
             // Assinado, mas: certificado vencido (sem carimbo de tempo) ou de
             // emissor que o Windows não conhece (MeshAgent usa o certificado do
             // próprio MeshCentral) -- bem diferente de arquivo ADULTERADO.
+            // Raiz desconhecida mas o arquivo confere com a assinatura: se o certificado é da RD, vale como assinado.
+            if (resultado is CertERaizNaoConfiavel or CertEEncadeamento or CertERaizDeTeste && AssinanteDaRd(caminho) is { } daRd)
+            {
+                return ("valida", daRd);
+            }
+
             return resultado switch
             {
                 CertEExpirado or CertEPeriodoInvalido => ("expirada", NomeDoAssinante(caminho)),

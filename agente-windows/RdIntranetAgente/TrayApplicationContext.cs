@@ -60,6 +60,7 @@ public class TrayApplicationContext : ApplicationContext
         _seguranca = new SegurancaService(() => _config, () => _machineGuid);
         _seguranca.Detectado += AoDetectarEventoSeguranca;
         _seguranca.Aplicar(_estado.UltimoModuloSeguranca);
+        AnaliseExecutavel.DefinirAssinantesConfiaveis((_estado.AssinantesConfiaveis ?? new()).Select(a => a.Split('|', 2)).Select(p => (p[0], p.Length > 1 ? p[1] : "")));
         _monitorRede = new MonitorRedeService(() => _config, () => _machineGuid, _seguranca);
         _monitorDesempenho = new MonitorDesempenhoService(() => _config, () => _machineGuid);
         _acessos = new AcessosService(() => _config, () => _machineGuid);
@@ -232,6 +233,16 @@ public class TrayApplicationContext : ApplicationContext
             {
                 _monitorRede.Aplicar(resultado.MonitorRede.Ativo, resultado.MonitorRede.Intervalo);
                 if (resultado.MonitorRede.Confiaveis != null) ConfiaveisService.DefinirGlobais(resultado.MonitorRede.Confiaveis);
+                if (resultado.MonitorRede.Assinantes != null)
+                {
+                    AnaliseExecutavel.DefinirAssinantesConfiaveis(resultado.MonitorRede.Assinantes.Select(a => (a.Impressao, a.Descricao)));
+                    var guardar = AnaliseExecutavel.ImpressoesConfiaveis().OrderBy(a => a).ToList();
+                    if (!guardar.SequenceEqual((_estado.AssinantesConfiaveis ?? new()).OrderBy(a => a)))
+                    {
+                        _estado.AssinantesConfiaveis = guardar;
+                        _estado.Salvar();
+                    }
+                }
             }
 
             if (resultado.Sucesso && resultado.MonitorDesempenho != null)
