@@ -189,6 +189,7 @@ class AtualizacaoService
             $this->garantirCronWhatsappInatividade();
             $this->garantirCronChamadosDistribuicao();
             $this->garantirCronBitdefender();
+            $this->garantirCronTrilhaAcesso();
             $this->garantirCronChamadosSlaExpediente();
             $this->garantirCronProjetosPrazos();
             $this->garantirCronProjetosLixeira();
@@ -438,6 +439,17 @@ class AtualizacaoService
             'Copia do console do GravityZone as máquinas, o estado da proteção e a quarentena; itens novos de quarentena viram alerta na Central de Segurança.',
             '*/15 * * * *',
             'php ' . $this->repoDir() . '/rd bitdefender:sincronizar'
+        );
+    }
+
+    /** Trilha de acesso: importa o registro de entradas do Entra (se configurado) e apaga o que passou da retenção. */
+    public function garantirCronTrilhaAcesso(): void
+    {
+        $this->garantirCronJob(
+            'Trilha de acesso às máquinas',
+            'Importa do Entra ID os logins no Windows (o Entra só guarda 30 dias) e apaga da trilha o que passou do prazo de retenção.',
+            '*/15 * * * *',
+            'php ' . $this->repoDir() . '/rd acessos:manutencao'
         );
     }
 

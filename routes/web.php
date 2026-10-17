@@ -526,6 +526,8 @@ $router->get('/administracao/integracoes/bitdefender', [IntegracoesController::c
 $router->post('/administracao/integracoes/bitdefender/salvar', [IntegracoesController::class, 'bitdefenderSalvar']);
 $router->post('/administracao/integracoes/bitdefender/remover', [IntegracoesController::class, 'bitdefenderRemover']);
 $router->post('/administracao/integracoes/bitdefender/testar', [IntegracoesController::class, 'bitdefenderTestar']);
+$router->get('/seguranca/trilha-acesso', [\App\Controllers\TrilhaAcessoController::class, 'index']);
+$router->get('/seguranca/trilha-acesso/exportar', [\App\Controllers\TrilhaAcessoController::class, 'exportar']);
 $router->get('/seguranca/bitdefender', [\App\Controllers\BitdefenderController::class, 'index']);
 $router->post('/seguranca/bitdefender/sincronizar', [\App\Controllers\BitdefenderController::class, 'sincronizar']);
 $router->post('/seguranca/bitdefender/verificar', [\App\Controllers\BitdefenderController::class, 'verificar']);
@@ -1159,6 +1161,7 @@ $router->post('/api/ativos/seguranca/evento', [AtivoAgenteController::class, 'ev
 $router->get('/api/ativos/seguranca/assinaturas', [AtivoAgenteController::class, 'assinaturasSeguranca']);
 $router->get('/api/ativos/seguranca/regras', [AtivoAgenteController::class, 'regrasSeguranca']);
 $router->post('/api/ativos/seguranca/retrato', [AtivoAgenteController::class, 'retratoSeguranca']);
+$router->post('/api/ativos/acessos', [AtivoAgenteController::class, 'acessos']);
 $router->get('/ativos/seguranca/monitor', [AtivoController::class, 'monitorSeguranca']);
 $router->post('/ativos/seguranca/monitor/acao', [AtivoController::class, 'acaoMonitorSeguranca']);
 $router->post('/ativos/desempenho/config', [AtivoController::class, 'salvarDesempenhoAtivo']);

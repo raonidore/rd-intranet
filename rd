@@ -385,6 +385,14 @@ switch ($comando) {
 
         break;
 
+    case 'acessos:manutencao':
+        $acessos = new \App\Services\AcessoMaquinaService();
+        $r = $acessos->importarDoEntra();
+        $apagados = $acessos->purgarSeVenceu();
+        echo "OK: trilha de acesso -- {$r['importados']} entrada(s) nova(s) do Entra ({$r['mensagem']}), {$apagados} registro(s) antigo(s) apagado(s).
+";
+        break;
+
     case 'bitdefender:sincronizar':
         try {
             $r = (new \App\Services\BitdefenderService())->sincronizar();

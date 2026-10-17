@@ -867,6 +867,7 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
     $mostrarBitdefender = PermissionService::temAcesso('seguranca_bitdefender') && (new \App\Services\BitdefenderService())->configurado();
     $temSeguranca = PermissionService::temAcesso('seguranca_antivirus')
         || $mostrarBitdefender
+        || PermissionService::temAcesso('seguranca_trilha_acesso')
         || PermissionService::temAcessoRestrito('seguranca_auditoria_credenciais')
         || PermissionService::temAcessoRestrito('seguranca_cofre_senhas')
         || PermissionService::temAcessoRestrito('seguranca_cofre_senhas_gerenciar');
@@ -881,6 +882,11 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         <?php if (PermissionService::temAcesso('seguranca_antivirus')): ?>
         <a href="<?= url('/seguranca/antivirus') ?>" class="<?= str_starts_with($uriAtual, '/seguranca/antivirus') ? 'active' : '' ?>">
             <i class="bi bi-virus me-2"></i> Antivírus
+        </a>
+        <?php endif; ?>
+        <?php if (PermissionService::temAcesso('seguranca_trilha_acesso')): ?>
+        <a href="<?= url('/seguranca/trilha-acesso') ?>" class="<?= str_starts_with($uriAtual, '/seguranca/trilha-acesso') ? 'active' : '' ?>">
+            <i class="bi bi-person-badge me-2"></i> Trilha de acesso
         </a>
         <?php endif; ?>
         <?php if ($mostrarBitdefender): ?>

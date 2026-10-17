@@ -429,6 +429,54 @@ class EntraService
         return 'S-1-12-1-' . implode('-', unpack('V4', $bytes));
     }
 
+    /** SID -> UPN de todos os usuários do tenant (pra trilha de acesso mostrar a conta do Entra no log do Windows). Sem notificação: roda também pelo cron. */
+    public function mapaSidUpn(): array
+    {
+        $mapa = [];
+        $proxima = '/users?$select=id,userPrincipalName&$top=999';
+        while ($proxima !== null) {
+            $r = $this->chamarGraph('GET', $proxima);
+            if (!$r['sucesso']) {
+                return $mapa;
+            }
+            foreach ($r['dados']['value'] ?? [] as $u) {
+                if ($sid = self::sidDoObjeto($u['id'])) {
+                    $mapa[$sid] = $u['userPrincipalName'];
+                }
+            }
+            $proxima = $r['dados']['@odata.nextLink'] ?? null;
+        }
+
+        return $mapa;
+    }
+
+    /** App "Windows Sign In" -- login no Windows de máquina ingressada no Entra. */
+    private const APP_WINDOWS_SIGN_IN = '38aa3b87-a06d-4817-b275-7a316988d93b';
+
+    /**
+     * Registro de entradas do Entra (auditLogs/signIns) de login no Windows desde $desdeUtc
+     * (ISO 8601). Exige AuditLog.Read.All + Entra ID P1; o Entra retém só 30 dias.
+     *
+     * @return array{sucesso:bool, itens:array, mensagem:string}
+     */
+    public function entradasNoWindows(string $desdeUtc): array
+    {
+        $filtro = rawurlencode("appId eq '" . self::APP_WINDOWS_SIGN_IN . "' and createdDateTime ge {$desdeUtc}");
+        $proxima = '/auditLogs/signIns?$filter=' . $filtro . '&$top=500';
+        $itens = [];
+
+        while ($proxima !== null) {
+            $r = $this->chamarGraph('GET', $proxima);
+            if (!$r['sucesso']) {
+                return ['sucesso' => false, 'itens' => $itens, 'mensagem' => $r['mensagem']];
+            }
+            array_push($itens, ...($r['dados']['value'] ?? []));
+            $proxima = $r['dados']['@odata.nextLink'] ?? null;
+        }
+
+        return ['sucesso' => true, 'itens' => $itens, 'mensagem' => ''];
+    }
+
     /** Grupos de segurança do tenant (os únicos que entram no token de login do Windows). */
     public function listarGruposSeguranca(): array
     {

@@ -55,6 +55,7 @@ class ModuloCatalogo
         'seguranca_cofre_senhas' => ['label' => 'Cofre de Senhas', 'grupo' => 'Segurança'],
         'seguranca_cofre_senhas_gerenciar' => ['label' => 'Cofre de Senhas - Gerenciar Cofres', 'grupo' => 'Segurança'],
         'seguranca_bitdefender' => ['label' => 'Bitdefender GravityZone', 'grupo' => 'Segurança'],
+        'seguranca_trilha_acesso' => ['label' => 'Trilha de acesso às máquinas', 'grupo' => 'Segurança'],
         'ativos_dashboard' => ['label' => 'Ativos - Dashboard', 'grupo' => 'Ativos'],
         'ativos_lista' => ['label' => 'Ativos - Lista', 'grupo' => 'Ativos'],
         'ativos_novo' => ['label' => 'Ativos - Novo/Editar', 'grupo' => 'Ativos'],

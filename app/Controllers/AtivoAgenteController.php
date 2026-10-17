@@ -141,6 +141,35 @@ class AtivoAgenteController extends Controller
     }
 
     /**
+     * Trilha de acesso (agente 1.0.71+): eventos de login/logoff/bloqueio do log
+     * de segurança do Windows. {"machine_guid", "eventos": [...]}; lista vazia só
+     * pergunta de onde continuar -- a resposta traz o último RecordId guardado.
+     */
+    public function acessos(): void
+    {
+        header('Content-Type: application/json');
+
+        if (!$this->service->chaveValida($_SERVER['HTTP_X_RD_AGENTE_CHAVE'] ?? '')) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'message' => 'Chave de API inválida.']);
+            return;
+        }
+
+        $payload = json_decode(file_get_contents('php://input'), true);
+        $ativoId = is_array($payload) ? $this->service->idPorMachineGuid(trim((string)($payload['machine_guid'] ?? ''))) : null;
+        if ($ativoId === null) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Ativo não encontrado para este machine_guid.']);
+            return;
+        }
+
+        $acessos = new \App\Services\AcessoMaquinaService();
+        $novos = $acessos->registrarDoWindows($ativoId, is_array($payload['eventos'] ?? null) ? $payload['eventos'] : []);
+
+        echo json_encode(['success' => true, 'novos' => $novos, 'ultimo_record_id' => $acessos->ultimoRecordId($ativoId)]);
+    }
+
+    /**
      * Lista pública de extensões/notas de ransomware já filtrada (agente
      * 1.0.35+ baixa quando a versão no checkin muda). 404 quando a opção
      * está desligada na Central de Segurança.
