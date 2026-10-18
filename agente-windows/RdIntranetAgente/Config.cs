@@ -72,18 +72,24 @@ public class Config
     {
         try
         {
+            Config? doPerfil = null;
             if (File.Exists(CaminhoArquivo))
             {
-                var json = File.ReadAllText(CaminhoArquivo);
-                return JsonSerializer.Deserialize<Config>(json) ?? new Config();
+                doPerfil = JsonSerializer.Deserialize<Config>(File.ReadAllText(CaminhoArquivo));
+                if (doPerfil is { EstaConfigurado: true }) return doPerfil;
             }
 
+            // Perfil sem servidor/chave (sessão nova numa máquina do Entra -- o agente
+            // grava ali só o identificador calculado): vale a configuração da máquina.
+            // Antes o arquivo incompleto do perfil ganhava e o agente ficava "sem conexão".
             var caminhoJuntoDoExe = Path.Combine(AppContext.BaseDirectory, "config.json");
             if (File.Exists(caminhoJuntoDoExe))
             {
-                var json = File.ReadAllText(caminhoJuntoDoExe);
-                return JsonSerializer.Deserialize<Config>(json) ?? new Config();
+                var daMaquina = JsonSerializer.Deserialize<Config>(File.ReadAllText(caminhoJuntoDoExe));
+                if (daMaquina is { EstaConfigurado: true }) return daMaquina;
             }
+
+            if (doPerfil != null) return doPerfil;
         }
         catch
         {
