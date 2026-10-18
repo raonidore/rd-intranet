@@ -124,7 +124,9 @@ public class HeartbeatClient
 
     public async Task<ResultadoHeartbeat> EnviarAsync(string machineGuid)
     {
-        var json = JsonSerializer.Serialize(new { machine_guid = machineGuid });
+        // sessao_elevada: o portal só entrega comando de administrador a agente elevado
+        // (máquina compartilhada tem um agente por sessão, inclusive de usuário comum).
+        var json = JsonSerializer.Serialize(new { machine_guid = machineGuid, sessao_elevada = Program.EstaElevado() });
         var bytesEnvio = Encoding.UTF8.GetBytes(json);
 
         var handler = new HttpClientHandler

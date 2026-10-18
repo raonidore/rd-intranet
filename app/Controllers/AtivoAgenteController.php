@@ -78,7 +78,9 @@ class AtivoAgenteController extends Controller
             return;
         }
 
-        echo json_encode($this->service->registrarHeartbeat($machineGuid, $chaveEnviada));
+        // Agente 1.0.79+: informa se a sessão dele é elevada (null = agente antigo, entrega tudo como antes).
+        $elevada = array_key_exists('sessao_elevada', $payload ?? []) ? (bool)$payload['sessao_elevada'] : null;
+        echo json_encode($this->service->registrarHeartbeat($machineGuid, $chaveEnviada, $elevada));
     }
 
     /**

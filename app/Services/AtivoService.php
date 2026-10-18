@@ -6100,7 +6100,7 @@ class AtivoService
      * heartbeatIntervaloSegundos(). Devolve se há um checkin completo
      * pendente de ser forçado (pedido pelo portal via solicitarCheckin()).
      */
-    public function registrarHeartbeat(string $machineGuid, string $chaveUsada = ''): array
+    public function registrarHeartbeat(string $machineGuid, string $chaveUsada = '', ?bool $sessaoElevada = null): array
     {
         $resultado = $this->repository->registrarHeartbeat($machineGuid);
 
@@ -6119,6 +6119,12 @@ class AtivoService
         (new SegurancaIsolamentoService())->processarPendentes($ativoId);
 
         $solicitacoes = $this->repository->solicitacoesPendentes($ativoId);
+        // Máquina compartilhada (Entra): o agente da sessão de um usuário comum também
+        // faz heartbeat. Comando de administrador só pra agente elevado -- senão ele
+        // pegava o comando e falhava por falta de permissão (EN-TI-01-D, 18/10/2026).
+        if ($sessaoElevada === false) {
+            $solicitacoes = array_values(array_filter($solicitacoes, fn($s) => !(bool)$s['elevado']));
+        }
 
         $resposta = [
             'success' => true,
