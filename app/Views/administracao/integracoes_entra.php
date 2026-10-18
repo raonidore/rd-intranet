@@ -158,15 +158,43 @@ $diasSecret = $secretVence ? (int)floor((strtotime($secretVence) - time()) / 864
                         os campos de PIN que aparecem podem ser ignorados.)</li>
                     <li><a href="https://admin.cloud.microsoft/?#/Settings/Services/:/Settings/L1/Reports" target="_blank">Admin center do M365 &rarr; Configurações da organização &rarr; Relatórios</a>:
                         desmarque <em>Exibir nomes de usuários, grupos e sites ocultos</em> -- senão os relatórios de uso vêm com nomes embaralhados.</li>
+                    <li><a href="https://intune.microsoft.com/#view/Microsoft_Intune_Workflows/SecurityManagementMenu/~/accountprotection" target="_blank">Intune &rarr; Segurança do ponto de extremidade &rarr; Proteção de conta</a>
+                        &rarr; <strong>Criar Política</strong> &rarr; Plataforma <em>Windows</em>, perfil <em>Solução de Senha de Administrador Local (Windows LAPS)</em>.
+                        Nome <code>RD.Intranet - LAPS</code>, e em Configuration settings:
+                        <table class="table table-sm table-bordered mt-2 mb-0">
+                            <tr><td>Diretório de Backup</td><td><strong>Fazer backup da senha apenas no Microsoft Entra ID</strong></td></tr>
+                            <tr><td>Dias de Duração da Senha</td><td>30</td></tr>
+                            <tr><td>Nome da Conta de Administrador</td><td><strong>Não configurado</strong> (cuida do Administrador interno, mesmo nome em todas as máquinas)</td></tr>
+                            <tr><td>Complexidade da senha</td><td>Letras grandes + pequenas + números + caracteres especiais</td></tr>
+                            <tr><td>Comprimento da Senha</td><td><strong>16</strong> (o padrão 8 é fraco para administrador)</td></tr>
+                            <tr><td>Ações Pós-Autenticação</td><td>Redefinir a senha e fazer logoff da conta gerenciada</td></tr>
+                            <tr><td>Atraso de Pós-redefinição</td><td>8 (horas)</td></tr>
+                            <tr><td>Gerenciamento Automático de Conta</td><td>Não configurado (só existe no Windows 11 24H2+)</td></tr>
+                        </table>
+                        Marcas de escopo: deixe "Padrão". Atribuições: <strong>Adicionar todos os dispositivos</strong> &rarr; Criar.
+                        O Administrador interno vem desativado; o agente da RD (1.0.75+) o ativa sozinho <strong>só depois</strong> que o LAPS trocou a senha dele.
+                        A senha de cada máquina fica em <a href="https://entra.microsoft.com/#view/Microsoft_AAD_Devices/DevicesMenuBlade/~/LocalAdminPasswordRecovery/menuId~/null" target="_blank">Entra &rarr; Dispositivos &rarr; Recuperação da senha do administrador local</a>.</li>
                 </ol>
 
-                <h6><span class="badge text-bg-primary">Parte 3</span> Aqui no portal</h6>
-                <ol class="text-muted mb-0" start="10">
+                <h6><span class="badge text-bg-primary">Parte 3</span> Em cada máquina e aqui no portal</h6>
+                <ol class="text-muted mb-0" start="11">
+                    <li>Instale o <strong>agente da RD</strong> antes de tudo (versão 1.0.75 ou mais nova). Ele instala sozinho o serviço do Windows que abre o agente
+                        para usuário comum e mantém a trilha de acesso mesmo sem ninguém logado.</li>
                     <li><a href="<?= url('/entra/grupos') ?>">Entra &rarr; Grupos</a>: um grupo por unidade (ex.: <em>NTO - Acesso às Máquinas</em>) com quem pode entrar nas máquinas dela.</li>
-                    <li>Em cada máquina: Configurações &rarr; Contas &rarr; Acesso corporativo ou de estudante &rarr; <strong>Conectar</strong> &rarr;
-                        <em>Ingressar este dispositivo no Microsoft Entra ID</em>, com a conta da TI (se houver uma conta @empresa já conectada ali, <em>Desconectar</em> antes). Reiniciar.</li>
-                    <li><a href="<?= url('/entra/acesso-maquinas') ?>">Entra &rarr; Acesso às Máquinas</a>: aplique o grupo da unidade nas máquinas que já entraram no Entra e desative as contas locais antigas.</li>
-                    <li><a href="<?= url('/seguranca/trilha-acesso') ?>">Segurança &rarr; Trilha de acesso</a>: quem entrou em qual máquina e quando, com exportação em PDF/Excel para auditoria.</li>
+                    <li>Na máquina: Configurações &rarr; Contas &rarr; Acesso corporativo ou de estudante &rarr; <strong>Conectar</strong> &rarr;
+                        <em>Ingressar este dispositivo no Microsoft Entra ID</em>, com a conta da TI (se houver uma conta @empresa já conectada ali, <em>Desconectar</em> antes). Reiniciar.
+                        <strong>Só ingresse depois das partes 1 e 2</strong>: a inscrição no Intune acontece no momento do ingresso.</li>
+                    <li><strong>Confira se a máquina entrou no Intune:</strong> ela tem que aparecer em <a href="<?= url('/entra/dispositivos') ?>">Entra &rarr; Dispositivos (Intune)</a>
+                        em alguns minutos. Se não aparecer, use <em>Forçar inscrição no Intune</em> na mesma tela -- fora do Intune nenhuma política chega
+                        (Windows Hello volta a pedir PIN e celular, LAPS não funciona). Caso real: a EN-TI-01-D entrou no Entra antes do passo 7 e ficou de fora.</li>
+                    <li><a href="<?= url('/entra/acesso-maquinas') ?>">Entra &rarr; Acesso às Máquinas</a>: aplique o grupo da unidade nas máquinas que já entraram no Entra.
+                        O Windows não traz os grupos do Entra no login, então o portal libera <strong>cada pessoa do grupo</strong> na máquina e reaplica sozinho quando
+                        alguém entra ou sai do grupo (na hora pela tela Grupos; em até 15 min se mudarem direto no Entra). Administradores locais sempre continuam entrando.</li>
+                    <li><strong>Teste</strong> com uma conta dentro e outra fora do grupo, usando o e-mail completo (<code>pessoa@empresa</code>) em "Outro usuário":
+                        quem está fora recebe <em>"O método de entrada que você está tentando usar não é permitido"</em>.</li>
+                    <li>Depois que o LAPS estiver ativo (passo 10), desative as contas locais antigas na mesma tela de Acesso às Máquinas.</li>
+                    <li><a href="<?= url('/seguranca/trilha-acesso') ?>">Segurança &rarr; Trilha de acesso</a>: quem entrou em qual máquina e quando -- inclusive os acessos negados --
+                        com exportação em PDF/Excel para auditoria.</li>
                 </ol>
             </div>
         </div>
