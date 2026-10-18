@@ -394,14 +394,19 @@ class EntraService
      | existente (AtivoService::solicitarListagem, executar_powershell,
      | elevado).
      |
-     | Contas e grupos entram pelo SID, nunca pelo nome: nome
+     | Contas entram pelo SID, nunca pelo nome: nome
      | ("AzureAD\usuario@tenant.com") só resolve pra quem já logou
-     | naquela máquina, e grupo do Entra não resolve por nome nenhum. O
-     | SID de usuário/grupo do Entra numa máquina ingressada é derivado
-     | do objectId (S-1-12-1-...), e o token de login já traz os SIDs dos
-     | grupos de segurança do usuário -- então autorizar um GRUPO funciona
-     | e incluir/tirar alguém vira só editar o grupo no Entra (vale no
-     | próximo login; sessão aberta renova os grupos em até 4h).
+     | naquela máquina. O SID de usuário do Entra numa máquina ingressada
+     | é derivado do objectId (S-1-12-1-...).
+     |
+     | GRUPO NÃO FUNCIONA pelo SID do grupo: o token de login do Windows
+     | traz os PAPÉIS do Entra (Administrador global, Leitor global...),
+     | não os grupos de segurança -- confirmado no piloto da EN-TI-01-D
+     | (17/10/2026): conta do grupo barrada com 0xC000015B e o whoami de
+     | um membro sem o SID do grupo. Por isso o grupo escolhido na tela é
+     | expandido nos membros (transitivos) na hora de aplicar, e
+     | sincronizarAcessos() reaplica quando a lista de membros muda
+     | (na hora pela tela Grupos; pelo cron em até 15 min se mudarem no Entra).
      |
      | Rede de segurança: o grupo local "Administradores" (SID universal
      | *S-1-5-32-544) SEMPRE entra na lista, então essa ação nunca tranca
@@ -596,7 +601,7 @@ class EntraService
         return ['sucesso' => true, 'itens' => $itens, 'mensagem' => ''];
     }
 
-    /** Grupos de segurança do tenant (os únicos que entram no token de login do Windows). */
+    /** Grupos de segurança do tenant. */
     public function listarGruposSeguranca(): array
     {
         $resultado = $this->chamarGraph('GET', '/groups?$filter=securityEnabled%20eq%20true&$select=id,displayName,description&$top=999');
@@ -686,10 +691,12 @@ class EntraService
             return false;
         }
 
+        $maquinas = 0;
         if ($adicionar || $remover) {
             AuditService::registrar('Microsoft Entra', 'Membros do grupo', "Grupo \"{$nomeGrupo}\": " . count($adicionar) . ' adicionado(s), ' . count($remover) . ' removido(s).');
+            $maquinas = $this->sincronizarAcessos($_SESSION['usuario']['nome'] ?? 'Tela Grupos');
         }
-        NotificationService::success("Membros do grupo \"{$nomeGrupo}\" atualizados -- vale no próximo login de cada pessoa.");
+        NotificationService::success("Membros do grupo \"{$nomeGrupo}\" atualizados" . ($maquinas ? " -- reaplicado em {$maquinas} máquina(s), vale no próximo login." : '.'));
 
         return true;
     }
@@ -714,13 +721,85 @@ class EntraService
      | último pedido, pra tela mostrar que restrição cada máquina tem.
      */
 
-    /** @param array<int,array{id:string,nome:string,tipo:string}>|null $autorizados null = restrição removida */
-    public static function registrarAcessoAplicado(int $ativoId, ?array $autorizados, ?string $por): void
+    /**
+     * @param array<int,array{id:string,nome:string,tipo:string}>|null $autorizados null = restrição removida
+     * @param string[] $usuarios objectIds efetivamente liberados (grupos já expandidos)
+     */
+    public static function registrarAcessoAplicado(int $ativoId, ?array $autorizados, ?string $por, array $usuarios = []): void
     {
         \App\Core\Database::connection()->prepare(
-            'INSERT INTO entra_acesso_maquinas (ativo_id, autorizados, aplicado_por, aplicado_em) VALUES (?, ?, ?, NOW())
-             ON DUPLICATE KEY UPDATE autorizados = VALUES(autorizados), aplicado_por = VALUES(aplicado_por), aplicado_em = NOW()'
-        )->execute([$ativoId, $autorizados === null ? null : json_encode($autorizados, JSON_UNESCAPED_UNICODE), $por]);
+            'INSERT INTO entra_acesso_maquinas (ativo_id, autorizados, usuarios_hash, aplicado_por, aplicado_em) VALUES (?, ?, ?, ?, NOW())
+             ON DUPLICATE KEY UPDATE autorizados = VALUES(autorizados), usuarios_hash = VALUES(usuarios_hash), aplicado_por = VALUES(aplicado_por), aplicado_em = NOW()'
+        )->execute([$ativoId, $autorizados === null ? null : json_encode($autorizados, JSON_UNESCAPED_UNICODE), $autorizados === null ? null : self::hashUsuarios($usuarios), $por]);
+    }
+
+    private static function hashUsuarios(array $usuarios): string
+    {
+        $usuarios = array_map('strtolower', $usuarios);
+        sort($usuarios);
+
+        return sha1(implode(',', $usuarios));
+    }
+
+    /**
+     * Usuários liberados por uma lista de autorizados: membros (transitivos, só
+     * usuários) de cada grupo + usuários avulsos. null se o Graph falhar -- nunca
+     * aplicar uma lista incompleta (trancaria gente de fora).
+     *
+     * @return string[]|null objectIds
+     */
+    public function usuariosAutorizados(array $autorizados): ?array
+    {
+        $ids = [];
+        foreach ($autorizados as $a) {
+            if (($a['tipo'] ?? '') === 'usuario') {
+                $ids[] = $a['id'];
+                continue;
+            }
+            $proxima = '/groups/' . rawurlencode($a['id']) . '/transitiveMembers/microsoft.graph.user?$select=id&$top=999';
+            while ($proxima !== null) {
+                $r = $this->chamarGraph('GET', $proxima);
+                if (!$r['sucesso']) {
+                    return null;
+                }
+                array_push($ids, ...array_column($r['dados']['value'] ?? [], 'id'));
+                $proxima = $r['dados']['@odata.nextLink'] ?? null;
+            }
+        }
+
+        return array_values(array_unique(array_filter($ids, fn($id) => self::sidDoObjeto((string)$id) !== null)));
+    }
+
+    /**
+     * Reaplica a restrição nas máquinas cuja lista de pessoas mudou desde a
+     * última aplicação (alguém entrou/saiu do grupo). Chamado ao salvar
+     * membros na tela Grupos e pelo cron (rd acessos:manutencao).
+     *
+     * @return int máquinas atualizadas
+     */
+    public function sincronizarAcessos(string $por = 'Sincronização automática'): int
+    {
+        if (!$this->configurado()) {
+            return 0;
+        }
+        $atualizadas = 0;
+        foreach (self::acessosAplicados() as $ativoId => $linha) {
+            if ($linha['autorizados'] === null) {
+                continue;
+            }
+            $usuarios = $this->usuariosAutorizados($linha['autorizados']);
+            if ($usuarios === null || self::hashUsuarios($usuarios) === ($linha['usuarios_hash'] ?? '')) {
+                continue;
+            }
+            $r = (new AtivoService())->solicitarListagem($ativoId, 'executar_powershell', self::gerarScriptRestricaoLogin($usuarios), $por, true);
+            if ($r['success'] ?? false) {
+                self::registrarAcessoAplicado($ativoId, $linha['autorizados'], $por, $usuarios);
+                AuditService::registrar('Microsoft Entra', 'Restrição de login reaplicada', "Máquina #{$ativoId}: membros do grupo mudaram -- " . count($usuarios) . ' conta(s) liberada(s).');
+                $atualizadas++;
+            }
+        }
+
+        return $atualizadas;
     }
 
     /** @return array<int,array{autorizados:?array,aplicado_por:?string,aplicado_em:string}> por ativo_id */

@@ -401,14 +401,24 @@ class EntraController extends Controller
             array_map(fn($id) => ['id' => $id, 'nome' => $nomesUsuarios[$id] ?? $id, 'tipo' => 'usuario'], $usuarios)
         );
 
+        // O Windows não traz os grupos do Entra no token de login: libera cada pessoa do grupo.
+        $liberados = $this->service->usuariosAutorizados($autorizados);
+        if ($liberados === null || $liberados === []) {
+            NotificationService::error($liberados === null
+                ? 'Não foi possível ler os membros do grupo no Entra -- nada foi aplicado. Tente de novo.'
+                : 'O grupo escolhido não tem nenhum membro -- aplicar trancaria todo mundo (só administradores entrariam).');
+            header('Location: ' . url('/entra/acesso-maquinas'));
+            exit;
+        }
+
         $enviados = $this->enviarScriptParaAtivos(
-            EntraService::gerarScriptRestricaoLogin(array_merge($grupos, $usuarios)),
+            EntraService::gerarScriptRestricaoLogin($liberados),
             $ativoIds,
             'Restrição de login aplicada',
-            'autorizados: ' . implode(', ', array_column($autorizados, 'nome'))
+            'autorizados: ' . implode(', ', array_column($autorizados, 'nome')) . ' (' . count($liberados) . ' conta(s))'
         );
         foreach ($enviados as $ativoId) {
-            EntraService::registrarAcessoAplicado($ativoId, $autorizados, $_SESSION['usuario']['nome'] ?? null);
+            EntraService::registrarAcessoAplicado($ativoId, $autorizados, $_SESSION['usuario']['nome'] ?? null, $liberados);
         }
 
         header('Location: ' . url('/entra/acesso-maquinas'));

@@ -389,6 +389,10 @@ switch ($comando) {
         $acessos = new \App\Services\AcessoMaquinaService();
         $r = $acessos->importarDoEntra();
         $apagados = $acessos->purgarSeVenceu();
+        $reaplicadas = (new \App\Services\EntraService())->sincronizarAcessos();
+        if ($reaplicadas > 0) {
+            echo "Acesso às máquinas: restrição reaplicada em {$reaplicadas} máquina(s) (membros de grupo mudaram).\n";
+        }
         echo "OK: trilha de acesso -- {$r['importados']} entrada(s) nova(s) do Entra ({$r['mensagem']}), {$apagados} registro(s) antigo(s) apagado(s).
 ";
         break;
