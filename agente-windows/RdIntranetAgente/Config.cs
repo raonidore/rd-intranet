@@ -140,5 +140,56 @@ public class Config
         }
 
         File.WriteAllText(CaminhoArquivo, JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true }));
+        if (EstaConfigurado) SalvarCopiaDaMaquina(this);
+    }
+
+    private static string CaminhoCopiaDaMaquina => Path.Combine(AppContext.BaseDirectory, "config.json");
+
+    /// <summary>
+    /// Cópia da configuração ao lado do .exe (C:\RDTecnologia, só administrador
+    /// grava): é o que o agente lê numa sessão de quem nunca configurou -- com
+    /// máquinas no Entra, toda pessoa nova (piloto da EN-TI-01-D: o agente da
+    /// teste.permitido abriu "sem conexão"). Vai junto o identificador da máquina
+    /// (cache/manual), senão a sessão nova podia virar ativo duplicado.
+    /// Só grava quem pode (agente elevado ou o serviço); sem permissão, ignora.
+    /// </summary>
+    public static void SalvarCopiaDaMaquina(Config config)
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
+            if (File.Exists(CaminhoCopiaDaMaquina) && File.ReadAllText(CaminhoCopiaDaMaquina) == json) return;
+            File.WriteAllText(CaminhoCopiaDaMaquina, json);
+        }
+        catch
+        {
+            // sessão sem elevação ou pasta só de leitura -- o serviço grava depois
+        }
+    }
+
+    /// <summary>Serviço (SYSTEM): mantém a cópia da máquina igual à configuração mais recente dos perfis.</summary>
+    public static void SincronizarCopiaDaMaquina()
+    {
+        // Só os perfis (o mais recente configurado) -- a própria cópia nunca é fonte dela mesma.
+        try
+        {
+            var usuarios = Path.Combine(Path.GetPathRoot(Environment.SystemDirectory) ?? @"C:\", "Users");
+            foreach (var caminho in Directory.GetDirectories(usuarios)
+                         .Select(perfil => Path.Combine(perfil, "AppData", "Local", "RDIntranetAgent", "config.json"))
+                         .Where(File.Exists)
+                         .OrderByDescending(File.GetLastWriteTimeUtc))
+            {
+                var config = JsonSerializer.Deserialize<Config>(File.ReadAllText(caminho));
+                if (config is { EstaConfigurado: true })
+                {
+                    SalvarCopiaDaMaquina(config);
+                    return;
+                }
+            }
+        }
+        catch
+        {
+            // sem acesso a C:\Users -- tenta de novo na próxima
+        }
     }
 }

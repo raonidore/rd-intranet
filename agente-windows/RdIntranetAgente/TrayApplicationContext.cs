@@ -143,11 +143,27 @@ public class TrayApplicationContext : ApplicationContext
 
         if (!_config.EstaConfigurado)
         {
-            AbrirConfiguracoes();
+            // Sessão de quem nunca configurou (pessoa nova numa máquina do Entra): a
+            // configuração da máquina vem do serviço (C:\RDTecnologia\config.json).
+            // Confere a cada 30 s e conecta sozinho; o formulário só aparece pra
+            // administrador -- usuário comum não tem o que preencher ali.
+            var esperaConfig = new System.Windows.Forms.Timer { Interval = 30_000 };
+            esperaConfig.Tick += (s, e) =>
+            {
+                var daMaquina = Config.Carregar();
+                if (!daMaquina.EstaConfigurado) return;
+                esperaConfig.Stop();
+                esperaConfig.Dispose();
+                AplicarConfiguracao(daMaquina);
+                LogAtividade.Registrar(NivelAtividade.Sucesso, "CONFIG", "Configuração da máquina carregada -- agente conectado.");
+            };
+            esperaConfig.Start();
+            if (Program.EstaElevado()) AbrirConfiguracoes();
         }
 
         if (_config.EstaConfigurado)
         {
+            if (Program.EstaElevado()) Config.SalvarCopiaDaMaquina(_config);
             _timer.Start();
             _heartbeatTimer.Start();
             _ = ColetarEEnviarAsync(manual: false);

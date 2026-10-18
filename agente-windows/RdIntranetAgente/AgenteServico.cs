@@ -39,6 +39,7 @@ public class AgenteServico : ServiceBase
     // logado -- o logoff do fim do dia não se perde mais à noite.
     private AcessosService? _acessos;
     private System.Threading.Timer? _timerLaps;
+    private System.Threading.Timer? _timerConfig;
 
     public AgenteServico()
     {
@@ -75,6 +76,8 @@ public class AgenteServico : ServiceBase
         _acessos = new AcessosService(Config.CarregarParaServico, IdentificadorDaMaquina);
         // LAPS troca a senha do Administrador em algum momento depois da política chegar -- confere de hora em hora.
         _timerLaps = new System.Threading.Timer(_ => ProtecaoInstalacao.AtivarAdministradorComLaps(), null, TimeSpan.FromMinutes(5), TimeSpan.FromHours(1));
+        // Configuração da máquina ao lado do .exe -- sessão de quem nunca configurou (pessoa nova no Entra) já abre conectada.
+        _timerConfig = new System.Threading.Timer(_ => Config.SincronizarCopiaDaMaquina(), null, TimeSpan.Zero, TimeSpan.FromHours(1));
 
         _timerAtualizacao = new System.Threading.Timer(
             _ => _ = AtualizacaoServico.VerificarEAtualizarAsync("verificação periódica"),
@@ -85,6 +88,7 @@ public class AgenteServico : ServiceBase
     {
         _timerAtualizacao?.Dispose();
         _timerLaps?.Dispose();
+        _timerConfig?.Dispose();
         _acessos?.Dispose();
     }
 
