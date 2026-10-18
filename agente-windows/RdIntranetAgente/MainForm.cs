@@ -361,8 +361,10 @@ public sealed class MainForm : Form
             BorderStyle = BorderStyle.None,
             Font = Tema.Fonte(9F)
         };
-        // Sem tema nativo aqui: qualquer tema escuro do Windows faz a lista
-        // desenhar uma grade vertical entre as colunas e barra horizontal.
+        // Tema escuro nativo só pelas barras de rolagem (sem ele ficavam brancas).
+        // A grade vertical que o tema desenhava entre as colunas não aparece mais
+        // porque as linhas são desenhadas à mão (DrawSubItem abaixo).
+        Tema.TemaEscuroNativo(lista);
         foreach (var coluna in colunas) lista.Columns.Add(coluna.titulo, coluna.largura);
 
         // Cabeçalho padrão do Windows é claro e não aceita cor -- desenha

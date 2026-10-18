@@ -94,6 +94,13 @@ internal static class Program
                     "coleta normal funciona, mas comandos remotos com elevação não vão funcionar nesta máquina.",
                     EventLogEntryType.Information);
             }
+            else if (ServicoDoAgenteRodando())
+            {
+                // Tarefa de logon numa sessão de usuário comum, com o serviço instalado:
+                // quem abre o agente aqui é o serviço (--auto). Pedir senha de
+                // administrador (UAC) a quem não tem seria só atrito.
+                return;
+            }
             else
             {
                 RelancarComoAdministrador();
@@ -138,6 +145,19 @@ internal static class Program
     /// vivo numa VM de teste -- só destravou rodando o próprio agente como
     /// administrador.
     /// </summary>
+    private static bool ServicoDoAgenteRodando()
+    {
+        try
+        {
+            using var controlador = new System.ServiceProcess.ServiceController(AgenteServico.NomeServico);
+            return controlador.Status == System.ServiceProcess.ServiceControllerStatus.Running;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     internal static bool EstaElevado()
     {
         using var identidade = WindowsIdentity.GetCurrent();

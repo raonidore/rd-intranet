@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.Win32;
 
 namespace RdIntranetAgente;
 
@@ -63,6 +64,8 @@ public static class ProtecaoInstalacao
             "-NoProfile -WindowStyle Hidden -Command \"" +
             $"Add-MpPreference -ExclusionPath '{PastaMeshAgent}','{PastaInstaladorMesh}\\' -ErrorAction Stop; " +
             $"Add-MpPreference -ExclusionProcess '{PastaMeshAgent}MeshAgent.exe' -ErrorAction Stop\"");
+        AtivarAdministradorComLaps();
+
         if (codigo == 0)
         {
             LogAtividade.Registrar(NivelAtividade.Seguranca, "ACESSO REMOTO", "Exclusões do Defender garantidas para o MeshAgent da RD (o Defender o confunde com persistência de malware).");
@@ -70,6 +73,34 @@ public static class ProtecaoInstalacao
         else if (!saida.Contains("not recognized", StringComparison.OrdinalIgnoreCase))
         {
             LogAtividade.Registrar(NivelAtividade.Aviso, "ACESSO REMOTO", "Não consegui ajustar as exclusões do Defender (política ou outro antivírus): " + saida.Trim());
+        }
+    }
+
+    /// <summary>
+    /// Máquina com política do Windows LAPS (Intune) que JÁ trocou a senha do
+    /// Administrador interno: ativa a conta -- vira o acesso de emergência,
+    /// com senha única por máquina guardada no Entra. Antes disso nunca ativa:
+    /// seria um administrador com senha desconhecida (ou em branco).
+    /// </summary>
+    public static void AtivarAdministradorComLaps()
+    {
+        try
+        {
+            using var estado = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\LAPS\State");
+            if (estado?.GetValue("LastPasswordUpdateTime") == null) return;
+        }
+        catch
+        {
+            return;
+        }
+
+        var (_, saida) = Rodar("powershell.exe",
+            "-NoProfile -WindowStyle Hidden -Command \"$a = Get-LocalUser | Where-Object { $_.SID.Value -like 'S-1-5-21-*-500' }; " +
+            "if ($a -and -not $a.Enabled) { Enable-LocalUser -SID $a.SID; 'ativado' }\"");
+        if (saida.Contains("ativado"))
+        {
+            LogAtividade.Registrar(NivelAtividade.Seguranca, "SEGURANÇA", "Administrador interno ativado: a senha dele é do Windows LAPS (única por máquina, guardada no Entra).");
+            AgenteServico.RegistrarEvento("Administrador interno ativado -- senha gerenciada pelo Windows LAPS.", EventLogEntryType.Information);
         }
     }
 

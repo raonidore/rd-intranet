@@ -34,6 +34,12 @@ public class AgenteServico : ServiceBase
     // 3 min depois de subir e depois a cada hora.
     private System.Threading.Timer? _timerAtualizacao;
 
+    // Trilha de acesso roda aqui, como SYSTEM: funciona com usuário comum logado
+    // (o ícone dele não tem elevação pra ler o log de segurança) e sem ninguém
+    // logado -- o logoff do fim do dia não se perde mais à noite.
+    private AcessosService? _acessos;
+    private System.Threading.Timer? _timerLaps;
+
     public AgenteServico()
     {
         ServiceName = NomeServico;
@@ -66,6 +72,10 @@ public class AgenteServico : ServiceBase
             RegistrarEvento($"Falha ao lançar o agente nas sessões já ativas: {ex.Message}", EventLogEntryType.Warning);
         }
 
+        _acessos = new AcessosService(Config.CarregarParaServico, IdentificadorDaMaquina);
+        // LAPS troca a senha do Administrador em algum momento depois da política chegar -- confere de hora em hora.
+        _timerLaps = new System.Threading.Timer(_ => ProtecaoInstalacao.AtivarAdministradorComLaps(), null, TimeSpan.FromMinutes(5), TimeSpan.FromHours(1));
+
         _timerAtualizacao = new System.Threading.Timer(
             _ => _ = AtualizacaoServico.VerificarEAtualizarAsync("verificação periódica"),
             null, TimeSpan.FromMinutes(3), TimeSpan.FromHours(1));
@@ -74,6 +84,8 @@ public class AgenteServico : ServiceBase
     protected override void OnStop()
     {
         _timerAtualizacao?.Dispose();
+        _timerLaps?.Dispose();
+        _acessos?.Dispose();
     }
 
     /// <summary>Comando 130 = "verifique atualização agora" (mandado pela bandeja em "Atualizar agora" e no "Forçar coleta" do portal).</summary>
@@ -158,6 +170,27 @@ public class AgenteServico : ServiceBase
         catch (Exception ex)
         {
             RegistrarEvento($"Falha ao abrir o agente na sessão {sessionId}: {ex.Message}", EventLogEntryType.Warning);
+        }
+    }
+
+    /// <summary>
+    /// Mesmo identificador que o ícone usa: o SYSTEM não tem o config.json do
+    /// usuário (onde ficam o identificador manual e o cache), então lê o
+    /// config dos perfis antes de recalcular -- senão VM sem serial de BIOS
+    /// viraria "ativo não encontrado".
+    /// </summary>
+    internal static string? IdentificadorDaMaquina()
+    {
+        try
+        {
+            var config = Config.CarregarParaServico();
+            if (!string.IsNullOrWhiteSpace(config.MachineGuidOverride)) return config.MachineGuidOverride.Trim();
+            if (!string.IsNullOrWhiteSpace(config.MachineGuidCache)) return config.MachineGuidCache.Trim();
+            return CollectorService.ObterMachineGuid();
+        }
+        catch
+        {
+            return null;
         }
     }
 

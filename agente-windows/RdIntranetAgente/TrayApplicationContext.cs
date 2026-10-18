@@ -119,6 +119,7 @@ public class TrayApplicationContext : ApplicationContext
         };
 
         RegistrarInicioAutomatico();
+        _ = GarantirServicoInstaladoAsync();
         AtualizarTooltip();
 
         _timer = new System.Windows.Forms.Timer { Interval = IntervaloEmMs() };
@@ -929,6 +930,24 @@ public class TrayApplicationContext : ApplicationContext
                 ok ? "Serviço removido." : $"Falha ao remover o serviço: {mensagem}",
                 "RD Intranet", MessageBoxButtons.OK, ok ? MessageBoxIcon.Information : MessageBoxIcon.Error);
         }
+    }
+
+    /// <summary>
+    /// Serviço do Windows instalado sozinho (antes só pelo menu): com máquinas no
+    /// Entra todo mundo entra como usuário comum, e sem o serviço o agente não
+    /// abre (ou abre sem elevação) e a trilha de acesso para. Só na instalação
+    /// padrão (C:\RDTecnologia) -- rodando de outra pasta, nada muda.
+    /// </summary>
+    private static async Task GarantirServicoInstaladoAsync()
+    {
+        if (!Program.EstaElevado() || ObterStatusServico() != null) return;
+        var pasta = Path.GetDirectoryName(Application.ExecutablePath)?.TrimEnd('\\') ?? "";
+        if (!string.Equals(pasta, @"C:\RDTecnologia", StringComparison.OrdinalIgnoreCase)) return;
+
+        var (ok, mensagem) = await InstalarServicoAsync();
+        LogAtividade.Registrar(ok ? NivelAtividade.Sucesso : NivelAtividade.Aviso, "SERVIÇO", ok
+            ? "Serviço do Windows do agente instalado: abre o agente para qualquer usuário e mantém a trilha de acesso mesmo sem ninguém logado."
+            : "Não consegui instalar o serviço do Windows do agente: " + mensagem);
     }
 
     private static async Task<(bool ok, string mensagem)> InstalarServicoAsync()
