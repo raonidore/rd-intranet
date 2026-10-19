@@ -2248,7 +2248,7 @@ class AtivoController extends Controller
         if (in_array($tipo, ['executar_cmd', 'executar_powershell'], true)) {
             AuthMiddleware::checkModulo('ativos_novo');
         }
-        if (in_array($tipo, ['network_apply', 'network_revert'], true)) {
+        if (in_array($tipo, ['network_apply', 'network_revert', 'network_apply_confirmar', 'network_disable', 'network_enable', 'network_wifi_disconnect', 'network_wifi_connect', 'network_confirm', 'network_rollback'], true)) {
             AuthMiddleware::checkModulo('ativos_novo');
         }
         if ($tipo === 'mesh_install') {

@@ -33,6 +33,8 @@ $agenteSuportaExplorador = $ativo['origem'] === 'agente' && ($ativo['agente_vers
 // MTR remoto (network_mtr) só existe a partir do agente 1.0.48 -- agente antigo ignora o pedido e a tela ficaria esperando à toa.
 $agenteSuportaMtr = $agenteSuportaExplorador && version_compare((string)($ativo['agente_versao'] ?? '0'), '1.0.48', '>=');
 $podeAlterarRedeRemota = PermissionService::temAcesso('ativos_novo');
+// Desativar placa / desconectar Wi-Fi e a janela de confirmação com reversão automática: agente 1.0.82+.
+$agenteSuportaControleRede = $agenteSuportaExplorador && version_compare((string)($ativo['agente_versao'] ?? '0'), '1.0.82', '>=');
 
 // Campos de "Componentes" ficam numa aba própria -- o resto dos
 // detalhes técnicos (SO, funcao, snmp, etc.) fica na Visão Geral.
@@ -983,13 +985,38 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     <!-- Network -->
     <div class="tab-pane fade" id="abaNetwork">
         <?php if ($agenteSuportaExplorador): ?>
-            <section class="card border-0 shadow-sm mb-3" id="painelRedeAoVivo" data-ativo-id="<?= (int)$ativo['id'] ?>">
+            <section class="card border-0 shadow-sm mb-3" id="painelRedeAoVivo" data-ativo-id="<?= (int)$ativo['id'] ?>" data-controle-rede="<?= $agenteSuportaControleRede && $podeAlterarRedeRemota ? '1' : '0' ?>">
                 <div class="card-header bg-white d-flex align-items-center justify-content-between gap-2">
                     <div><strong><i class="bi bi-router"></i> Rede do computador</strong><div class="text-muted small">Consulta ao vivo pelo agente instalado neste ativo.</div></div>
                     <button type="button" class="btn btn-sm btn-outline-secondary" id="botaoAtualizarAdaptadores"><i class="bi bi-arrow-clockwise"></i> Atualizar</button>
                 </div>
                 <div class="card-body">
-                    <div class="alert alert-warning small py-2"><i class="bi bi-exclamation-triangle-fill"></i> Alterar IP, gateway ou DNS pode interromper o acesso remoto. Confira os valores com o cliente antes de aplicar. A configuração anterior fica salva no agente para reversão.</div>
+                    <?php if ($agenteSuportaControleRede && $podeAlterarRedeRemota): ?>
+                        <div class="alert alert-warning small py-2 d-flex flex-wrap align-items-center gap-2">
+                            <span class="flex-grow-1"><i class="bi bi-shield-check"></i> Alterar IP, desativar placa ou desconectar o Wi-Fi abre uma janela de confirmação: se a máquina não voltar a responder e você não confirmar no prazo, o agente volta sozinho à configuração anterior.</span>
+                            <label class="text-nowrap" for="redeJanelaConfirmacao">Prazo</label>
+                            <select class="form-select form-select-sm w-auto" id="redeJanelaConfirmacao">
+                                <option value="60">1 min</option>
+                                <option value="120" selected>2 min</option>
+                                <option value="300">5 min</option>
+                                <option value="600">10 min</option>
+                            </select>
+                        </div>
+                        <div class="alert alert-info py-2 d-none" id="redeConfirmacao" role="alert" aria-live="polite">
+                            <div class="d-flex flex-wrap align-items-center gap-2">
+                                <i class="bi bi-hourglass-split fs-5"></i>
+                                <div class="flex-grow-1">
+                                    <strong id="redeConfirmacaoTitulo">Alteração aplicada</strong>
+                                    <div class="small" id="redeConfirmacaoTexto"></div>
+                                </div>
+                                <span class="badge text-bg-dark font-monospace fs-6" id="redeConfirmacaoContagem">--:--</span>
+                                <button type="button" class="btn btn-sm btn-success" id="botaoConfirmarRede"><i class="bi bi-check2-circle"></i> Manter alteração</button>
+                                <button type="button" class="btn btn-sm btn-outline-danger" id="botaoReverterAgoraRede"><i class="bi bi-arrow-counterclockwise"></i> Reverter agora</button>
+                            </div>
+                        </div>
+                    <?php else: ?>
+                    <div class="alert alert-warning small py-2"><i class="bi bi-exclamation-triangle-fill"></i> Alterar IP, gateway ou DNS pode interromper o acesso remoto. Confira os valores com o cliente antes de aplicar. A configuração anterior fica salva no agente para reversão.<?php if ($podeAlterarRedeRemota && $agenteSuportaExplorador): ?> Desativar placa e desconectar o Wi-Fi exigem o agente 1.0.82 ou mais novo.<?php endif; ?></div>
+                    <?php endif; ?>
                     <div class="small text-muted mb-2" id="redeAoVivoStatus" role="status">Carregue os adaptadores para começar.</div>
                     <div class="row g-2 mb-3" id="redeAoVivoAdaptadores"></div>
                     <div class="row g-3">
@@ -7769,7 +7796,121 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro, tempoLimiteMs
     const botaoPing = document.getElementById('botaoTestarPing');
     const botaoVelocidade = document.getElementById('botaoTesteVelocidade');
     const botaoTraceRoute = document.getElementById('botaoTestarTraceRoute');
+    const controleRede = painel.dataset.controleRede === '1';
+    const caixaConfirmacao = document.getElementById('redeConfirmacao');
+    const botaoConfirmar = document.getElementById('botaoConfirmarRede');
+    const botaoReverterAgora = document.getElementById('botaoReverterAgoraRede');
     let adaptadores = [];
+    // Alteração aguardando "Manter alteração": { id, descricao, expiraEm (ms) }.
+    let pendente = null;
+    let relogioPendente = null;
+
+    function janelaConfirmacao() {
+        return Number(document.getElementById('redeJanelaConfirmacao')?.value || 120);
+    }
+
+    function mostrarPendente(id, descricao, segundos) {
+        if (!caixaConfirmacao || !id) return;
+        pendente = { id, descricao, expiraEm: Date.now() + Math.max(0, segundos) * 1000 };
+        document.getElementById('redeConfirmacaoTitulo').textContent = descricao || 'Alteração de rede aplicada';
+        document.getElementById('redeConfirmacaoTexto').textContent = 'Se a máquina continuar respondendo, clique em "Manter alteração". Sem confirmação, o agente volta sozinho à configuração anterior quando o tempo acabar.';
+        caixaConfirmacao.className = 'alert alert-info py-2';
+        botaoConfirmar.disabled = false;
+        botaoReverterAgora.disabled = false;
+        clearInterval(relogioPendente);
+        relogioPendente = setInterval(atualizarContagem, 500);
+        atualizarContagem();
+    }
+
+    function esconderPendente() {
+        pendente = null;
+        clearInterval(relogioPendente);
+        caixaConfirmacao?.classList.add('d-none');
+    }
+
+    function atualizarContagem() {
+        if (!pendente) return;
+        const restante = Math.max(0, Math.round((pendente.expiraEm - Date.now()) / 1000));
+        document.getElementById('redeConfirmacaoContagem').textContent = String(Math.floor(restante / 60)).padStart(2, '0') + ':' + String(restante % 60).padStart(2, '0');
+        if (restante > 0) return;
+        clearInterval(relogioPendente);
+        caixaConfirmacao.className = 'alert alert-secondary py-2';
+        document.getElementById('redeConfirmacaoTexto').textContent = 'Prazo esgotado sem confirmação: o agente está voltando à configuração anterior. A lista atualiza em instantes.';
+        botaoConfirmar.disabled = true;
+        botaoReverterAgora.disabled = true;
+        pendente = null;
+        setTimeout(() => carregarAdaptadores().then(() => caixaConfirmacao?.classList.add('d-none')), 20000);
+    }
+
+    // Resposta "agendado" do agente: ele responde antes de aplicar e espera a confirmação.
+    function aposAgendar(resposta, descricao) {
+        if (!resposta?.agendado) return false;
+        mostrarPendente(resposta.confirmacao_id, descricao, Number(resposta.janela_segundos || janelaConfirmacao()));
+        status.textContent = resposta.mensagem || 'Aplicando...';
+        status.className = 'small text-warning mb-2';
+        setTimeout(() => carregarAdaptadores(), 6000);
+        return true;
+    }
+
+    async function acaoPlaca(tipo, adaptador, pergunta, descricao) {
+        if (pergunta && !confirm(pergunta)) return;
+        status.textContent = 'Enviando pedido ao agente...';
+        status.className = 'small text-muted mb-2';
+        try {
+            const resposta = await solicitar(tipo, JSON.stringify({ adapter_id: adaptador.adapter_id, janela: janelaConfirmacao() }), 30000);
+            if (!aposAgendar(resposta, descricao)) {
+                status.textContent = resposta?.mensagem || 'Pronto.';
+                status.className = 'small text-success mb-2';
+                setTimeout(() => carregarAdaptadores(), 4000);
+            }
+        } catch (erro) {
+            status.textContent = erro.message;
+            status.className = 'small text-danger mb-2';
+        }
+    }
+
+    function unicaSaida(adaptador) {
+        const comGateway = adaptadores.filter(a => a.ativo && a.gateway);
+        return comGateway.length === 1 && comGateway[0].adapter_id === adaptador.adapter_id;
+    }
+
+    function avisoQueda(adaptador) {
+        const segundos = janelaConfirmacao();
+        return unicaSaida(adaptador)
+            ? '\n\nATENÇÃO: esta parece ser a única conexão da máquina com a rede. Ela vai parar de responder, e o agente religa sozinho em ' + segundos + ' s (não há como confirmar).'
+            : '\n\nSe a máquina parar de responder, o agente volta sozinho em ' + segundos + ' s.';
+    }
+
+    function botoesPlaca(adaptador) {
+        const botoes = [];
+        const criar = (rotulo, icone, classe, acao) => {
+            const botao = document.createElement('button');
+            botao.type = 'button';
+            botao.className = 'btn btn-sm ' + classe;
+            botao.innerHTML = '<i class="bi ' + icone + '"></i> ' + rotulo;
+            botao.addEventListener('click', acao);
+            botoes.push(botao);
+        };
+        if (adaptador.desativado) {
+            criar('Ativar placa', 'bi-power', 'btn-outline-success', () => acaoPlaca('network_enable', adaptador, 'Ativar a placa "' + adaptador.nome + '"?', ''));
+            return botoes;
+        }
+        // Sem placa física por trás (WAN Miniport etc.): o agente nem acha a conexão no Windows.
+        if (String(adaptador.status) === 'Desconhecido') return botoes;
+        if (adaptador.wifi) {
+            if (adaptador.ativo && !adaptador.wifi_auto_desligado) {
+                criar('Desconectar Wi-Fi', 'bi-wifi-off', 'btn-outline-warning', () => acaoPlaca('network_wifi_disconnect', adaptador,
+                    'Desconectar o Wi-Fi "' + adaptador.nome + '"' + (adaptador.wifi_ssid ? ' da rede ' + adaptador.wifi_ssid : '') + '?\n\nAs redes salvas ficam em "conectar manualmente": o Windows não volta a conectar sozinho.' + avisoQueda(adaptador),
+                    'Wi-Fi "' + adaptador.nome + '" desconectado'));
+            } else if (adaptador.wifi_auto_desligado) {
+                criar('Reconectar Wi-Fi', 'bi-wifi', 'btn-outline-success', () => acaoPlaca('network_wifi_connect', adaptador,
+                    'Voltar a conectar automaticamente o Wi-Fi "' + adaptador.nome + '"?', ''));
+            }
+        }
+        criar('Desativar placa', 'bi-slash-circle', 'btn-outline-danger', () => acaoPlaca('network_disable', adaptador,
+            'Desativar a placa "' + adaptador.nome + '"?' + avisoQueda(adaptador), 'Placa "' + adaptador.nome + '" desativada'));
+        return botoes;
+    }
 
     function escapar(texto) {
         return String(texto ?? '').replace(/[&<>"']/g, caractere => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[caractere]);
@@ -7824,12 +7965,22 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro, tempoLimiteMs
             const gateway = adaptador.gateway || 'Sem gateway';
             const estaAtivo = Boolean(adaptador.ativo);
             const linkDown = String(adaptador.status).toLowerCase() === 'down';
-            const estadoLink = estaAtivo ? 'UP' : (linkDown ? 'DOWN' : 'DESCONHECIDO');
-            const classeEstado = estaAtivo ? 'text-bg-success' : (linkDown ? 'text-bg-danger' : 'text-bg-secondary');
+            const estadoLink = adaptador.desativado ? 'DESATIVADA' : (estaAtivo ? 'UP' : (linkDown ? 'DOWN' : 'DESCONHECIDO'));
+            const classeEstado = adaptador.desativado ? 'text-bg-dark' : (estaAtivo ? 'text-bg-success' : (linkDown ? 'text-bg-danger' : 'text-bg-secondary'));
             const cartao = document.createElement('div');
             cartao.className = 'col-md-6 col-xxl-4';
-            cartao.innerHTML = '<div class="border rounded-3 p-3 h-100"><div class="d-flex justify-content-between gap-2"><strong class="text-break">' + escapar(adaptador.nome) + '</strong><span class="badge ' + classeEstado + '">' + escapar(estadoLink) + '</span></div><div class="small text-muted mt-2">' + escapar(adaptador.descricao) + '</div><div class="font-monospace small mt-2">' + escapar(ip) + '</div><div class="small text-muted">' + (estaAtivo ? 'Ativo' : 'Inativo') + ' · ' + (adaptador.dhcp ? 'DHCP' : 'IP manual') + ' · ' + escapar(gateway) + '</div>' + (adaptador.wifi_ssid ? '<div class="small mt-1"><i class="bi bi-wifi"></i> ' + escapar(adaptador.wifi_ssid) + '</div>' : '') + '<div class="d-flex gap-2 mt-1"><button type="button" class="btn btn-sm btn-link px-0" data-rede-editar>Selecionar para editar</button><button type="button" class="btn btn-sm btn-link px-0" data-rede-copiar>Copiar dados</button></div></div>';
-            cartao.querySelector('[data-rede-editar]').addEventListener('click', () => atualizarFormulario(adaptador));
+            const detalhes = adaptador.desativado
+                ? '<div class="small text-muted mt-2">Placa desativada no Windows.</div>'
+                : '<div class="font-monospace small mt-2">' + escapar(ip) + '</div><div class="small text-muted">' + (estaAtivo ? 'Ativo' : 'Inativo') + ' · ' + (adaptador.dhcp ? 'DHCP' : 'IP manual') + ' · ' + escapar(gateway) + '</div>'
+                    + (adaptador.wifi_ssid ? '<div class="small mt-1"><i class="bi bi-wifi"></i> ' + escapar(adaptador.wifi_ssid) + '</div>' : '')
+                    + (adaptador.wifi_auto_desligado ? '<div class="small mt-1 text-warning"><i class="bi bi-wifi-off"></i> Reconexão automática desligada pelo portal</div>' : '');
+            cartao.innerHTML = '<div class="border rounded-3 p-3 h-100' + (adaptador.desativado ? ' bg-body-tertiary' : '') + '"><div class="d-flex justify-content-between gap-2"><strong class="text-break">' + (adaptador.wifi ? '<i class="bi bi-wifi me-1"></i>' : '<i class="bi bi-ethernet me-1"></i>') + escapar(adaptador.nome) + '</strong><span class="badge ' + classeEstado + '">' + escapar(estadoLink) + '</span></div><div class="small text-muted mt-2">' + escapar(adaptador.descricao) + '</div>' + detalhes + '<div class="d-flex gap-2 mt-1">' + (adaptador.desativado ? '' : '<button type="button" class="btn btn-sm btn-link px-0" data-rede-editar>Selecionar para editar</button>') + '<button type="button" class="btn btn-sm btn-link px-0" data-rede-copiar>Copiar dados</button></div>' + (controleRede ? '<div class="d-flex flex-wrap gap-2 mt-2" data-rede-acoes></div>' : '') + '</div>';
+            cartao.querySelector('[data-rede-editar]')?.addEventListener('click', () => atualizarFormulario(adaptador));
+            cartao.querySelector('[data-rede-acoes]')?.append(...botoesPlaca(adaptador));
+            if (controleRede && adaptador.confirmacao_id && !pendente) {
+                const restante = adaptador.reverte_em ? Math.round((new Date(adaptador.reverte_em).getTime() - Date.now()) / 1000) : 0;
+                if (restante > 0) mostrarPendente(adaptador.confirmacao_id, adaptador.pendencia_descricao, restante);
+            }
             cartao.querySelector('[data-rede-copiar]').addEventListener('click', async () => {
                 const dados = [adaptador.nome, estadoLink, estaAtivo ? 'Ativo' : 'Inativo', adaptador.mac, ip, adaptador.dhcp ? 'DHCP' : 'Manual', adaptador.wifi_ssid || ''].join('\t');
                 try {
@@ -7842,7 +7993,7 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro, tempoLimiteMs
                 }
             });
             lista.append(cartao);
-            if (seletor) seletor.add(new Option(adaptador.nome + ' · ' + ip, String(adaptador.adapter_id)));
+            if (seletor && !adaptador.desativado) seletor.add(new Option(adaptador.nome + ' · ' + ip, String(adaptador.adapter_id)));
         });
         if (!adaptadores.length) {
             lista.innerHTML = '<div class="col-12 text-muted small">O agente não retornou adaptadores TCP/IP.</div>';
@@ -7851,7 +8002,8 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro, tempoLimiteMs
             if (botaoReverter) botaoReverter.disabled = true;
         } else if (seletor) {
             seletor.disabled = false;
-            const selecionado = adaptadores.find(a => String(a.adapter_id) === String(adapterIdAnterior)) || adaptadores[0];
+            const configuraveis = adaptadores.filter(a => !a.desativado);
+            const selecionado = configuraveis.find(a => String(a.adapter_id) === String(adapterIdAnterior)) || configuraveis[0];
             atualizarFormulario(selecionado);
         }
     }
@@ -7893,6 +8045,22 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro, tempoLimiteMs
                 return;
             }
         }
+        if (controleRede) {
+            const adaptador = adaptadores.find(a => String(a.adapter_id) === seletor.value);
+            if (!confirm('Aplicar esta configuração de rede em "' + (adaptador?.nome || '') + '"?' + (adaptador ? avisoQueda(adaptador) : ''))) return;
+            config.janela = janelaConfirmacao();
+            botaoAplicar.disabled = true;
+            try {
+                const resposta = await solicitar('network_apply_confirmar', JSON.stringify(config), 30000);
+                aposAgendar(resposta, 'Configuração IPv4 de "' + (adaptador?.nome || '') + '" alterada');
+            } catch (erro) {
+                status.textContent = erro.message;
+                status.className = 'small text-danger mb-2';
+            } finally {
+                botaoAplicar.disabled = false;
+            }
+            return;
+        }
         if (!confirm('Aplicar esta configuração de rede? A conexão remota pode cair se os dados estiverem incorretos. O agente salvará os valores atuais antes da alteração.')) return;
         botaoAplicar.disabled = true;
         status.textContent = 'Aplicando configuração no Windows...';
@@ -7905,6 +8073,40 @@ async function pedirEAguardarSolicitacao(ativoId, tipo, parametro, tempoLimiteMs
             status.textContent = erro.message;
             status.className = 'small text-danger mb-2';
             botaoAplicar.disabled = false;
+        }
+    });
+    botaoConfirmar?.addEventListener('click', async () => {
+        if (!pendente) return;
+        const restanteMs = Math.max(5000, pendente.expiraEm - Date.now());
+        botaoConfirmar.disabled = true;
+        botaoReverterAgora.disabled = true;
+        document.getElementById('redeConfirmacaoTexto').textContent = 'Confirmando com o agente...';
+        try {
+            const resposta = await solicitar('network_confirm', pendente.id, restanteMs);
+            esconderPendente();
+            status.textContent = resposta?.mensagem || 'Alteração mantida.';
+            status.className = 'small text-success mb-2';
+            await carregarAdaptadores();
+        } catch (erro) {
+            document.getElementById('redeConfirmacaoTexto').textContent = erro.message;
+            botaoConfirmar.disabled = false;
+            botaoReverterAgora.disabled = false;
+        }
+    });
+    botaoReverterAgora?.addEventListener('click', async () => {
+        if (!pendente || !confirm('Voltar agora à configuração anterior?')) return;
+        botaoConfirmar.disabled = true;
+        botaoReverterAgora.disabled = true;
+        try {
+            const resposta = await solicitar('network_rollback', pendente.id, Math.max(15000, pendente.expiraEm - Date.now()));
+            esconderPendente();
+            status.textContent = resposta?.mensagem || 'Configuração anterior restaurada.';
+            status.className = 'small text-success mb-2';
+            setTimeout(() => carregarAdaptadores(), 4000);
+        } catch (erro) {
+            document.getElementById('redeConfirmacaoTexto').textContent = erro.message;
+            botaoConfirmar.disabled = false;
+            botaoReverterAgora.disabled = false;
         }
     });
     botaoReverter?.addEventListener('click', async () => {

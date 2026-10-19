@@ -60,6 +60,8 @@ public class AgenteServico : ServiceBase
         InstanciaPrincipal.GarantirObjetosGlobais();
         // Pasta do agente só de administrador + exclusões do Defender pro MeshAgent (ver ProtecaoInstalacao).
         ProtecaoInstalacao.GarantirEmSegundoPlano();
+        // Reversão automática das alterações de rede do portal: aqui funciona mesmo sem ninguém logado (reboot no meio do prazo).
+        RedeControleService.IniciarVigia();
 
         // Cobre o caso do serviço (re)iniciar com alguém já logado --
         // sem isso, só a PRÓXIMA troca de sessão dispararia o lançamento.

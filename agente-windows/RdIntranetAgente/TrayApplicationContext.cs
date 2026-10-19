@@ -185,6 +185,9 @@ public class TrayApplicationContext : ApplicationContext
         _timerPrincipal = new System.Windows.Forms.Timer { Interval = 60_000 };
         _timerPrincipal.Tick += (s, e) => ConferirPrincipal();
         _timerPrincipal.Start();
+
+        // Alteração de rede do portal sem confirmação no prazo volta sozinha (também roda no serviço).
+        RedeControleService.IniciarVigia();
     }
 
     private readonly System.Windows.Forms.Timer _timerPrincipal;
@@ -492,7 +495,36 @@ public class TrayApplicationContext : ApplicationContext
                         break;
 
                     case "network_list":
-                        await cliente.ResponderAsync(_machineGuid!, solicitacao.Id, NetworkService.ListarAdaptadores());
+                        await cliente.ResponderAsync(_machineGuid!, solicitacao.Id, NetworkService.ListarAdaptadores(incluirDesativados: true));
+                        break;
+
+                    // 1.0.82: com janela de confirmação -- sem "network_confirm" no prazo, o agente volta sozinho (RedeControleService).
+                    case "network_apply_confirmar":
+                        await cliente.ResponderAsync(_machineGuid!, solicitacao.Id, NetworkService.AplicarComConfirmacao(solicitacao.Parametro));
+                        break;
+
+                    case "network_disable":
+                        await cliente.ResponderAsync(_machineGuid!, solicitacao.Id, RedeControleService.Desativar(solicitacao.Parametro));
+                        break;
+
+                    case "network_enable":
+                        await cliente.ResponderAsync(_machineGuid!, solicitacao.Id, RedeControleService.Ativar(solicitacao.Parametro));
+                        break;
+
+                    case "network_wifi_disconnect":
+                        await cliente.ResponderAsync(_machineGuid!, solicitacao.Id, RedeControleService.DesconectarWifi(solicitacao.Parametro));
+                        break;
+
+                    case "network_wifi_connect":
+                        await cliente.ResponderAsync(_machineGuid!, solicitacao.Id, RedeControleService.ReconectarWifi(solicitacao.Parametro));
+                        break;
+
+                    case "network_confirm":
+                        await cliente.ResponderAsync(_machineGuid!, solicitacao.Id, RedeControleService.Confirmar(solicitacao.Parametro));
+                        break;
+
+                    case "network_rollback":
+                        await cliente.ResponderAsync(_machineGuid!, solicitacao.Id, RedeControleService.ReverterAgora(solicitacao.Parametro));
                         break;
 
                     case "network_apply":

@@ -6146,7 +6146,8 @@ class AtivoService
                 // dela -- nao em todo heartbeat, so na resposta da
                 // solicitacao elevada que vai usa-la na hora. Credencial e
                 // POR MAQUINA (ativoId), nao global pra frota.
-                if ($item['elevado']) {
+                // network_*: elevado só pra ir ao agente elevado, não usa credencial.
+                if ($item['elevado'] && !str_starts_with($item['tipo'], 'network_')) {
                     $credencial = $this->credenciaisElevacaoParaAgente($ativoId);
                     if ($credencial !== null) {
                         $item['usuario_elevacao'] = $credencial['usuario'];
@@ -6258,9 +6259,15 @@ class AtivoService
      |---------------------------------------------------------
      */
 
+    private const TIPOS_REDE_COM_CONFIRMACAO = [
+        'network_apply_confirmar', 'network_disable', 'network_enable', 'network_wifi_disconnect', 'network_wifi_connect', 'network_confirm', 'network_rollback',
+    ];
+
     private const TIPOS_SOLICITACAO_VALIDOS = [
         'listar_arquivos', 'listar_processos', 'baixar_arquivo', 'executar_cmd', 'executar_powershell',
         'network_list', 'network_apply', 'network_revert', 'network_ping', 'network_speedtest', 'network_traceroute', 'network_mtr', 'mesh_install',
+        // Agente 1.0.82+: placa/Wi-Fi e IP com janela de confirmação (sem network_confirm no prazo, o agente reverte sozinho).
+        'network_apply_confirmar', 'network_disable', 'network_enable', 'network_wifi_disconnect', 'network_wifi_connect', 'network_confirm', 'network_rollback',
         // Monitor de conexões/processos e firewall (agente 1.0.56+) -- criados por acaoMonitorSeguranca().
         'seguranca_atualizar', 'firewall_bloquear', 'firewall_desbloquear', 'servico_desativar', 'processo_encerrar',
         // Agente 1.0.58+: remediação (inicialização, quarentena, firewall ligado).
@@ -6419,7 +6426,25 @@ class AtivoService
             return ['success' => false, 'message' => 'Informe o caminho do arquivo/comando.'];
         }
 
-        if ($tipo === 'network_apply') {
+        // Mexem na rede da máquina: só agente elevado executa (a sessão de usuário comum nem recebe).
+        if (in_array($tipo, self::TIPOS_REDE_COM_CONFIRMACAO, true)) {
+            $elevado = true;
+        }
+
+        if (in_array($tipo, ['network_disable', 'network_enable', 'network_wifi_disconnect', 'network_wifi_connect'], true)) {
+            $pedido = json_decode((string)$parametro, true);
+            if (!is_array($pedido) || (int)($pedido['adapter_id'] ?? 0) <= 0) {
+                return ['success' => false, 'message' => 'Adaptador de rede inválido.'];
+            }
+            $janela = (int)($pedido['janela'] ?? 120);
+            if ($janela < 60 || $janela > 600) {
+                return ['success' => false, 'message' => 'O prazo de confirmação deve ficar entre 60 e 600 segundos.'];
+            }
+        } elseif (in_array($tipo, ['network_confirm', 'network_rollback'], true) && !preg_match('/^[a-f0-9]{32}$/', (string)$parametro)) {
+            return ['success' => false, 'message' => 'Confirmação inválida.'];
+        }
+
+        if ($tipo === 'network_apply' || $tipo === 'network_apply_confirmar') {
             $config = json_decode((string)$parametro, true);
             if (!is_array($config) || (int)($config['adapter_id'] ?? 0) <= 0) {
                 return ['success' => false, 'message' => 'Adaptador de rede inválido.'];
@@ -6487,6 +6512,21 @@ class AtivoService
 
         if (in_array($tipo, ['network_apply', 'network_revert'], true)) {
             AuditService::registrar('Ativos', 'Configuração de rede', "Solicitação {$tipo} para {$ativo['codigo_patrimonio']} ({$ativo['nome']}).");
+        }
+
+        if (in_array($tipo, self::TIPOS_REDE_COM_CONFIRMACAO, true)) {
+            $descricao = [
+                'network_apply_confirmar' => 'alterar a configuração IPv4',
+                'network_disable' => 'desativar a placa de rede',
+                'network_enable' => 'ativar a placa de rede',
+                'network_wifi_disconnect' => 'desconectar o Wi-Fi (sem reconexão automática)',
+                'network_wifi_connect' => 'reconectar o Wi-Fi',
+                'network_confirm' => 'confirmar a alteração de rede',
+                'network_rollback' => 'reverter a alteração de rede',
+            ][$tipo];
+            $pedidoRede = json_decode((string)$parametro, true);
+            $adapter = is_array($pedidoRede) ? ($pedidoRede['adapter_id'] ?? null) : null;
+            AuditService::registrar('Ativos', 'Configuração de rede', "{$ativo['codigo_patrimonio']} ({$ativo['nome']}): {$solicitadoPor} pediu {$descricao}" . ($adapter ? " (adaptador {$adapter})" : '') . '.');
         }
 
         if ($tipo === 'mesh_install') {

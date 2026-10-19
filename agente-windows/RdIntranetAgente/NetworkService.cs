@@ -52,6 +52,25 @@ public sealed class AdaptadorRedeInfo
 
     [JsonPropertyName("reversao_disponivel")]
     public bool ReversaoDisponivel { get; init; }
+
+    [JsonPropertyName("desativado")]
+    public bool Desativado { get; init; }
+
+    [JsonPropertyName("wifi")]
+    public bool Wifi { get; init; }
+
+    [JsonPropertyName("wifi_auto_desligado")]
+    public bool WifiAutoDesligado { get; init; }
+
+    // Alteração feita pelo portal aguardando confirmação (RedeControleService).
+    [JsonPropertyName("confirmacao_id")]
+    public string? ConfirmacaoId { get; init; }
+
+    [JsonPropertyName("reverte_em")]
+    public string? ReverteEm { get; init; }
+
+    [JsonPropertyName("pendencia_descricao")]
+    public string? PendenciaDescricao { get; init; }
 }
 
 public sealed class NetworkService
@@ -119,7 +138,7 @@ public sealed class NetworkService
     [DllImport("wlanapi.dll")]
     private static extern int WlanCloseHandle(IntPtr clientHandle, IntPtr reserved);
 
-    private sealed class Snapshot
+    public sealed class Snapshot
     {
         public int AdapterId { get; set; }
         public string Mac { get; set; } = "";
@@ -149,6 +168,9 @@ public sealed class NetworkService
 
         [JsonPropertyName("dns")]
         public List<string>? Dns { get; set; }
+
+        [JsonPropertyName("janela")]
+        public int Janela { get; set; } = RedeControleService.JanelaPadraoSegundos;
     }
 
     private sealed class PingSolicitado
@@ -177,10 +199,15 @@ public sealed class NetworkService
     private static readonly string CaminhoSnapshots = Path.Combine(PastaDados, "network-snapshots.json");
     private static readonly object TravaSnapshots = new();
 
-    public static List<AdaptadorRedeInfo> ListarAdaptadores()
+    public static List<AdaptadorRedeInfo> ListarAdaptadores() => ListarAdaptadores(false);
+
+    /// <summary>incluirDesativados: placas desativadas no Windows (somem do Win32_NetworkAdapterConfiguration) -- o portal precisa delas pra reativar.</summary>
+    public static List<AdaptadorRedeInfo> ListarAdaptadores(bool incluirDesativados)
     {
         var resultado = new List<AdaptadorRedeInfo>();
         var snapshots = CarregarSnapshots();
+        var pendencia = incluirDesativados ? RedeControleService.PendenciaAtual() : null;
+        var wifiManual = incluirDesativados ? RedeControleService.InterfacesComWifiManual() : new HashSet<Guid>();
         using var busca = new ManagementObjectSearcher("SELECT * FROM Win32_NetworkAdapterConfiguration WHERE MACAddress IS NOT NULL");
         foreach (ManagementObject adaptador in busca.Get())
         {
@@ -188,16 +215,20 @@ public sealed class NetworkService
             {
                 var id = LerInteiro(adaptador, "Index");
                 var mac = LerTexto(adaptador, "MACAddress") ?? "";
+                // "Index" do WMI não é o índice da interface (InterfaceIndex) -- comparar os dois trocava o nome das placas.
+                var indiceInterface = LerInteiro(adaptador, "InterfaceIndex");
                 var nic = NetworkInterface.GetAllNetworkInterfaces().FirstOrDefault(n =>
                 {
                     if (Guid.TryParse(n.Id, out var guid) && guid == GetGuid(adaptador, "SettingID")) return true;
-                    try { return n.GetIPProperties().GetIPv4Properties()?.Index == id; }
+                    try { return indiceInterface > 0 && n.GetIPProperties().GetIPv4Properties()?.Index == indiceInterface; }
                     catch { return false; }
                 });
                 var ips = LerArray(adaptador, "IPAddress");
                 var indiceIp = Array.FindIndex(ips, e => IPAddress.TryParse(e, out var ip) && ip.AddressFamily == AddressFamily.InterNetwork);
                 var mascaras = LerArray(adaptador, "IPSubnet");
                 var gateways = LerArray(adaptador, "DefaultIPGateway");
+                var settingId = GetGuid(adaptador, "SettingID");
+                var minhaPendencia = pendencia?.AdapterId == id ? pendencia : null;
                 resultado.Add(new AdaptadorRedeInfo
                 {
                     AdapterId = id,
@@ -213,10 +244,16 @@ public sealed class NetworkService
                     Mascara = indiceIp >= 0 && indiceIp < mascaras.Length ? mascaras[indiceIp] : null,
                     Gateway = gateways.FirstOrDefault(),
                     Dns = LerArray(adaptador, "DNSServerSearchOrder").ToList(),
-                    ReversaoDisponivel = snapshots.TryGetValue(id, out var snapshot) && string.Equals(snapshot.Mac, mac, StringComparison.OrdinalIgnoreCase)
+                    ReversaoDisponivel = snapshots.TryGetValue(id, out var snapshot) && string.Equals(snapshot.Mac, mac, StringComparison.OrdinalIgnoreCase),
+                    Wifi = nic != null ? nic.NetworkInterfaceType == NetworkInterfaceType.Wireless80211 : PareceWifi(LerTexto(adaptador, "Description")),
+                    WifiAutoDesligado = wifiManual.Contains(settingId),
+                    ConfirmacaoId = minhaPendencia?.Id,
+                    ReverteEm = minhaPendencia?.ExpiraEm.ToLocalTime().ToString("yyyy-MM-ddTHH:mm:ss"),
+                    PendenciaDescricao = minhaPendencia?.Descricao
                 });
             }
         }
+        if (incluirDesativados) resultado.AddRange(ListarDesativados(pendencia));
         return resultado
             .OrderByDescending(a => a.Ativo)
             .ThenBy(a => a.Nome, StringComparer.OrdinalIgnoreCase)
@@ -232,7 +269,72 @@ public sealed class NetworkService
         return IPAddress.TryParse(valor, out var endereco) ? endereco.ToString() : null;
     }
 
+    private static List<AdaptadorRedeInfo> ListarDesativados(RedeControleService.Pendencia? pendencia)
+    {
+        var lista = new List<AdaptadorRedeInfo>();
+        try
+        {
+            // 22 = dispositivo desativado (Gerenciador de Dispositivos / "Desativar" da conexão).
+            using var busca = new ManagementObjectSearcher("SELECT Index, NetConnectionID, Name, MACAddress FROM Win32_NetworkAdapter WHERE ConfigManagerErrorCode = 22 AND NetConnectionID IS NOT NULL");
+            foreach (ManagementObject placa in busca.Get())
+            {
+                using (placa)
+                {
+                    var id = LerInteiro(placa, "Index");
+                    var minhaPendencia = pendencia?.AdapterId == id ? pendencia : null;
+                    lista.Add(new AdaptadorRedeInfo
+                    {
+                        AdapterId = id,
+                        Nome = LerTexto(placa, "NetConnectionID") ?? $"Adaptador {id}",
+                        Descricao = LerTexto(placa, "Name") ?? "",
+                        Mac = LerTexto(placa, "MACAddress") ?? "",
+                        Status = "Disabled",
+                        Desativado = true,
+                        Wifi = PareceWifi(LerTexto(placa, "Name")) || PareceWifi(LerTexto(placa, "NetConnectionID")),
+                        ConfirmacaoId = minhaPendencia?.Id,
+                        ReverteEm = minhaPendencia?.ExpiraEm.ToLocalTime().ToString("yyyy-MM-ddTHH:mm:ss"),
+                        PendenciaDescricao = minhaPendencia?.Descricao
+                    });
+                }
+            }
+        }
+        catch
+        {
+            // sem WMI de placas -- lista só as ativas
+        }
+        return lista.OrderBy(a => a.Nome, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    private static bool PareceWifi(string? texto) =>
+        !string.IsNullOrEmpty(texto) && System.Text.RegularExpressions.Regex.IsMatch(texto, @"wi-?fi|wireless|wlan|802\.11", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
     public static object Aplicar(string? parametro)
+    {
+        var (atual, aplicar) = PrepararAplicacao(parametro);
+        SalvarSnapshot(atual);
+        aplicar();
+        LogAtividade.Registrar(NivelAtividade.Aviso, "REDE", $"Configuração alterada no adaptador {atual.AdapterId}; snapshot anterior salvo para reversão.");
+        return new { sucesso = true, reversao_disponivel = true, adaptadores = ListarAdaptadores() };
+    }
+
+    /// <summary>Pelo portal: aplica com janela de confirmação (volta sozinho se a máquina parar de responder).</summary>
+    public static object AplicarComConfirmacao(string? parametro)
+    {
+        var janela = RedeControleService.JanelaPadraoSegundos;
+        try { janela = JsonSerializer.Deserialize<ConfiguracaoSolicitada>(parametro ?? "")?.Janela ?? janela; } catch { }
+        return RedeControleService.AplicarIp(parametro, janela, p =>
+        {
+            var (atual, aplicar) = PrepararAplicacao(p);
+            SalvarSnapshot(atual);
+            return (atual, aplicar);
+        });
+    }
+
+    public static void RestaurarSnapshot(Snapshot snapshot) =>
+        AplicarSnapshot(snapshot.AdapterId, snapshot.Mac, snapshot.Dhcp, snapshot.Ip, snapshot.Mascara, snapshot.Gateway, snapshot.Dns);
+
+    /// <summary>Valida o pedido e devolve o retrato atual + a ação que aplica (sem aplicar ainda).</summary>
+    private static (Snapshot Atual, Action Aplicar) PrepararAplicacao(string? parametro)
     {
         var config = JsonSerializer.Deserialize<ConfiguracaoSolicitada>(parametro ?? "")
             ?? throw new InvalidOperationException("Configuração de rede inválida.");
@@ -252,15 +354,11 @@ public sealed class NetworkService
         if (dns.Length > 2 || dns.Any(d => !IPAddress.TryParse(d, out _)))
             throw new InvalidOperationException("Informe até dois servidores DNS válidos.");
 
-        SalvarSnapshot(atual);
-        AplicarSnapshot(config.AdapterId, atual.Mac, config.Dhcp,
+        return (atual, () => AplicarSnapshot(config.AdapterId, atual.Mac, config.Dhcp,
             config.Dhcp ? Array.Empty<string>() : new[] { config.Ip!.Trim() },
             config.Dhcp ? Array.Empty<string>() : new[] { config.Mascara!.Trim() },
             config.Dhcp || string.IsNullOrWhiteSpace(config.Gateway) ? Array.Empty<string>() : new[] { config.Gateway!.Trim() },
-            config.Dhcp ? Array.Empty<string>() : dns);
-
-        LogAtividade.Registrar(NivelAtividade.Aviso, "REDE", $"Configuração alterada no adaptador {config.AdapterId}; snapshot anterior salvo para reversão.");
-        return new { sucesso = true, reversao_disponivel = true, adaptadores = ListarAdaptadores() };
+            config.Dhcp ? Array.Empty<string>() : dns));
     }
 
     public static object Reverter(string? parametro)
@@ -400,7 +498,18 @@ public sealed class NetworkService
         }
     }
 
-    private static string? ObterSsidWifi(Guid interfaceGuid)
+    private static string? ObterSsidWifi(Guid interfaceGuid) => ConsultarConexaoWifi(interfaceGuid, conexao =>
+    {
+        var ssid = conexao.Association.Ssid;
+        if (ssid.Bytes == null || ssid.Length == 0 || ssid.Length > ssid.Bytes.Length) return null;
+        return Encoding.UTF8.GetString(ssid.Bytes, 0, (int)ssid.Length).TrimEnd('\0');
+    });
+
+    /// <summary>Nome do perfil (rede salva) em uso na interface, ou null se desconectada.</summary>
+    public static string? PerfilWifiConectado(Guid interfaceGuid) =>
+        ConsultarConexaoWifi(interfaceGuid, conexao => string.IsNullOrWhiteSpace(conexao.ProfileName) ? null : conexao.ProfileName);
+
+    private static string? ConsultarConexaoWifi(Guid interfaceGuid, Func<WlanConnectionAttributes, string?> ler)
     {
         IntPtr cliente = IntPtr.Zero;
         IntPtr lista = IntPtr.Zero;
@@ -420,10 +529,7 @@ public sealed class NetworkService
                     return null;
                 try
                 {
-                    var conexao = Marshal.PtrToStructure<WlanConnectionAttributes>(dados);
-                    var ssid = conexao.Association.Ssid;
-                    if (ssid.Bytes == null || ssid.Length == 0 || ssid.Length > ssid.Bytes.Length) return null;
-                    return Encoding.UTF8.GetString(ssid.Bytes, 0, (int)ssid.Length).TrimEnd('\0');
+                    return ler(Marshal.PtrToStructure<WlanConnectionAttributes>(dados));
                 }
                 finally
                 {
