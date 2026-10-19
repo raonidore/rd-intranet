@@ -10,6 +10,9 @@ namespace RdIntranetAgente;
 
 public static class CollectorService
 {
+    private static string? _ativacaoCache;
+    private static DateTime _ativacaoCacheEm;
+
     private static readonly string[] SeriaisInvalidos =
     {
         "", "To be filled by O.E.M.", "None", "System Serial Number", "0", "Default string"
@@ -194,24 +197,36 @@ public static class CollectorService
         // simples de Sim/Não. Melhor esforço: em alguns ambientes
         // restritos essa classe WMI pode não responder -- nesse caso fica
         // sem informar em vez de derrubar a coleta inteira.
-        try
+        // Consulta cara: acorda o serviço de licenciamento (sppsvc), que ficava em
+        // ~15% de CPU no TS-DOREMED a cada coleta. Ativação não muda toda hora:
+        // guarda por 24 h.
+        if (_ativacaoCache != null && DateTime.Now - _ativacaoCacheEm < TimeSpan.FromHours(24))
         {
-            using var buscaAtivacao = new ManagementObjectSearcher(
-                "SELECT LicenseStatus FROM SoftwareLicensingProduct WHERE PartialProductKey IS NOT NULL");
-
-            foreach (ManagementObject lic in buscaAtivacao.Get())
-            {
-                if (lic["LicenseStatus"] != null)
-                {
-                    var status = Convert.ToUInt32(lic["LicenseStatus"]);
-                    payload.WindowsAtivado = status == 1 ? "Sim" : "Não";
-                }
-                break;
-            }
+            payload.WindowsAtivado = _ativacaoCache;
         }
-        catch
+        else
         {
-            // segue sem essa informacao
+            try
+            {
+                using var buscaAtivacao = new ManagementObjectSearcher(
+                    "SELECT LicenseStatus FROM SoftwareLicensingProduct WHERE PartialProductKey IS NOT NULL");
+
+                foreach (ManagementObject lic in buscaAtivacao.Get())
+                {
+                    if (lic["LicenseStatus"] != null)
+                    {
+                        var status = Convert.ToUInt32(lic["LicenseStatus"]);
+                        payload.WindowsAtivado = status == 1 ? "Sim" : "Não";
+                        _ativacaoCache = payload.WindowsAtivado;
+                        _ativacaoCacheEm = DateTime.Now;
+                    }
+                    break;
+                }
+            }
+            catch
+            {
+                // segue sem essa informacao
+            }
         }
 
         // ----------------------------------------------------------

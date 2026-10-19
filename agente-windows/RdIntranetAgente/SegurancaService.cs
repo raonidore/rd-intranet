@@ -248,9 +248,17 @@ public sealed class SegurancaService : IDisposable
         var pastas = new List<string>
         {
             Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-            Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
-            Environment.GetFolderPath(Environment.SpecialFolder.CommonDocuments)
+            Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory)
         };
+
+        // C:\Users\Public\Documents é a MESMA pasta pra todas as sessões: só a
+        // instância principal planta/vigia. No TS-DOREMED (19/10/2026) 31 cópias
+        // reabertas juntas recriaram as mesmas iscas, uma viu a outra "apagar",
+        // e o isolamento automático derrubou todas as conexões RDP.
+        if (InstanciaPrincipal.EhPrincipal)
+        {
+            pastas.Add(Environment.GetFolderPath(Environment.SpecialFolder.CommonDocuments));
+        }
 
         if (incluirImagens)
         {

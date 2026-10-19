@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -9,7 +9,7 @@
     <AssemblyName>RdIntranetAgente</AssemblyName>
     <RootNamespace>RdIntranetAgente</RootNamespace>
     <Product>RD Intranet - Agente</Product>
-    <Version>1.0.79</Version>
+    <Version>1.0.81</Version>
     <InvariantGlobalization>true</InvariantGlobalization>
     <ApplicationIcon>assets/icone.ico</ApplicationIcon>
 
@@ -23,7 +23,7 @@
     <PackageReference Include="System.Management" Version="8.0.0" />
     <PackageReference Include="System.Diagnostics.EventLog" Version="8.0.0" />
     <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
-    <!-- DPAPI: guarda o token de login do módulo Chamados criptografado por usuário do Windows (ChamadoAgenteClient). -->
+    <!-- DPAPI: guarda o token de login do mÃ³dulo Chamados criptografado por usuÃ¡rio do Windows (ChamadoAgenteClient). -->
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
   </ItemGroup>
 

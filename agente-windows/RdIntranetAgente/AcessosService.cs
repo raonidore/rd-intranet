@@ -46,15 +46,20 @@ public sealed class AcessosService : IDisposable
     private bool _ambienteConferido;
     private bool _avisouSemPermissao;
 
-    public AcessosService(Func<Config> config, Func<string?> machineGuid)
+    private readonly Func<bool> _deveRodar;
+
+    /// <param name="deveRodar">Na bandeja: só a instância principal da máquina lê o log (ver InstanciaPrincipal).</param>
+    public AcessosService(Func<Config> config, Func<string?> machineGuid, Func<bool>? deveRodar = null)
     {
         _config = config;
         _machineGuid = machineGuid;
+        _deveRodar = deveRodar ?? (() => true);
         _timer = new System.Threading.Timer(_ => Ciclo(), null, TimeSpan.FromSeconds(90), TimeSpan.FromMinutes(5));
     }
 
     private void Ciclo()
     {
+        if (!_deveRodar()) return;
         if (Interlocked.Exchange(ref _executando, 1) == 1) return;
         try
         {

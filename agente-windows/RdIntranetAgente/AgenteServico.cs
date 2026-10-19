@@ -56,6 +56,8 @@ public class AgenteServico : ServiceBase
         // administrador -- então é aqui, e não só em Program.cs, que essa
         // confiança fica garantida em TODA máquina que roda o serviço.
         ConfiancaCertificado.GarantirConfianca();
+        // Mutex da instância principal criado aqui (SYSTEM): usuário comum só consegue abrir, não criar, objeto em Global\.
+        InstanciaPrincipal.GarantirObjetosGlobais();
         // Pasta do agente só de administrador + exclusões do Defender pro MeshAgent (ver ProtecaoInstalacao).
         ProtecaoInstalacao.GarantirEmSegundoPlano();
 

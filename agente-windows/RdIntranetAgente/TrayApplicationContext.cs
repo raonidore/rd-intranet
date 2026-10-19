@@ -57,20 +57,25 @@ public class TrayApplicationContext : ApplicationContext
         // cada tick.
         RecalcularMachineGuid();
 
+        // Uma cópia por sessão de usuário: só a principal faz o trabalho da
+        // máquina (ver InstanciaPrincipal -- servidor de terminal com 17 sessões
+        // ficava em 100% de CPU por causa do agente).
+        InstanciaPrincipal.TentarAssumir();
+
         _seguranca = new SegurancaService(() => _config, () => _machineGuid);
         _seguranca.Detectado += AoDetectarEventoSeguranca;
-        _seguranca.Aplicar(_estado.UltimoModuloSeguranca);
+        _seguranca.Aplicar(InstanciaPrincipal.EhPrincipal ? _estado.UltimoModuloSeguranca : InstanciaPrincipal.LerModuloParaSecundaria());
         AnaliseExecutavel.DefinirAssinantesConfiaveis((_estado.AssinantesConfiaveis ?? new()).Select(a => a.Split('|', 2)).Select(p => (p[0], p.Length > 1 ? p[1] : "")));
         _monitorRede = new MonitorRedeService(() => _config, () => _machineGuid, _seguranca);
         _monitorDesempenho = new MonitorDesempenhoService(() => _config, () => _machineGuid);
-        _acessos = new AcessosService(() => _config, () => _machineGuid);
+        _acessos = new AcessosService(() => _config, () => _machineGuid, () => InstanciaPrincipal.EhPrincipal);
         ProtecaoInstalacao.GarantirEmSegundoPlano();
 
         // Escuta local pra imprimir etiqueta sob demanda (sem esperar o
-        // proximo checkin) -- sempre tenta iniciar; so imprime de verdade
-        // se uma impressora estiver configurada (menu Configuracoes).
+        // proximo checkin) -- so imprime de verdade se uma impressora estiver
+        // configurada (menu Configuracoes). Uma escuta por maquina: a principal.
         _printListener = new PrintListener(() => _config);
-        _printListener.Iniciar();
+        if (InstanciaPrincipal.EhPrincipal) _printListener.Iniciar();
 
         var menu = new ContextMenuStrip { Renderer = new RenderizadorMenuEscuro() };
         // Painel (Visão geral / Segurança / Atividade) -- antes só abria
@@ -164,6 +169,56 @@ public class TrayApplicationContext : ApplicationContext
         if (_config.EstaConfigurado)
         {
             if (Program.EstaElevado()) Config.SalvarCopiaDaMaquina(_config);
+            if (InstanciaPrincipal.EhPrincipal)
+            {
+                _timer.Start();
+                _heartbeatTimer.Start();
+                _ = ColetarEEnviarAsync(manual: false);
+            }
+        }
+
+        if (!InstanciaPrincipal.EhPrincipal)
+        {
+            LogAtividade.Registrar(NivelAtividade.Info, "SESSÃO", "Outra sessão deste computador já está com o agente principal: esta cópia fica só com o ícone, o painel e a proteção das pastas deste usuário.");
+        }
+
+        _timerPrincipal = new System.Windows.Forms.Timer { Interval = 60_000 };
+        _timerPrincipal.Tick += (s, e) => ConferirPrincipal();
+        _timerPrincipal.Start();
+    }
+
+    private readonly System.Windows.Forms.Timer _timerPrincipal;
+
+    /// <summary>A cada minuto: secundária tenta assumir (a principal pode ter saído); principal não elevada cede a vez a uma elevada.</summary>
+    private void ConferirPrincipal()
+    {
+        if (InstanciaPrincipal.EhPrincipal)
+        {
+            if (!InstanciaPrincipal.DeveCeder()) return;
+
+            _timer.Stop();
+            _heartbeatTimer.Stop();
+            _monitorRede.Aplicar(false, 30);
+            _monitorDesempenho.AplicarServidor(false, 5);
+            InstanciaPrincipal.Liberar();
+            _seguranca.Aplicar(InstanciaPrincipal.LerModuloParaSecundaria());
+            LogAtividade.Registrar(NivelAtividade.Info, "SESSÃO", "Agente principal passado para uma sessão de administrador deste computador.");
+            return;
+        }
+
+        if (!InstanciaPrincipal.TentarAssumir())
+        {
+            _seguranca.Aplicar(InstanciaPrincipal.LerModuloParaSecundaria());
+            return;
+        }
+
+        LogAtividade.Registrar(NivelAtividade.Info, "SESSÃO", "Esta sessão assumiu o agente principal do computador.");
+        // Desliga e religa: a principal também vigia a pasta pública (Documentos Públicos).
+        _seguranca.Aplicar(null);
+        _seguranca.Aplicar(_estado.UltimoModuloSeguranca);
+        try { _printListener.Iniciar(); } catch { }
+        if (_config.EstaConfigurado)
+        {
             _timer.Start();
             _heartbeatTimer.Start();
             _ = ColetarEEnviarAsync(manual: false);
@@ -216,7 +271,7 @@ public class TrayApplicationContext : ApplicationContext
         _timer.Interval = IntervaloEmMs();
         _heartbeatTimer.Interval = HeartbeatIntervaloEmMs();
 
-        if (_config.EstaConfigurado)
+        if (_config.EstaConfigurado && InstanciaPrincipal.EhPrincipal)
         {
             _timer.Stop();
             _timer.Start();
@@ -631,6 +686,7 @@ public class TrayApplicationContext : ApplicationContext
                 AplicarNovaChaveApiSeNecessario(resultado.ChaveApiAtual);
                 _estado.UltimoModuloSeguranca = resultado.ModuloSeguranca;
                 _seguranca.Aplicar(resultado.ModuloSeguranca);
+                if (InstanciaPrincipal.EhPrincipal) InstanciaPrincipal.GravarModulo(resultado.ModuloSeguranca);
             }
 
             LogAtividade.Registrar(
@@ -1450,6 +1506,8 @@ del ""%~f0""
     private void Encerrar()
     {
         _timerBandeja.Stop();
+        _timerPrincipal.Stop();
+        InstanciaPrincipal.Liberar();
         _seguranca.Detectado -= AoDetectarEventoSeguranca;
         _monitorRede.Dispose();
         _monitorDesempenho.Dispose();
