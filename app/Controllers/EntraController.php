@@ -416,15 +416,52 @@ class EntraController extends Controller
     {
         AuthMiddleware::checkModulo('entra_usuarios');
         AuthMiddleware::checkModulo('ativos_novo');
+        $this->aplicarRestricao();
+        header('Location: ' . url('/entra/acesso-maquinas'));
+        exit;
+    }
 
+    public function acessoMaquinasAdmins(): void
+    {
+        AuthMiddleware::checkModulo('entra_usuarios');
+        AuthMiddleware::checkModulo('ativos_novo');
+        $this->aplicarAdmins();
+        header('Location: ' . url('/entra/acesso-maquinas'));
+        exit;
+    }
+
+    /** Um clique só: aplica o que estiver marcado no passo 2 (quem entra) e no passo 3 (quem administra). */
+    public function acessoMaquinasSalvar(): void
+    {
+        AuthMiddleware::checkModulo('entra_usuarios');
+        AuthMiddleware::checkModulo('ativos_novo');
+
+        $temEntrada = !empty($_POST['grupos']) || !empty($_POST['usuarios']);
+        $temAdmins = !empty($_POST['admin_grupos']) || !empty($_POST['admin_usuarios']);
+        if (!$temEntrada && !$temAdmins) {
+            NotificationService::error('Marque um grupo no passo 2 (quem entra) e/ou no passo 3 (quem administra).');
+        }
+        // Administradores primeiro: se a restrição for aplicada junto, quem administra já está garantido.
+        if ($temAdmins) {
+            $this->aplicarAdmins();
+        }
+        if ($temEntrada) {
+            $this->aplicarRestricao();
+        }
+
+        header('Location: ' . url('/entra/acesso-maquinas'));
+        exit;
+    }
+
+    private function aplicarRestricao(): void
+    {
         $grupos = array_values(array_filter((array)($_POST['grupos'] ?? []), fn($id) => EntraService::sidDoObjeto((string)$id) !== null));
         $usuarios = array_values(array_filter((array)($_POST['usuarios'] ?? []), fn($id) => EntraService::sidDoObjeto((string)$id) !== null));
         $ativoIds = array_map('intval', $_POST['ativos'] ?? []);
 
         if ((empty($grupos) && empty($usuarios)) || empty($ativoIds)) {
             NotificationService::error('Selecione ao menos um grupo ou usuário e uma máquina.');
-            header('Location: ' . url('/entra/acesso-maquinas'));
-            exit;
+            return;
         }
 
         // Nomes só pra tela/auditoria -- o script usa os objectIds (viram SID).
@@ -449,8 +486,7 @@ class EntraController extends Controller
             NotificationService::error('Restrição NÃO aplicada em ' . implode(', ', $foraDoEntra) . ': a máquina ainda não entrou no Entra, e a restrição trancaria todo mundo (só administradores entrariam).');
         }
         if (!$ativoIds) {
-            header('Location: ' . url('/entra/acesso-maquinas'));
-            exit;
+            return;
         }
 
         // O Windows não traz os grupos do Entra no token de login: libera cada pessoa do grupo.
@@ -459,8 +495,7 @@ class EntraController extends Controller
             NotificationService::error($liberados === null
                 ? 'Não foi possível ler os membros do grupo no Entra -- nada foi aplicado. Tente de novo.'
                 : 'O grupo escolhido não tem nenhum membro -- aplicar trancaria todo mundo (só administradores entrariam).');
-            header('Location: ' . url('/entra/acesso-maquinas'));
-            exit;
+            return;
         }
 
         $enviados = $this->enviarScriptParaAtivos(
@@ -473,8 +508,6 @@ class EntraController extends Controller
             EntraService::registrarAcessoAplicado($ativoId, $autorizados, $_SESSION['usuario']['nome'] ?? null, $liberados);
         }
 
-        header('Location: ' . url('/entra/acesso-maquinas'));
-        exit;
     }
 
     /**
@@ -482,19 +515,15 @@ class EntraController extends Controller
      * Administradores local. O grupo é expandido nas pessoas (o Windows não
      * traz grupo no token) e reaplicado sozinho quando muda.
      */
-    public function acessoMaquinasAdmins(): void
+    private function aplicarAdmins(): void
     {
-        AuthMiddleware::checkModulo('entra_usuarios');
-        AuthMiddleware::checkModulo('ativos_novo');
-
         $grupos = array_values(array_filter((array)($_POST['admin_grupos'] ?? []), fn($id) => EntraService::sidDoObjeto((string)$id) !== null));
         $usuarios = array_values(array_filter((array)($_POST['admin_usuarios'] ?? []), fn($id) => EntraService::sidDoObjeto((string)$id) !== null));
         $ativoIds = array_map('intval', $_POST['ativos'] ?? []);
 
         if ((empty($grupos) && empty($usuarios)) || empty($ativoIds)) {
             NotificationService::error('Escolha o grupo (ou pessoas) de administradores e ao menos uma máquina.');
-            header('Location: ' . url('/entra/acesso-maquinas'));
-            exit;
+            return;
         }
 
         $nomesGrupos = array_column($this->service->listarGruposSeguranca(), 'displayName', 'id');
@@ -507,8 +536,7 @@ class EntraController extends Controller
         $pessoas = $this->service->usuariosAutorizados($autorizados);
         if ($pessoas === null || $pessoas === []) {
             NotificationService::error($pessoas === null ? 'Não foi possível ler os membros do grupo no Entra -- nada foi aplicado.' : 'O grupo escolhido não tem nenhum membro.');
-            header('Location: ' . url('/entra/acesso-maquinas'));
-            exit;
+            return;
         }
 
         $sids = array_map([EntraService::class, 'sidDoObjeto'], $pessoas);
@@ -528,8 +556,6 @@ class EntraController extends Controller
             ? NotificationService::success("Enviado pra {$enviados} máquina(s): " . count($pessoas) . ' pessoa(s) como administrador. O resultado aparece no histórico de cada ativo.')
             : NotificationService::error('Não foi possível enviar pra nenhuma máquina selecionada.');
 
-        header('Location: ' . url('/entra/acesso-maquinas'));
-        exit;
     }
 
     /** Tira só quem o portal colocou como administrador (o Administrador interno e os papéis do Entra ficam). */

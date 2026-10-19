@@ -947,6 +947,7 @@ $router->get('/entra/acesso-maquinas', [EntraController::class, 'acessoMaquinas'
 $router->post('/entra/acesso-maquinas/aplicar', [EntraController::class, 'acessoMaquinasAplicar']);
 $router->post('/entra/acesso-maquinas/remover', [EntraController::class, 'acessoMaquinasRemover']);
 $router->post('/entra/acesso-maquinas/admins', [EntraController::class, 'acessoMaquinasAdmins']);
+$router->post('/entra/acesso-maquinas/salvar', [EntraController::class, 'acessoMaquinasSalvar']);
 $router->post('/entra/acesso-maquinas/admins/remover', [EntraController::class, 'acessoMaquinasAdminsRemover']);
 $router->post('/entra/acesso-maquinas/desativar-contas', [EntraController::class, 'acessoMaquinasDesativarContas']);
 $router->post('/entra/acesso-maquinas/reativar-contas', [EntraController::class, 'acessoMaquinasReativarContas']);

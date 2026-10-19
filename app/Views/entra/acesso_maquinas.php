@@ -105,7 +105,7 @@ $listaAvulsos = function (string $campo, string $classe) use ($usuarios): string
 
                 <div class="pop-step"><div class="pop-step-num">2</div><div>
                     <div class="pop-step-title"><i class="bi bi-door-open"></i> Quem pode entrar</div>
-                    <div class="pop-step-text">Marque o grupo da unidade (ex.: <code>NTO - Acesso às Máquinas</code>) e clique em <strong>Aplicar restrição</strong>.
+                    <div class="pop-step-text">Marque o grupo da unidade (ex.: <code>NTO - Acesso às Máquinas</code>) e clique em <strong>Salvar nas máquinas marcadas</strong>.
                         Para criar o grupo ou mudar quem está nele, use <strong>Novo grupo</strong> / <strong>Membros</strong> ali mesmo.
                         Quem estiver fora do grupo recebe no Windows: <em>"O método de entrada que você está tentando usar não é permitido"</em>.</div>
                     <div class="pop-callout"><i class="bi bi-shield-fill-check"></i><div>Administradores da máquina sempre entram. Máquina fora do Entra é recusada pelo portal -- lá a restrição trancaria todo mundo.</div></div>
@@ -113,7 +113,7 @@ $listaAvulsos = function (string $campo, string $classe) use ($usuarios): string
 
                 <div class="pop-step"><div class="pop-step-num">3</div><div>
                     <div class="pop-step-title"><i class="bi bi-person-gear"></i> Quem administra</div>
-                    <div class="pop-step-text">Marque o grupo da TI (ex.: <code>TI - Administradores NTO</code>) e clique em <strong>Definir administradores</strong>.
+                    <div class="pop-step-text">Marque o grupo da TI (ex.: <code>TI - Administradores NTO</code>) e clique em <strong>Salvar nas máquinas marcadas</strong> (pode ser junto com o passo 2).
                         O portal só tira quem ele mesmo colocou -- o Administrador interno (senha no LAPS) e os administradores globais ficam sempre.</div>
                 </div></div>
 
@@ -231,9 +231,6 @@ $listaAvulsos = function (string $campo, string $classe) use ($usuarios): string
                         <?= $listaGrupos('grupos', 'campo-autorizado') ?>
                         <?= $listaAvulsos('usuarios', 'campo-autorizado') ?>
                         <div class="mt-3 d-flex flex-wrap gap-2">
-                            <button type="submit" formaction="<?= url('/entra/acesso-maquinas/aplicar') ?>" class="btn btn-primary btn-sm" id="botaoAplicarRestricao">
-                                <i class="bi bi-shield-check"></i> Aplicar restrição
-                            </button>
                             <button type="submit" formaction="<?= url('/entra/acesso-maquinas/remover') ?>" formnovalidate class="btn btn-outline-secondary btn-sm" id="botaoRemoverRestricao">
                                 <i class="bi bi-shield-slash"></i> Remover restrição
                             </button>
@@ -255,15 +252,22 @@ $listaAvulsos = function (string $campo, string $classe) use ($usuarios): string
                         <?= $listaGrupos('admin_grupos', 'campo-admin') ?>
                         <?= $listaAvulsos('admin_usuarios', 'campo-admin') ?>
                         <div class="mt-3 d-flex flex-wrap gap-2">
-                            <button type="submit" formaction="<?= url('/entra/acesso-maquinas/admins') ?>" formnovalidate class="btn btn-primary btn-sm" id="botaoAplicarAdmins">
-                                <i class="bi bi-person-gear"></i> Definir administradores
-                            </button>
                             <button type="submit" formaction="<?= url('/entra/acesso-maquinas/admins/remover') ?>" formnovalidate class="btn btn-outline-secondary btn-sm" id="botaoRemoverAdmins">
                                 <i class="bi bi-person-dash"></i> Retirar os definidos pelo portal
                             </button>
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mt-3 border-start border-primary border-4">
+            <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div class="small text-muted">Aplica de uma vez, nas máquinas marcadas no passo 1, o que estiver marcado no passo 2 (quem entra) e no passo 3 (quem administra).
+                    Pode marcar só um dos dois. Máquinas fora do Entra ficam de fora da restrição.</div>
+                <button type="submit" formaction="<?= url('/entra/acesso-maquinas/salvar') ?>" formnovalidate class="btn btn-primary" id="botaoSalvarAcesso">
+                    <i class="bi bi-check2-circle"></i> Salvar nas máquinas marcadas
+                </button>
             </div>
         </div>
 
@@ -312,23 +316,27 @@ $listaAvulsos = function (string $campo, string $classe) use ($usuarios): string
         return true;
     }
 
-    document.getElementById('botaoAplicarRestricao').addEventListener('click', function (e) {
-        if (!exigir(e, '.campo-autorizado', 'Marque o grupo (ou pessoas) no passo 2 e ao menos uma máquina no passo 1.')) return;
+    document.getElementById('botaoSalvarAcesso').addEventListener('click', function (e) {
+        const entrada = algumMarcado('.campo-autorizado');
+        const admins = algumMarcado('.campo-admin');
+        if (!marcadas().length) { e.preventDefault(); alert('Marque ao menos uma máquina no passo 1.'); return; }
+        if (!entrada && !admins) { e.preventDefault(); alert('Marque um grupo no passo 2 (quem entra) e/ou no passo 3 (quem administra).'); return; }
         const fora = marcadas().filter(c => c.dataset.entra !== '1').map(c => c.dataset.nome);
         const dentro = marcadas().length - fora.length;
-        if (!dentro) { e.preventDefault(); alert('Nenhuma das máquinas marcadas está no Entra (' + fora.join(', ') + '). Ingresse no Entra antes -- senão a restrição trancaria todo mundo.'); return; }
-        const aviso = fora.length ? '\n\nSerão IGNORADAS por estarem fora do Entra: ' + fora.join(', ') + '.' : '';
-        if (!confirm('Aplicar a restrição em ' + dentro + ' máquina(s)? Só as pessoas do grupo (e os administradores) vão conseguir entrar.' + aviso)) e.preventDefault();
+        const linhas = [];
+        if (admins) linhas.push('- Quem administra: ' + marcadas().length + ' máquina(s).');
+        if (entrada) linhas.push(dentro
+            ? '- Quem pode entrar: ' + dentro + ' máquina(s) -- só o grupo (e os administradores) entram.' + (fora.length ? ' Ignoradas por estarem fora do Entra: ' + fora.join(', ') + '.' : '')
+            : '- Quem pode entrar: NENHUMA (todas as marcadas estão fora do Entra: ' + fora.join(', ') + ').');
+        if (!confirm('Salvar nas máquinas marcadas?
+
+' + linhas.join('
+'))) e.preventDefault();
     });
 
     document.getElementById('botaoRemoverRestricao').addEventListener('click', function (e) {
         if (!exigir(e, null, 'Marque ao menos uma máquina no passo 1.')) return;
         if (!confirm('Remover a restrição das máquinas marcadas? Qualquer conta volta a conseguir entrar.')) e.preventDefault();
-    });
-
-    document.getElementById('botaoAplicarAdmins').addEventListener('click', function (e) {
-        if (!exigir(e, '.campo-admin', 'Marque o grupo (ou pessoas) no passo 3 e ao menos uma máquina no passo 1.')) return;
-        if (!confirm('Tornar essas pessoas administradoras das ' + marcadas().length + ' máquina(s) marcada(s)?')) e.preventDefault();
     });
 
     document.getElementById('botaoRemoverAdmins').addEventListener('click', function (e) {
