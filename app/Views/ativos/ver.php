@@ -7590,9 +7590,10 @@ import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js'))
             display.style.zIndex = '0';
             corpo.appendChild(display);
 
-            const tunnel = new Guacamole.WebSocketTunnel(
-                'wss://' + location.host + '/rdp-ws?token=' + encodeURIComponent(resultado.token)
-            );
+            // Token vai como parâmetro do connect(): o WebSocketTunnel monta "url?" + dados.
+            // Com o token já na URL e connect() vazio, chegava "token=...?undefined" e a
+            // ponte não decifrava ("Token validation failed" -- Patrimonial, 19/10/2026).
+            const tunnel = new Guacamole.WebSocketTunnel('wss://' + location.host + '/rdp-ws');
             const client = new Guacamole.Client(tunnel);
             clienteAtivo = client;
             botaoCtrlAltDel.classList.remove('d-none');
@@ -7635,7 +7636,7 @@ import Guacamole from <?= json_encode(url('/assets/js/guacamole-common.min.js'))
             const guacDisplay = client.getDisplay();
             const elementoDisplay = guacDisplay.getElement();
             display.appendChild(elementoDisplay);
-            client.connect();
+            client.connect('token=' + encodeURIComponent(resultado.token));
 
             // O cursor remoto já é desenhado pelo próprio Guacamole (é a
             // "seta" que se move na tela do RDP) -- sem esconder o cursor
