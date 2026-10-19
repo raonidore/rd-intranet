@@ -190,6 +190,9 @@ $diasSecret = $secretVence ? (int)floor((strtotime($secretVence) - time()) / 864
                     <li><a href="<?= url('/entra/acesso-maquinas') ?>">Entra &rarr; Acesso às Máquinas</a>: aplique o grupo da unidade nas máquinas que já entraram no Entra.
                         O Windows não traz os grupos do Entra no login, então o portal libera <strong>cada pessoa do grupo</strong> na máquina e reaplica sozinho quando
                         alguém entra ou sai do grupo (na hora pela tela Grupos; em até 15 min se mudarem direto no Entra). Administradores locais sempre continuam entrando.</li>
+                    <li>Na mesma tela, <strong>Administradores destas máquinas</strong>: um grupo da TI (ex.: <em>TI - Administradores NTO</em>) vira administrador
+                        das máquinas marcadas -- tudo pelo portal, sem mexer em papéis no Entra. Reaplica sozinho quando o grupo muda e só tira quem o portal colocou.
+                        Boa prática para a auditoria: a TI usa uma conta só de administração (ex.: <code>nome.admin@empresa</code>) separada da conta do dia a dia.</li>
                     <li><strong>Teste</strong> com uma conta dentro e outra fora do grupo, usando o e-mail completo (<code>pessoa@empresa</code>) em "Outro usuário":
                         quem está fora recebe <em>"O método de entrada que você está tentando usar não é permitido"</em>.</li>
                     <li>Depois que o LAPS estiver ativo (passo 10), desative as contas locais antigas na mesma tela de Acesso às Máquinas.</li>
