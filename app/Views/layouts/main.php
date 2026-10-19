@@ -154,6 +154,26 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
             margin:2px 12px 2px 12px;
         }
         .menu-sub a { padding-left:34px; font-size:13px; }
+
+        /* Pesquisa do menu -- fixa no topo enquanto o menu rola. */
+        .rd-busca-menu { position:sticky; top:0; z-index:5; padding:10px 12px 12px; background:linear-gradient(#111827 82%, rgba(17,24,39,0)); }
+        .rd-busca-campo { position:relative; display:flex; align-items:center; background:rgba(255,255,255,.05); border:1px solid rgba(148,163,184,.22); border-radius:11px; transition:border-color .15s, box-shadow .15s, background .15s; overflow:hidden; }
+        .rd-busca-campo::after { content:''; position:absolute; left:0; right:0; bottom:0; height:1px; background:linear-gradient(90deg, transparent, var(--rd-primary, #3b82f6), transparent); opacity:0; transition:opacity .2s; }
+        .rd-busca-campo:focus-within { background:rgba(255,255,255,.08); border-color:var(--rd-primary, #3b82f6); box-shadow:0 0 0 3px rgba(59,130,246,.18), 0 0 18px rgba(59,130,246,.15); }
+        .rd-busca-campo:focus-within::after { opacity:1; }
+        .rd-busca-campo > i { color:#64748b; padding:0 4px 0 11px; font-size:13px; transition:color .15s; }
+        .rd-busca-campo:focus-within > i { color:#93c5fd; }
+        .rd-busca-campo input { flex:1; min-width:0; background:transparent; border:0; outline:0; color:#e5e7eb; font-size:13px; padding:9px 6px; }
+        .rd-busca-campo input::placeholder { color:#64748b; }
+        .rd-busca-atalho { font:600 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color:#94a3b8; border:1px solid rgba(148,163,184,.3); border-bottom-width:2px; border-radius:5px; padding:3px 5px; margin-right:8px; white-space:nowrap; }
+        .rd-busca-limpar { display:none; background:none; border:0; color:#94a3b8; padding:0 10px; font-size:15px; line-height:1; cursor:pointer; }
+        .rd-busca-ativa .rd-busca-limpar { display:block; }
+        .rd-busca-ativa .rd-busca-atalho { display:none; }
+        .rd-busca-info { font:500 10.5px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; color:#64748b; letter-spacing:.04em; padding:6px 4px 0; min-height:18px; }
+        .rd-busca-oculto { display:none !important; }
+        .sidebar a.rd-busca-sel { background:#1e3a5f; color:#fff; box-shadow:inset 3px 0 0 var(--rd-primary, #3b82f6); }
+        .sidebar mark.rd-busca-marca { background:rgba(59,130,246,.28); color:#fff; padding:0 1px; border-radius:3px; }
+        .rd-busca-vazio { color:#64748b; font-size:12.5px; padding:14px 24px; display:none; }
         .content {
             margin-left:260px;
             padding:28px;
@@ -183,6 +203,17 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
             </div>
         <?php endif; ?>
     </div>
+
+    <div class="rd-busca-menu" id="rdBuscaMenu">
+        <div class="rd-busca-campo">
+            <i class="bi bi-search"></i>
+            <input type="text" id="rdBuscaMenuCampo" placeholder="Pesquisar no menu..." autocomplete="off" spellcheck="false" aria-label="Pesquisar no menu">
+            <span class="rd-busca-atalho" title="Atalho: Ctrl+K ou /">Ctrl K</span>
+            <button type="button" class="rd-busca-limpar" id="rdBuscaMenuLimpar" title="Limpar (Esc)">&times;</button>
+        </div>
+        <div class="rd-busca-info" id="rdBuscaMenuInfo"></div>
+    </div>
+    <div class="rd-busca-vazio" id="rdBuscaMenuVazio"><i class="bi bi-emoji-neutral me-1"></i> Nada encontrado no menu.</div>
 
     <a href="<?= url('/dashboard') ?>" class="<?= in_array($uriAtual, ['/', '/dashboard'], true) ? 'active' : '' ?>">
         <i class="bi bi-speedometer2 me-2"></i> Dashboard
@@ -1534,6 +1565,128 @@ function atualizarAlertaGeralChamados() {
 })();
 </script>
 <?php endif; ?>
+
+<script>
+// Pesquisa do menu lateral: filtra na hora (sem acento/maiúscula), abre os grupos com
+// resultado, destaca o trecho encontrado; setas + Enter navegam; Ctrl+K ou "/" focam.
+(function () {
+    const sidebar = document.querySelector('.sidebar');
+    const campo = document.getElementById('rdBuscaMenuCampo');
+    if (!sidebar || !campo) return;
+    const caixa = campo.closest('.rd-busca-campo');
+    const info = document.getElementById('rdBuscaMenuInfo');
+    const vazio = document.getElementById('rdBuscaMenuVazio');
+    const limpar = document.getElementById('rdBuscaMenuLimpar');
+
+    const semAcento = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    const toggleDe = c => sidebar.querySelector('[data-bs-target="#' + c.id + '"]');
+    const grupos = el => {
+        const nomes = [];
+        for (let c = el.closest('.collapse'); c; c = c.parentElement.closest('.collapse')) {
+            const t = toggleDe(c);
+            if (t) nomes.push(t.textContent);
+        }
+        return nomes.join(' ');
+    };
+
+    const itens = Array.from(sidebar.querySelectorAll('a'))
+        .filter(a => !a.closest('.rd-busca-menu') && a.textContent.trim() !== '')
+        .map(a => ({ a, html: a.innerHTML, chave: semAcento(a.textContent + ' ' + grupos(a)).replace(/\s+/g, ' ') }));
+    const collapses = Array.from(sidebar.querySelectorAll('.collapse'));
+    const inicial = collapses.map(c => ({ c, aberto: c.classList.contains('show'), t: toggleDe(c) }));
+    const soltos = Array.from(sidebar.querySelectorAll('.menu-section'));
+    let selecionado = -1;
+
+    function destacar(a, palavras) {
+        const caminhante = document.createTreeWalker(a, NodeFilter.SHOW_TEXT);
+        const nos = [];
+        while (caminhante.nextNode()) nos.push(caminhante.currentNode);
+        nos.forEach(no => {
+            const texto = no.nodeValue;
+            // texto sem acento com o mapa de posições de volta pro original
+            let norm = '', mapa = [];
+            for (let i = 0; i < texto.length; i++) { const n = semAcento(texto[i]); for (const ch of n) { norm += ch; mapa.push(i); } }
+            const trechos = [];
+            palavras.forEach(p => { const i = norm.indexOf(p); if (i >= 0) trechos.push([mapa[i], mapa[i + p.length - 1] + 1]); });
+            if (!trechos.length) return;
+            trechos.sort((x, y) => x[0] - y[0]);
+            const frag = document.createDocumentFragment();
+            let pos = 0;
+            trechos.forEach(([ini, fim]) => {
+                if (ini < pos) return;
+                frag.appendChild(document.createTextNode(texto.slice(pos, ini)));
+                const m = document.createElement('mark'); m.className = 'rd-busca-marca'; m.textContent = texto.slice(ini, fim);
+                frag.appendChild(m); pos = fim;
+            });
+            frag.appendChild(document.createTextNode(texto.slice(pos)));
+            no.parentNode.replaceChild(frag, no);
+        });
+    }
+
+    function visiveis() { return itens.filter(i => !i.a.classList.contains('rd-busca-oculto')); }
+
+    function marcar(indice) {
+        const lista = visiveis();
+        itens.forEach(i => i.a.classList.remove('rd-busca-sel'));
+        if (!lista.length) { selecionado = -1; return; }
+        selecionado = (indice + lista.length) % lista.length;
+        lista[selecionado].a.classList.add('rd-busca-sel');
+        lista[selecionado].a.scrollIntoView({ block: 'nearest' });
+    }
+
+    function filtrar() {
+        const palavras = semAcento(campo.value.trim()).split(/\s+/).filter(Boolean);
+        caixa.classList.toggle('rd-busca-ativa', palavras.length > 0);
+        itens.forEach(i => { i.a.innerHTML = i.html; i.a.classList.remove('rd-busca-sel', 'rd-busca-oculto'); });
+
+        if (!palavras.length) {
+            inicial.forEach(({ c, aberto, t }) => {
+                c.classList.remove('rd-busca-oculto'); c.classList.toggle('show', aberto);
+                if (t) { t.classList.remove('rd-busca-oculto'); t.setAttribute('aria-expanded', aberto ? 'true' : 'false'); }
+            });
+            soltos.forEach(s => s.classList.remove('rd-busca-oculto'));
+            info.textContent = ''; vazio.style.display = 'none'; selecionado = -1;
+            return;
+        }
+
+        let total = 0;
+        itens.forEach(i => {
+            const ok = palavras.every(p => i.chave.includes(p));
+            i.a.classList.toggle('rd-busca-oculto', !ok);
+            if (ok) { total++; destacar(i.a, palavras); }
+        });
+        // grupo com resultado abre; sem resultado some (de dentro pra fora, por causa dos subgrupos)
+        inicial.slice().reverse().forEach(({ c, t }) => {
+            const tem = Array.from(c.querySelectorAll('a')).some(a => !a.classList.contains('rd-busca-oculto'));
+            c.classList.toggle('show', tem); c.classList.toggle('rd-busca-oculto', !tem);
+            if (t) { t.classList.toggle('rd-busca-oculto', !tem); t.setAttribute('aria-expanded', tem ? 'true' : 'false'); }
+        });
+        soltos.forEach(s => s.classList.add('rd-busca-oculto'));
+        info.textContent = total ? total + (total === 1 ? ' resultado' : ' resultados') + '  ·  ↑↓ Enter' : '';
+        vazio.style.display = total ? 'none' : 'block';
+        marcar(0);
+    }
+
+    campo.addEventListener('input', filtrar);
+    campo.addEventListener('keydown', e => {
+        if (e.key === 'ArrowDown') { e.preventDefault(); marcar(selecionado + 1); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); marcar(selecionado - 1); }
+        else if (e.key === 'Enter') {
+            const lista = visiveis();
+            if (campo.value.trim() && lista.length) { e.preventDefault(); lista[Math.max(0, selecionado)].a.click(); }
+        } else if (e.key === 'Escape') { campo.value = ''; filtrar(); campo.blur(); }
+    });
+    limpar.addEventListener('click', () => { campo.value = ''; filtrar(); campo.focus(); });
+
+    document.addEventListener('keydown', e => {
+        const digitando = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) || document.activeElement.isContentEditable;
+        if (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') || (e.key === '/' && !digitando)) {
+            e.preventDefault(); campo.focus(); campo.select();
+        }
+    });
+    if (/Mac/i.test(navigator.platform)) document.querySelector('.rd-busca-atalho').textContent = '⌘ K';
+})();
+</script>
 
 </body>
 </html>
