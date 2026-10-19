@@ -31,7 +31,7 @@ public static class RedeControleService
     {
         public string Id { get; set; } = "";
         public string Tipo { get; set; } = ""; // desativar | wifi_desconectar | ip
-        public int AdapterId { get; set; }
+        public int AdapterId { get; set; } = -1;
         public string Mac { get; set; } = "";
         public string NomeConexao { get; set; } = "";
         public Guid InterfaceGuid { get; set; }
@@ -46,7 +46,7 @@ public static class RedeControleService
     private sealed class PedidoAdaptador
     {
         [JsonPropertyName("adapter_id")]
-        public int AdapterId { get; set; }
+        public int AdapterId { get; set; } = -1;
 
         [JsonPropertyName("janela")]
         public int Janela { get; set; } = JanelaPadraoSegundos;
@@ -330,7 +330,7 @@ public static class RedeControleService
         PedidoAdaptador? pedido;
         try { pedido = JsonSerializer.Deserialize<PedidoAdaptador>(parametro ?? ""); }
         catch { pedido = null; }
-        if (pedido == null || pedido.AdapterId <= 0) throw new InvalidOperationException("Adaptador inválido.");
+        if (pedido == null || pedido.AdapterId < 0) throw new InvalidOperationException("Adaptador inválido.");
         return pedido;
     }
 

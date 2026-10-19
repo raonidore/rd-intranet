@@ -6433,7 +6433,7 @@ class AtivoService
 
         if (in_array($tipo, ['network_disable', 'network_enable', 'network_wifi_disconnect', 'network_wifi_connect'], true)) {
             $pedido = json_decode((string)$parametro, true);
-            if (!is_array($pedido) || (int)($pedido['adapter_id'] ?? 0) <= 0) {
+            if (!is_array($pedido) || !is_numeric($pedido['adapter_id'] ?? null) || (int)$pedido['adapter_id'] < 0) {
                 return ['success' => false, 'message' => 'Adaptador de rede inválido.'];
             }
             $janela = (int)($pedido['janela'] ?? 120);
@@ -6446,7 +6446,7 @@ class AtivoService
 
         if ($tipo === 'network_apply' || $tipo === 'network_apply_confirmar') {
             $config = json_decode((string)$parametro, true);
-            if (!is_array($config) || (int)($config['adapter_id'] ?? 0) <= 0) {
+            if (!is_array($config) || !is_numeric($config['adapter_id'] ?? null) || (int)$config['adapter_id'] < 0) {
                 return ['success' => false, 'message' => 'Adaptador de rede inválido.'];
             }
             if (empty($config['dhcp'])) {
@@ -6468,7 +6468,7 @@ class AtivoService
                     }
                 }
             }
-        } elseif ($tipo === 'network_revert' && (!ctype_digit((string)$parametro) || (int)$parametro <= 0)) {
+        } elseif ($tipo === 'network_revert' && !ctype_digit((string)$parametro)) {
             return ['success' => false, 'message' => 'Adaptador inválido para reversão.'];
         } elseif ($tipo === 'network_mtr') {
             // MTR aceita nome além de IP (o agente resolve) -- só letras, números, ponto e hífen.

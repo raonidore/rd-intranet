@@ -363,7 +363,7 @@ public sealed class NetworkService
 
     public static object Reverter(string? parametro)
     {
-        if (!int.TryParse(parametro, out var adapterId) || adapterId <= 0)
+        if (!int.TryParse(parametro, out var adapterId) || adapterId < 0)
             throw new InvalidOperationException("Adaptador inválido para reversão.");
         var snapshots = CarregarSnapshots();
         if (!snapshots.TryGetValue(adapterId, out var snapshot))
