@@ -303,6 +303,10 @@ use App\Services\EntraService;
                                         <?php else: ?>
                                             <br><span class="text-warning"><i class="bi bi-unlock"></i> Sem restrição pelo portal</span>
                                         <?php endif; ?>
+                                        <?php if ($adm = $admins[(int)$c['id']] ?? null): ?>
+                                            <br><span class="text-primary"><i class="bi bi-person-gear"></i> Administradores: <?= htmlspecialchars(implode(', ', array_column($adm['autorizados'], 'nome'))) ?></span>
+                                            <span class="text-muted">(<?= count($adm['sids']) ?> pessoa(s), <?= date('d/m H:i', strtotime($adm['aplicado_em'])) ?>)</span>
+                                        <?php endif; ?>
                                     </label>
                                 </div>
                             <?php endforeach; ?>
@@ -319,6 +323,50 @@ use App\Services\EntraService;
             <button type="submit" formaction="<?= url('/entra/acesso-maquinas/remover') ?>" formnovalidate class="btn btn-outline-secondary" id="botaoRemoverRestricao">
                 <i class="bi bi-shield-slash"></i> Remover restrição (liberar login pra todos de novo)
             </button>
+        </div>
+
+        <div class="card border-0 shadow-sm mt-4">
+            <div class="card-header bg-white">
+                <strong><i class="bi bi-person-gear"></i> Administradores destas máquinas</strong>
+                <span class="text-muted small d-block">
+                    Quem da TI pode instalar programas e administrar as máquinas marcadas acima. Escolha um grupo (ex.: <em>TI - Administradores NTO</em>):
+                    o portal coloca cada pessoa dele no grupo Administradores da máquina e reaplica sozinho quando alguém entra ou sai do grupo.
+                    Só mexe em quem o próprio portal colocou -- o Administrador interno (LAPS) e os administradores globais do Entra ficam sempre.
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="text-muted small fw-semibold text-uppercase mb-1">Grupo de administradores</div>
+                        <?php foreach ($grupos as $g): ?>
+                            <div class="form-check">
+                                <input class="form-check-input campo-admin" type="checkbox" name="admin_grupos[]" value="<?= htmlspecialchars($g['id']) ?>" id="adm-grupo-<?= htmlspecialchars($g['id']) ?>">
+                                <label class="form-check-label small" for="adm-grupo-<?= htmlspecialchars($g['id']) ?>"><?= htmlspecialchars($g['displayName']) ?> <span class="text-muted">(<?= count($g['membros']) ?>)</span></label>
+                            </div>
+                        <?php endforeach; ?>
+                        <?php if (empty($grupos)): ?><p class="text-muted small mb-0">Crie o grupo em <a href="<?= url('/entra/grupos') ?>">Grupos</a>.</p><?php endif; ?>
+                    </div>
+                    <div class="col-md-6">
+                        <details>
+                            <summary class="text-muted small fw-semibold text-uppercase">Pessoas avulsas</summary>
+                            <?php foreach ($usuarios as $u): ?>
+                                <div class="form-check">
+                                    <input class="form-check-input campo-admin" type="checkbox" name="admin_usuarios[]" value="<?= htmlspecialchars($u['id']) ?>" id="adm-usuario-<?= htmlspecialchars($u['id']) ?>">
+                                    <label class="form-check-label small" for="adm-usuario-<?= htmlspecialchars($u['id']) ?>"><?= htmlspecialchars($u['displayName'] ?? '') ?> <span class="text-muted font-monospace">(<?= htmlspecialchars($u['userPrincipalName'] ?? '') ?>)</span></label>
+                                </div>
+                            <?php endforeach; ?>
+                        </details>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <button type="submit" formaction="<?= url('/entra/acesso-maquinas/admins') ?>" formnovalidate class="btn btn-outline-primary btn-sm" id="botaoAplicarAdmins">
+                        <i class="bi bi-person-gear"></i> Definir administradores nas máquinas selecionadas
+                    </button>
+                    <button type="submit" formaction="<?= url('/entra/acesso-maquinas/admins/remover') ?>" formnovalidate class="btn btn-outline-secondary btn-sm" id="botaoRemoverAdmins">
+                        <i class="bi bi-person-dash"></i> Retirar os administradores definidos pelo portal
+                    </button>
+                </div>
+            </div>
         </div>
 
         <div class="card border-0 shadow-sm mt-4">
@@ -370,6 +418,28 @@ use App\Services\EntraService;
             return;
         }
         if (!confirm('Aplicar a restrição de login nas máquinas selecionadas? Só os membros dos grupos/usuários marcados (+ administradores) vão conseguir entrar nelas a partir de agora.')) {
+            e.preventDefault();
+        }
+    });
+
+    document.getElementById('botaoAplicarAdmins').addEventListener('click', function (e) {
+        if (!algumMarcado('.campo-admin') || !algumMarcado('.campo-ativo-restricao')) {
+            e.preventDefault();
+            alert('Escolha o grupo (ou pessoas) de administradores e ao menos uma máquina.');
+            return;
+        }
+        if (!confirm('Tornar essas pessoas administradoras das máquinas selecionadas? Elas poderão instalar programas e mudar configurações do Windows.')) {
+            e.preventDefault();
+        }
+    });
+
+    document.getElementById('botaoRemoverAdmins').addEventListener('click', function (e) {
+        if (!algumMarcado('.campo-ativo-restricao')) {
+            e.preventDefault();
+            alert('Selecione ao menos uma máquina.');
+            return;
+        }
+        if (!confirm('Retirar das máquinas selecionadas os administradores que o portal definiu? O Administrador interno e os administradores globais continuam.')) {
             e.preventDefault();
         }
     });

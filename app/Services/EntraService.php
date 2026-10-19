@@ -799,7 +799,128 @@ class EntraService
             }
         }
 
+        // Administradores definidos pelo portal: mesma regra.
+        foreach (self::adminsAplicados() as $ativoId => $linha) {
+            $usuarios = $this->usuariosAutorizados($linha['autorizados']);
+            if ($usuarios === null || self::hashUsuarios($usuarios) === ($linha['usuarios_hash'] ?? '')) {
+                continue;
+            }
+            $sids = array_map([self::class, 'sidDoObjeto'], $usuarios);
+            $r = (new AtivoService())->solicitarListagem($ativoId, 'executar_powershell', self::gerarScriptAdministradores($sids, $linha['sids']), $por, true);
+            if ($r['success'] ?? false) {
+                self::registrarAdminsAplicado($ativoId, $linha['autorizados'], $por, $usuarios);
+                AuditService::registrar('Microsoft Entra', 'Administradores reaplicados', "Máquina #{$ativoId}: membros do grupo mudaram -- " . count($usuarios) . ' administrador(es).');
+                $atualizadas++;
+            }
+        }
+
         return $atualizadas;
+    }
+
+    /*
+     | Administradores destas máquinas -- quem da TI vira administrador local.
+     | Mesmo modelo da restrição de login: grupo expandido nas pessoas, cada
+     | uma posta no grupo Administradores pelo SID (NetLocalGroupAddMembers, que
+     | não precisa resolver nome -- conta do Entra que nunca logou ali não tem
+     | nome local). Só sai do grupo quem o PORTAL colocou (coluna sids).
+     */
+
+    /** @return array<int,array{autorizados:array,sids:array,aplicado_por:?string,aplicado_em:string}> por ativo_id */
+    public static function adminsAplicados(): array
+    {
+        $linhas = [];
+        foreach (\App\Core\Database::connection()->query('SELECT * FROM entra_admins_maquinas WHERE autorizados IS NOT NULL')->fetchAll(\PDO::FETCH_ASSOC) as $l) {
+            $l['autorizados'] = json_decode($l['autorizados'], true) ?: [];
+            $l['sids'] = json_decode($l['sids'] ?? '[]', true) ?: [];
+            $linhas[(int)$l['ativo_id']] = $l;
+        }
+
+        return $linhas;
+    }
+
+    /** SIDs que o portal colocou como administradores na máquina (pra saber quem pode tirar). */
+    public static function sidsAdminsDoPortal(int $ativoId): array
+    {
+        $stmt = \App\Core\Database::connection()->prepare('SELECT sids FROM entra_admins_maquinas WHERE ativo_id = ?');
+        $stmt->execute([$ativoId]);
+
+        return json_decode((string)$stmt->fetchColumn() ?: '[]', true) ?: [];
+    }
+
+    /** @param array|null $autorizados null = administradores do portal removidos */
+    public static function registrarAdminsAplicado(int $ativoId, ?array $autorizados, ?string $por, array $usuarios = []): void
+    {
+        $sids = array_values(array_filter(array_map([self::class, 'sidDoObjeto'], $usuarios)));
+        \App\Core\Database::connection()->prepare(
+            'INSERT INTO entra_admins_maquinas (ativo_id, autorizados, usuarios_hash, sids, aplicado_por, aplicado_em) VALUES (?, ?, ?, ?, ?, NOW())
+             ON DUPLICATE KEY UPDATE autorizados = VALUES(autorizados), usuarios_hash = VALUES(usuarios_hash), sids = VALUES(sids), aplicado_por = VALUES(aplicado_por), aplicado_em = NOW()'
+        )->execute([
+            $ativoId,
+            $autorizados === null ? null : json_encode($autorizados, JSON_UNESCAPED_UNICODE),
+            $autorizados === null ? null : self::hashUsuarios($usuarios),
+            json_encode($sids),
+            $por,
+        ]);
+    }
+
+    /**
+     * Script: põe no grupo Administradores (S-1-5-32-544) os SIDs de $desejados e tira os
+     * de $remover que não estão em $desejados. Confere relendo o grupo.
+     */
+    public static function gerarScriptAdministradores(array $sidsDesejados, array $sidsRemover): string
+    {
+        $valido = fn($s) => preg_match('/^S-1-12-1(-\d+){4}$/', (string)$s) === 1;
+        $desejados = array_values(array_unique(array_filter($sidsDesejados, $valido)));
+        $remover = array_values(array_diff(array_unique(array_filter($sidsRemover, $valido)), $desejados));
+
+        $template = <<<'PS'
+$desejados = @(__DESEJADOS__)
+$remover = @(__REMOVER__)
+Add-Type -Namespace RdAdm -Name Api -MemberDefinition @'
+[DllImport("netapi32.dll", CharSet=CharSet.Unicode)] public static extern int NetLocalGroupAddMembers(string server, string grupo, int nivel, ref IntPtr membros, int total);
+[DllImport("netapi32.dll", CharSet=CharSet.Unicode)] public static extern int NetLocalGroupDelMembers(string server, string grupo, int nivel, ref IntPtr membros, int total);
+'@
+$grupo = (New-Object Security.Principal.SecurityIdentifier 'S-1-5-32-544').Translate([Security.Principal.NTAccount]).Value.Split('\')[1]
+
+function Membros {
+    $g = [ADSI]"WinNT://./$grupo,group"
+    @($g.psbase.Invoke('Members') | ForEach-Object {
+        $b = $_.GetType().InvokeMember('objectSid', 'GetProperty', $null, $_, $null)
+        (New-Object Security.Principal.SecurityIdentifier ($b, 0)).Value
+    })
+}
+
+function Alterar([string]$sid, [bool]$adicionar) {
+    $s = New-Object Security.Principal.SecurityIdentifier $sid
+    $bytes = New-Object byte[] $s.BinaryLength
+    $s.GetBinaryForm($bytes, 0)
+    $ptr = [Runtime.InteropServices.Marshal]::AllocHGlobal($bytes.Length)
+    try {
+        [Runtime.InteropServices.Marshal]::Copy($bytes, 0, $ptr, $bytes.Length)
+        # [ref]$ptr = vetor de 1 LOCALGROUP_MEMBERS_INFO_0 (a estrutura é só o ponteiro pro SID).
+        if ($adicionar) { [RdAdm.Api]::NetLocalGroupAddMembers($null, $grupo, 0, [ref]$ptr, 1) } else { [RdAdm.Api]::NetLocalGroupDelMembers($null, $grupo, 0, [ref]$ptr, 1) }
+    } finally { [Runtime.InteropServices.Marshal]::FreeHGlobal($ptr) }
+}
+
+$atuais = Membros
+$erros = @()
+foreach ($sid in $desejados) { if ($atuais -notcontains $sid) { $r = Alterar $sid $true; if ($r -ne 0 -and $r -ne 1378) { $erros += "$sid (incluir: $r)" } } }
+foreach ($sid in $remover) { if ($atuais -contains $sid) { $r = Alterar $sid $false; if ($r -ne 0 -and $r -ne 1377) { $erros += "$sid (tirar: $r)" } } }
+
+$depois = Membros
+$faltando = $desejados | Where-Object { $depois -notcontains $_ }
+$sobrando = $remover | Where-Object { $depois -contains $_ }
+if ($faltando -or $sobrando -or $erros) {
+    Write-Output "ERRO: administradores nao ficaram como esperado. Faltando: $($faltando -join ', ') | Sobrando: $($sobrando -join ', ') | $($erros -join '; ')"
+    exit 1
+}
+Write-Output "Administradores atualizados -- $($desejados.Count) conta(s) do Entra definida(s) pelo portal."
+Write-Output "Grupo Administradores agora: $($depois -join ', ')"
+PS;
+
+        $lista = fn(array $sids) => implode(',', array_map(fn($s) => "'{$s}'", $sids));
+
+        return str_replace(['__DESEJADOS__', '__REMOVER__'], [$lista($desejados), $lista($remover)], $template);
     }
 
     /** @return array<int,array{autorizados:?array,aplicado_por:?string,aplicado_em:string}> por ativo_id */

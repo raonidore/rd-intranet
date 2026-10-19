@@ -315,6 +315,7 @@ class EntraController extends Controller
             'grupos' => $grupos,
             'computadores' => $computadores,
             'aplicados' => EntraService::acessosAplicados(),
+            'admins' => EntraService::adminsAplicados(),
         ]);
     }
 
@@ -420,6 +421,89 @@ class EntraController extends Controller
         foreach ($enviados as $ativoId) {
             EntraService::registrarAcessoAplicado($ativoId, $autorizados, $_SESSION['usuario']['nome'] ?? null, $liberados);
         }
+
+        header('Location: ' . url('/entra/acesso-maquinas'));
+        exit;
+    }
+
+    /**
+     * Administradores destas máquinas: grupo/pessoas do Entra no grupo
+     * Administradores local. O grupo é expandido nas pessoas (o Windows não
+     * traz grupo no token) e reaplicado sozinho quando muda.
+     */
+    public function acessoMaquinasAdmins(): void
+    {
+        AuthMiddleware::checkModulo('entra_usuarios');
+        AuthMiddleware::checkModulo('ativos_novo');
+
+        $grupos = array_values(array_filter((array)($_POST['admin_grupos'] ?? []), fn($id) => EntraService::sidDoObjeto((string)$id) !== null));
+        $usuarios = array_values(array_filter((array)($_POST['admin_usuarios'] ?? []), fn($id) => EntraService::sidDoObjeto((string)$id) !== null));
+        $ativoIds = array_map('intval', $_POST['ativos'] ?? []);
+
+        if ((empty($grupos) && empty($usuarios)) || empty($ativoIds)) {
+            NotificationService::error('Escolha o grupo (ou pessoas) de administradores e ao menos uma máquina.');
+            header('Location: ' . url('/entra/acesso-maquinas'));
+            exit;
+        }
+
+        $nomesGrupos = array_column($this->service->listarGruposSeguranca(), 'displayName', 'id');
+        $nomesUsuarios = array_column($this->service->listarUsuarios(), 'userPrincipalName', 'id');
+        $autorizados = array_merge(
+            array_map(fn($id) => ['id' => $id, 'nome' => $nomesGrupos[$id] ?? $id, 'tipo' => 'grupo'], $grupos),
+            array_map(fn($id) => ['id' => $id, 'nome' => $nomesUsuarios[$id] ?? $id, 'tipo' => 'usuario'], $usuarios)
+        );
+
+        $pessoas = $this->service->usuariosAutorizados($autorizados);
+        if ($pessoas === null || $pessoas === []) {
+            NotificationService::error($pessoas === null ? 'Não foi possível ler os membros do grupo no Entra -- nada foi aplicado.' : 'O grupo escolhido não tem nenhum membro.');
+            header('Location: ' . url('/entra/acesso-maquinas'));
+            exit;
+        }
+
+        $sids = array_map([EntraService::class, 'sidDoObjeto'], $pessoas);
+        $ativoService = new AtivoService();
+        $por = $_SESSION['usuario']['nome'] ?? null;
+        $enviados = 0;
+        foreach ($ativoIds as $ativoId) {
+            $script = EntraService::gerarScriptAdministradores($sids, EntraService::sidsAdminsDoPortal($ativoId));
+            if ($ativoService->solicitarListagem($ativoId, 'executar_powershell', $script, $por, true)['success'] ?? false) {
+                EntraService::registrarAdminsAplicado($ativoId, $autorizados, $por, $pessoas);
+                $enviados++;
+            }
+        }
+
+        AuditService::registrar('Microsoft Entra', 'Administradores das máquinas', "{$enviados} máquina(s) -- " . implode(', ', array_column($autorizados, 'nome')) . ' (' . count($pessoas) . ' pessoa(s)).');
+        $enviados > 0
+            ? NotificationService::success("Enviado pra {$enviados} máquina(s): " . count($pessoas) . ' pessoa(s) como administrador. O resultado aparece no histórico de cada ativo.')
+            : NotificationService::error('Não foi possível enviar pra nenhuma máquina selecionada.');
+
+        header('Location: ' . url('/entra/acesso-maquinas'));
+        exit;
+    }
+
+    /** Tira só quem o portal colocou como administrador (o Administrador interno e os papéis do Entra ficam). */
+    public function acessoMaquinasAdminsRemover(): void
+    {
+        AuthMiddleware::checkModulo('entra_usuarios');
+        AuthMiddleware::checkModulo('ativos_novo');
+
+        $ativoIds = array_map('intval', $_POST['ativos'] ?? []);
+        $ativoService = new AtivoService();
+        $por = $_SESSION['usuario']['nome'] ?? null;
+        $enviados = 0;
+        foreach ($ativoIds as $ativoId) {
+            $sids = EntraService::sidsAdminsDoPortal($ativoId);
+            if (!$sids) {
+                continue;
+            }
+            if ($ativoService->solicitarListagem($ativoId, 'executar_powershell', EntraService::gerarScriptAdministradores([], $sids), $por, true)['success'] ?? false) {
+                EntraService::registrarAdminsAplicado($ativoId, null, $por);
+                $enviados++;
+            }
+        }
+
+        AuditService::registrar('Microsoft Entra', 'Administradores das máquinas removidos', "{$enviados} máquina(s).");
+        NotificationService::success($enviados ? "Administradores definidos pelo portal retirados de {$enviados} máquina(s)." : 'Nenhuma máquina selecionada tinha administradores definidos pelo portal.');
 
         header('Location: ' . url('/entra/acesso-maquinas'));
         exit;
