@@ -37,6 +37,13 @@ internal static class Program
             return;
         }
 
+        var indiceAtividade = Array.FindIndex(args, a => a.Equals("--teste-tela-atividade", StringComparison.OrdinalIgnoreCase));
+        if (indiceAtividade >= 0)
+        {
+            MainForm.PrintsAtividade(args.Length > indiceAtividade + 1 ? args[indiceAtividade + 1] : Path.Combine(Path.GetTempPath(), "rd-tela-atividade"));
+            return;
+        }
+
         var indicePrints = Array.FindIndex(args, a => a.Equals("--teste-tela-seguranca", StringComparison.OrdinalIgnoreCase));
         if (indicePrints >= 0)
         {

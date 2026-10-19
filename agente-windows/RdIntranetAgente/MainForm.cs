@@ -37,6 +37,9 @@ public sealed class MainForm : Form
     private readonly CartaoInfo _cartaoTrafego;
     private readonly CartaoInfo _cartaoServico;
     private readonly ListView _listaAtividade;
+    private readonly SeletorSegmentado _abasAtividade;
+    private readonly Label _resumoAtividade;
+    private string _abaAtividade = "importante";
 
     public MainForm(
         AppState estado,
@@ -173,11 +176,19 @@ public sealed class MainForm : Form
 
         _paginaAtividade = CriarPagina();
         var tituloAtividade = CriarTitulo("Atividade", "Registro recente do que o agente executou.");
+        // Importante (padrão) separa a rotina de check-in do que pede atenção: falhas, segurança, trilha, configuração.
+        _abasAtividade = new SeletorSegmentado { Height = 40 };
+        _abasAtividade.DefinirOpcoes(new[]
+        {
+            ("importante", "Importante", Tema.Acento), ("conexao", "Check-in e conexão", Tema.Acento), ("tudo", "Tudo", Tema.Acento)
+        }, "importante");
+        _abasAtividade.SelecaoAlterada += (s, e) => { _abaAtividade = _abasAtividade.ChaveSelecionada ?? "importante"; AtualizarAtividade(); };
+        _resumoAtividade = new Label { Height = 28, ForeColor = Tema.TextoSecundario, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true };
         _listaAtividade = CriarLista(new[] { ("Quando", 145), ("Nível", 85), ("Categoria", 115), ("Registro", 430) });
         _listaAtividade.Location = new Point(0, 86);
         _listaAtividade.Size = new Size(720, 500);
         _listaAtividade.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-        Empilhar(_paginaAtividade, _listaAtividade, tituloAtividade, Espaco(8));
+        Empilhar(_paginaAtividade, _listaAtividade, tituloAtividade, Espaco(4), _abasAtividade, _resumoAtividade);
 
         _paginaNetwork = new NetworkPagina();
         _paginaDesempenho = new DesempenhoPagina(monitorDesempenho);
@@ -533,9 +544,78 @@ public sealed class MainForm : Form
         if (_paginaSeguranca.Visible) _paginaSeguranca.Atualizar();
     }
 
+    /// <summary>Modo de teste com prints (--teste-tela-atividade): abre a Atividade numa aba.</summary>
+    internal void MostrarAtividade(string aba)
+    {
+        var botao = _navegacao.Controls.OfType<Button>().First(b => b.Text == "Atividade");
+        MostrarPagina(_paginaAtividade, botao);
+        _abasAtividade.DefinirOpcoes(new[]
+        {
+            ("importante", "Importante", Tema.Acento), ("conexao", "Check-in e conexão", Tema.Acento), ("tudo", "Tudo", Tema.Acento)
+        }, aba);
+        _abaAtividade = aba;
+        AtualizarAtividade();
+    }
+
+    internal static void PrintsAtividade(string pasta)
+    {
+        Directory.CreateDirectory(pasta);
+        Application.EnableVisualStyles();
+        // Um dia de rotina (check-in a cada 5 min) misturado com o que importa.
+        for (var i = 0; i < 70; i++) LogAtividade.Registrar(NivelAtividade.Sucesso, "CHECKIN", "Checkin concluído com sucesso.");
+        LogAtividade.Registrar(NivelAtividade.Aviso, "HEARTBEAT", "Falha ao enviar heartbeat ao servidor.");
+        LogAtividade.Registrar(NivelAtividade.Erro, "CHECKIN", "Falha no checkin: A tarefa foi cancelada.");
+        LogAtividade.Registrar(NivelAtividade.Seguranca, "SEGURANÇA", "Arquivo-isca alterado em C:\\Users\\Public\\Documents -- possível ransomware.");
+        LogAtividade.Registrar(NivelAtividade.Aviso, "REDE", "Wi-Fi \"Wi-Fi\" desconectado (sem reconexão automática) pelo portal; volta sozinho às 14:02:10 se não houver confirmação.");
+        LogAtividade.Registrar(NivelAtividade.Sucesso, "CONFIG", "Configurações salvas pelo painel.");
+        LogAtividade.Registrar(NivelAtividade.Info, "TRILHA", "Logon de MAURILIO\\recepcao registrado.");
+        for (var i = 0; i < 10; i++) LogAtividade.Registrar(NivelAtividade.Sucesso, "CHECKIN", "Checkin concluído com sucesso.");
+
+        var seguranca = new SegurancaService(() => new Config(), () => null);
+        using var monitor = new MonitorRedeService(() => new Config(), () => null, seguranca);
+        using var monitorDesempenho = new MonitorDesempenhoService(() => new Config(), () => null);
+        using var janela = new MainForm(new AppState(), seguranca, () => 1, () => Task.CompletedTask, () => Task.CompletedTask,
+            () => new Config(), _ => { }, () => Task.CompletedTask, monitor, monitorDesempenho) { ShowInTaskbar = false };
+        janela.Show();
+        foreach (var aba in new[] { "importante", "conexao", "tudo" })
+        {
+            janela.MostrarAtividade(aba);
+            var ate = DateTime.Now.AddSeconds(1.5);
+            while (DateTime.Now < ate) { Application.DoEvents(); Thread.Sleep(50); }
+            using var imagem = new Bitmap(janela.Width, janela.Height);
+            janela.DrawToBitmap(imagem, new Rectangle(Point.Empty, janela.Size));
+            imagem.Save(Path.Combine(pasta, $"atividade-{aba}.png"));
+        }
+    }
+
     private void AtualizarAtividade()
     {
-        var entradas = LogAtividade.Recentes(300);
+        var todas = LogAtividade.Recentes(600);
+        var conexao = todas.Where(LogAtividade.EhConexao).ToList();
+        var entradas = (_abaAtividade switch
+        {
+            "conexao" => conexao,
+            "tudo" => todas,
+            _ => todas.Where(e => !LogAtividade.EhConexao(e)).ToList()
+        }).Take(300).ToList();
+
+        if (_abaAtividade == "conexao")
+        {
+            var ultimoOk = conexao.FirstOrDefault(e => e.Categoria == "CHECKIN" && e.Nivel == NivelAtividade.Sucesso);
+            var falhas24h = conexao.Count(e => e.Nivel is NivelAtividade.Erro or NivelAtividade.Aviso && e.Quando >= DateTime.Now.AddHours(-24));
+            _resumoAtividade.Text = (ultimoOk != null ? $"Último check-in com sucesso: {ultimoOk.Quando:dd/MM HH:mm:ss}" : "Nenhum check-in com sucesso desde que o agente abriu")
+                + $"   ·   Falhas de comunicação nas últimas 24 h: {falhas24h}";
+            _resumoAtividade.ForeColor = falhas24h > 0 ? Tema.Perigo : Tema.TextoSecundario;
+        }
+        else
+        {
+            var problemas = entradas.Count(e => e.Nivel is NivelAtividade.Erro or NivelAtividade.Seguranca);
+            _resumoAtividade.Text = _abaAtividade == "importante"
+                ? (entradas.Count == 0 ? "Nada além da rotina de check-in até agora." : $"{entradas.Count} registro(s) fora da rotina de check-in" + (problemas > 0 ? $"   ·   {problemas} erro(s) ou alerta(s) de segurança" : ""))
+                : $"{entradas.Count} registro(s), incluindo a rotina de check-in.";
+            _resumoAtividade.ForeColor = Tema.TextoSecundario;
+        }
+
         _listaAtividade.BeginUpdate();
         _listaAtividade.Items.Clear();
         foreach (var entrada in entradas)
@@ -544,7 +624,7 @@ public sealed class MainForm : Form
             item.SubItems.Add(entrada.Nivel.ToString().ToUpperInvariant());
             item.SubItems.Add(entrada.Categoria);
             item.SubItems.Add(entrada.Mensagem);
-            item.ForeColor = entrada.Nivel == NivelAtividade.Erro ? Tema.Perigo : entrada.Nivel == NivelAtividade.Sucesso ? Tema.Sucesso : Tema.Texto;
+            item.ForeColor = entrada.Nivel == NivelAtividade.Erro ? Tema.Perigo : entrada.Nivel is NivelAtividade.Seguranca or NivelAtividade.Aviso ? Tema.Alerta : entrada.Nivel == NivelAtividade.Sucesso ? Tema.Sucesso : Tema.Texto;
             _listaAtividade.Items.Add(item);
         }
         _listaAtividade.EndUpdate();

@@ -26,7 +26,13 @@ public static class LogAtividade
     private const long TamanhoMaximoArquivo = 1024 * 1024;
 
     private static readonly object Trava = new();
+    // Rotina (check-in/heartbeat) em lista própria: um check-in a cada 5 min enchia as 300
+    // posições em um dia e empurrava pra fora as falhas e os avisos de segurança.
     private static readonly LinkedList<EntradaAtividade> Entradas = new();
+    private static readonly LinkedList<EntradaAtividade> EntradasRotina = new();
+
+    /// <summary>Check-in e heartbeat (com sucesso ou falha) -- aba "Check-in e conexão" da Atividade.</summary>
+    public static bool EhConexao(EntradaAtividade e) => e.Categoria is "CHECKIN" or "HEARTBEAT";
 
     /// <summary>Disparado em qualquer thread -- quem atualiza UI precisa fazer Invoke.</summary>
     public static event Action<EntradaAtividade>? Adicionada;
@@ -41,10 +47,11 @@ public static class LogAtividade
 
         lock (Trava)
         {
-            Entradas.AddFirst(entrada);
-            while (Entradas.Count > MaximoEmMemoria)
+            var lista = EhConexao(entrada) ? EntradasRotina : Entradas;
+            lista.AddFirst(entrada);
+            while (lista.Count > MaximoEmMemoria)
             {
-                Entradas.RemoveLast();
+                lista.RemoveLast();
             }
 
             GravarEmArquivo(entrada);
@@ -64,7 +71,7 @@ public static class LogAtividade
     {
         lock (Trava)
         {
-            return Entradas.Take(limite).ToList();
+            return Entradas.Concat(EntradasRotina).OrderByDescending(e => e.Quando).Take(limite).ToList();
         }
     }
 
