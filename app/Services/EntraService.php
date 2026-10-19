@@ -1611,6 +1611,8 @@ PS;
             'odata' => '#microsoft.graph.windows10GeneralConfiguration',
             'nome' => 'Restrições, periféricos e Defender',
             'icone' => 'bi-sliders',
+            'cor' => '#0d6efd',
+            'itens' => ['Senha e bloqueio de tela', 'Pen drive, câmera, Bluetooth, print', 'Contas pessoais e privacidade', 'Microsoft Defender'],
             'resumo' => 'Senha e bloqueio de tela, contas pessoais, USB/pen drive, câmera, Bluetooth, captura de tela, privacidade, Microsoft Store e Defender.',
             'secoes' => [
                 'Aparência' => [
@@ -1676,6 +1678,8 @@ PS;
             'odata' => '#microsoft.graph.windowsUpdateForBusinessConfiguration',
             'nome' => 'Windows Update',
             'icone' => 'bi-arrow-repeat',
+            'cor' => '#198754',
+            'itens' => ['Instalar e reiniciar fora do expediente', 'Office atualizado junto', 'Prazos para instalar', 'Adiar versão nova do Windows'],
             'resumo' => 'Atualizações automáticas fora do expediente, prazo para reiniciar e adiamento de versões -- evidência de gestão de vulnerabilidades.',
             'secoes' => [
                 'Instalação' => [
@@ -1703,6 +1707,8 @@ PS;
             'odata' => '#microsoft.graph.windows10EndpointProtectionConfiguration',
             'nome' => 'Login, firewall e BitLocker',
             'icone' => 'bi-shield-lock',
+            'cor' => '#6f42c1',
+            'itens' => ['Aviso legal antes de entrar', 'Não mostrar o último usuário', 'Firewall ligado', 'BitLocker com chave no Entra'],
             'resumo' => 'Tela de login (aviso legal, não mostrar o último usuário), bloqueio por inatividade, firewall e criptografia do disco com a chave guardada no Entra.',
             'secoes' => [
                 'Tela de login' => [

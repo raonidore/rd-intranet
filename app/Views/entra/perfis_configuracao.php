@@ -14,18 +14,46 @@ use App\Services\EntraService;
         <small class="text-muted"><a href="<?= url('/entra/dashboard') ?>"><i class="bi bi-arrow-left"></i> Dashboard</a></small>
     </div>
     <?php if ($configurado): ?>
-        <div class="dropdown">
-            <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown"><i class="bi bi-plus-lg"></i> Novo perfil</button>
-            <ul class="dropdown-menu dropdown-menu-end" style="max-width:420px">
-                <?php foreach (EntraService::TIPOS_PERFIL as $chaveTipo => $defTipo): ?>
-                    <li><a class="dropdown-item text-wrap" href="<?= url('/entra/perfis-configuracao/novo') ?>?tipo=<?= $chaveTipo ?>">
-                        <i class="bi <?= $defTipo['icone'] ?>"></i> <strong><?= htmlspecialchars($defTipo['nome']) ?></strong>
-                        <div class="small text-muted"><?= htmlspecialchars($defTipo['resumo']) ?></div>
-                    </a></li>
-                <?php endforeach; ?>
-            </ul>
-        </div>
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalNovoPerfil">
+            <i class="bi bi-plus-lg"></i> Novo perfil
+        </button>
     <?php endif; ?>
+</div>
+
+<style>
+.cartao-tipo { border:1px solid var(--bs-border-color); border-radius:12px; padding:1.1rem; height:100%; display:flex; flex-direction:column; transition:transform .15s ease, box-shadow .15s ease; text-decoration:none; color:inherit; }
+.cartao-tipo:hover { transform:translateY(-2px); box-shadow:0 8px 20px rgba(0,0,0,.08); color:inherit; }
+.cartao-tipo .icone { width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:1.35rem; color:#fff; margin-bottom:.75rem; }
+.cartao-tipo ul { padding-left:1.1rem; margin-bottom:1rem; }
+.cartao-tipo .mt-auto .btn { width:100%; }
+</style>
+
+<div class="modal fade" id="modalNovoPerfil" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-plus-lg"></i> Novo perfil -- escolha o tipo</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <?php foreach (EntraService::TIPOS_PERFIL as $chaveTipo => $defTipo): ?>
+                        <div class="col-md-4">
+                            <a class="cartao-tipo" href="<?= url('/entra/perfis-configuracao/novo') ?>?tipo=<?= $chaveTipo ?>">
+                                <div class="icone" style="background:<?= $defTipo['cor'] ?>"><i class="bi <?= $defTipo['icone'] ?>"></i></div>
+                                <h6 class="mb-2"><?= htmlspecialchars($defTipo['nome']) ?></h6>
+                                <ul class="small text-muted">
+                                    <?php foreach ($defTipo['itens'] as $item): ?><li><?= htmlspecialchars($item) ?></li><?php endforeach; ?>
+                                </ul>
+                                <div class="mt-auto"><span class="btn btn-sm btn-outline-primary">Criar este perfil <i class="bi bi-arrow-right"></i></span></div>
+                            </a>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+                <p class="small text-muted mt-3 mb-0"><i class="bi bi-info-circle"></i> Dá para ter mais de um perfil de cada tipo. O perfil só vale depois de "Aplicar a todos os dispositivos" e só chega às máquinas inscritas no Intune.</p>
+            </div>
+        </div>
+    </div>
 </div>
 
 <div class="card border-0 shadow-sm mb-3">
