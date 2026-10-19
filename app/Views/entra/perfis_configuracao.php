@@ -3,6 +3,7 @@ ob_start();
 
 use App\Components\Alert;
 use App\Components\Badge;
+use App\Services\EntraService;
 ?>
 
 <?= Alert::flash() ?>
@@ -13,9 +14,17 @@ use App\Components\Badge;
         <small class="text-muted"><a href="<?= url('/entra/dashboard') ?>"><i class="bi bi-arrow-left"></i> Dashboard</a></small>
     </div>
     <?php if ($configurado): ?>
-        <a href="<?= url('/entra/perfis-configuracao/novo') ?>" class="btn btn-primary">
-            <i class="bi bi-plus-lg"></i> Novo perfil
-        </a>
+        <div class="dropdown">
+            <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown"><i class="bi bi-plus-lg"></i> Novo perfil</button>
+            <ul class="dropdown-menu dropdown-menu-end" style="max-width:420px">
+                <?php foreach (EntraService::TIPOS_PERFIL as $chaveTipo => $defTipo): ?>
+                    <li><a class="dropdown-item text-wrap" href="<?= url('/entra/perfis-configuracao/novo') ?>?tipo=<?= $chaveTipo ?>">
+                        <i class="bi <?= $defTipo['icone'] ?>"></i> <strong><?= htmlspecialchars($defTipo['nome']) ?></strong>
+                        <div class="small text-muted"><?= htmlspecialchars($defTipo['resumo']) ?></div>
+                    </a></li>
+                <?php endforeach; ?>
+            </ul>
+        </div>
     <?php endif; ?>
 </div>
 
@@ -163,6 +172,7 @@ use App\Components\Badge;
                     <thead>
                         <tr>
                             <th>Nome</th>
+                            <th>Tipo</th>
                             <th>Descrição</th>
                             <th>Atribuição</th>
                             <th class="text-end">Ações</th>
@@ -183,6 +193,7 @@ use App\Components\Badge;
                             ?>
                             <tr>
                                 <td><?= htmlspecialchars($nome) ?></td>
+                                <td class="small"><?php $tp = EntraService::tipoDoPerfil($p); ?><?= $tp ? '<i class="bi ' . EntraService::TIPOS_PERFIL[$tp]['icone'] . '"></i> ' . htmlspecialchars(EntraService::TIPOS_PERFIL[$tp]['nome']) : '—' ?></td>
                                 <td class="small text-muted"><?= htmlspecialchars($p['description'] ?? '—') ?></td>
                                 <td>
                                     <?php if ($atribuidoTodos): ?>

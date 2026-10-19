@@ -1591,28 +1591,235 @@ PS;
      |---------------------------------------------------------
      */
 
-    private const TIPO_GRAPH_RESTRICOES = '#microsoft.graph.windows10GeneralConfiguration';
+    /*
+     | Três tipos de perfil (clássicos do Intune, todos pela API beta -- só
+     | ela tem as opções de login do tipo "proteção"). Cada opção abaixo foi
+     | validada criando o perfil de verdade no tenant (Enzilab, 19/10/2026):
+     | ficaram de fora "tipo de senha" (só aceita o padrão do dispositivo) e
+     | "horário da verificação do Defender" (recusado em qualquer formato).
+     |
+     | Campo começando com "_" não existe no Graph: é montado à mão
+     | (agendamento do Windows Update, firewall nos 3 perfis, BitLocker).
+     */
+    private const GRAPH_PERFIS = 'https://graph.microsoft.com/beta/deviceManagement/deviceConfigurations';
 
-    /** campo Graph => [label em português, tipo de input] -- usado tanto pra montar o form quanto pra filtrar o $_POST na hora de salvar. */
-    public const CAMPOS_RESTRICOES = [
-        'personalizationDesktopImageUrl' => ['label' => 'Papel de parede da área de trabalho (URL da imagem .jpg/.png)', 'tipo' => 'url'],
-        'personalizationLockScreenImageUrl' => ['label' => 'Papel de parede da tela de bloqueio (URL da imagem .jpg/.png)', 'tipo' => 'url'],
-        'usbBlocked' => ['label' => 'Bloquear conexão USB', 'tipo' => 'bool'],
-        'storageBlockRemovableStorage' => ['label' => 'Bloquear armazenamento removível (pen drive, HD externo)', 'tipo' => 'bool'],
-        'passwordRequired' => ['label' => 'Exigir senha pra entrar no Windows', 'tipo' => 'bool'],
-        'passwordMinimumLength' => ['label' => 'Tamanho mínimo da senha', 'tipo' => 'numero'],
-        'passwordMinutesOfInactivityBeforeScreenTimeout' => ['label' => 'Bloquear tela após ficar parado (minutos)', 'tipo' => 'numero'],
-        'windowsStoreBlocked' => ['label' => 'Bloquear a Windows Store', 'tipo' => 'bool'],
-        'settingsBlockSettingsApp' => ['label' => 'Bloquear acesso ao app de Configurações do Windows', 'tipo' => 'bool'],
+    private const DIAS = ['everyday' => 'Todos os dias', 'monday' => 'Segunda', 'tuesday' => 'Terça', 'wednesday' => 'Quarta',
+        'thursday' => 'Quinta', 'friday' => 'Sexta', 'saturday' => 'Sábado', 'sunday' => 'Domingo'];
+
+    public const TIPOS_PERFIL = [
+        'restricoes' => [
+            'odata' => '#microsoft.graph.windows10GeneralConfiguration',
+            'nome' => 'Restrições, periféricos e Defender',
+            'icone' => 'bi-sliders',
+            'resumo' => 'Senha e bloqueio de tela, contas pessoais, USB/pen drive, câmera, Bluetooth, captura de tela, privacidade, Microsoft Store e Defender.',
+            'secoes' => [
+                'Aparência' => [
+                    'personalizationDesktopImageUrl' => ['label' => 'Papel de parede da área de trabalho (URL da imagem)', 'tipo' => 'url'],
+                    'personalizationLockScreenImageUrl' => ['label' => 'Papel de parede da tela de bloqueio (URL da imagem)', 'tipo' => 'url'],
+                ],
+                'Senha e bloqueio de tela' => [
+                    'passwordRequired' => ['label' => 'Exigir senha para entrar no Windows', 'tipo' => 'bool'],
+                    'passwordMinimumLength' => ['label' => 'Tamanho mínimo da senha', 'tipo' => 'numero', 'min' => 4, 'max' => 16],
+                    'passwordMinutesOfInactivityBeforeScreenTimeout' => ['label' => 'Bloquear a tela após ficar parado (minutos)', 'tipo' => 'numero', 'min' => 1, 'max' => 60,
+                        'ajuda' => 'Em máquina compartilhada: a próxima pessoa usa "Trocar usuário" e entra com a própria conta.'],
+                    'passwordExpirationDays' => ['label' => 'Senha vence em (dias)', 'tipo' => 'numero', 'min' => 0, 'max' => 730],
+                    'passwordPreviousPasswordBlockCount' => ['label' => 'Não repetir as últimas N senhas', 'tipo' => 'numero', 'min' => 0, 'max' => 50],
+                    'lockScreenBlockToastNotifications' => ['label' => 'Esconder notificações na tela de bloqueio', 'tipo' => 'bool'],
+                ],
+                'Contas' => [
+                    'microsoftAccountBlocked' => ['label' => 'Bloquear contas pessoais da Microsoft (@outlook, @hotmail) na máquina', 'tipo' => 'bool'],
+                    'accountsBlockAddingNonMicrosoftAccountEmail' => ['label' => 'Bloquear adicionar e-mail pessoal (Gmail etc.) no app de e-mail', 'tipo' => 'bool'],
+                ],
+                'Periféricos' => [
+                    'storageBlockRemovableStorage' => ['label' => 'Bloquear pen drive e HD externo', 'tipo' => 'bool', 'ajuda' => 'Mouse, teclado e impressora USB continuam funcionando.'],
+                    'usbBlocked' => ['label' => 'Bloquear conexão USB com o computador (celular/PC)', 'tipo' => 'bool'],
+                    'cameraBlocked' => ['label' => 'Bloquear câmera', 'tipo' => 'bool'],
+                    'bluetoothBlocked' => ['label' => 'Bloquear Bluetooth', 'tipo' => 'bool'],
+                    'screenCaptureBlocked' => ['label' => 'Bloquear captura de tela (Print Screen, Ferramenta de Captura)', 'tipo' => 'bool'],
+                    'printerBlockAddition' => ['label' => 'Usuário não pode instalar impressoras', 'tipo' => 'bool'],
+                    'internetSharingBlocked' => ['label' => 'Bloquear compartilhar a internet (ponto de acesso)', 'tipo' => 'bool'],
+                ],
+                'Privacidade (LGPD)' => [
+                    'locationServicesBlocked' => ['label' => 'Bloquear localização', 'tipo' => 'bool'],
+                    'cortanaBlocked' => ['label' => 'Bloquear Cortana', 'tipo' => 'bool'],
+                    'diagnosticsDataSubmissionMode' => ['label' => 'Dados enviados à Microsoft (diagnóstico)', 'tipo' => 'opcao',
+                        'opcoes' => ['' => 'Não configurar', 'none' => 'Nenhum (só Enterprise)', 'basic' => 'Básico', 'enhanced' => 'Avançado', 'full' => 'Completo']],
+                    'windowsSpotlightBlocked' => ['label' => 'Bloquear sugestões e propagandas do Windows (Spotlight)', 'tipo' => 'bool'],
+                    'gameDvrBlocked' => ['label' => 'Bloquear gravação de jogos (Xbox Game Bar)', 'tipo' => 'bool'],
+                ],
+                'Sistema e aplicativos' => [
+                    'windowsStoreBlocked' => ['label' => 'Bloquear a Microsoft Store', 'tipo' => 'bool'],
+                    'settingsBlockSettingsApp' => ['label' => 'Bloquear o app Configurações', 'tipo' => 'bool', 'ajuda' => 'Cuidado: a TI também perde o acesso pelo teclado.'],
+                    'settingsBlockChangeSystemTime' => ['label' => 'Usuário não pode mudar data e hora', 'tipo' => 'bool', 'ajuda' => 'Importante para a trilha de acesso ter horário confiável.'],
+                    'smartScreenBlockPromptOverride' => ['label' => 'SmartScreen: não deixar ignorar o aviso de site/arquivo perigoso', 'tipo' => 'bool'],
+                ],
+                'Microsoft Defender' => [
+                    'defenderRequireRealTimeMonitoring' => ['label' => 'Proteção em tempo real sempre ligada', 'tipo' => 'bool'],
+                    'defenderRequireBehaviorMonitoring' => ['label' => 'Monitorar comportamento de programas', 'tipo' => 'bool'],
+                    'defenderRequireCloudProtection' => ['label' => 'Proteção pela nuvem da Microsoft', 'tipo' => 'bool'],
+                    'defenderRequireNetworkInspectionSystem' => ['label' => 'Inspeção de tráfego de rede', 'tipo' => 'bool'],
+                    'defenderBlockEndUserAccess' => ['label' => 'Esconder o Defender do usuário (não consegue desligar)', 'tipo' => 'bool'],
+                    'defenderScanArchiveFiles' => ['label' => 'Verificar dentro de arquivos compactados (.zip)', 'tipo' => 'bool'],
+                    'defenderScanRemovableDrivesDuringFullScan' => ['label' => 'Verificar pen drives na verificação completa', 'tipo' => 'bool'],
+                    'defenderScanType' => ['label' => 'Verificação agendada', 'tipo' => 'opcao',
+                        'opcoes' => ['' => 'Não configurar', 'quick' => 'Rápida', 'full' => 'Completa', 'disabled' => 'Desligada']],
+                    'defenderSystemScanSchedule' => ['label' => 'Dia da verificação agendada (às 2h)', 'tipo' => 'opcao', 'opcoes' => ['' => 'Não configurar'] + self::DIAS],
+                    'defenderSignatureUpdateIntervalInHours' => ['label' => 'Atualizar as definições de vírus a cada (horas)', 'tipo' => 'numero', 'min' => 0, 'max' => 24],
+                    'defenderPotentiallyUnwantedAppAction' => ['label' => 'Programas potencialmente indesejados (adware)', 'tipo' => 'opcao',
+                        'opcoes' => ['' => 'Não configurar', 'block' => 'Bloquear', 'audit' => 'Só registrar']],
+                    'defenderCloudBlockLevel' => ['label' => 'Rigor da proteção pela nuvem', 'tipo' => 'opcao',
+                        'opcoes' => ['' => 'Não configurar', 'high' => 'Alto', 'highPlus' => 'Alto+', 'zeroTolerance' => 'Tolerância zero']],
+                ],
+            ],
+        ],
+        'atualizacoes' => [
+            'odata' => '#microsoft.graph.windowsUpdateForBusinessConfiguration',
+            'nome' => 'Windows Update',
+            'icone' => 'bi-arrow-repeat',
+            'resumo' => 'Atualizações automáticas fora do expediente, prazo para reiniciar e adiamento de versões -- evidência de gestão de vulnerabilidades.',
+            'secoes' => [
+                'Instalação' => [
+                    'automaticUpdateMode' => ['label' => 'Como instalar', 'tipo' => 'opcao', 'opcoes' => [
+                        'autoInstallAndRebootAtScheduledTime' => 'Instalar e reiniciar no dia/horário abaixo (recomendado)',
+                        'autoInstallAtMaintenanceTime' => 'Instalar na manutenção automática do Windows',
+                        'autoInstallAndRebootAtMaintenanceTime' => 'Instalar e reiniciar na manutenção automática',
+                        'notifyDownload' => 'Só avisar o usuário',
+                        'userDefined' => 'Deixar o usuário decidir']],
+                    '_instalarDia' => ['label' => 'Dia', 'tipo' => 'opcao', 'opcoes' => self::DIAS],
+                    '_instalarHora' => ['label' => 'Horário (fora do expediente)', 'tipo' => 'hora', 'padrao' => '03:00'],
+                    'microsoftUpdateServiceAllowed' => ['label' => 'Atualizar também o Office e outros produtos Microsoft', 'tipo' => 'bool'],
+                    'driversExcluded' => ['label' => 'Não instalar drivers pelo Windows Update', 'tipo' => 'bool'],
+                ],
+                'Prazos' => [
+                    'qualityUpdatesDeferralPeriodInDays' => ['label' => 'Adiar atualizações de segurança (dias)', 'tipo' => 'numero', 'min' => 0, 'max' => 30, 'padrao' => 0],
+                    'featureUpdatesDeferralPeriodInDays' => ['label' => 'Adiar versão nova do Windows (dias)', 'tipo' => 'numero', 'min' => 0, 'max' => 365, 'padrao' => 30],
+                    'deadlineForQualityUpdatesInDays' => ['label' => 'Prazo para instalar atualização de segurança (dias)', 'tipo' => 'numero', 'min' => 0, 'max' => 30, 'padrao' => 3],
+                    'deadlineForFeatureUpdatesInDays' => ['label' => 'Prazo para instalar versão nova (dias)', 'tipo' => 'numero', 'min' => 0, 'max' => 30, 'padrao' => 7],
+                    'deadlineGracePeriodInDays' => ['label' => 'Tolerância antes de reiniciar à força (dias)', 'tipo' => 'numero', 'min' => 0, 'max' => 7, 'padrao' => 2],
+                ],
+            ],
+        ],
+        'protecao' => [
+            'odata' => '#microsoft.graph.windows10EndpointProtectionConfiguration',
+            'nome' => 'Login, firewall e BitLocker',
+            'icone' => 'bi-shield-lock',
+            'resumo' => 'Tela de login (aviso legal, não mostrar o último usuário), bloqueio por inatividade, firewall e criptografia do disco com a chave guardada no Entra.',
+            'secoes' => [
+                'Tela de login' => [
+                    'localSecurityOptionsHideLastSignedInUser' => ['label' => 'Não mostrar o último usuário que entrou', 'tipo' => 'bool',
+                        'ajuda' => 'Em máquina compartilhada cada pessoa digita a própria conta.'],
+                    'localSecurityOptionsHideUsernameAtSignIn' => ['label' => 'Não mostrar o nome de quem está entrando', 'tipo' => 'bool'],
+                    'localSecurityOptionsLogOnMessageTitle' => ['label' => 'Aviso antes de entrar -- título', 'tipo' => 'texto', 'ajuda' => 'Aviso legal de uso restrito, comum em auditoria.'],
+                    'localSecurityOptionsLogOnMessageText' => ['label' => 'Aviso antes de entrar -- texto', 'tipo' => 'textarea'],
+                    'localSecurityOptionsMachineInactivityLimit' => ['label' => 'Bloquear a sessão após ficar parado (minutos)', 'tipo' => 'numero', 'min' => 0, 'max' => 99],
+                ],
+                'Firewall' => [
+                    '_firewallLigado' => ['label' => 'Firewall do Windows ligado nas redes de domínio, privada e pública', 'tipo' => 'bool'],
+                ],
+                'BitLocker (criptografia do disco)' => [
+                    'bitLockerEncryptDevice' => ['label' => 'Criptografar o disco', 'tipo' => 'bool',
+                        'ajuda' => 'Notebook roubado não expõe dados de pacientes. A chave de recuperação fica no Entra (e aparece em Dispositivos).'],
+                    '_bitlockerChaveNoEntra' => ['label' => 'Só criptografar depois de guardar a chave de recuperação no Entra', 'tipo' => 'bool', 'padrao' => true],
+                    'bitLockerDisableWarningForOtherDiskEncryption' => ['label' => 'Não avisar o usuário sobre outra criptografia', 'tipo' => 'bool'],
+                ],
+            ],
+        ],
     ];
+
+    public static function tipoDoPerfil(array $perfil): ?string
+    {
+        foreach (self::TIPOS_PERFIL as $tipo => $def) {
+            if (($perfil['@odata.type'] ?? '') === $def['odata']) {
+                return $tipo;
+            }
+        }
+
+        return null;
+    }
+
+    /** Valores pra preencher o formulário (inclusive os campos montados à mão). */
+    public static function valoresDoPerfil(string $tipo, ?array $perfil): array
+    {
+        $valores = [];
+        foreach (self::TIPOS_PERFIL[$tipo]['secoes'] as $campos) {
+            foreach ($campos as $campo => $info) {
+                $valores[$campo] = $perfil === null ? ($info['padrao'] ?? null) : ($perfil[$campo] ?? null);
+            }
+        }
+        if ($perfil === null) {
+            return $valores;
+        }
+
+        if ($tipo === 'atualizacoes') {
+            $agenda = $perfil['installationSchedule'] ?? [];
+            $valores['_instalarDia'] = $agenda['scheduledInstallDay'] ?? 'everyday';
+            $valores['_instalarHora'] = substr((string)($agenda['scheduledInstallTime'] ?? '03:00'), 0, 5);
+        }
+        if ($tipo === 'protecao') {
+            $valores['_firewallLigado'] = ($perfil['firewallProfilePrivate']['firewallEnabled'] ?? '') === 'allowed';
+            $valores['_bitlockerChaveNoEntra'] = (bool)($perfil['bitLockerSystemDrivePolicy']['recoveryOptions']['enableBitLockerAfterRecoveryInformationToStore'] ?? false);
+        }
+
+        return $valores;
+    }
+
+    private static function montarCorpoPerfil(string $tipo, array $post): array
+    {
+        $corpo = ['@odata.type' => self::TIPOS_PERFIL[$tipo]['odata']];
+
+        foreach (self::TIPOS_PERFIL[$tipo]['secoes'] as $campos) {
+            foreach ($campos as $campo => $info) {
+                if ($campo[0] === '_') {
+                    continue;
+                }
+                if ($info['tipo'] === 'bool') {
+                    $corpo[$campo] = isset($post[$campo]);
+                    continue;
+                }
+                $valor = trim((string)($post[$campo] ?? ''));
+                if ($valor === '') {
+                    continue;
+                }
+                if ($info['tipo'] === 'numero') {
+                    $valor = max($info['min'] ?? 0, min($info['max'] ?? PHP_INT_MAX, (int)$valor));
+                } elseif ($info['tipo'] === 'opcao' && !array_key_exists($valor, $info['opcoes'])) {
+                    continue;
+                }
+                $corpo[$campo] = $valor;
+            }
+        }
+
+        if ($tipo === 'atualizacoes') {
+            $corpo['businessReadyUpdatesOnly'] = 'userDefined';
+            $dia = array_key_exists($post['_instalarDia'] ?? '', self::DIAS) ? $post['_instalarDia'] : 'everyday';
+            $hora = preg_match('/^\d{2}:\d{2}$/', (string)($post['_instalarHora'] ?? '')) ? $post['_instalarHora'] : '03:00';
+            $corpo['installationSchedule'] = ['@odata.type' => '#microsoft.graph.windowsUpdateScheduledInstall', 'scheduledInstallDay' => $dia, 'scheduledInstallTime' => "{$hora}:00.0000000"];
+        }
+        if ($tipo === 'protecao') {
+            $firewall = isset($post['_firewallLigado']) ? 'allowed' : 'notConfigured';
+            foreach (['firewallProfileDomain', 'firewallProfilePrivate', 'firewallProfilePublic'] as $perfilRede) {
+                $corpo[$perfilRede] = ['firewallEnabled' => $firewall];
+            }
+            if (isset($post['bitLockerEncryptDevice'])) {
+                $corpo['bitLockerSystemDrivePolicy'] = ['recoveryOptions' => [
+                    'blockDataRecoveryAgent' => false, 'recoveryPasswordUsage' => 'allowed', 'recoveryKeyUsage' => 'allowed', 'hideRecoveryOptions' => true,
+                    'enableRecoveryInformationSaveToStore' => true, 'recoveryInformationToStore' => 'passwordAndKey',
+                    'enableBitLockerAfterRecoveryInformationToStore' => isset($post['_bitlockerChaveNoEntra']),
+                ]];
+            }
+        }
+
+        return $corpo;
+    }
 
     public function listarPerfisConfiguracao(): array
     {
+        $tipos = array_column(self::TIPOS_PERFIL, 'odata');
         $todos = [];
-        $proximaUrl = '/deviceManagement/deviceConfigurations?$top=999&$expand=assignments';
+        $proximaUrl = self::GRAPH_PERFIS . '?$top=200&$expand=assignments';
 
         while ($proximaUrl !== null) {
-            $resultado = $this->chamarGraph('GET', $proximaUrl);
+            $resultado = $this->chamarGraph('GET', $proximaUrl, null, 60);
 
             if (!$resultado['sucesso']) {
                 NotificationService::error('Erro ao listar perfis de configuração.', $resultado['mensagem']);
@@ -1620,7 +1827,7 @@ PS;
             }
 
             foreach ($resultado['dados']['value'] ?? [] as $perfil) {
-                if (($perfil['@odata.type'] ?? '') === self::TIPO_GRAPH_RESTRICOES) {
+                if (in_array($perfil['@odata.type'] ?? '', $tipos, true)) {
                     $todos[] = $perfil;
                 }
             }
@@ -1633,7 +1840,7 @@ PS;
 
     public function buscarPerfilConfiguracao(string $id): ?array
     {
-        $resultado = $this->chamarGraph('GET', '/deviceManagement/deviceConfigurations/' . rawurlencode($id));
+        $resultado = $this->chamarGraph('GET', self::GRAPH_PERFIS . '/' . rawurlencode($id), null, 60);
 
         if (!$resultado['sucesso']) {
             NotificationService::error('Erro ao carregar o perfil.', $resultado['mensagem']);
@@ -1643,49 +1850,24 @@ PS;
         return $resultado['dados'];
     }
 
-    private static function montarCorpoRestricoes(array $post): array
-    {
-        $corpo = [];
-
-        foreach (self::CAMPOS_RESTRICOES as $campo => $info) {
-            if ($info['tipo'] === 'bool') {
-                $corpo[$campo] = isset($post[$campo]);
-                continue;
-            }
-
-            $valor = trim((string)($post[$campo] ?? ''));
-            if ($valor === '') {
-                continue;
-            }
-
-            $corpo[$campo] = $info['tipo'] === 'numero' ? (int)$valor : $valor;
-        }
-
-        return $corpo;
-    }
-
-    public function criarPerfilConfiguracao(string $nome, string $descricao, array $post): bool
+    public function criarPerfilConfiguracao(string $tipo, string $nome, string $descricao, array $post): bool
     {
         $nome = trim($nome);
-        if ($nome === '') {
+        if ($nome === '' || !isset(self::TIPOS_PERFIL[$tipo])) {
             NotificationService::error('Informe um nome pro perfil.');
             return false;
         }
 
-        $corpo = array_merge(
-            ['@odata.type' => self::TIPO_GRAPH_RESTRICOES, 'displayName' => $nome, 'description' => trim($descricao)],
-            self::montarCorpoRestricoes($post)
-        );
-
-        $resultado = $this->chamarGraph('POST', '/deviceManagement/deviceConfigurations', $corpo);
+        $corpo = ['displayName' => $nome, 'description' => trim($descricao)] + self::montarCorpoPerfil($tipo, $post);
+        $resultado = $this->chamarGraph('POST', self::GRAPH_PERFIS, $corpo, 60);
 
         if (!$resultado['sucesso']) {
             NotificationService::error('Erro ao criar o perfil de configuração.', $resultado['mensagem']);
             return false;
         }
 
-        AuditService::registrar('Microsoft Entra', 'Criar perfil de configuração', "Perfil \"{$nome}\" criado.");
-        NotificationService::success('Perfil de configuração criado -- lembre de aplicar em "Todos os dispositivos" quando quiser que valha.');
+        AuditService::registrar('Microsoft Entra', 'Criar perfil de configuração', "Perfil \"{$nome}\" (" . self::TIPOS_PERFIL[$tipo]['nome'] . ') criado.');
+        NotificationService::success('Perfil criado -- ele só vale depois de "Aplicar a todos os dispositivos".');
 
         return true;
     }
@@ -1693,17 +1875,15 @@ PS;
     public function editarPerfilConfiguracao(string $id, string $nome, string $descricao, array $post): bool
     {
         $nome = trim($nome);
-        if ($nome === '') {
-            NotificationService::error('Informe um nome pro perfil.');
+        $atual = $this->buscarPerfilConfiguracao($id);
+        $tipo = $atual ? self::tipoDoPerfil($atual) : null;
+        if ($nome === '' || $tipo === null) {
+            NotificationService::error($nome === '' ? 'Informe um nome pro perfil.' : 'Tipo de perfil não suportado pelo portal.');
             return false;
         }
 
-        $corpo = array_merge(
-            ['displayName' => $nome, 'description' => trim($descricao)],
-            self::montarCorpoRestricoes($post)
-        );
-
-        $resultado = $this->chamarGraph('PATCH', '/deviceManagement/deviceConfigurations/' . rawurlencode($id), $corpo);
+        $corpo = ['displayName' => $nome, 'description' => trim($descricao)] + self::montarCorpoPerfil($tipo, $post);
+        $resultado = $this->chamarGraph('PATCH', self::GRAPH_PERFIS . '/' . rawurlencode($id), $corpo, 60);
 
         if (!$resultado['sucesso']) {
             NotificationService::error('Erro ao salvar o perfil de configuração.', $resultado['mensagem']);
@@ -1711,7 +1891,7 @@ PS;
         }
 
         AuditService::registrar('Microsoft Entra', 'Editar perfil de configuração', "Perfil \"{$nome}\" atualizado.");
-        NotificationService::success('Perfil de configuração salvo.');
+        NotificationService::success('Perfil salvo -- as máquinas recebem na próxima sincronização com o Intune.');
 
         return true;
     }

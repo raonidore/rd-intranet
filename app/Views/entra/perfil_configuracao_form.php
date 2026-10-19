@@ -4,10 +4,8 @@ ob_start();
 use App\Components\Alert;
 use App\Services\EntraService;
 
-$valores = [];
-foreach (EntraService::CAMPOS_RESTRICOES as $campo => $info) {
-    $valores[$campo] = $perfil[$campo] ?? null;
-}
+$def = EntraService::TIPOS_PERFIL[$tipo];
+$valores = EntraService::valoresDoPerfil($tipo, $perfil);
 
 $wallpaperUrlsPorCampo = [
     'personalizationDesktopImageUrl' => $wallpaperDesktopFileUrl ?? null,
@@ -17,69 +15,93 @@ $wallpaperUrlsPorCampo = [
 
 <?= Alert::flash() ?>
 
-<div class="mb-4">
-    <h4 class="mb-1"><i class="bi bi-sliders me-1"></i> <?= $modoEdicao ? 'Editar' : 'Novo' ?> Perfil de Configuração</h4>
+<div class="mb-3">
+    <h4 class="mb-1"><i class="bi <?= $def['icone'] ?> me-1"></i> <?= $modoEdicao ? 'Editar' : 'Novo' ?> perfil -- <?= htmlspecialchars($def['nome']) ?></h4>
     <small class="text-muted"><a href="<?= url('/entra/perfis-configuracao') ?>"><i class="bi bi-arrow-left"></i> Perfis de Configuração</a></small>
 </div>
 
-<div class="card border-0 shadow-sm" style="max-width:720px">
-    <div class="card-body">
-        <form method="post" action="<?= url($modoEdicao ? '/entra/perfis-configuracao/editar' : '/entra/perfis-configuracao/novo') ?>">
-            <?php if ($modoEdicao): ?>
-                <input type="hidden" name="id" value="<?= htmlspecialchars($perfil['id'] ?? '') ?>">
-            <?php endif; ?>
+<form method="post" action="<?= url($modoEdicao ? '/entra/perfis-configuracao/editar' : '/entra/perfis-configuracao/novo') ?>" style="max-width:980px">
+    <input type="hidden" name="tipo" value="<?= htmlspecialchars($tipo) ?>">
+    <?php if ($modoEdicao): ?>
+        <input type="hidden" name="id" value="<?= htmlspecialchars($perfil['id'] ?? '') ?>">
+    <?php endif; ?>
 
-            <div class="mb-3">
-                <label class="form-label">Nome do perfil</label>
-                <input type="text" name="nome" class="form-control" required value="<?= htmlspecialchars($perfil['displayName'] ?? '') ?>">
+    <div class="card border-0 shadow-sm mb-3">
+        <div class="card-body">
+            <p class="text-muted small"><?= htmlspecialchars($def['resumo']) ?></p>
+            <div class="row g-3">
+                <div class="col-md-5">
+                    <label class="form-label">Nome do perfil</label>
+                    <input type="text" name="nome" class="form-control" required value="<?= htmlspecialchars($perfil['displayName'] ?? '') ?>"
+                           placeholder="Ex.: RD.Intranet - <?= htmlspecialchars($def['nome']) ?>">
+                </div>
+                <div class="col-md-7">
+                    <label class="form-label">Descrição <span class="text-muted small">(opcional)</span></label>
+                    <input type="text" name="descricao" class="form-control" value="<?= htmlspecialchars($perfil['description'] ?? '') ?>">
+                </div>
             </div>
-            <div class="mb-3">
-                <label class="form-label">Descrição (opcional)</label>
-                <textarea name="descricao" class="form-control" rows="2"><?= htmlspecialchars($perfil['description'] ?? '') ?></textarea>
-            </div>
+            <div class="form-text mt-2">O que ficar desmarcado ou em branco não é configurado -- o Windows segue como está. Vale para as máquinas no Intune depois de "Aplicar a todos os dispositivos".</div>
+        </div>
+    </div>
 
-            <hr>
-            <p class="text-muted small">Deixe em branco/desmarcado o que não quiser configurar por esse perfil.</p>
-
-            <?php foreach (EntraService::CAMPOS_RESTRICOES as $campo => $info): ?>
-                <div class="mb-3">
-                    <?php if ($info['tipo'] === 'bool'): ?>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="<?= htmlspecialchars($campo) ?>" id="campo-<?= htmlspecialchars($campo) ?>" <?= !empty($valores[$campo]) ? 'checked' : '' ?>>
-                            <label class="form-check-label" for="campo-<?= htmlspecialchars($campo) ?>"><?= htmlspecialchars($info['label']) ?></label>
-                        </div>
-                    <?php else: ?>
-                        <label class="form-label" for="campo-<?= htmlspecialchars($campo) ?>"><?= htmlspecialchars($info['label']) ?></label>
-                        <div class="d-flex gap-2">
-                            <input type="<?= $info['tipo'] === 'numero' ? 'number' : 'text' ?>" name="<?= htmlspecialchars($campo) ?>" id="campo-<?= htmlspecialchars($campo) ?>" class="form-control"
-                                   value="<?= htmlspecialchars((string)($valores[$campo] ?? '')) ?>">
-                            <?php if (!empty($wallpaperUrlsPorCampo[$campo])): ?>
-                                <button type="button" class="btn btn-outline-secondary text-nowrap botao-usar-imagem-enviada" data-campo="campo-<?= htmlspecialchars($campo) ?>" data-url="<?= htmlspecialchars($wallpaperUrlsPorCampo[$campo]) ?>">
-                                    <i class="bi bi-image"></i> Usar imagem enviada
-                                </button>
+    <?php foreach ($def['secoes'] as $secao => $campos): ?>
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white"><strong><?= htmlspecialchars($secao) ?></strong></div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <?php foreach ($campos as $campo => $info): ?>
+                        <?php $id = 'campo-' . $campo; $valor = $valores[$campo] ?? null; ?>
+                        <div class="<?= $info['tipo'] === 'bool' || $info['tipo'] === 'textarea' || $info['tipo'] === 'url' ? 'col-12' : 'col-md-6' ?>">
+                            <?php if ($info['tipo'] === 'bool'): ?>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="<?= $campo ?>" id="<?= $id ?>" <?= !empty($valor) ? 'checked' : '' ?>>
+                                    <label class="form-check-label" for="<?= $id ?>"><?= htmlspecialchars($info['label']) ?></label>
+                                </div>
+                            <?php else: ?>
+                                <label class="form-label small" for="<?= $id ?>"><?= htmlspecialchars($info['label']) ?></label>
+                                <?php if ($info['tipo'] === 'opcao'): ?>
+                                    <select name="<?= $campo ?>" id="<?= $id ?>" class="form-select form-select-sm">
+                                        <?php foreach ($info['opcoes'] as $chave => $rotulo): ?>
+                                            <option value="<?= htmlspecialchars((string)$chave) ?>" <?= (string)$valor === (string)$chave ? 'selected' : '' ?>><?= htmlspecialchars($rotulo) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                <?php elseif ($info['tipo'] === 'textarea'): ?>
+                                    <textarea name="<?= $campo ?>" id="<?= $id ?>" class="form-control form-control-sm" rows="3"><?= htmlspecialchars((string)$valor) ?></textarea>
+                                <?php else: ?>
+                                    <div class="d-flex gap-2">
+                                        <input type="<?= ['numero' => 'number', 'hora' => 'time', 'url' => 'url'][$info['tipo']] ?? 'text' ?>" name="<?= $campo ?>" id="<?= $id ?>"
+                                               class="form-control form-control-sm" value="<?= htmlspecialchars((string)$valor) ?>"
+                                               <?= isset($info['min']) ? 'min="' . $info['min'] . '"' : '' ?> <?= isset($info['max']) ? 'max="' . $info['max'] . '"' : '' ?>>
+                                        <?php if (!empty($wallpaperUrlsPorCampo[$campo])): ?>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary text-nowrap botao-usar-imagem-enviada" data-campo="<?= $id ?>" data-url="<?= htmlspecialchars($wallpaperUrlsPorCampo[$campo]) ?>">
+                                                <i class="bi bi-image"></i> Usar imagem enviada
+                                            </button>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php endif; ?>
+                            <?php endif; ?>
+                            <?php if (!empty($info['ajuda'])): ?>
+                                <div class="form-text"><?= htmlspecialchars($info['ajuda']) ?></div>
                             <?php endif; ?>
                         </div>
-                        <?php if (array_key_exists($campo, $wallpaperUrlsPorCampo) && empty($wallpaperUrlsPorCampo[$campo])): ?>
-                            <div class="form-text">Nenhuma imagem enviada ainda pra esse campo -- veja "Imagens de papel de parede" na listagem.</div>
-                        <?php endif; ?>
-                    <?php endif; ?>
+                    <?php endforeach; ?>
                 </div>
-            <?php endforeach; ?>
+            </div>
+        </div>
+    <?php endforeach; ?>
 
-            <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Salvar</button>
-            <a href="<?= url('/entra/perfis-configuracao') ?>" class="btn btn-outline-secondary">Cancelar</a>
-        </form>
+    <div class="d-flex gap-2 mb-4">
+        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Salvar</button>
+        <a href="<?= url('/entra/perfis-configuracao') ?>" class="btn btn-outline-secondary">Cancelar</a>
     </div>
-</div>
+</form>
 
 <script>
 (function () {
     document.querySelectorAll('.botao-usar-imagem-enviada').forEach(function (botao) {
         botao.addEventListener('click', function () {
             const campo = document.getElementById(botao.dataset.campo);
-            if (campo) {
-                campo.value = botao.dataset.url;
-            }
+            if (campo) campo.value = botao.dataset.url;
         });
     });
 })();

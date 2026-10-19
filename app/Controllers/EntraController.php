@@ -1119,8 +1119,11 @@ class EntraController extends Controller
     {
         AuthMiddleware::checkModulo('entra_perfis_configuracao');
 
+        $tipo = array_key_exists($_GET['tipo'] ?? '', EntraService::TIPOS_PERFIL) ? $_GET['tipo'] : 'restricoes';
+
         $this->view('entra/perfil_configuracao_form', [
             'modoEdicao' => false,
+            'tipo' => $tipo,
             'perfil' => null,
             'wallpaperDesktopFileUrl' => $this->service->urlFileWallpaper('desktop'),
             'wallpaperLockscreenFileUrl' => $this->service->urlFileWallpaper('lockscreen'),
@@ -1131,7 +1134,7 @@ class EntraController extends Controller
     {
         AuthMiddleware::checkModulo('entra_perfis_configuracao');
 
-        $this->service->criarPerfilConfiguracao($_POST['nome'] ?? '', $_POST['descricao'] ?? '', $_POST);
+        $this->service->criarPerfilConfiguracao((string)($_POST['tipo'] ?? ''), $_POST['nome'] ?? '', $_POST['descricao'] ?? '', $_POST);
 
         header('Location: ' . url('/entra/perfis-configuracao'));
         exit;
@@ -1144,14 +1147,16 @@ class EntraController extends Controller
         $id = $_GET['id'] ?? '';
         $perfil = $id !== '' ? $this->service->buscarPerfilConfiguracao($id) : null;
 
-        if ($perfil === null) {
-            NotificationService::error('Perfil não encontrado.');
+        $tipo = $perfil !== null ? EntraService::tipoDoPerfil($perfil) : null;
+        if ($tipo === null) {
+            NotificationService::error($perfil === null ? 'Perfil não encontrado.' : 'Esse tipo de perfil foi criado no Intune e não é editável pelo portal.');
             header('Location: ' . url('/entra/perfis-configuracao'));
             exit;
         }
 
         $this->view('entra/perfil_configuracao_form', [
             'modoEdicao' => true,
+            'tipo' => $tipo,
             'perfil' => $perfil,
             'wallpaperDesktopFileUrl' => $this->service->urlFileWallpaper('desktop'),
             'wallpaperLockscreenFileUrl' => $this->service->urlFileWallpaper('lockscreen'),
