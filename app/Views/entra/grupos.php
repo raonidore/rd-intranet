@@ -3,27 +3,6 @@ ob_start();
 
 use App\Components\Alert;
 
-$usuariosOrdenados = $usuarios;
-usort($usuariosOrdenados, fn($a, $b) => strcasecmp($a['displayName'] ?? '', $b['displayName'] ?? ''));
-
-/** Lista de caixas de seleção de usuários (modal de novo grupo e de membros). */
-$listaUsuarios = function (string $prefixo, array $marcados) use ($usuariosOrdenados): string {
-    ob_start();
-    foreach ($usuariosOrdenados as $u):
-        $campo = $prefixo . '-' . $u['id'];
-        ?>
-        <div class="form-check">
-            <input class="form-check-input" type="checkbox" name="membros[]" value="<?= htmlspecialchars($u['id']) ?>" id="<?= htmlspecialchars($campo) ?>" <?= in_array($u['id'], $marcados, true) ? 'checked' : '' ?>>
-            <label class="form-check-label small" for="<?= htmlspecialchars($campo) ?>">
-                <?= htmlspecialchars($u['displayName'] ?? $u['userPrincipalName']) ?>
-                <span class="text-muted font-monospace">(<?= htmlspecialchars($u['userPrincipalName'] ?? '') ?>)</span>
-                <?php if (!($u['accountEnabled'] ?? true)): ?><span class="badge text-bg-secondary">desativado</span><?php endif; ?>
-            </label>
-        </div>
-        <?php
-    endforeach;
-    return ob_get_clean();
-};
 ?>
 
 <?= Alert::flash() ?>
@@ -111,55 +90,7 @@ $listaUsuarios = function (string $prefixo, array $marcados) use ($usuariosOrden
         </div>
     </div>
 
-    <?php foreach ($grupos as $g): ?>
-        <div class="modal fade" id="modalMembros-<?= htmlspecialchars($g['id']) ?>" tabindex="-1">
-            <div class="modal-dialog modal-dialog-scrollable">
-                <form method="post" action="<?= url('/entra/grupos/membros') ?>" class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title"><i class="bi bi-people"></i> Membros - <?= htmlspecialchars($g['displayName']) ?></h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <input type="hidden" name="grupo_id" value="<?= htmlspecialchars($g['id']) ?>">
-                        <input type="hidden" name="nome" value="<?= htmlspecialchars($g['displayName']) ?>">
-                        <p class="text-muted small">Marque quem faz parte do grupo. Quem for desmarcado sai do grupo.</p>
-                        <?= $listaUsuarios('m-' . $g['id'], array_column($g['membros'], 'id')) ?>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Salvar membros</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    <?php endforeach; ?>
-
-    <div class="modal fade" id="modalNovoGrupo" tabindex="-1">
-        <div class="modal-dialog modal-dialog-scrollable">
-            <form method="post" action="<?= url('/entra/grupos/novo') ?>" class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title"><i class="bi bi-plus-lg"></i> Novo grupo</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label">Nome</label>
-                        <input type="text" name="nome" class="form-control" required maxlength="120" placeholder="Ex.: Prime - Acesso às Máquinas">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Descrição <span class="text-muted small">(opcional)</span></label>
-                        <input type="text" name="descricao" class="form-control" maxlength="300" placeholder="Usuários autorizados a entrar nos computadores da unidade">
-                    </div>
-                    <label class="form-label">Membros</label>
-                    <?= $listaUsuarios('n', []) ?>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Criar grupo</button>
-                </div>
-            </form>
-        </div>
-    </div>
+    <?php $voltarPara = '/entra/grupos'; require __DIR__ . '/_modais_grupos.php'; ?>
 
 <?php endif; ?>
 

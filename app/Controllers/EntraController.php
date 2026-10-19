@@ -297,9 +297,11 @@ class EntraController extends Controller
         // Mostrado ao lado de cada máquina na tela, pra quem for desativar
         // conta local ver de cara quem está logado ali agora antes de
         // decidir -- evita desativar por engano a conta em uso na hora.
+        $situacao = $configurado ? $this->situacaoNoEntra() : [];
         foreach ($computadores as &$c) {
             $detalhes = json_decode($c['detalhes'] ?? '', true) ?: [];
             $c['usuario_logado_atual'] = trim((string)($detalhes['usuario_logado'] ?? ''));
+            $c['entra'] = $situacao[mb_strtolower($c['nome'])] ?? ['entra' => false, 'intune' => false];
         }
         unset($c);
 
@@ -317,6 +319,29 @@ class EntraController extends Controller
             'aplicados' => EntraService::acessosAplicados(),
             'admins' => EntraService::adminsAplicados(),
         ]);
+    }
+
+    /**
+     * Por nome da máquina (minúsculo): se está ingressada no Entra e se aparece no
+     * Intune. Restrição de login só faz sentido (e só é aceita) em máquina no Entra.
+     *
+     * @return array<string,array{entra:bool,intune:bool}>
+     */
+    private function situacaoNoEntra(): array
+    {
+        $situacao = [];
+        foreach ($this->service->dispositivosNoEntra() ?? [] as $d) {
+            $nome = mb_strtolower((string)($d['displayName'] ?? ''));
+            $situacao[$nome]['entra'] = ($situacao[$nome]['entra'] ?? false) || ($d['trustType'] ?? '') === 'AzureAd';
+            $situacao[$nome]['intune'] = false;
+        }
+        foreach ($this->service->listarDispositivosGerenciados() as $d) {
+            $nome = mb_strtolower((string)($d['deviceName'] ?? ''));
+            $situacao[$nome]['entra'] = $situacao[$nome]['entra'] ?? false;
+            $situacao[$nome]['intune'] = true;
+        }
+
+        return $situacao;
     }
 
     /*
@@ -355,7 +380,7 @@ class EntraController extends Controller
             $this->service->definirMembros($id, trim((string)$_POST['nome']), (array)$_POST['membros']);
         }
 
-        header('Location: ' . url('/entra/grupos'));
+        header('Location: ' . url($this->voltarGrupos()));
         exit;
     }
 
@@ -365,8 +390,16 @@ class EntraController extends Controller
 
         $this->service->definirMembros((string)($_POST['grupo_id'] ?? ''), (string)($_POST['nome'] ?? ''), (array)($_POST['membros'] ?? []));
 
-        header('Location: ' . url('/entra/grupos'));
+        header('Location: ' . url($this->voltarGrupos()));
         exit;
+    }
+
+    /** As janelas de grupo também ficam em Acesso às Máquinas -- volta pra tela de onde veio. */
+    private function voltarGrupos(): string
+    {
+        $voltar = (string)($_POST['voltar'] ?? '');
+
+        return in_array($voltar, ['/entra/grupos', '/entra/acesso-maquinas'], true) ? $voltar : '/entra/grupos';
     }
 
     public function grupoExcluir(): void
@@ -401,6 +434,24 @@ class EntraController extends Controller
             array_map(fn($id) => ['id' => $id, 'nome' => $nomesGrupos[$id] ?? $id, 'tipo' => 'grupo'], $grupos),
             array_map(fn($id) => ['id' => $id, 'nome' => $nomesUsuarios[$id] ?? $id, 'tipo' => 'usuario'], $usuarios)
         );
+
+        // Máquina fora do Entra: ninguém entra com conta do Entra -- a restrição trancaria todo mundo.
+        $situacao = $this->situacaoNoEntra();
+        $foraDoEntra = [];
+        foreach ($ativoIds as $i => $id) {
+            $nome = (string)((new AtivoService())->buscar($id)['nome'] ?? '');
+            if (!($situacao[mb_strtolower($nome)]['entra'] ?? false)) {
+                $foraDoEntra[] = $nome ?: "#{$id}";
+                unset($ativoIds[$i]);
+            }
+        }
+        if ($foraDoEntra) {
+            NotificationService::error('Restrição NÃO aplicada em ' . implode(', ', $foraDoEntra) . ': a máquina ainda não entrou no Entra, e a restrição trancaria todo mundo (só administradores entrariam).');
+        }
+        if (!$ativoIds) {
+            header('Location: ' . url('/entra/acesso-maquinas'));
+            exit;
+        }
 
         // O Windows não traz os grupos do Entra no token de login: libera cada pessoa do grupo.
         $liberados = $this->service->usuariosAutorizados($autorizados);

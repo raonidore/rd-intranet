@@ -3,9 +3,57 @@ ob_start();
 
 use App\Components\Alert;
 use App\Services\EntraService;
+
+$noEntra = array_filter($computadores, fn($c) => $c['entra']['entra']);
+
+/** Lista de grupos com caixa de seleção + botão "Membros" (janela), usada nos passos 1 e 2. */
+$listaGrupos = function (string $campo, string $classe) use ($grupos): string {
+    ob_start();
+    if (empty($grupos)): ?>
+        <p class="text-muted small mb-2">Nenhum grupo ainda -- use <strong>Novo grupo</strong>.</p>
+    <?php endif;
+    foreach ($grupos as $g): ?>
+        <div class="d-flex align-items-start gap-2 py-1 border-bottom">
+            <div class="form-check flex-grow-1 mb-0">
+                <input class="form-check-input <?= $classe ?>" type="checkbox" name="<?= $campo ?>[]" value="<?= htmlspecialchars($g['id']) ?>" id="<?= $campo ?>-<?= htmlspecialchars($g['id']) ?>">
+                <label class="form-check-label small" for="<?= $campo ?>-<?= htmlspecialchars($g['id']) ?>">
+                    <strong><?= htmlspecialchars($g['displayName']) ?></strong>
+                    <span class="text-muted">(<?= count($g['membros']) ?>)</span>
+                    <?php if ($g['membros']): ?>
+                        <br><span class="text-muted"><?= htmlspecialchars(implode(', ', array_map(fn($m) => $m['displayName'] ?? $m['userPrincipalName'] ?? '', $g['membros']))) ?></span>
+                    <?php endif; ?>
+                </label>
+            </div>
+            <button type="button" class="btn btn-sm btn-link p-0 text-nowrap" data-bs-toggle="modal" data-bs-target="#modalMembros-<?= htmlspecialchars($g['id']) ?>">
+                <i class="bi bi-people"></i> Membros
+            </button>
+        </div>
+    <?php endforeach;
+    return ob_get_clean();
+};
+
+$listaAvulsos = function (string $campo, string $classe) use ($usuarios): string {
+    ob_start(); ?>
+    <details class="mt-2">
+        <summary class="text-muted small">Pessoas avulsas (exceção para uma máquina específica)</summary>
+        <?php foreach ($usuarios as $u): ?>
+            <div class="form-check">
+                <input class="form-check-input <?= $classe ?>" type="checkbox" name="<?= $campo ?>[]" value="<?= htmlspecialchars($u['id']) ?>" id="<?= $campo ?>-<?= htmlspecialchars($u['id']) ?>">
+                <label class="form-check-label small" for="<?= $campo ?>-<?= htmlspecialchars($u['id']) ?>">
+                    <?= htmlspecialchars($u['displayName'] ?? '') ?> <span class="text-muted font-monospace">(<?= htmlspecialchars($u['userPrincipalName'] ?? '') ?>)</span>
+                    <?php if (!($u['accountEnabled'] ?? true)): ?><span class="badge text-bg-secondary">desativado</span><?php endif; ?>
+                </label>
+            </div>
+        <?php endforeach; ?>
+    </details>
+    <?php return ob_get_clean();
+};
 ?>
 
 <style>
+.passo-num { width:30px; height:30px; border-radius:8px; background:var(--bs-primary); color:#fff; display:inline-flex; align-items:center; justify-content:center; font-weight:700; margin-right:.5rem; }
+.passo-ajuda { font-size:.82rem; }
+.tabela-maquinas td { vertical-align: middle; }
 .pop-modal .modal-content { background:#0d1117; color:#c9d1d9; border:1px solid #30363d; border-radius:14px; }
 .pop-topbar { display:flex; justify-content:space-between; align-items:center; padding:14px 20px; background:#161b22; border-bottom:1px solid #30363d; border-radius:14px 14px 0 0; }
 .pop-topbar .pop-breadcrumb { font-weight:600; color:#58a6ff; display:flex; align-items:center; gap:8px; font-size:1rem; }
@@ -18,43 +66,22 @@ use App\Services\EntraService;
 .pop-step-text { color:#8b949e; font-size:.83rem; margin-top:3px; line-height:1.55; }
 .pop-step-text strong { color:#c9d1d9; }
 .pop-step-text code { background:#1c2733; color:#7ee787; padding:1px 5px; border-radius:4px; font-size:.78rem; }
-.pop-callout { display:flex; gap:.6rem; padding:.7rem .9rem; border-radius:8px; font-size:.82rem; margin-top:.6rem; }
-.pop-callout-info { background:rgba(12,45,74,.35); border:1px solid rgba(31,111,235,.35); color:#79c0ff; }
-.pop-callout-warning { background:rgba(59,47,0,.2); border:1px solid rgba(125,90,0,.35); color:#e3b341; }
-.pop-callout i { flex:0 0 auto; }
-
-/* Mockups simulados (não são captura de tela real -- ilustram o layout descrito no passo). */
-.pop-mockup { display:flex; gap:14px; background:#010409; border:1px solid #30363d; border-radius:10px; padding:14px; margin-top:.7rem; flex-wrap:wrap; }
-.pop-mockup-col { flex:1; min-width:190px; }
-.pop-mockup-label { font-size:.68rem; text-transform:uppercase; letter-spacing:.05em; color:#8b949e; margin-bottom:6px; font-weight:700; }
-.pop-mockup-check { display:flex; align-items:flex-start; gap:6px; font-size:.76rem; color:#c9d1d9; padding:4px 0; }
-.pop-mockup-box { width:13px; height:13px; margin-top:2px; border:1.5px solid #484f58; border-radius:3px; flex:0 0 auto; display:inline-block; position:relative; }
-.pop-mockup-box.checked { background:#238636; border-color:#238636; }
-.pop-mockup-box.checked::after { content:'\2713'; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:9px; color:#fff; line-height:1; }
-.pop-mockup-tag { display:block; font-size:.68rem; color:#e3b341; margin-top:1px; }
-.pop-mockup-btn { display:inline-flex; align-items:center; gap:5px; font-size:.76rem; padding:5px 10px; border-radius:6px; margin-top:8px; font-weight:600; }
-.pop-mockup-btn.primary { background:#1f6feb; color:#fff; }
-.pop-mockup-btn.danger { background:#21262d; color:#f85149; border:1px solid #6e2c27; }
-.pop-mockup-btn.secondary { background:#21262d; color:#c9d1d9; border:1px solid #30363d; }
-.pop-mockup-bubble { background:#161b22; border:1px solid #30363d; border-radius:8px; padding:8px 10px; font-size:.72rem; color:#8b949e; margin-top:8px; max-width:320px; }
-.pop-mockup-bubble strong { color:#e6edf3; }
-.pop-mockup-textarea { background:#0d1117; border:1px solid #30363d; border-radius:6px; padding:6px 8px; font-size:.72rem; color:#7ee787; font-family:ui-monospace,monospace; margin-top:6px; line-height:1.6; }
+.pop-callout { display:flex; gap:.6rem; padding:.7rem .9rem; border-radius:8px; font-size:.82rem; margin-top:.6rem; background:rgba(59,47,0,.2); border:1px solid rgba(125,90,0,.35); color:#e3b341; }
 </style>
 
 <?= Alert::flash() ?>
 
-<div class="mb-4 d-flex justify-content-between align-items-start flex-wrap gap-2">
+<div class="mb-3 d-flex justify-content-between align-items-start flex-wrap gap-2">
     <div>
         <h4 class="mb-1"><i class="bi bi-shield-lock me-1"></i> Microsoft Entra - Acesso às Máquinas</h4>
-        <small class="text-muted"><a href="<?= url('/entra/dashboard') ?>"><i class="bi bi-arrow-left"></i> Dashboard</a></small>
+        <small class="text-muted">Quem entra e quem administra os computadores de cada unidade -- tudo por aqui, sem abrir o Entra.</small>
     </div>
-
     <button type="button" class="btn btn-outline-dark text-nowrap" data-bs-toggle="modal" data-bs-target="#modalPopAcessoMaquinas">
         <i class="bi bi-broadcast"></i> POP - Acesso às Máquinas
     </button>
 </div>
 
-<!-- POP -- Procedimento Operacional Padrão da tela de Acesso às Máquinas -->
+<!-- POP -- Procedimento Operacional Padrão -->
 <div class="modal fade pop-modal" id="modalPopAcessoMaquinas" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content">
@@ -63,138 +90,45 @@ use App\Services\EntraService;
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="pop-body">
-                <p class="pop-intro">Passo a passo de cada bloco da tela, na ordem em que normalmente se usa: primeiro restringe quem loga, depois (se precisar) desativa contas locais antigas.</p>
+                <p class="pop-intro">Como deixar os computadores de uma unidade acessíveis só por quem trabalha nela, com a TI administrando -- e com registro de tudo para a auditoria.</p>
 
-                <div class="pop-step">
-                    <div class="pop-step-num">1</div>
-                    <div>
-                        <div class="pop-step-title"><i class="bi bi-shield-lock"></i> Pra que serve essa tela</div>
-                        <div class="pop-step-text">
-                            Controla <strong>quem consegue logar localmente</strong> (na tela de login do Windows, no
-                            teclado/mouse da própria máquina) nos computadores selecionados. Não mexe em acesso remoto
-                            (RDP, comando remoto daqui do portal) nem precisa de Intune/licença adicional -- é uma
-                            configuração local de cada máquina, aplicada remotamente por aqui.
-                        </div>
-                    </div>
-                </div>
+                <div class="pop-step"><div class="pop-step-num">0</div><div>
+                    <div class="pop-step-title"><i class="bi bi-list-check"></i> Antes de começar (uma vez por máquina)</div>
+                    <div class="pop-step-text">Agente da RD instalado (1.0.77+). A máquina <strong>ingressada no Entra</strong> e aparecendo no <strong>Intune</strong>
+                        -- a coluna "Situação" mostra. O passo a passo do ingresso está em Administração &gt; Integrações &gt; Microsoft Entra.</div>
+                </div></div>
 
-                <div class="pop-step">
-                    <div class="pop-step-num">2</div>
-                    <div>
-                        <div class="pop-step-title"><i class="bi bi-people"></i> Quem pode entrar (coluna esquerda)</div>
-                        <div class="pop-step-text">
-                            Marque o <strong>grupo da unidade</strong> (criado em Entra &gt; Grupos). Os membros do
-                            grupo passam a conseguir entrar; incluir ou tirar alguém depois é só mudar os membros do
-                            grupo, sem reaplicar aqui (vale no próximo login da pessoa). <strong>Usuários avulsos</strong>
-                            servem pra exceção numa máquina específica -- esses só mudam reaplicando.
-                        </div>
-                    </div>
-                </div>
+                <div class="pop-step"><div class="pop-step-num">1</div><div>
+                    <div class="pop-step-title"><i class="bi bi-pc-display"></i> Marque as máquinas</div>
+                    <div class="pop-step-text">Na tabela "Máquinas". As marcadas valem para os três passos abaixo. <strong>"Marcar as que estão no Entra"</strong> seleciona só as prontas.</div>
+                </div></div>
 
-                <div class="pop-step">
-                    <div class="pop-step-num">3</div>
-                    <div>
-                        <div class="pop-step-title"><i class="bi bi-pc-display"></i> Máquinas (coluna direita)</div>
-                        <div class="pop-step-text">
-                            Só aparecem máquinas com o <strong>agente de bandeja (.exe)</strong> instalado -- é o canal
-                            que entrega o comando remotamente. Cada linha mostra <code>Logado agora: ...</code> quando
-                            tem alguém logado na hora -- confira isso antes de aplicar qualquer ação, principalmente
-                            antes de desativar conta (passo 6).
-                        </div>
-                        <div class="pop-mockup">
-                            <div class="pop-mockup-col">
-                                <div class="pop-mockup-label">Contas autorizadas</div>
-                                <div class="pop-mockup-check"><span class="pop-mockup-box checked"></span> Raoni Dore (raoni.dore@enzilab.net)</div>
-                                <div class="pop-mockup-check"><span class="pop-mockup-box"></span> Ana Paula Barbalho</div>
-                                <div class="pop-mockup-check"><span class="pop-mockup-box"></span> Débora Sales de Lima</div>
-                            </div>
-                            <div class="pop-mockup-col">
-                                <div class="pop-mockup-label">Máquinas</div>
-                                <div class="pop-mockup-check"><span class="pop-mockup-box checked"></span> <span>EP-TRIAGEM (EP-PC-000014)<span class="pop-mockup-tag">Logado agora: EP-TRIAGEM\EP - Triagem</span></span></div>
-                                <div class="pop-mockup-check"><span class="pop-mockup-box"></span> <span>EP-RECEP4 (EP-PC-000013)</span></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <div class="pop-step"><div class="pop-step-num">2</div><div>
+                    <div class="pop-step-title"><i class="bi bi-door-open"></i> Quem pode entrar</div>
+                    <div class="pop-step-text">Marque o grupo da unidade (ex.: <code>NTO - Acesso às Máquinas</code>) e clique em <strong>Aplicar restrição</strong>.
+                        Para criar o grupo ou mudar quem está nele, use <strong>Novo grupo</strong> / <strong>Membros</strong> ali mesmo.
+                        Quem estiver fora do grupo recebe no Windows: <em>"O método de entrada que você está tentando usar não é permitido"</em>.</div>
+                    <div class="pop-callout"><i class="bi bi-shield-fill-check"></i><div>Administradores da máquina sempre entram. Máquina fora do Entra é recusada pelo portal -- lá a restrição trancaria todo mundo.</div></div>
+                </div></div>
 
-                <div class="pop-step">
-                    <div class="pop-step-num">4</div>
-                    <div>
-                        <div class="pop-step-title"><i class="bi bi-shield-check"></i> Aplicar restrição</div>
-                        <div class="pop-step-text">
-                            Marque as contas (passo 2) e as máquinas (passo 3), clique em <strong>"Aplicar restrição
-                            nas máquinas selecionadas"</strong> e confirme. A partir daí, só essas contas conseguem
-                            logar localmente nessas máquinas.
-                        </div>
-                        <div class="pop-callout pop-callout-warning">
-                            <i class="bi bi-shield-fill-check"></i>
-                            <div>Rede de segurança: os <strong>administradores locais de cada máquina sempre continuam permitidos</strong>, mesmo sem marcar nada -- essa ação nunca tranca o acesso de quem administra a máquina.</div>
-                        </div>
-                        <div class="pop-mockup">
-                            <div class="pop-mockup-col">
-                                <span class="pop-mockup-btn primary"><i class="bi bi-shield-check"></i> Aplicar restrição nas máquinas selecionadas</span>
-                                <div class="pop-mockup-bubble">
-                                    <strong>Confirmar ação</strong><br>
-                                    Aplicar a restrição de login nas máquinas selecionadas? Só as contas marcadas (+ administradores locais) vão conseguir logar localmente.
-                                    <div style="margin-top:6px"><span class="pop-mockup-btn secondary" style="margin-top:0">Cancelar</span> <span class="pop-mockup-btn primary" style="margin-top:0">OK</span></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <div class="pop-step"><div class="pop-step-num">3</div><div>
+                    <div class="pop-step-title"><i class="bi bi-person-gear"></i> Quem administra</div>
+                    <div class="pop-step-text">Marque o grupo da TI (ex.: <code>TI - Administradores NTO</code>) e clique em <strong>Definir administradores</strong>.
+                        O portal só tira quem ele mesmo colocou -- o Administrador interno (senha no LAPS) e os administradores globais ficam sempre.</div>
+                </div></div>
 
-                <div class="pop-step">
-                    <div class="pop-step-num">5</div>
-                    <div>
-                        <div class="pop-step-title"><i class="bi bi-shield-slash"></i> Remover restrição</div>
-                        <div class="pop-step-text">
-                            Só precisa marcar as <strong>máquinas</strong> (não precisa marcar conta nenhuma). Volta o
-                            login local ao normal (qualquer usuário/administrador local da máquina consegue entrar de
-                            novo) -- é o "desfazer" do passo 4.
-                        </div>
-                    </div>
-                </div>
+                <div class="pop-step"><div class="pop-step-num">4</div><div>
+                    <div class="pop-step-title"><i class="bi bi-person-x"></i> Contas locais antigas</div>
+                    <div class="pop-step-text">Depois que o LAPS estiver ativo, desative as contas locais antigas (ex.: <code>Enzilab</code>). Nunca exclui -- dá para reativar.
+                        Confira o "Logado agora" antes.</div>
+                </div></div>
 
-                <div class="pop-step">
-                    <div class="pop-step-num">6</div>
-                    <div>
-                        <div class="pop-step-title"><i class="bi bi-person-x"></i> Desativar contas locais</div>
-                        <div class="pop-step-text">
-                            Passo complementar, separado da restrição de login -- o Windows <strong>não apaga contas
-                            locais</strong> sozinho quando a máquina entra no Entra. Digite o(s) nome(s) da conta local
-                            (uma por linha ou separadas por vírgula, ex: <code>Aluno</code>, <code>Admin</code>),
-                            marque as máquinas e clique em <strong>"Desativar nas máquinas selecionadas"</strong>.
-                        </div>
-                        <div class="pop-callout pop-callout-warning">
-                            <i class="bi bi-exclamation-triangle"></i>
-                            <div>Confira o <strong>"Logado agora"</strong> de cada máquina (passo 3) antes de desativar -- desativar a conta que está em uso ali não derruba a sessão aberta na hora, mas ninguém consegue entrar de novo com ela depois. Contas protegidas do Windows (Administrator, Guest, DefaultAccount e as versões em português) nunca são desativadas, mesmo se digitadas.</div>
-                        </div>
-                        <div class="pop-mockup">
-                            <div class="pop-mockup-col">
-                                <div class="pop-mockup-label">Nome(s) da conta local</div>
-                                <div class="pop-mockup-textarea">Aluno<br>Admin<br>User</div>
-                                <span class="pop-mockup-btn danger"><i class="bi bi-person-x"></i> Desativar nas máquinas selecionadas</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="pop-step">
-                    <div class="pop-step-num">7</div>
-                    <div>
-                        <div class="pop-step-title"><i class="bi bi-person-check"></i> Reativar contas locais</div>
-                        <div class="pop-step-text">
-                            Desfaz o passo 6 -- mesmo campo de nomes, mesmas máquinas marcadas, clique em
-                            <strong>"Reativar nas máquinas selecionadas"</strong>. <code>Disable-LocalUser</code>/
-                            <code>Enable-LocalUser</code> nunca excluem a conta nem os dados dela, então essa ação é
-                            sempre 100% reversível.
-                        </div>
-                        <div class="pop-callout pop-callout-info">
-                            <i class="bi bi-info-circle"></i>
-                            <div>Toda ação dessa tela é enfileirada pra máquina e só executa no próximo contato do agente com o servidor (poucos segundos) -- o resultado de cada uma aparece no histórico de comandos da ficha do ativo.</div>
-                        </div>
-                    </div>
-                </div>
+                <div class="pop-step"><div class="pop-step-num">5</div><div>
+                    <div class="pop-step-title"><i class="bi bi-arrow-repeat"></i> Depois, no dia a dia</div>
+                    <div class="pop-step-text">Entrou ou saiu alguém? Só mude os <strong>Membros</strong> do grupo -- o portal atualiza as máquinas sozinho
+                        (na hora por aqui; em até 15 min se mudarem direto no Entra). Quem entrou em qual máquina e quando, inclusive os acessos negados,
+                        fica em Segurança &gt; Trilha de acesso, com exportação para a auditoria.</div>
+                </div></div>
             </div>
         </div>
     </div>
@@ -210,195 +144,153 @@ use App\Services\EntraService;
     </div>
 <?php else: ?>
 
-    <div class="alert alert-warning small">
-        <i class="bi bi-exclamation-triangle"></i>
-        Só aplique em máquina que <strong>já entrou no Entra</strong> (Configurações &gt; Contas &gt; Acesso corporativo
-        &gt; "Conectado ao Azure AD/Entra ID"). Numa máquina fora do Entra ninguém consegue entrar com conta do Entra --
-        a restrição deixaria só os administradores locais.
-    </div>
-
-    <div class="alert alert-info small">
-        <i class="bi bi-info-circle"></i>
-        Restringe quem consegue <strong>logar localmente</strong> (na tela de login do Windows) nas máquinas
-        selecionadas -- só os membros dos grupos (ou os usuários) do Entra marcados abaixo passam a conseguir entrar. Os
-        <strong>administradores locais de cada máquina sempre continuam permitidos</strong>, mesmo sem marcar
-        nada (rede de segurança pra nunca travar o acesso). Não afeta acesso remoto (RDP, comando remoto daqui
-        do portal) nem exige Intune/licença adicional. O resultado de cada máquina aparece no histórico de
-        comandos da própria ficha do ativo, em poucos segundos. Quer visibilidade/controle remoto extra
-        (conformidade, sincronizar, reiniciar, bloquear tela) além disso? Isso é opcional e fica em
-        <a href="<?= url('/entra/dispositivos') ?>">Dispositivos (Intune)</a>.
+    <div class="card border-0 shadow-sm mb-3">
+        <div class="card-body py-2">
+            <details>
+                <summary class="small fw-semibold"><i class="bi bi-info-circle text-primary"></i> Como funciona (leia antes da primeira vez)</summary>
+                <ul class="small text-muted mt-2 mb-1">
+                    <li><strong>Pré-requisito:</strong> a máquina precisa estar <strong>no Entra</strong> (e de preferência no Intune). Veja a coluna "Situação". Fora do Entra o portal não deixa aplicar a restrição.</li>
+                    <li><strong>Grupos:</strong> você escolhe o grupo; o portal libera <strong>cada pessoa</strong> dele na máquina (o Windows não reconhece grupo do Entra no login) e <strong>reaplica sozinho</strong> quando alguém entra ou sai do grupo.</li>
+                    <li><strong>Rede de segurança:</strong> administradores da máquina sempre entram -- nunca fica todo mundo de fora. Tudo é desfazível pelos botões "Remover"/"Retirar".</li>
+                    <li><strong>Resultado:</strong> cada ação vira um comando para o agente da máquina (segundos); o resultado fica no histórico do ativo. A coluna da tabela mostra o que está aplicado.</li>
+                    <li><strong>Auditoria:</strong> logins, logoffs e acessos negados ficam em <a href="<?= url('/seguranca/trilha-acesso') ?>">Segurança &gt; Trilha de acesso</a>. Guia completo do tenant em <a href="<?= url('/administracao/integracoes/entra') ?>">Integrações &gt; Microsoft Entra</a>.</li>
+                </ul>
+            </details>
+        </div>
     </div>
 
     <form method="post" id="formAcessoMaquinas">
+
+        <!-- Máquinas (valem pros 3 passos) -->
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div><span class="passo-num">1</span><strong>Máquinas</strong> <span class="text-muted small">-- as marcadas valem para os passos 2, 3 e 4</span></div>
+                <button type="button" class="btn btn-sm btn-outline-primary" id="botaoMarcarEntra"><i class="bi bi-check2-square"></i> Marcar as que estão no Entra (<?= count($noEntra) ?>)</button>
+            </div>
+            <div class="card-body p-0">
+                <?php if (empty($computadores)): ?>
+                    <p class="text-muted small p-3 mb-0">Nenhum computador com o agente da RD instalado.</p>
+                <?php else: ?>
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0 small tabela-maquinas">
+                            <thead><tr><th style="width:30px"></th><th>Máquina</th><th>Situação</th><th>Quem pode entrar</th><th>Administradores (portal)</th></tr></thead>
+                            <tbody>
+                                <?php foreach ($computadores as $c): ?>
+                                    <?php $id = (int)$c['id']; $ap = $aplicados[$id] ?? null; $adm = $admins[$id] ?? null; ?>
+                                    <tr>
+                                        <td><input class="form-check-input campo-ativo-restricao" type="checkbox" name="ativos[]" value="<?= $id ?>" id="ativo-<?= $id ?>"
+                                                   data-entra="<?= $c['entra']['entra'] ? '1' : '0' ?>" data-nome="<?= htmlspecialchars($c['nome']) ?>"></td>
+                                        <td>
+                                            <label for="ativo-<?= $id ?>" class="mb-0"><strong><?= htmlspecialchars($c['nome']) ?></strong>
+                                                <span class="text-muted font-monospace">(<?= htmlspecialchars($c['codigo_patrimonio']) ?>)</span></label>
+                                            <?php if ($c['usuario_logado_atual']): ?><div class="text-muted">Logado agora: <span class="font-monospace"><?= htmlspecialchars($c['usuario_logado_atual']) ?></span></div><?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <?php if ($c['entra']['entra']): ?>
+                                                <span class="badge text-bg-success">No Entra</span>
+                                                <?= $c['entra']['intune'] ? '<span class="badge text-bg-success">Intune</span>' : '<span class="badge text-bg-warning" title="Fora do Intune: Hello e LAPS não chegam. Use Forçar inscrição em Dispositivos (Intune).">Fora do Intune</span>' ?>
+                                            <?php else: ?>
+                                                <span class="badge text-bg-secondary" title="Ainda usa conta local. Ingresse no Entra antes de aplicar a restrição.">Fora do Entra</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <?php if ($ap && $ap['autorizados'] !== null): ?>
+                                                <span class="text-success"><i class="bi bi-shield-check"></i> <?= htmlspecialchars(implode(', ', array_column($ap['autorizados'], 'nome'))) ?></span>
+                                                <span class="text-muted">(<?= date('d/m H:i', strtotime($ap['aplicado_em'])) ?>)</span>
+                                            <?php else: ?>
+                                                <span class="text-warning"><i class="bi bi-unlock"></i> Qualquer um</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <?php if ($adm): ?>
+                                                <span class="text-primary"><i class="bi bi-person-gear"></i> <?= htmlspecialchars(implode(', ', array_column($adm['autorizados'], 'nome'))) ?></span>
+                                                <span class="text-muted">(<?= count($adm['sids']) ?>)</span>
+                                            <?php else: ?>
+                                                <span class="text-muted">--</span>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+
         <div class="row g-3">
-            <div class="col-md-6">
+            <!-- Passo 2 -->
+            <div class="col-lg-6">
                 <div class="card border-0 shadow-sm h-100">
                     <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                        <strong>Quem pode entrar</strong>
-                        <a href="<?= url('/entra/grupos') ?>" class="small"><i class="bi bi-diagram-2"></i> Gerenciar grupos</a>
+                        <div><span class="passo-num">2</span><strong>Quem pode entrar</strong></div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalNovoGrupo"><i class="bi bi-plus-lg"></i> Novo grupo</button>
                     </div>
-                    <div class="card-body" style="max-height:420px; overflow-y:auto">
-                        <div class="text-muted small fw-semibold text-uppercase mb-1">Grupos do Entra <span class="fw-normal text-lowercase">(recomendado)</span></div>
-                        <?php if (empty($grupos)): ?>
-                            <p class="text-muted small">Nenhum grupo de segurança -- crie um por unidade em <a href="<?= url('/entra/grupos') ?>">Grupos</a>.</p>
-                        <?php else: ?>
-                            <?php foreach ($grupos as $g): ?>
-                                <div class="form-check mb-1">
-                                    <input class="form-check-input campo-autorizado" type="checkbox" name="grupos[]" value="<?= htmlspecialchars($g['id']) ?>" id="grupo-<?= htmlspecialchars($g['id']) ?>">
-                                    <label class="form-check-label small" for="grupo-<?= htmlspecialchars($g['id']) ?>">
-                                        <strong><?= htmlspecialchars($g['displayName']) ?></strong>
-                                        <span class="text-muted">(<?= count($g['membros']) ?> membro(s))</span>
-                                        <?php if ($g['membros']): ?>
-                                            <br><span class="text-muted"><?= htmlspecialchars(implode(', ', array_map(fn($m) => $m['displayName'] ?? $m['userPrincipalName'] ?? '', $g['membros']))) ?></span>
-                                        <?php endif; ?>
-                                    </label>
-                                </div>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-
-                        <details class="mt-3">
-                            <summary class="text-muted small fw-semibold text-uppercase">Usuários avulsos (<?= count($usuarios) ?>)</summary>
-                            <p class="text-muted small mt-1 mb-2">Pra uma exceção numa máquina específica. No dia a dia prefira o grupo -- usuário avulso só muda reaplicando na máquina.</p>
-                            <?php foreach ($usuarios as $u): ?>
-                                <?php $upn = $u['userPrincipalName'] ?? ''; ?>
-                                <div class="form-check">
-                                    <input class="form-check-input campo-autorizado" type="checkbox" name="usuarios[]" value="<?= htmlspecialchars($u['id']) ?>" id="usuario-<?= htmlspecialchars($u['id']) ?>">
-                                    <label class="form-check-label small" for="usuario-<?= htmlspecialchars($u['id']) ?>">
-                                        <?= htmlspecialchars($u['displayName'] ?? $upn) ?>
-                                        <span class="text-muted font-monospace">(<?= htmlspecialchars($upn) ?>)</span>
-                                        <?php if (!($u['accountEnabled'] ?? true)): ?><span class="badge text-bg-secondary">desativado</span><?php endif; ?>
-                                    </label>
-                                </div>
-                            <?php endforeach; ?>
-                        </details>
+                    <div class="card-body">
+                        <p class="text-muted passo-ajuda mb-2">Marque o grupo da unidade. Só as pessoas dele (e os administradores) entram nas máquinas marcadas. Máquinas fora do Entra são ignoradas.</p>
+                        <?= $listaGrupos('grupos', 'campo-autorizado') ?>
+                        <?= $listaAvulsos('usuarios', 'campo-autorizado') ?>
+                        <div class="mt-3 d-flex flex-wrap gap-2">
+                            <button type="submit" formaction="<?= url('/entra/acesso-maquinas/aplicar') ?>" class="btn btn-primary btn-sm" id="botaoAplicarRestricao">
+                                <i class="bi bi-shield-check"></i> Aplicar restrição
+                            </button>
+                            <button type="submit" formaction="<?= url('/entra/acesso-maquinas/remover') ?>" formnovalidate class="btn btn-outline-secondary btn-sm" id="botaoRemoverRestricao">
+                                <i class="bi bi-shield-slash"></i> Remover restrição
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div class="col-md-6">
+            <!-- Passo 3 -->
+            <div class="col-lg-6">
                 <div class="card border-0 shadow-sm h-100">
                     <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                        <strong>Máquinas</strong>
-                        <span class="text-muted small"><?= count($computadores) ?> disponíve(is)</span>
+                        <div><span class="passo-num">3</span><strong>Quem administra</strong></div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalNovoGrupo"><i class="bi bi-plus-lg"></i> Novo grupo</button>
                     </div>
-                    <div class="card-body" style="max-height:420px; overflow-y:auto">
-                        <?php if (empty($computadores)): ?>
-                            <p class="text-muted small mb-0">Nenhum computador com o agente de bandeja (.exe) instalado -- essa ação precisa dele (script .ps1 não recebe comando remoto).</p>
-                        <?php else: ?>
-                            <?php foreach ($computadores as $c): ?>
-                                <div class="form-check">
-                                    <input class="form-check-input campo-ativo-restricao" type="checkbox" name="ativos[]" value="<?= (int)$c['id'] ?>" id="ativo-<?= (int)$c['id'] ?>">
-                                    <label class="form-check-label small" for="ativo-<?= (int)$c['id'] ?>">
-                                        <?= htmlspecialchars($c['nome']) ?>
-                                        <span class="text-muted font-monospace">(<?= htmlspecialchars($c['codigo_patrimonio']) ?>)</span>
-                                        <?php if (!empty($c['usuario_logado_atual'])): ?>
-                                            <br><span class="text-muted">Logado agora: <span class="font-monospace"><?= htmlspecialchars($c['usuario_logado_atual']) ?></span></span>
-                                        <?php endif; ?>
-                                        <?php $ap = $aplicados[(int)$c['id']] ?? null; ?>
-                                        <?php if ($ap && $ap['autorizados'] !== null): ?>
-                                            <br><span class="text-success"><i class="bi bi-shield-check"></i> Restrita a: <?= htmlspecialchars(implode(', ', array_column($ap['autorizados'], 'nome'))) ?></span>
-                                            <span class="text-muted">(<?= date('d/m H:i', strtotime($ap['aplicado_em'])) ?>)</span>
-                                        <?php elseif ($ap): ?>
-                                            <br><span class="text-muted"><i class="bi bi-shield-slash"></i> Restrição removida em <?= date('d/m H:i', strtotime($ap['aplicado_em'])) ?></span>
-                                        <?php else: ?>
-                                            <br><span class="text-warning"><i class="bi bi-unlock"></i> Sem restrição pelo portal</span>
-                                        <?php endif; ?>
-                                        <?php if ($adm = $admins[(int)$c['id']] ?? null): ?>
-                                            <br><span class="text-primary"><i class="bi bi-person-gear"></i> Administradores: <?= htmlspecialchars(implode(', ', array_column($adm['autorizados'], 'nome'))) ?></span>
-                                            <span class="text-muted">(<?= count($adm['sids']) ?> pessoa(s), <?= date('d/m H:i', strtotime($adm['aplicado_em'])) ?>)</span>
-                                        <?php endif; ?>
-                                    </label>
-                                </div>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
+                    <div class="card-body">
+                        <p class="text-muted passo-ajuda mb-2">Marque o grupo da TI. As pessoas dele viram administradoras das máquinas marcadas (instalar programas, mudar configurações).
+                            O Administrador interno (LAPS) e os administradores globais do Entra ficam sempre.</p>
+                        <?= $listaGrupos('admin_grupos', 'campo-admin') ?>
+                        <?= $listaAvulsos('admin_usuarios', 'campo-admin') ?>
+                        <div class="mt-3 d-flex flex-wrap gap-2">
+                            <button type="submit" formaction="<?= url('/entra/acesso-maquinas/admins') ?>" formnovalidate class="btn btn-primary btn-sm" id="botaoAplicarAdmins">
+                                <i class="bi bi-person-gear"></i> Definir administradores
+                            </button>
+                            <button type="submit" formaction="<?= url('/entra/acesso-maquinas/admins/remover') ?>" formnovalidate class="btn btn-outline-secondary btn-sm" id="botaoRemoverAdmins">
+                                <i class="bi bi-person-dash"></i> Retirar os definidos pelo portal
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="mt-3">
-            <button type="submit" formaction="<?= url('/entra/acesso-maquinas/aplicar') ?>" class="btn btn-primary" id="botaoAplicarRestricao">
-                <i class="bi bi-shield-check"></i> Aplicar restrição nas máquinas selecionadas
-            </button>
-            <button type="submit" formaction="<?= url('/entra/acesso-maquinas/remover') ?>" formnovalidate class="btn btn-outline-secondary" id="botaoRemoverRestricao">
-                <i class="bi bi-shield-slash"></i> Remover restrição (liberar login pra todos de novo)
-            </button>
-        </div>
-
-        <div class="card border-0 shadow-sm mt-4">
-            <div class="card-header bg-white">
-                <strong><i class="bi bi-person-gear"></i> Administradores destas máquinas</strong>
-                <span class="text-muted small d-block">
-                    Quem da TI pode instalar programas e administrar as máquinas marcadas acima. Escolha um grupo (ex.: <em>TI - Administradores NTO</em>):
-                    o portal coloca cada pessoa dele no grupo Administradores da máquina e reaplica sozinho quando alguém entra ou sai do grupo.
-                    Só mexe em quem o próprio portal colocou -- o Administrador interno (LAPS) e os administradores globais do Entra ficam sempre.
-                </span>
-            </div>
+        <!-- Passo 4 -->
+        <div class="card border-0 shadow-sm mt-3">
+            <div class="card-header bg-white"><span class="passo-num">4</span><strong>Contas locais antigas</strong></div>
             <div class="card-body">
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <div class="text-muted small fw-semibold text-uppercase mb-1">Grupo de administradores</div>
-                        <?php foreach ($grupos as $g): ?>
-                            <div class="form-check">
-                                <input class="form-check-input campo-admin" type="checkbox" name="admin_grupos[]" value="<?= htmlspecialchars($g['id']) ?>" id="adm-grupo-<?= htmlspecialchars($g['id']) ?>">
-                                <label class="form-check-label small" for="adm-grupo-<?= htmlspecialchars($g['id']) ?>"><?= htmlspecialchars($g['displayName']) ?> <span class="text-muted">(<?= count($g['membros']) ?>)</span></label>
-                            </div>
-                        <?php endforeach; ?>
-                        <?php if (empty($grupos)): ?><p class="text-muted small mb-0">Crie o grupo em <a href="<?= url('/entra/grupos') ?>">Grupos</a>.</p><?php endif; ?>
-                    </div>
-                    <div class="col-md-6">
-                        <details>
-                            <summary class="text-muted small fw-semibold text-uppercase">Pessoas avulsas</summary>
-                            <?php foreach ($usuarios as $u): ?>
-                                <div class="form-check">
-                                    <input class="form-check-input campo-admin" type="checkbox" name="admin_usuarios[]" value="<?= htmlspecialchars($u['id']) ?>" id="adm-usuario-<?= htmlspecialchars($u['id']) ?>">
-                                    <label class="form-check-label small" for="adm-usuario-<?= htmlspecialchars($u['id']) ?>"><?= htmlspecialchars($u['displayName'] ?? '') ?> <span class="text-muted font-monospace">(<?= htmlspecialchars($u['userPrincipalName'] ?? '') ?>)</span></label>
-                                </div>
-                            <?php endforeach; ?>
-                        </details>
-                    </div>
-                </div>
-                <div class="mt-3">
-                    <button type="submit" formaction="<?= url('/entra/acesso-maquinas/admins') ?>" formnovalidate class="btn btn-outline-primary btn-sm" id="botaoAplicarAdmins">
-                        <i class="bi bi-person-gear"></i> Definir administradores nas máquinas selecionadas
-                    </button>
-                    <button type="submit" formaction="<?= url('/entra/acesso-maquinas/admins/remover') ?>" formnovalidate class="btn btn-outline-secondary btn-sm" id="botaoRemoverAdmins">
-                        <i class="bi bi-person-dash"></i> Retirar os administradores definidos pelo portal
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <div class="card border-0 shadow-sm mt-4">
-            <div class="card-header bg-white">
-                <strong>Desativar contas locais antigas</strong>
-                <span class="text-muted small d-block">
-                    Passo complementar -- o Windows não apaga contas locais sozinho quando a máquina entra no Entra.
-                    Use <code>Disable-LocalUser</code>/<code>Enable-LocalUser</code> (nunca exclui a conta, sempre reversível).
-                </span>
-            </div>
-            <div class="card-body">
-                <div class="alert alert-warning small mb-3">
-                    <i class="bi bi-exclamation-triangle"></i>
-                    Confira acima quem está <strong>logado agora</strong> em cada máquina selecionada antes de desativar --
-                    desativar a conta que está em uso ali impede login de novo com ela (a sessão atual não cai na hora,
-                    mas ninguém consegue entrar de novo com essa conta depois). Contas protegidas do Windows
-                    (<?= htmlspecialchars(implode(', ', EntraService::CONTAS_LOCAIS_PROTEGIDAS)) ?>)
-                    nunca são desativadas, mesmo se digitadas.
-                </div>
+                <p class="text-muted passo-ajuda mb-2">
+                    Depois que o LAPS estiver ativo, desative as contas locais antigas das máquinas marcadas (ex.: <code>Enzilab</code>) -- o Windows não as apaga ao entrar no Entra.
+                    Nunca exclui (dá para reativar). Confira o "Logado agora" na tabela antes. Contas protegidas do Windows
+                    (<?= htmlspecialchars(implode(', ', EntraService::CONTAS_LOCAIS_PROTEGIDAS)) ?>) nunca são desativadas.
+                </p>
                 <label class="form-label small">Nome(s) da conta local (uma por linha, ou separadas por vírgula)</label>
-                <textarea class="form-control form-control-sm font-monospace" name="contas" rows="3" placeholder="Aluno&#10;Admin&#10;User"></textarea>
-                <div class="mt-2">
+                <textarea class="form-control form-control-sm font-monospace" name="contas" rows="2" placeholder="Enzilab"></textarea>
+                <div class="mt-2 d-flex flex-wrap gap-2">
                     <button type="submit" formaction="<?= url('/entra/acesso-maquinas/desativar-contas') ?>" formnovalidate class="btn btn-outline-danger btn-sm" id="botaoDesativarContas">
-                        <i class="bi bi-person-x"></i> Desativar nas máquinas selecionadas
+                        <i class="bi bi-person-x"></i> Desativar
                     </button>
                     <button type="submit" formaction="<?= url('/entra/acesso-maquinas/reativar-contas') ?>" formnovalidate class="btn btn-outline-secondary btn-sm" id="botaoReativarContas">
-                        <i class="bi bi-person-check"></i> Reativar nas máquinas selecionadas
+                        <i class="bi bi-person-check"></i> Reativar
                     </button>
                 </div>
             </div>
         </div>
     </form>
+
+    <?php $voltarPara = '/entra/acesso-maquinas'; require __DIR__ . '/_modais_grupos.php'; ?>
 
 <?php endif; ?>
 
@@ -407,78 +299,51 @@ use App\Services\EntraService;
     const form = document.getElementById('formAcessoMaquinas');
     if (!form) return;
 
-    function algumMarcado(seletor) {
-        return Array.from(document.querySelectorAll(seletor)).some(function (c) { return c.checked; });
+    const maquinas = () => Array.from(document.querySelectorAll('.campo-ativo-restricao'));
+    const marcadas = () => maquinas().filter(c => c.checked);
+    const algumMarcado = sel => Array.from(document.querySelectorAll(sel)).some(c => c.checked);
+
+    document.getElementById('botaoMarcarEntra').addEventListener('click', function () {
+        maquinas().forEach(c => { c.checked = c.dataset.entra === '1'; });
+    });
+
+    function exigir(e, sel, msg) {
+        if ((sel && !algumMarcado(sel)) || !marcadas().length) { e.preventDefault(); alert(msg); return false; }
+        return true;
     }
 
     document.getElementById('botaoAplicarRestricao').addEventListener('click', function (e) {
-        if (!algumMarcado('.campo-autorizado') || !algumMarcado('.campo-ativo-restricao')) {
-            e.preventDefault();
-            alert('Selecione ao menos um grupo (ou usuário) e uma máquina.');
-            return;
-        }
-        if (!confirm('Aplicar a restrição de login nas máquinas selecionadas? Só os membros dos grupos/usuários marcados (+ administradores) vão conseguir entrar nelas a partir de agora.')) {
-            e.preventDefault();
-        }
-    });
-
-    document.getElementById('botaoAplicarAdmins').addEventListener('click', function (e) {
-        if (!algumMarcado('.campo-admin') || !algumMarcado('.campo-ativo-restricao')) {
-            e.preventDefault();
-            alert('Escolha o grupo (ou pessoas) de administradores e ao menos uma máquina.');
-            return;
-        }
-        if (!confirm('Tornar essas pessoas administradoras das máquinas selecionadas? Elas poderão instalar programas e mudar configurações do Windows.')) {
-            e.preventDefault();
-        }
-    });
-
-    document.getElementById('botaoRemoverAdmins').addEventListener('click', function (e) {
-        if (!algumMarcado('.campo-ativo-restricao')) {
-            e.preventDefault();
-            alert('Selecione ao menos uma máquina.');
-            return;
-        }
-        if (!confirm('Retirar das máquinas selecionadas os administradores que o portal definiu? O Administrador interno e os administradores globais continuam.')) {
-            e.preventDefault();
-        }
+        if (!exigir(e, '.campo-autorizado', 'Marque o grupo (ou pessoas) no passo 2 e ao menos uma máquina no passo 1.')) return;
+        const fora = marcadas().filter(c => c.dataset.entra !== '1').map(c => c.dataset.nome);
+        const dentro = marcadas().length - fora.length;
+        if (!dentro) { e.preventDefault(); alert('Nenhuma das máquinas marcadas está no Entra (' + fora.join(', ') + '). Ingresse no Entra antes -- senão a restrição trancaria todo mundo.'); return; }
+        const aviso = fora.length ? '\n\nSerão IGNORADAS por estarem fora do Entra: ' + fora.join(', ') + '.' : '';
+        if (!confirm('Aplicar a restrição em ' + dentro + ' máquina(s)? Só as pessoas do grupo (e os administradores) vão conseguir entrar.' + aviso)) e.preventDefault();
     });
 
     document.getElementById('botaoRemoverRestricao').addEventListener('click', function (e) {
-        if (!algumMarcado('.campo-ativo-restricao')) {
-            e.preventDefault();
-            alert('Selecione ao menos uma máquina.');
-            return;
-        }
-        if (!confirm('Remover a restrição de login das máquinas selecionadas? Volta a liberar o login local pra qualquer usuário/administrador local dessas máquinas.')) {
-            e.preventDefault();
-        }
+        if (!exigir(e, null, 'Marque ao menos uma máquina no passo 1.')) return;
+        if (!confirm('Remover a restrição das máquinas marcadas? Qualquer conta volta a conseguir entrar.')) e.preventDefault();
     });
 
-    function contasPreenchidas() {
-        return document.querySelector('textarea[name="contas"]').value.trim() !== '';
-    }
+    document.getElementById('botaoAplicarAdmins').addEventListener('click', function (e) {
+        if (!exigir(e, '.campo-admin', 'Marque o grupo (ou pessoas) no passo 3 e ao menos uma máquina no passo 1.')) return;
+        if (!confirm('Tornar essas pessoas administradoras das ' + marcadas().length + ' máquina(s) marcada(s)?')) e.preventDefault();
+    });
 
+    document.getElementById('botaoRemoverAdmins').addEventListener('click', function (e) {
+        if (!exigir(e, null, 'Marque ao menos uma máquina no passo 1.')) return;
+        if (!confirm('Retirar os administradores que o portal definiu nas máquinas marcadas? O Administrador interno e os administradores globais continuam.')) e.preventDefault();
+    });
+
+    const contas = () => document.querySelector('textarea[name="contas"]').value.trim() !== '';
     document.getElementById('botaoDesativarContas').addEventListener('click', function (e) {
-        if (!contasPreenchidas() || !algumMarcado('.campo-ativo-restricao')) {
-            e.preventDefault();
-            alert('Informe ao menos uma conta local e selecione ao menos uma máquina.');
-            return;
-        }
-        if (!confirm('Desativar essa(s) conta local(is) nas máquinas selecionadas? Confira acima quem está logado agora em cada uma -- desativar a conta em uso impede login de novo com ela. Ação reversível pelo botão "Reativar".')) {
-            e.preventDefault();
-        }
+        if (!contas() || !marcadas().length) { e.preventDefault(); alert('Informe a conta local e marque ao menos uma máquina.'); return; }
+        if (!confirm('Desativar essa(s) conta(s) local(is) nas máquinas marcadas? Confira o "Logado agora". Dá para reativar.')) e.preventDefault();
     });
-
     document.getElementById('botaoReativarContas').addEventListener('click', function (e) {
-        if (!contasPreenchidas() || !algumMarcado('.campo-ativo-restricao')) {
-            e.preventDefault();
-            alert('Informe ao menos uma conta local e selecione ao menos uma máquina.');
-            return;
-        }
-        if (!confirm('Reativar essa(s) conta local(is) nas máquinas selecionadas?')) {
-            e.preventDefault();
-        }
+        if (!contas() || !marcadas().length) { e.preventDefault(); alert('Informe a conta local e marque ao menos uma máquina.'); return; }
+        if (!confirm('Reativar essa(s) conta(s) local(is) nas máquinas marcadas?')) e.preventDefault();
     });
 })();
 </script>
