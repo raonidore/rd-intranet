@@ -49,7 +49,14 @@ class TailscaleService
         $hostname = trim($hostname);
 
         if ($apiToken === '' && !$this->configurado()) {
-            NotificationService::error('Informe o API Token do Tailscale.');
+            NotificationService::error('Cole a chave do Tailscale (tskey-auth-... ou tskey-api-...).');
+            return false;
+        }
+
+        // No console do Tailscale a chave aparece quebrada em duas linhas -- copiar só a
+        // segunda (Maurílio, 19/10/2026) gravava um pedaço que nunca ia funcionar.
+        if ($apiToken !== '' && !preg_match('/^tskey-(auth|api)-[A-Za-z0-9]+-[A-Za-z0-9]{10,}$/', $apiToken)) {
+            NotificationService::error('Essa não parece uma chave completa do Tailscale: ela começa com "tskey-auth-" ou "tskey-api-". No console a chave aparece quebrada em linhas -- use o botão de copiar ao lado dela em vez de selecionar o texto.');
             return false;
         }
 
@@ -121,7 +128,11 @@ class TailscaleService
             }
         }
 
-        $authkey = $this->gerarAuthKey($token);
+        // Chave de autenticação (tskey-auth-, a que o console oferece em "Add device > Linux")
+        // vai direto pro "tailscale up"; API Token (tskey-api-) gera uma de uso único pela API.
+        $authkey = str_starts_with($token, 'tskey-auth-')
+            ? ['sucesso' => true, 'dados' => $token, 'mensagem' => '']
+            : $this->gerarAuthKey($token);
         if (!$authkey['sucesso']) {
             return ['success' => false, 'message' => $authkey['mensagem'], 'detalhes' => $authkey['detalhes'] ?? null];
         }
@@ -244,7 +255,9 @@ class TailscaleService
             return ['sucesso' => true, 'dados' => $dados['key'], 'mensagem' => ''];
         }
 
-        $mensagemErro = $dados['message'] ?? "Erro HTTP {$codigo} ao gerar authkey (confira o API Token/Tailnet).";
+        $mensagemErro = $codigo === 401
+            ? 'O Tailscale recusou o API Token (vencido, revogado ou incompleto). Gere outro ou use uma chave de autenticação (tskey-auth-).'
+            : ($dados['message'] ?? "Erro HTTP {$codigo} ao gerar authkey (confira o API Token/Tailnet).");
 
         return ['sucesso' => false, 'dados' => null, 'mensagem' => $mensagemErro, 'detalhes' => "HTTP {$codigo}\n{$resposta}"];
     }
