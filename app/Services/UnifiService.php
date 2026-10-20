@@ -299,32 +299,48 @@ class UnifiService
 
         usort($redes, fn($a, $b) => ($a['wan_failover_priority'] ?? 99) <=> ($b['wan_failover_priority'] ?? 99));
         $outras = array_values(array_filter($redes, fn($r) => $r['_id'] !== $alvo['_id']));
-        $reordenadas = array_merge([$alvo], $outras);
         // Em failover a primária é a única "weighted" -- trocar só a prioridade deixava a
         // antiga ainda carregando o tráfego. Em balanceamento todas seguem "weighted".
         $failover = (bool)array_filter($redes, fn($r) => ($r['wan_load_balance_type'] ?? '') === 'failover-only');
 
-        foreach ($reordenadas as $i => $rede) {
-            $mudancas = [];
-            if ((int)($rede['wan_failover_priority'] ?? 0) !== $i + 1) {
-                $mudancas['wan_failover_priority'] = $i + 1;
-            }
-            if ($failover) {
-                $tipo = $i === 0 ? 'weighted' : 'failover-only';
-                if (($rede['wan_load_balance_type'] ?? '') !== $tipo) {
-                    $mudancas['wan_load_balance_type'] = $tipo;
-                }
-            }
-            if (!$mudancas) {
-                continue;
-            }
-
-            // Só os campos alterados: o objeto inteiro, do jeito que o Controller devolve, é
-            // recusado (api.err.InvalidPayload) -- WAN PPPoE "Uplink" do Maurílio, 19/10/2026.
+        // Só os campos alterados: o objeto inteiro, do jeito que o Controller devolve, é
+        // recusado (api.err.InvalidPayload) -- WAN PPPoE "Uplink" do Maurílio, 19/10/2026.
+        $atualizar = function (array $rede, array $mudancas) use ($ref): ?string {
             $resultado = $this->chamarApi('PUT', "/proxy/network/api/s/{$ref}/rest/networkconf/{$rede['_id']}", $mudancas);
 
-            if (!$resultado['sucesso']) {
-                return ['success' => false, 'message' => 'Falha ao atualizar "' . ($rede['name'] ?? $rede['wan_networkgroup']) . '": ' . $resultado['mensagem']];
+            return $resultado['sucesso'] ? null : 'Falha ao atualizar "' . ($rede['name'] ?? $rede['wan_networkgroup']) . '": ' . $resultado['mensagem'];
+        };
+
+        // O Controller não deixa duas WANs com a mesma prioridade nem por um instante
+        // (api.err.WanFailOverPriorityAlreadyExists). Então: a escolhida vai para uma
+        // posição vaga, as que estavam acima descem uma (da maior pra menor, sempre pra
+        // uma posição que acabou de vagar) e por fim a escolhida sobe para 1.
+        $prioridadeAlvo = (int)($alvo['wan_failover_priority'] ?? 0);
+        $vaga = max(array_map(fn($r) => (int)($r['wan_failover_priority'] ?? 0), $redes)) + 1;
+        if ($erro = $atualizar($alvo, ['wan_failover_priority' => $vaga])) {
+            return ['success' => false, 'message' => $erro];
+        }
+        $acima = array_filter($outras, fn($r) => (int)($r['wan_failover_priority'] ?? 0) < $prioridadeAlvo || $prioridadeAlvo === 0);
+        usort($acima, fn($a, $b) => ($b['wan_failover_priority'] ?? 0) <=> ($a['wan_failover_priority'] ?? 0));
+        foreach ($acima as $rede) {
+            if ($erro = $atualizar($rede, ['wan_failover_priority' => (int)$rede['wan_failover_priority'] + 1])) {
+                return ['success' => false, 'message' => $erro];
+            }
+        }
+        $mudancasAlvo = ['wan_failover_priority' => 1];
+        if ($failover) {
+            $mudancasAlvo['wan_load_balance_type'] = 'weighted';
+        }
+        if ($erro = $atualizar($alvo, $mudancasAlvo)) {
+            return ['success' => false, 'message' => $erro];
+        }
+
+        // Em failover só a primária carrega o tráfego.
+        if ($failover) {
+            foreach ($outras as $rede) {
+                if (($rede['wan_load_balance_type'] ?? '') !== 'failover-only' && ($erro = $atualizar($rede, ['wan_load_balance_type' => 'failover-only']))) {
+                    return ['success' => false, 'message' => $erro];
+                }
             }
         }
 
