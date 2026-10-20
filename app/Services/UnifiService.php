@@ -300,16 +300,28 @@ class UnifiService
         usort($redes, fn($a, $b) => ($a['wan_failover_priority'] ?? 99) <=> ($b['wan_failover_priority'] ?? 99));
         $outras = array_values(array_filter($redes, fn($r) => $r['_id'] !== $alvo['_id']));
         $reordenadas = array_merge([$alvo], $outras);
+        // Em failover a primária é a única "weighted" -- trocar só a prioridade deixava a
+        // antiga ainda carregando o tráfego. Em balanceamento todas seguem "weighted".
+        $failover = (bool)array_filter($redes, fn($r) => ($r['wan_load_balance_type'] ?? '') === 'failover-only');
 
         foreach ($reordenadas as $i => $rede) {
-            $novaPrioridade = $i + 1;
-
-            if ((int)($rede['wan_failover_priority'] ?? 0) === $novaPrioridade) {
+            $mudancas = [];
+            if ((int)($rede['wan_failover_priority'] ?? 0) !== $i + 1) {
+                $mudancas['wan_failover_priority'] = $i + 1;
+            }
+            if ($failover) {
+                $tipo = $i === 0 ? 'weighted' : 'failover-only';
+                if (($rede['wan_load_balance_type'] ?? '') !== $tipo) {
+                    $mudancas['wan_load_balance_type'] = $tipo;
+                }
+            }
+            if (!$mudancas) {
                 continue;
             }
 
-            $rede['wan_failover_priority'] = $novaPrioridade;
-            $resultado = $this->chamarApi('PUT', "/proxy/network/api/s/{$ref}/rest/networkconf/{$rede['_id']}", $rede);
+            // Só os campos alterados: o objeto inteiro, do jeito que o Controller devolve, é
+            // recusado (api.err.InvalidPayload) -- WAN PPPoE "Uplink" do Maurílio, 19/10/2026.
+            $resultado = $this->chamarApi('PUT', "/proxy/network/api/s/{$ref}/rest/networkconf/{$rede['_id']}", $mudancas);
 
             if (!$resultado['sucesso']) {
                 return ['success' => false, 'message' => 'Falha ao atualizar "' . ($rede['name'] ?? $rede['wan_networkgroup']) . '": ' . $resultado['mensagem']];
@@ -362,8 +374,8 @@ class UnifiService
                 continue;
             }
 
-            $rede['wan_load_balance_type'] = $novoTipo;
-            $resultado = $this->chamarApi('PUT', "/proxy/network/api/s/{$ref}/rest/networkconf/{$rede['_id']}", $rede);
+            // Só o campo alterado (o objeto inteiro é recusado -- ver definirWanPrimaria).
+            $resultado = $this->chamarApi('PUT', "/proxy/network/api/s/{$ref}/rest/networkconf/{$rede['_id']}", ['wan_load_balance_type' => $novoTipo]);
 
             if (!$resultado['sucesso']) {
                 return ['success' => false, 'message' => 'Falha ao atualizar "' . ($rede['name'] ?? $rede['wan_networkgroup']) . '": ' . $resultado['mensagem']];
@@ -1782,7 +1794,10 @@ class UnifiService
             return ['sucesso' => true, 'dados' => $dados, 'mensagem' => ''];
         }
 
-        $mensagemErro = $dados['message'] ?? ($dados['error']['message'] ?? "Erro HTTP {$codigo} ao falar com o Controller.");
+        // API clássica responde {"meta":{"rc":"error","msg":"api.err.X"}} -- mostra o motivo em vez de só o código.
+        $mensagemErro = $dados['message'] ?? ($dados['error']['message'] ?? (isset($dados['meta']['msg'])
+            ? "O Controller recusou ({$dados['meta']['msg']})."
+            : "Erro HTTP {$codigo} ao falar com o Controller."));
 
         return ['sucesso' => false, 'dados' => null, 'mensagem' => is_string($mensagemErro) ? $mensagemErro : "Erro HTTP {$codigo}."];
     }
