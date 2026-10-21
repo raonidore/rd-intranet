@@ -99,7 +99,8 @@
         ['total', 'Controle total (inclui mudar permissões)'],
     ];
     const modalEl = document.getElementById('modalPermissoes');
-    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    // O bootstrap.bundle só carrega no fim do layout, depois deste script.
+    const modal = () => bootstrap.Modal.getOrCreateInstance(modalEl);
     let caminho = '', dados = null, linhas = [], pollTimer = null;
 
     function esc(t) { const d = document.createElement('div'); d.textContent = t == null ? '' : String(t); return d.innerHTML; }
@@ -165,7 +166,7 @@
         el('perm-erro').classList.add('d-none');
         el('perm-progresso').classList.add('d-none');
         el('perm-salvar').disabled = true;
-        modal.show();
+        modal().show();
         try {
             const r = await fetch(URL_PERM + '?path=' + encodeURIComponent(path));
             dados = await r.json();
@@ -208,7 +209,7 @@
                 el('perm-progresso-barra').classList.remove('progress-bar-animated');
                 el('perm-progresso-barra').classList.add(ok ? 'bg-success' : 'bg-danger');
                 el('perm-salvar').disabled = false;
-                if (ok && !s.mensagem) setTimeout(() => modal.hide(), 1500);
+                if (ok && !s.mensagem) setTimeout(() => modal().hide(), 1500);
             }
         }, 1000);
     }
