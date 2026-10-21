@@ -615,6 +615,112 @@ class SambaArquivosController extends Controller
         echo json_encode($this->jsonOutput('/opt/rdtecnologia/scripts/criar_pasta_samba_web.sh', [$rel]));
     }
 
+    // ── Permissões de uma pasta (ACL do Windows via Samba) ────────────────
+    // Mexer em quem acessa o quê é coisa de quem administra os
+    // compartilhamentos, não de quem só navega nos arquivos.
+    private const SCRIPT_PERMISSOES = '/opt/rdtecnologia/scripts/permissoes_pasta_samba_web.sh';
+    private const STATUS_ACL_DIR = '/var/www/rd.intranet/storage/samba_acl_status';
+
+    private function relDePermissao(string $bruto): ?string
+    {
+        $rel = $this->validarRel($bruto);
+
+        return ($rel !== null && substr_count($rel, '/') >= 1) ? $rel : null;
+    }
+
+    public function permissoes(): void
+    {
+        AuthMiddleware::checkModulo('samba_arquivos');
+        AuthMiddleware::checkModulo('samba_compartilhamentos');
+
+        $rel = $this->relDePermissao($_GET['path'] ?? '');
+        if ($rel === null) {
+            $this->jsonResponse(['success' => false, 'message' => 'A raiz do compartilhamento é configurada em Samba > Compartilhamentos > Usuários.']);
+            return;
+        }
+
+        $this->jsonResponse($this->jsonOutput(self::SCRIPT_PERMISSOES, ['ler', $rel]));
+    }
+
+    public function permissoesSalvar(): void
+    {
+        AuthMiddleware::checkModulo('samba_arquivos');
+        AuthMiddleware::checkModulo('samba_compartilhamentos');
+
+        $rel = $this->relDePermissao($_POST['path'] ?? '');
+        $entradas = json_decode((string)($_POST['entradas'] ?? ''), true);
+        if ($rel === null || !is_array($entradas)) {
+            $this->jsonResponse(['success' => false, 'message' => 'Dados inválidos.']);
+            return;
+        }
+
+        $limpas = [];
+        foreach ($entradas as $e) {
+            $sid = (string)($e['sid'] ?? '');
+            $nivel = (string)($e['nivel'] ?? '');
+            if (preg_match('/^S-1-[0-9]+(-[0-9]+)+$/', $sid) && in_array($nivel, ['ler', 'gravar', 'modificar', 'total'], true)) {
+                $limpas[] = ['sid' => $sid, 'nivel' => $nivel];
+            }
+        }
+        if (!$limpas) {
+            $this->jsonResponse(['success' => false, 'message' => 'Deixe pelo menos um usuário ou grupo com acesso -- uma pasta sem ninguém só seria acessível pelo portal.']);
+            return;
+        }
+
+        $estado = $this->statusPermissoes($rel);
+        if (($estado['status'] ?? '') === 'rodando' && time() - (int)($estado['atualizado_em'] ?? 0) < 120) {
+            $this->jsonResponse(['success' => false, 'message' => 'Já há uma aplicação de permissões em andamento nesta pasta.']);
+            return;
+        }
+
+        $subpastas = !empty($_POST['subpastas']);
+        @unlink($this->arquivoStatusPermissoes($rel));
+        (new LinuxService())->executarScriptEmSegundoPlano(self::SCRIPT_PERMISSOES, [
+            'aplicar', $rel, base64_encode(json_encode(['entradas' => $limpas, 'subpastas' => $subpastas])),
+        ]);
+
+        $resumo = implode(', ', array_map(
+            fn($l) => ($this->nomeDaEntrada($entradas, $l['sid']) ?? $l['sid']) . '=' . $l['nivel'],
+            $limpas
+        ));
+        \App\Services\AuditService::registrar('Samba', 'Permissões de pasta',
+            "Permissões de {$rel} alteradas" . ($subpastas ? ' (com subpastas)' : '') . ": {$resumo}.");
+
+        $this->jsonResponse(['success' => true]);
+    }
+
+    public function permissoesStatus(): void
+    {
+        AuthMiddleware::checkModulo('samba_arquivos');
+
+        $rel = $this->relDePermissao($_GET['path'] ?? '');
+        $this->jsonResponse($rel === null ? ['status' => 'desconhecido'] : $this->statusPermissoes($rel));
+    }
+
+    private function nomeDaEntrada(array $entradas, string $sid): ?string
+    {
+        foreach ($entradas as $e) {
+            if (($e['sid'] ?? '') === $sid && !empty($e['nome'])) {
+                return preg_replace('/[^\w .@-]/u', '', (string)$e['nome']);
+            }
+        }
+
+        return null;
+    }
+
+    private function arquivoStatusPermissoes(string $rel): string
+    {
+        return self::STATUS_ACL_DIR . '/pasta-' . md5($rel) . '.json';
+    }
+
+    private function statusPermissoes(string $rel): array
+    {
+        $arquivo = $this->arquivoStatusPermissoes($rel);
+        $dados = is_file($arquivo) ? json_decode((string)file_get_contents($arquivo), true) : null;
+
+        return is_array($dados) ? $dados : ['status' => 'aguardando'];
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────
     private function icon(string $type, string $ext): string
     {

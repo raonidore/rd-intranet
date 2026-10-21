@@ -225,6 +225,9 @@ $router->post('/samba/arquivos/lote-excluir', [SambaArquivosController::class, '
 $router->post('/samba/arquivos/lote-mover', [SambaArquivosController::class, 'loteMover']);
 $router->post('/samba/arquivos/lote-copiar', [SambaArquivosController::class, 'loteCopiar']);
 $router->get('/samba/arquivos/lote-status', [SambaArquivosController::class, 'loteStatus']);
+$router->get('/samba/arquivos/permissoes', [SambaArquivosController::class, 'permissoes']);
+$router->post('/samba/arquivos/permissoes', [SambaArquivosController::class, 'permissoesSalvar']);
+$router->get('/samba/arquivos/permissoes/status', [SambaArquivosController::class, 'permissoesStatus']);
 
 $router->get('/infraestrutura/servidor', [ServerController::class, 'index']);
 $router->get('/infraestrutura/servidor/api', [ServerController::class, 'api']);

@@ -7,6 +7,8 @@ function formatBytes(int $bytes): string {
     $i = (int)floor(log($bytes, 1024));
     return round($bytes / pow(1024, $i), 1) . ' ' . $u[$i];
 }
+
+$podePermissoes = \App\Services\PermissionService::temAcesso('samba_compartilhamentos');
 ?>
 
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
@@ -341,6 +343,14 @@ a.fm-crumb:hover { background:#eff6ff; color:#2563eb; }
                             title="Mover para...">
                             <i class="bi bi-arrows-move"></i>
                         </button>
+                        <?php if ($podePermissoes && str_contains($f['path'], '/')): ?>
+                        <button class="btn btn-sm btn-outline-secondary btn-permissoes"
+                            data-path="<?= htmlspecialchars($f['path']) ?>"
+                            data-name="<?= htmlspecialchars($f['name']) ?>"
+                            title="Permissões (quem pode ler, gravar e excluir)">
+                            <i class="bi bi-shield-lock"></i>
+                        </button>
+                        <?php endif; ?>
                         <button class="btn btn-sm btn-outline-danger btn-excluir"
                             data-path="<?= htmlspecialchars($f['path']) ?>"
                             data-name="<?= htmlspecialchars($f['name']) ?>"
@@ -1479,6 +1489,8 @@ a.fm-crumb:hover { background:#eff6ff; color:#2563eb; }
     });
 })();
 </script>
+
+<?php if ($podePermissoes) { require __DIR__ . '/_permissoes_pasta.php'; } ?>
 
 <?php
 $conteudo = ob_get_clean();
