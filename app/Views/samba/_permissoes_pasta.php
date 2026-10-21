@@ -122,6 +122,8 @@
                 const avisos = [];
                 if (info && info.no_compartilhamento === false) avisos.push('<span class="text-warning-emphasis"><i class="bi bi-exclamation-triangle"></i> Não está liberado no compartilhamento ' + esc(dados.compartilhamento) + ' -- não vai conseguir entrar.</span>');
                 else if (info && info.chega === false) avisos.push('<span class="text-warning-emphasis"><i class="bi bi-exclamation-triangle"></i> Sem leitura numa pasta de cima -- não vai conseguir chegar até aqui.</span>');
+                // Aparece quando alguém deu chmod o+rwx (ex.: 777) direto no servidor.
+                if (l.sid === 'S-1-1-0') avisos.push('<span class="text-danger"><i class="bi bi-exclamation-octagon"></i> Qualquer pessoa que conecte no compartilhamento (vem de permissão "outros" no Linux, como um chmod 777). Tire esta linha para fechar.</span>');
                 if (l.tipo === 'grupo') avisos.push('<span class="text-muted">Vale para todos os membros do grupo.</span>');
                 const icone = l.tipo === 'grupo' ? 'bi-people-fill text-primary' : (l.tipo === 'usuario' ? 'bi-person-fill text-secondary' : 'bi-gear text-muted');
                 return '<tr><td><div class="perm-quem"><i class="bi ' + icone + ' me-1"></i>' + esc(l.nome) + '</div>'
