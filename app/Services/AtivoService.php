@@ -4447,7 +4447,34 @@ class AtivoService
             ];
         }
 
+        // IP de outra unidade/rede (ex.: DVR do NTO detectado no portal do Prime) dava só o
+        // "não encontrado" genérico -- diz quando o problema é alcance, não integração.
+        if (!self::ipAlcancavel($ip)) {
+            return ['success' => false, 'message' => "O servidor deste portal não alcança {$ip} (nenhuma resposta a ping nem às portas usuais). "
+                . 'Confira o IP, se o equipamento está ligado, ou se ele é de outra unidade -- nesse caso cadastre pelo portal daquela unidade.'];
+        }
+
         return ['success' => false, 'message' => 'Nenhum dispositivo com esse IP foi encontrado em: ' . implode(', ', $integracoesTentadas) . '.'];
+    }
+
+    /** Responde a ping ou a alguma porta comum de equipamento de rede/CFTV. */
+    private static function ipAlcancavel(string $ip): bool
+    {
+        foreach ([80, 443, 37777, 22, 554] as $porta) {
+            $sock = @fsockopen($ip, $porta, $erro, $msg, 0.8);
+            if ($sock) {
+                fclose($sock);
+
+                return true;
+            }
+            // Recusa imediata (RST) também prova que o IP existe.
+            if ($erro === 111) {
+                return true;
+            }
+        }
+        exec('ping -c 1 -W 1 ' . escapeshellarg($ip) . ' > /dev/null 2>&1', $saida, $codigo);
+
+        return $codigo === 0;
     }
 
     /** Login digitado no Detectar: deu certo = guarda como credencial do IP (a coleta do ativo usa depois). */
