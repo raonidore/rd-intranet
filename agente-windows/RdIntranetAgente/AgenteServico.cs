@@ -36,6 +36,11 @@ public class AgenteServico : ServiceBase
     // A cada minuto: toda sessão com usuário e Explorer tem que ter o agente rodando.
     private System.Threading.Timer? _timerVigiaSessoes;
 
+    // Máquina ligada sem ninguém logado: sem ícone, ninguém mandava heartbeat e o portal
+    // mostrava "desligada" (EN-AT-01-D, 22/10/2026). O serviço avisa que está viva.
+    private System.Threading.Timer? _timerHeartbeat;
+    private int _enviandoHeartbeat;
+
     // Com serviço instalado quem atualiza o agente é o serviço (ver AtualizacaoServico):
     // 3 min depois de subir e depois a cada hora.
     private System.Threading.Timer? _timerAtualizacao;
@@ -84,6 +89,7 @@ public class AgenteServico : ServiceBase
         }
 
         _timerVigiaSessoes = new System.Threading.Timer(_ => VigiarSessoes(), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
+        _timerHeartbeat = new System.Threading.Timer(_ => _ = HeartbeatSemSessaoAsync(), null, TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(30));
 
         _acessos = new AcessosService(Config.CarregarParaServico, IdentificadorDaMaquina);
         // LAPS troca a senha do Administrador em algum momento depois da política chegar -- confere de hora em hora.
@@ -100,6 +106,7 @@ public class AgenteServico : ServiceBase
     {
         _timerAtualizacao?.Dispose();
         _timerVigiaSessoes?.Dispose();
+        _timerHeartbeat?.Dispose();
         _timerLaps?.Dispose();
         _timerConfig?.Dispose();
         _acessos?.Dispose();
@@ -182,6 +189,44 @@ public class AgenteServico : ServiceBase
                 lock (_sessoesEmAndamento) _sessoesEmAndamento.Remove(sessionId);
             }
         });
+    }
+
+    /// <summary>
+    /// Só quando nenhuma sessão tem o ícone do agente (ele é quem manda heartbeat e atende os pedidos).
+    /// A resposta é ignorada: pedidos do portal ficam na fila até alguém logar.
+    /// </summary>
+    private async Task HeartbeatSemSessaoAsync()
+    {
+        if (Interlocked.Exchange(ref _enviandoHeartbeat, 1) == 1) return;
+        try
+        {
+            if (AgenteEmAlgumaSessao()) return;
+            var config = Config.CarregarParaServico();
+            var guid = IdentificadorDaMaquina();
+            if (!config.EstaConfigurado || string.IsNullOrEmpty(guid)) return;
+            await new HeartbeatClient(config).EnviarAsync(guid);
+        }
+        catch
+        {
+            // tenta de novo em 30 s
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _enviandoHeartbeat, 0);
+        }
+    }
+
+    private static bool AgenteEmAlgumaSessao()
+    {
+        try
+        {
+            return Process.GetProcessesByName(Path.GetFileNameWithoutExtension(Environment.ProcessPath ?? "RdIntranetAgente"))
+                .Any(p => p.SessionId > 0);
+        }
+        catch
+        {
+            return true;
+        }
     }
 
     private static bool AgenteRodandoNaSessao(int sessionId)
