@@ -267,7 +267,15 @@ class EntraService
         ]);
 
         if (!$resultado['sucesso']) {
-            NotificationService::error('Erro ao resetar senha.', $resultado['mensagem']);
+            // App-only: User.ReadWrite.All não basta pra senha -- a Microsoft exige o app com papel de
+            // diretório (Administrador de usuários). Sem ele vem "Insufficient privileges" (Enzilab, 22/10/2026).
+            $semPapel = stripos($resultado['mensagem'], 'insufficient privileges') !== false;
+            NotificationService::error(
+                $semPapel
+                    ? 'Erro ao resetar senha: o aplicativo RD.Intranet no Entra não tem papel de administrador. No Entra: Funções e administradores > Administrador de usuários > Adicionar atribuições > aplicativo "RD.Intranet".'
+                    : 'Erro ao resetar senha.',
+                $resultado['mensagem']
+            );
             return false;
         }
 
