@@ -190,6 +190,7 @@ class AtualizacaoService
             $this->garantirCronChamadosDistribuicao();
             $this->garantirCronBitdefender();
             $this->garantirCronTrilhaAcesso();
+            $this->garantirCronMeshVincular();
             $this->garantirCronChamadosSlaExpediente();
             $this->garantirCronProjetosPrazos();
             $this->garantirCronProjetosLixeira();
@@ -450,6 +451,20 @@ class AtualizacaoService
             'Importa do Entra ID os logins no Windows (o Entra só guarda 30 dias) e apaga da trilha o que passou do prazo de retenção.',
             '*/15 * * * *',
             'php ' . $this->repoDir() . '/rd acessos:manutencao'
+        );
+    }
+
+    /** MeshCentral: vincula ao ativo a máquina que já aparece no Mesh com o mesmo nome (antes só acontecia num pedido de Suporte Remoto). */
+    public function garantirCronMeshVincular(): void
+    {
+        if (!(new AcessoRemotoService())->credenciaisConfiguradas()) {
+            return;
+        }
+        $this->garantirCronJob(
+            'Vincular máquinas ao MeshCentral',
+            'Liga ao ativo o dispositivo do MeshCentral com o mesmo nome de computador, para o acesso remoto aparecer na ficha sem vínculo manual.',
+            '*/10 * * * *',
+            'php ' . $this->repoDir() . '/rd mesh:vincular'
         );
     }
 

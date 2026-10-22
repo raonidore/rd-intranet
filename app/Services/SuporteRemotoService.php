@@ -180,7 +180,26 @@ class SuporteRemotoService
         }
     }
 
-    private function vincularMeshSeUnico(int $ativoId): array
+    /**
+     * Cron (rd mesh:vincular): todo ativo do agente sem vínculo ganha o dispositivo do Mesh com o
+     * mesmo hostname, se for único. A EN-AT-01-D ficou com o MeshAgent online e sem vínculo (22/10/2026).
+     * @return array{vinculados:int, pendentes:int}
+     */
+    public function vincularMeshPendentes(): array
+    {
+        $ids = $this->pdo->query("SELECT id FROM ativos WHERE origem = 'agente' AND (mesh_device_id IS NULL OR mesh_device_id = '')")->fetchAll(PDO::FETCH_COLUMN);
+        if (!$ids) return ['vinculados' => 0, 'pendentes' => 0];
+        $acesso = new AcessoRemotoService();
+        if (!$acesso->rodando()) return ['vinculados' => 0, 'pendentes' => count($ids)];
+        $dispositivos = $acesso->listarDispositivos(); // uma chamada ao meshctrl pra todos
+        $vinculados = 0;
+        foreach ($ids as $id) {
+            if (!empty($this->vincularMeshSeUnico((int)$id, $dispositivos)['vinculado'])) $vinculados++;
+        }
+        return ['vinculados' => $vinculados, 'pendentes' => count($ids) - $vinculados];
+    }
+
+    private function vincularMeshSeUnico(int $ativoId, ?array $dispositivos = null): array
     {
         $stmt = $this->pdo->prepare('SELECT id, nome, detalhes, mesh_device_id FROM ativos WHERE id = ? LIMIT 1');
         $stmt->execute([$ativoId]);
@@ -195,12 +214,15 @@ class SuporteRemotoService
         ]);
         if (!$nomesAtivo) return ['vinculado' => false, 'message' => 'O ativo não tem hostname para comparar com o MeshCentral.'];
 
-        $acesso = new AcessoRemotoService();
-        if (!$acesso->rodando() || !$acesso->credenciaisConfiguradas())
-            return ['vinculado' => false, 'message' => 'MeshCentral está indisponível para concluir o vínculo.'];
+        if ($dispositivos === null) {
+            $acesso = new AcessoRemotoService();
+            if (!$acesso->rodando() || !$acesso->credenciaisConfiguradas())
+                return ['vinculado' => false, 'message' => 'MeshCentral está indisponível para concluir o vínculo.'];
+            $dispositivos = $acesso->listarDispositivos();
+        }
 
         $candidatos = [];
-        foreach ($acesso->listarDispositivos() as $dispositivo) {
+        foreach ($dispositivos as $dispositivo) {
             $id = (string)($dispositivo['_id'] ?? '');
             if ($id === '') continue;
             $nomesDispositivo = array_filter([

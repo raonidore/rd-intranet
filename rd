@@ -385,6 +385,15 @@ switch ($comando) {
 
         break;
 
+    case 'mesh:vincular':
+        if (!(new \App\Services\AcessoRemotoService())->credenciaisConfiguradas()) {
+            echo "OK: MeshCentral não configurado.\n";
+            break;
+        }
+        $r = (new \App\Services\SuporteRemotoService())->vincularMeshPendentes();
+        echo "OK: MeshCentral -- {$r['vinculados']} máquina(s) vinculada(s), {$r['pendentes']} sem dispositivo correspondente.\n";
+        break;
+
     case 'acessos:manutencao':
         $acessos = new \App\Services\AcessoMaquinaService();
         $r = $acessos->importarDoEntra();
