@@ -151,7 +151,7 @@ internal static class Program
     /// vivo numa VM de teste -- só destravou rodando o próprio agente como
     /// administrador.
     /// </summary>
-    private static bool ServicoDoAgenteRodando()
+    internal static bool ServicoDoAgenteRodando()
     {
         try
         {

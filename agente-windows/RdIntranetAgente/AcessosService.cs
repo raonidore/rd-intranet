@@ -69,6 +69,8 @@ public sealed class AcessosService : IDisposable
 
             if (!Program.EstaElevado())
             {
+                // Com o serviço (SYSTEM) rodando, é ele quem lê o log -- o ícone de um usuário comum não tem o que avisar.
+                if (Program.ServicoDoAgenteRodando()) return;
                 if (!_avisouSemPermissao)
                 {
                     _avisouSemPermissao = true;
