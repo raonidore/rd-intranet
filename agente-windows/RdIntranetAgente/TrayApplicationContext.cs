@@ -1250,6 +1250,9 @@ del ""%~f0""
     /// </summary>
     private static void RegistrarInicioAutomatico()
     {
+        // Usuário comum não cria tarefa agendada (Acesso negado a cada abertura): quem abre o agente na sessão dele é o serviço.
+        if (!Program.EstaElevado()) return;
+
         RemoverEntradaRunAntiga();
 
         try

@@ -103,10 +103,9 @@ internal static class Program
             }
             else if (ServicoDoAgenteRodando())
             {
-                // Tarefa de logon numa sessão de usuário comum, com o serviço instalado:
-                // quem abre o agente aqui é o serviço (--auto). Pedir senha de
-                // administrador (UAC) a quem não tem seria só atrito.
-                return;
+                // Usuário comum abrindo à mão (ou tarefa de logon), com o serviço instalado:
+                // roda sem elevação, sem pedir UAC. Antes saía calado e, se o serviço
+                // tivesse falhado nessa sessão, o agente ficava fora (EN-AT-01-D, 22/10/2026).
             }
             else
             {

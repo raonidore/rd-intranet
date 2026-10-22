@@ -28,7 +28,13 @@ public class AgenteServico : ServiceBase
     public const string NomeServico = "RDIntranetAgenteServico";
     public const string NomeExibicao = "RD Intranet - Agente (Serviço)";
 
-    private readonly HashSet<int> _sessoesJaTentadas = new();
+    // Sessões com abertura em andamento (espera do Explorer). Antes era "já tentei essa
+    // sessão" pra sempre: a tela de login cria a sessão antes de alguém entrar, a tentativa
+    // falhava sem usuário e quem logava depois nessa sessão ficava sem agente (EN-AT-01-D, 22/10/2026).
+    private readonly HashSet<int> _sessoesEmAndamento = new();
+
+    // A cada minuto: toda sessão com usuário e Explorer tem que ter o agente rodando.
+    private System.Threading.Timer? _timerVigiaSessoes;
 
     // Com serviço instalado quem atualiza o agente é o serviço (ver AtualizacaoServico):
     // 3 min depois de subir e depois a cada hora.
@@ -77,6 +83,8 @@ public class AgenteServico : ServiceBase
             RegistrarEvento($"Falha ao lançar o agente nas sessões já ativas: {ex.Message}", EventLogEntryType.Warning);
         }
 
+        _timerVigiaSessoes = new System.Threading.Timer(_ => VigiarSessoes(), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
+
         _acessos = new AcessosService(Config.CarregarParaServico, IdentificadorDaMaquina);
         // LAPS troca a senha do Administrador em algum momento depois da política chegar -- confere de hora em hora.
         _timerLaps = new System.Threading.Timer(_ => ProtecaoInstalacao.AtivarAdministradorComLaps(), null, TimeSpan.FromMinutes(5), TimeSpan.FromHours(1));
@@ -91,6 +99,7 @@ public class AgenteServico : ServiceBase
     protected override void OnStop()
     {
         _timerAtualizacao?.Dispose();
+        _timerVigiaSessoes?.Dispose();
         _timerLaps?.Dispose();
         _timerConfig?.Dispose();
         _acessos?.Dispose();
@@ -119,32 +128,73 @@ public class AgenteServico : ServiceBase
         }
     }
 
+    /// <summary>Rede de segurança: sessão com usuário logado e sem o agente (falhou ao abrir, alguém fechou, travou) ganha o agente de novo.</summary>
+    private void VigiarSessoes()
+    {
+        try
+        {
+            foreach (var sessionId in SessaoUsuario.ObterSessoesAtivas())
+            {
+                if (ExplorerRodandoNaSessao(sessionId) && !AgenteRodandoNaSessao(sessionId))
+                {
+                    LancarNaSessao(sessionId);
+                }
+            }
+        }
+        catch
+        {
+            // tenta de novo no próximo minuto
+        }
+    }
+
     private void LancarNaSessao(int sessionId)
     {
         if (sessionId <= 0) return; // sessao 0 = servicos, nunca tem desktop de usuario
 
-        lock (_sessoesJaTentadas)
+        lock (_sessoesEmAndamento)
         {
-            if (!_sessoesJaTentadas.Add(sessionId))
+            if (!_sessoesEmAndamento.Add(sessionId))
             {
-                return; // ja tentamos essa sessao nesta execucao do servico
+                return; // já esperando o Explorer dessa sessão
             }
         }
 
         // No login, o serviço é avisado antes de o Explorer montar a
         // barra de tarefas -- abrir o agente nesse instante fazia o ícone
         // nascer sem bandeja. Espera o Explorer da sessão (até 2 min) em
-        // segundo plano, sem travar o serviço.
+        // segundo plano, sem travar o serviço. Sem Explorer (tela de login,
+        // ninguém entrou ainda) não tenta: a vigia de cada minuto abre quando alguém logar.
         _ = Task.Run(() =>
         {
-            var limite = DateTime.Now.AddMinutes(2);
-            while (DateTime.Now < limite && !ExplorerRodandoNaSessao(sessionId))
+            try
             {
-                Thread.Sleep(2000);
+                var limite = DateTime.Now.AddMinutes(2);
+                while (DateTime.Now < limite && !ExplorerRodandoNaSessao(sessionId))
+                {
+                    Thread.Sleep(2000);
+                }
+                if (!ExplorerRodandoNaSessao(sessionId) || AgenteRodandoNaSessao(sessionId)) return;
+                Thread.Sleep(3000); // Explorer de pé ainda leva uns segundos pra criar a bandeja
+                AbrirAgenteNaSessao(sessionId);
             }
-            Thread.Sleep(3000); // Explorer de pé ainda leva uns segundos pra criar a bandeja
-            AbrirAgenteNaSessao(sessionId);
+            finally
+            {
+                lock (_sessoesEmAndamento) _sessoesEmAndamento.Remove(sessionId);
+            }
         });
+    }
+
+    private static bool AgenteRodandoNaSessao(int sessionId)
+    {
+        try
+        {
+            return Process.GetProcessesByName(Path.GetFileNameWithoutExtension(Environment.ProcessPath ?? "RdIntranetAgente"))
+                .Any(p => p.SessionId == sessionId);
+        }
+        catch
+        {
+            return true; // na dúvida não abre outra cópia
+        }
     }
 
     private static bool ExplorerRodandoNaSessao(int sessionId)
