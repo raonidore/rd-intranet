@@ -2177,6 +2177,8 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
 .sw-porta.selecionada { background:rgba(13,110,253,.35); box-shadow:0 0 0 2px #4d94ff; }
 .sw-porta.esmaecida { opacity:.25; }
 .sw-porta.destaque { background:rgba(255,193,7,.35); box-shadow:0 0 0 2px #ffc107; }
+.sw-porta.destaque-passa { box-shadow:0 0 0 2px rgba(255,193,7,.55); opacity:.75; }
+.sw-busca { min-width:280px; flex:1 1 280px; max-width:420px; }
 .sw-num { font-size:.62rem; color:#aab1ba; line-height:1; font-variant-numeric:tabular-nums; }
 
 /* tomada RJ45 */
@@ -2391,9 +2393,10 @@ tr.linha-selecionada > td { background:#e7f1ff !important; }
                     <label class="btn btn-outline-secondary" for="swVisaoTudo" title="Todo aparelho cujo tráfego passou pela porta na última coleta (inclui Wi-Fi do AP e o que está atrás de outro switch)"><i class="bi bi-diagram-3"></i> Tudo que passa</label>
                 </div>
             </div>
-            <div class="input-group input-group-sm" style="max-width:300px">
+            <div class="input-group sw-busca">
                 <span class="input-group-text"><i class="bi bi-search"></i></span>
-                <input type="search" class="form-control" id="swBusca" placeholder="Achar IP, nome ou MAC...">
+                <input type="text" class="form-control" id="swBusca" placeholder="Onde está ligado? IP, nome, MAC ou porta" autocomplete="off">
+                <button type="button" class="btn btn-outline-secondary" id="swBuscaLimpar" title="Limpar"><i class="bi bi-x-lg"></i></button>
             </div>
         </div>
         <div class="card-body">
@@ -2407,7 +2410,7 @@ tr.linha-selecionada > td { background:#e7f1ff !important; }
                 <span class="ms-auto"><i class="bi bi-mouse"></i> Passe o mouse para ver, clique para detalhar</span>
             </div>
             <div class="sw-legenda mt-2 d-none" id="swLegendaVlan"></div>
-            <div class="small text-muted mt-2" id="swBuscaResultado"></div>
+            <div class="small text-muted mt-2" id="swBuscaResultado" aria-live="polite"></div>
         </div>
     </div>
 
@@ -2949,6 +2952,8 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
         selecionar(tr.dataset.porta);
         chassi.querySelector(`[data-porta="${CSS.escape(tr.dataset.porta)}"]`).scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
     }));
+    const campoBusca = document.getElementById('swBusca');
+    if (campoBusca && campoBusca.value.trim() !== '' && typeof aplicarBusca === 'function') aplicarBusca();
     }
     renderTabela();
 
@@ -2980,21 +2985,43 @@ const URL_ATIVO_NOVO = <?= json_encode(url('/ativos/novo')) ?>;
     }));
 
     // ---------- busca ----------
+    // Filtra painel e tabela. Separa onde o aparelho está LIGADO (LLDP ou ponta
+    // física deduzida pela coleta) de onde ele só PASSA (uplink para outro
+    // switch) -- buscar um switch vizinho achava só a porta de trânsito.
     const busca = document.getElementById('swBusca');
     const resultado = document.getElementById('swBuscaResultado');
-    busca.addEventListener('input', () => {
+    const soHex = v => String(v || '').toLowerCase().replace(/[^0-9a-f]/g, '');
+    function aplicarBusca() {
         const termo = busca.value.trim().toLowerCase();
-        const achadas = [];
-        chassi.querySelectorAll('.sw-porta').forEach(el => {
-            const p = porNome[el.dataset.porta];
-            const bate = termo !== '' && (p.dispositivos || []).some(d =>
-                [d.ip, d.mac, d.hostname, d.ativo_nome, d.fabricante].some(v => String(v || '').toLowerCase().includes(termo)));
-            el.classList.toggle('destaque', bate);
-            el.classList.toggle('esmaecida', termo !== '' && !bate);
-            if (bate) achadas.push(numero(p));
+        const termoMac = soHex(termo);
+        const buscaMac = termoMac.length >= 4 && /^[0-9a-f:.\- ]+$/.test(termo);
+        const direto = [], passa = [];
+        const bateDisp = d => [d.ip, d.mac, d.hostname, d.lldp_nome, d.ativo_nome, d.fabricante].some(v => String(v || '').toLowerCase().includes(termo))
+            || (buscaMac && soHex(d.mac).includes(termoMac));
+        const estado = {};
+        portas.forEach(p => {
+            if (termo === '') { estado[p.porta] = ''; return; }
+            const achados = (p.dispositivos || []).filter(bateDisp);
+            const pelaPorta = String(p.porta).toLowerCase() === termo || String(numero(p)) === termo || String(p.descricao || p.nome || '').toLowerCase().includes(termo);
+            if (achados.some(d => d.lldp || (p.fisico && (p.fisico.macs || []).includes(d.mac))) || pelaPorta) { estado[p.porta] = 'direto'; direto.push(numero(p)); }
+            else if (achados.length) { estado[p.porta] = 'passa'; passa.push(numero(p)); }
+            else estado[p.porta] = 'nao';
         });
-        resultado.textContent = termo === '' ? '' : (achadas.length ? `Encontrado na(s) porta(s): ${achadas.join(', ')}` : 'Nada encontrado em nenhuma porta.');
-    });
+        chassi.querySelectorAll('.sw-porta').forEach(el => {
+            const e = estado[el.dataset.porta];
+            el.classList.toggle('destaque', e === 'direto');
+            el.classList.toggle('destaque-passa', e === 'passa');
+            el.classList.toggle('esmaecida', e === 'nao');
+        });
+        document.querySelectorAll('#swTabela tr').forEach(tr => tr.classList.toggle('d-none', estado[tr.dataset.porta] === 'nao'));
+        if (termo === '') { resultado.innerHTML = ''; return; }
+        const partes = [];
+        if (direto.length) partes.push(`<strong class="text-body">Ligado na porta ${direto.join(', ')}</strong>`);
+        if (passa.length) partes.push(`${direto.length ? 'também passa' : 'Não está ligado direto aqui; passa'} pela${passa.length > 1 ? 's portas' : ' porta'} ${passa.join(', ')} (uplink para outro equipamento)`);
+        resultado.innerHTML = partes.length ? '<i class="bi bi-search"></i> ' + partes.join(' · ') : 'Nada encontrado em nenhuma porta.';
+    }
+    busca.addEventListener('input', aplicarBusca);
+    document.getElementById('swBuscaLimpar').addEventListener('click', () => { busca.value = ''; aplicarBusca(); busca.focus(); });
 
     montarComoLer();
 
