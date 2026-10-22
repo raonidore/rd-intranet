@@ -1061,6 +1061,15 @@ class AtivoController extends Controller
         header('Content-Type: application/json');
 
         $id = (int)($_POST['id'] ?? 0);
+
+        // "Atualizar agora" da aba Portas: coleta todo o UniFi (~2 s), pra que o AP
+        // recém-plugado também mude de Desligado para Ligado, não só as portas.
+        if (!empty($_POST['todos'])) {
+            $todos = $this->service->coletarUnifiTodos();
+            echo json_encode(['success' => $todos['sucesso'] > 0, 'message' => "UniFi coletado em {$todos['sucesso']}/{$todos['total']} ativo(s)."]);
+            return;
+        }
+
         $resultado = $this->service->coletarUnifi($id);
 
         echo json_encode($resultado);

@@ -2427,7 +2427,11 @@ tr.linha-selecionada > td { background:#e7f1ff !important; }
     <div class="card border-0 shadow-sm">
         <div class="card-header bg-white d-flex justify-content-between">
             <strong>Todas as portas</strong>
-            <small class="text-muted"><?php if (!empty($detalhes[$fontePortasSwitch . '_coletado_em'])): ?>Coletado em <?= htmlspecialchars(data_br($detalhes[$fontePortasSwitch . '_coletado_em'])) ?><?php endif; ?></small>
+            <span class="d-flex align-items-center gap-2">
+                <small class="text-muted"><?php if (!empty($detalhes[$fontePortasSwitch . '_coletado_em'])): ?>Coletado em <?= htmlspecialchars(data_br($detalhes[$fontePortasSwitch . '_coletado_em'])) ?><?php endif; ?></small>
+                <button type="button" class="btn btn-sm btn-outline-primary" id="swAtualizarAgora" data-id="<?= (int)$ativo['id'] ?>" data-fonte="<?= htmlspecialchars($fontePortasSwitch) ?>"
+                        title="A coleta automática roda a cada 30 min. Use depois de mexer em cabos."><i class="bi bi-arrow-clockwise"></i> Atualizar agora</button>
+            </span>
         </div>
         <div class="card-body p-0">
             <table class="table table-sm align-middle mb-0">
@@ -4856,6 +4860,31 @@ document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(function (g
         } finally {
             botao.disabled = false;
             botao.innerHTML = '<i class="bi bi-arrow-repeat"></i> Coletar via SNMP';
+        }
+    });
+})();
+
+(function () {
+    // Aba Portas: coleta na hora e volta para a mesma aba.
+    const botao = document.getElementById('swAtualizarAgora');
+    if (!botao) return;
+    botao.addEventListener('click', async function () {
+        botao.disabled = true;
+        botao.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Coletando...';
+        const dados = new URLSearchParams();
+        dados.set('id', botao.dataset.id);
+        dados.set('todos', '1');
+        const url = botao.dataset.fonte === 'omada' ? <?= json_encode(url('/ativos/coletar-omada')) ?> : <?= json_encode(url('/ativos/coletar-unifi')) ?>;
+        try {
+            const resultado = await (await fetch(url, { method: 'POST', body: dados })).json();
+            if (!resultado.success) { alert(resultado.message || 'Falha ao coletar.'); return; }
+            location.hash = 'abaPortasSwitch';
+            location.reload();
+        } catch (e) {
+            alert('Erro ao comunicar com o servidor.');
+        } finally {
+            botao.disabled = false;
+            botao.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Atualizar agora';
         }
     });
 })();
