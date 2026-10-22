@@ -40,6 +40,12 @@ public class AgenteServico : ServiceBase
     // mostrava "desligada" (EN-AT-01-D, 22/10/2026). O serviço avisa que está viva.
     private System.Threading.Timer? _timerHeartbeat;
     private int _enviandoHeartbeat;
+    private DateTime _ultimoHeartbeat = DateTime.MinValue;
+    private Config? _configHeartbeat;
+    private string? _guidHeartbeat;
+    private DateTime _configLidaEm = DateTime.MinValue;
+    private DateTime _sessaoConferidaEm = DateTime.MinValue;
+    private bool _iconeEmAlgumaSessao;
 
     // Com serviço instalado quem atualiza o agente é o serviço (ver AtualizacaoServico):
     // 3 min depois de subir e depois a cada hora.
@@ -89,7 +95,8 @@ public class AgenteServico : ServiceBase
         }
 
         _timerVigiaSessoes = new System.Threading.Timer(_ => VigiarSessoes(), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
-        _timerHeartbeat = new System.Threading.Timer(_ => _ = HeartbeatSemSessaoAsync(), null, TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(30));
+        // Mesmo ritmo do ícone (HeartbeatSegundos, padrão 1 s): o portal só considera ligada com sinal nos últimos 5 s.
+        _timerHeartbeat = new System.Threading.Timer(_ => _ = HeartbeatSemSessaoAsync(), null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(1));
 
         _acessos = new AcessosService(Config.CarregarParaServico, IdentificadorDaMaquina);
         // LAPS troca a senha do Administrador em algum momento depois da política chegar -- confere de hora em hora.
@@ -200,9 +207,24 @@ public class AgenteServico : ServiceBase
         if (Interlocked.Exchange(ref _enviandoHeartbeat, 1) == 1) return;
         try
         {
-            if (AgenteEmAlgumaSessao()) return;
-            var config = Config.CarregarParaServico();
-            var guid = IdentificadorDaMaquina();
+            var agora = DateTime.UtcNow;
+            // Config (varre os perfis) e identificador: relidos a cada minuto; sessões com o ícone: a cada 5 s.
+            if (_configHeartbeat == null || agora - _configLidaEm > TimeSpan.FromMinutes(1))
+            {
+                _configHeartbeat = Config.CarregarParaServico();
+                _guidHeartbeat = IdentificadorDaMaquina();
+                _configLidaEm = agora;
+            }
+            var config = _configHeartbeat;
+            if (agora - _ultimoHeartbeat < TimeSpan.FromSeconds(Math.Max(1, config.HeartbeatSegundos) - 0.2)) return;
+            if (agora - _sessaoConferidaEm > TimeSpan.FromSeconds(5))
+            {
+                _iconeEmAlgumaSessao = AgenteEmAlgumaSessao();
+                _sessaoConferidaEm = agora;
+            }
+            if (_iconeEmAlgumaSessao) return;
+            _ultimoHeartbeat = agora;
+            var guid = _guidHeartbeat;
             if (!config.EstaConfigurado || string.IsNullOrEmpty(guid)) return;
             await new HeartbeatClient(config).EnviarAsync(guid);
         }
