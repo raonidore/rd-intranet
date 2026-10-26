@@ -124,7 +124,11 @@ foreach ($itens as $i) {
                             <?php if (!$ap['itens']): ?>
                                 <span class="text-muted">nada a aplicar</span>
                             <?php elseif ((int)$ap['falhas'] === 0): ?>
-                                <span class="text-success"><i class="bi bi-check-circle"></i> <?= count($ap['itens']) ?> item(ns) em dia</span>
+                                <?php $ignorados = array_filter($ap['itens'], fn($it) => str_starts_with((string)($it['mensagem'] ?? ''), 'ignorado')); ?>
+                                <span class="text-success"><i class="bi bi-check-circle"></i> <?= count($ap['itens']) - count($ignorados) ?> item(ns) em dia</span>
+                                <?php if ($ignorados): ?>
+                                    <div class="text-muted">Ignorado (programa não instalado nesta máquina): <?= htmlspecialchars(implode(', ', array_column($ignorados, 'nome'))) ?></div>
+                                <?php endif; ?>
                             <?php else: ?>
                                 <span class="text-danger"><i class="bi bi-exclamation-triangle"></i> <?= (int)$ap['falhas'] ?> com falha</span>
                                 <?php foreach ($ap['itens'] as $it): if (!empty($it['ok'])) continue; ?>

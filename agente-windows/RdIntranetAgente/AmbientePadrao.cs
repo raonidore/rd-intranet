@@ -103,6 +103,21 @@ public static class AmbientePadrao
             desejados.Add(chave);
             try
             {
+                var ausente = ProgramaAusente(item);
+                if (ausente != null)
+                {
+                    // Item "para todos" de um programa que esta máquina não tem: não cria atalho quebrado
+                    // nem entrada de inicialização -- e desfaz se tinha criado antes (programa desinstalado).
+                    if (criadosAntes.TryGetValue(chave, out var antigo))
+                    {
+                        Desfazer(antigo, hive);
+                        controle.DeleteValue(chave, false);
+                    }
+                    criadosAntes.Remove(chave);
+                    resultados.Add(new ResultadoItemAmbiente(item.Id, item.Nome, true, ausente));
+                    continue;
+                }
+
                 var (alvo, mudou, aviso) = AplicarItem(item, maquina, config, hive);
                 // Mudou de nome/letra/caminho: desfaz o que a versão anterior do item tinha criado.
                 if (criadosAntes.TryGetValue(chave, out var anterior) && !string.Equals(anterior.Alvo, alvo, StringComparison.OrdinalIgnoreCase))
@@ -160,7 +175,7 @@ public static class AmbientePadrao
                 var atual = run.GetValue(nomeValor) as string;
                 var mudou = !string.Equals(atual, comando, StringComparison.Ordinal);
                 if (mudou) run.SetValue(nomeValor, comando);
-                return ("run:" + nomeValor, mudou, ProgramaAusente(caminho));
+                return ("run:" + nomeValor, mudou, null);
             }
             case "atalho_site":
             {
@@ -174,7 +189,7 @@ public static class AmbientePadrao
             {
                 var arquivo = Path.Combine(desktop, item.Nome + ".lnk");
                 var mudou = CriarAtalho(arquivo, item.Caminho ?? "", item.Argumentos ?? "", item.Pasta ?? "");
-                return ("arquivo:" + arquivo, mudou, ProgramaAusente(item.Caminho ?? ""));
+                return ("arquivo:" + arquivo, mudou, null);
             }
             case "unidade_mapeada":
                 return MapearUnidade(item, config);
@@ -185,11 +200,13 @@ public static class AmbientePadrao
         }
     }
 
-    /// <summary>Programa local que não existe nesta máquina vira aviso (o item continua configurado).</summary>
-    private static string? ProgramaAusente(string caminho)
+    /// <summary>Texto informativo quando o item aponta para um programa local que esta máquina não tem.</summary>
+    private static string? ProgramaAusente(ItemAmbiente item)
     {
+        if (item.Tipo is not ("inicializar" or "atalho_programa")) return null;
+        var caminho = item.Caminho ?? "";
         if (caminho.StartsWith(@"\\")) return null; // rede: o SYSTEM não enxerga, confia no caminho
-        return File.Exists(caminho) ? null : "programa não instalado nesta máquina (" + caminho + ")";
+        return File.Exists(caminho) ? null : "ignorado: programa não instalado nesta máquina";
     }
 
     private static bool CriarAtalho(string arquivo, string alvo, string argumentos, string pasta)
