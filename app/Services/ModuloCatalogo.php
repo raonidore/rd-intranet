@@ -64,6 +64,7 @@ class ModuloCatalogo
         'ativos_rdp' => ['label' => 'Ativos - RDP', 'grupo' => 'Ativos'],
         'ativos_etiqueta_config' => ['label' => 'Ativos - Configurações de Etiqueta', 'grupo' => 'Ativos'],
         'ativos_politicas' => ['label' => 'Ativos - Regras de Segurança', 'grupo' => 'Ativos'],
+        'ativos_ambiente' => ['label' => 'Ativos - Ambiente padrão', 'grupo' => 'Ativos'],
         'entra_dashboard' => ['label' => 'Entra - Dashboard', 'grupo' => 'Microsoft Entra'],
         'entra_usuarios' => ['label' => 'Entra - Usuários', 'grupo' => 'Microsoft Entra'],
         'entra_configuracao' => ['label' => 'Entra - Configuração', 'grupo' => 'Microsoft Entra'],

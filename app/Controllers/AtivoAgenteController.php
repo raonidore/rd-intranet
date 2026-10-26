@@ -172,6 +172,67 @@ class AtivoAgenteController extends Controller
     }
 
     /**
+     * Ambiente padrão (agente 1.0.89+): o que aplicar nesta máquina.
+     * contexto "maquina" = serviço (vale para todos os usuários); "usuario" =
+     * ícone da sessão, com o SID de quem está logado (escopo por grupo do Entra).
+     */
+    public function ambiente(): void
+    {
+        header('Content-Type: application/json');
+
+        $chave = $_SERVER['HTTP_X_RD_AGENTE_CHAVE'] ?? '';
+        if (!$this->service->chaveValida($chave)) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'message' => 'Chave de API inválida.']);
+            return;
+        }
+
+        $payload = json_decode(file_get_contents('php://input'), true);
+        $ativoId = is_array($payload) ? $this->service->idPorMachineGuid(trim((string)($payload['machine_guid'] ?? ''))) : null;
+        $ativo = $ativoId ? (new \App\Repositories\AtivoRepository())->buscarPorId($ativoId) : null;
+        if (!$ativo) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Ativo não encontrado para este machine_guid.']);
+            return;
+        }
+
+        $contexto = ($payload['contexto'] ?? '') === 'usuario' ? 'usuario' : 'maquina';
+        $sid = preg_match('/^S-1-[0-9-]+$/i', (string)($payload['sid'] ?? '')) ? (string)$payload['sid'] : '';
+
+        echo json_encode(['success' => true, 'itens' => (new \App\Services\AmbientePadraoService())->paraAgente($ativo, $contexto, $sid, $chave)],
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    public function ambienteResultado(): void
+    {
+        header('Content-Type: application/json');
+
+        if (!$this->service->chaveValida($_SERVER['HTTP_X_RD_AGENTE_CHAVE'] ?? '')) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'message' => 'Chave de API inválida.']);
+            return;
+        }
+
+        $payload = json_decode(file_get_contents('php://input'), true);
+        $ativoId = is_array($payload) ? $this->service->idPorMachineGuid(trim((string)($payload['machine_guid'] ?? ''))) : null;
+        if ($ativoId === null) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Ativo não encontrado para este machine_guid.']);
+            return;
+        }
+
+        $itens = [];
+        foreach (is_array($payload['itens'] ?? null) ? $payload['itens'] : [] as $i) {
+            $itens[] = ['id' => (int)($i['id'] ?? 0), 'nome' => mb_substr((string)($i['nome'] ?? ''), 0, 120),
+                        'ok' => !empty($i['ok']), 'mensagem' => mb_substr((string)($i['mensagem'] ?? ''), 0, 300)];
+        }
+        $contexto = ($payload['contexto'] ?? '') === 'usuario' ? 'usuario' : 'maquina';
+        (new \App\Services\AmbientePadraoService())->registrarResultado($ativoId, $contexto, (string)($payload['usuario'] ?? ''), $itens);
+
+        echo json_encode(['success' => true]);
+    }
+
+    /**
      * Lista pública de extensões/notas de ransomware já filtrada (agente
      * 1.0.35+ baixa quando a versão no checkin muda). 404 quando a opção
      * está desligada na Central de Segurança.

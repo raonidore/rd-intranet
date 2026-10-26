@@ -73,6 +73,16 @@ internal static class Program
             return;
         }
 
+        // Uma conferência do Ambiente padrão e sai (o resultado vai para o portal e para a tela Atividade).
+        // Uso: RdIntranetAgente.exe --teste-ambiente <url do portal> <chave> <machine_guid> maquina|usuario
+        var indiceAmbiente = Array.FindIndex(args, a => a.Equals("--teste-ambiente", StringComparison.OrdinalIgnoreCase));
+        if (indiceAmbiente >= 0 && args.Length > indiceAmbiente + 4)
+        {
+            var configTeste = new Config { ServerUrl = args[indiceAmbiente + 1], ApiKey = args[indiceAmbiente + 2] };
+            AmbientePadrao.AplicarAsync(configTeste, args[indiceAmbiente + 3], args[indiceAmbiente + 4] == "maquina").GetAwaiter().GetResult();
+            return;
+        }
+
         // Lançado pelo AgenteServico (SessaoUsuario.LancarProcessoNaSessao)
         // -- já chega com o token certo (elevado, se o usuário for admin),
         // então NÃO deve tentar se relançar com "runas" de novo. Só muda

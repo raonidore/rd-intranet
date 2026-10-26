@@ -57,6 +57,8 @@ public class AgenteServico : ServiceBase
     private AcessosService? _acessos;
     private System.Threading.Timer? _timerLaps;
     private System.Threading.Timer? _timerConfig;
+    // Ambiente padrão do portal na parte que vale para todos os usuários (Run do HKLM, Área de Trabalho pública).
+    private System.Threading.Timer? _timerAmbiente;
 
     public AgenteServico()
     {
@@ -104,6 +106,10 @@ public class AgenteServico : ServiceBase
         // Configuração da máquina ao lado do .exe -- sessão de quem nunca configurou (pessoa nova no Entra) já abre conectada.
         _timerConfig = new System.Threading.Timer(_ => Config.SincronizarCopiaDaMaquina(), null, TimeSpan.Zero, TimeSpan.FromHours(1));
 
+        _timerAmbiente = new System.Threading.Timer(
+            _ => _ = AmbientePadrao.AplicarAsync(Config.CarregarParaServico(), IdentificadorDaMaquina(), contextoMaquina: true),
+            null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(30));
+
         _timerAtualizacao = new System.Threading.Timer(
             _ => _ = AtualizacaoServico.VerificarEAtualizarAsync("verificação periódica"),
             null, TimeSpan.FromMinutes(3), TimeSpan.FromHours(1));
@@ -116,6 +122,7 @@ public class AgenteServico : ServiceBase
         _timerHeartbeat?.Dispose();
         _timerLaps?.Dispose();
         _timerConfig?.Dispose();
+        _timerAmbiente?.Dispose();
         _acessos?.Dispose();
     }
 

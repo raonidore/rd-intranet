@@ -186,11 +186,27 @@ public class TrayApplicationContext : ApplicationContext
         _timerPrincipal.Tick += (s, e) => ConferirPrincipal();
         _timerPrincipal.Start();
 
+        // Ambiente padrão do portal na parte desta pessoa (pastas, impressoras, itens do grupo dela).
+        _timerAmbiente = new System.Threading.Timer(_ => ConferirAmbiente(), null, TimeSpan.FromSeconds(45), TimeSpan.FromMinutes(30));
+
         // Alteração de rede do portal sem confirmação no prazo volta sozinha (também roda no serviço).
         RedeControleService.IniciarVigia();
     }
 
     private readonly System.Windows.Forms.Timer _timerPrincipal;
+    private readonly System.Threading.Timer _timerAmbiente;
+
+    private void ConferirAmbiente()
+    {
+        if (!_config.EstaConfigurado) return;
+        var guid = _machineGuid;
+        _ = AmbientePadrao.AplicarAsync(_config, guid, contextoMaquina: false);
+        // Sem o serviço instalado, a parte de todos os usuários fica com o ícone principal elevado.
+        if (InstanciaPrincipal.EhPrincipal && Program.EstaElevado() && !Program.ServicoDoAgenteRodando())
+        {
+            _ = AmbientePadrao.AplicarAsync(_config, guid, contextoMaquina: true);
+        }
+    }
 
     /// <summary>A cada minuto: secundária tenta assumir (a principal pode ter saído); principal não elevada cede a vez a uma elevada.</summary>
     private void ConferirPrincipal()
@@ -1542,6 +1558,7 @@ del ""%~f0""
     {
         _timerBandeja.Stop();
         _timerPrincipal.Stop();
+        _timerAmbiente.Dispose();
         InstanciaPrincipal.Liberar();
         _seguranca.Detectado -= AoDetectarEventoSeguranca;
         _monitorRede.Dispose();

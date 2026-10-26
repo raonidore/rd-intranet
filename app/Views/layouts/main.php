@@ -265,7 +265,8 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         || PermissionService::temAcesso('ativos_cadastros')
         || PermissionService::temAcesso('ativos_acesso_remoto')
         || PermissionService::temAcesso('ativos_etiqueta_config')
-        || PermissionService::temAcesso('ativos_politicas');
+        || PermissionService::temAcesso('ativos_politicas')
+        || PermissionService::temAcesso('ativos_ambiente');
     ?>
     <?php if ($temAtivos): ?>
     <button class="menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#menuAtivos"
@@ -329,6 +330,12 @@ $abrirSistemaModulos = $rdSecaoAtiva(['/administracao/modulos']);
         <?php if (PermissionService::temAcesso('ativos_politicas')): ?>
         <a href="<?= url('/ativos/politicas') ?>" class="<?= str_starts_with($uriAtual, '/ativos/politicas') ? 'active' : '' ?>">
             <i class="bi bi-shield-check me-2"></i> Regras de Segurança
+        </a>
+        <?php endif; ?>
+
+        <?php if (PermissionService::temAcesso('ativos_ambiente')): ?>
+        <a href="<?= url('/ativos/ambiente-padrao') ?>" class="<?= str_starts_with($uriAtual, '/ativos/ambiente-padrao') ? 'active' : '' ?>">
+            <i class="bi bi-window-desktop me-2"></i> Ambiente padrão
         </a>
         <?php endif; ?>
     </div>

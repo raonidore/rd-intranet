@@ -1172,6 +1172,8 @@ $router->get('/api/ativos/seguranca/assinaturas', [AtivoAgenteController::class,
 $router->get('/api/ativos/seguranca/regras', [AtivoAgenteController::class, 'regrasSeguranca']);
 $router->post('/api/ativos/seguranca/retrato', [AtivoAgenteController::class, 'retratoSeguranca']);
 $router->post('/api/ativos/acessos', [AtivoAgenteController::class, 'acessos']);
+$router->post('/api/ativos/ambiente', [AtivoAgenteController::class, 'ambiente']);
+$router->post('/api/ativos/ambiente/resultado', [AtivoAgenteController::class, 'ambienteResultado']);
 $router->get('/ativos/seguranca/monitor', [AtivoController::class, 'monitorSeguranca']);
 $router->post('/ativos/seguranca/monitor/acao', [AtivoController::class, 'acaoMonitorSeguranca']);
 $router->post('/ativos/desempenho/config', [AtivoController::class, 'salvarDesempenhoAtivo']);
@@ -1255,6 +1257,11 @@ $router->post('/ativos/comando/enviar-arquivo', [AtivoController::class, 'enviar
 $router->post('/ativos/solicitacoes/listar', [AtivoController::class, 'solicitarListagem']);
 $router->get('/ativos/solicitacoes/resultado', [AtivoController::class, 'resultadoSolicitacao']);
 
+$router->get('/ativos/ambiente-padrao', [\App\Controllers\AmbientePadraoController::class, 'index']);
+$router->get('/ativos/ambiente-padrao/grupos', [\App\Controllers\AmbientePadraoController::class, 'grupos']);
+$router->post('/ativos/ambiente-padrao/salvar', [\App\Controllers\AmbientePadraoController::class, 'salvar']);
+$router->post('/ativos/ambiente-padrao/alternar', [\App\Controllers\AmbientePadraoController::class, 'alternar']);
+$router->post('/ativos/ambiente-padrao/excluir', [\App\Controllers\AmbientePadraoController::class, 'excluir']);
 $router->get('/ativos/politicas', [PoliticaController::class, 'index']);
 $router->post('/ativos/politicas/wallpaper/upload', [PoliticaController::class, 'wallpaperUpload']);
 $router->post('/ativos/politicas/wallpaper/remover', [PoliticaController::class, 'wallpaperRemover']);
