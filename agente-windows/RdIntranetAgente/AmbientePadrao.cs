@@ -45,6 +45,8 @@ public static class AmbientePadrao
     private const string PrefixoRun = "RD - ";
 
     private static int _aplicandoMaquina;
+    /// <summary>Só o --teste-ambiente: busca os itens "de máquina" mas grava no usuário atual (testar sem administrador).</summary>
+    internal static bool SimularMaquinaNoUsuario;
     private static int _aplicandoUsuario;
 
     public static async Task AplicarAsync(Config config, string? machineGuid, bool contextoMaquina)
@@ -59,7 +61,7 @@ public static class AmbientePadrao
             var itens = await BaixarAsync(config, machineGuid, contexto, identidade.User?.Value ?? "");
             if (itens == null) return; // portal fora do ar ou sem o recurso: não desfaz nada
 
-            if (contextoMaquina) GarantirConexoesVinculadas();
+            if (contextoMaquina && !SimularMaquinaNoUsuario) GarantirConexoesVinculadas();
             var resultados = Aplicar(itens, contextoMaquina, config);
             await EnviarResultadoAsync(config, machineGuid, contexto, contextoMaquina ? "" : identidade.Name, resultados);
         }
@@ -88,7 +90,7 @@ public static class AmbientePadrao
 
     private static List<ResultadoItemAmbiente> Aplicar(List<ItemAmbiente> itens, bool maquina, Config config)
     {
-        var hive = maquina ? RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64) : Registry.CurrentUser;
+        var hive = maquina && !SimularMaquinaNoUsuario ? RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64) : Registry.CurrentUser;
         using var controle = hive.CreateSubKey(ChaveControle);
         var criadosAntes = LerCriados(controle);
         var resultados = new List<ResultadoItemAmbiente>();
@@ -146,7 +148,7 @@ public static class AmbientePadrao
     /// <returns>(alvo criado, se mudou algo agora, aviso de falha ou null)</returns>
     private static (string alvo, bool mudou, string? aviso) AplicarItem(ItemAmbiente item, bool maquina, Config config, RegistryKey hive)
     {
-        var desktop = Environment.GetFolderPath(maquina ? Environment.SpecialFolder.CommonDesktopDirectory : Environment.SpecialFolder.DesktopDirectory);
+        var desktop = Environment.GetFolderPath(maquina && !SimularMaquinaNoUsuario ? Environment.SpecialFolder.CommonDesktopDirectory : Environment.SpecialFolder.DesktopDirectory);
         switch (item.Tipo)
         {
             case "inicializar":

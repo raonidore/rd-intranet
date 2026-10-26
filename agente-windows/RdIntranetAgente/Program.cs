@@ -74,12 +74,14 @@ internal static class Program
         }
 
         // Uma conferência do Ambiente padrão e sai (o resultado vai para o portal e para a tela Atividade).
-        // Uso: RdIntranetAgente.exe --teste-ambiente <url do portal> <chave> <machine_guid> maquina|usuario
+        // Uso: RdIntranetAgente.exe --teste-ambiente <url do portal> <chave> <machine_guid> maquina|usuario|maquina-no-usuario
         var indiceAmbiente = Array.FindIndex(args, a => a.Equals("--teste-ambiente", StringComparison.OrdinalIgnoreCase));
         if (indiceAmbiente >= 0 && args.Length > indiceAmbiente + 4)
         {
             var configTeste = new Config { ServerUrl = args[indiceAmbiente + 1], ApiKey = args[indiceAmbiente + 2] };
-            AmbientePadrao.AplicarAsync(configTeste, args[indiceAmbiente + 3], args[indiceAmbiente + 4] == "maquina").GetAwaiter().GetResult();
+            // "maquina-no-usuario": itens de máquina gravados no usuário atual (sem precisar de administrador).
+            AmbientePadrao.SimularMaquinaNoUsuario = args[indiceAmbiente + 4] == "maquina-no-usuario";
+            AmbientePadrao.AplicarAsync(configTeste, args[indiceAmbiente + 3], args[indiceAmbiente + 4] != "usuario").GetAwaiter().GetResult();
             return;
         }
 
