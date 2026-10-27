@@ -985,6 +985,12 @@ public sealed class SegurancaService : IDisposable
         //    Volsnap 25/32/35/36: descartou todas por falta de espaço/volume.
         var agora = DateTime.Now;
         var regras = _regras;
+        // Leitura anterior há mais de 5 min = máquina suspensa/hibernada (ou agente parado) no meio
+        // (EP-REC-03-D, Enzilab Prime, 27/10/2026: suspendeu às 22:45 com 3 cópias, acordou às 06:03
+        // com 1 e virou "caiu em menos de 1 minuto" + isolamento). Não dá para dizer que foi de uma
+        // vez nem quem foi: vira alerta, sem isolar, e a busca no log cobre o intervalo inteiro.
+        var intervalo = verificadoAntes.HasValue ? agora - verificadoAntes.Value : TimeSpan.Zero;
+        var houveIntervalo = intervalo > TimeSpan.FromMinutes(5);
         var temporarias = removidas.Count(c => c != DateTime.MinValue && (agora - c).TotalHours < regras.ShadowTemporariaHoras);
         var expiradas = removidas.Count(c => c != DateTime.MinValue && (agora - c).TotalDays > regras.ShadowExpiradaDias);
         var persistentes = removidas.Count - temporarias - expiradas;
@@ -1035,12 +1041,17 @@ public sealed class SegurancaService : IDisposable
         Registrar(new EventoSeguranca
         {
             Tipo = "SHADOW_COPY_DELETE_ATTEMPT",
-            Severidade = parcialDasAntigas ? "WARNING" : "CRITICAL",
-            Resumo = $"{removidas.Count} shadow copies removidas de uma vez ({anteriores.Count} → {atuais.Count}), {semExplicacao} sem explicação"
-                + (parcialDasAntigas ? " -- só as mais antigas, ainda restam cópias" : ""),
+            Severidade = parcialDasAntigas || houveIntervalo ? "WARNING" : "CRITICAL",
+            Resumo = houveIntervalo
+                ? $"{removidas.Count} shadow copies saíram ({anteriores.Count} → {atuais.Count}) entre {verificadoAntes:dd/MM HH:mm} e {agora:dd/MM HH:mm} -- a máquina ficou suspensa ou desligada no meio, {semExplicacao} sem explicação no log"
+                : $"{removidas.Count} shadow copies removidas de uma vez ({anteriores.Count} → {atuais.Count}), {semExplicacao} sem explicação"
+                    + (parcialDasAntigas ? " -- só as mais antigas, ainda restam cópias" : ""),
             Detalhes = new Dictionary<string, object?>
             {
-                ["linha_comando"] = $"Contagem de shadow copies caiu de {anteriores.Count} para {atuais.Count} em menos de 1 minuto",
+                ["linha_comando"] = houveIntervalo
+                    ? $"Contagem de shadow copies caiu de {anteriores.Count} para {atuais.Count} entre {verificadoAntes:dd/MM HH:mm:ss} e {agora:dd/MM HH:mm:ss} ({intervalo.TotalMinutes:0} min sem leitura)"
+                    : $"Contagem de shadow copies caiu de {anteriores.Count} para {atuais.Count} em menos de 1 minuto",
+                ["intervalo_minutos"] = Math.Round(intervalo.TotalMinutes),
                 ["contagem_anterior"] = anteriores.Count,
                 ["contagem_atual"] = atuais.Count,
                 ["temporarias"] = temporarias,
@@ -1065,7 +1076,7 @@ public sealed class SegurancaService : IDisposable
     {
         try
         {
-            var janelaMs = (long)Math.Clamp(((DateTime.Now - (desde ?? DateTime.Now.AddMinutes(-2))).TotalMilliseconds) + 180000, 120000, 900000);
+            var janelaMs = (long)Math.Clamp(((DateTime.Now - (desde ?? DateTime.Now.AddMinutes(-2))).TotalMilliseconds) + 180000, 120000, 691200000);
             var consulta = new System.Diagnostics.Eventing.Reader.EventLogQuery(
                 "Application",
                 System.Diagnostics.Eventing.Reader.PathType.LogName,
@@ -1155,7 +1166,8 @@ public sealed class SegurancaService : IDisposable
     {
         try
         {
-            var janelaMs = (long)Math.Clamp(((DateTime.Now - (desde ?? DateTime.Now.AddMinutes(-2))).TotalMilliseconds) + 30000, 60000, 600000);
+            // Até 8 dias: depois de suspensão/hibernação o intervalo real entre leituras é de horas.
+            var janelaMs = (long)Math.Clamp(((DateTime.Now - (desde ?? DateTime.Now.AddMinutes(-2))).TotalMilliseconds) + 30000, 60000, 691200000);
             var consulta = new System.Diagnostics.Eventing.Reader.EventLogQuery(
                 "System",
                 System.Diagnostics.Eventing.Reader.PathType.LogName,
