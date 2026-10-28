@@ -371,7 +371,8 @@ public static class AnaliseExecutavel
         else if (info.Assinatura == "expirada") Somar(5, "certificado da assinatura expirado");
 
         // Pasta estranha pesa de verdade só sem assinatura (instalador assinado roda do Temp o tempo todo).
-        var pesoLocal = info.TemAssinatura ? 0.25 : 1.0;
+        // Assinatura "desconhecida" = o agente não conseguiu ler o arquivo (pasta só do SYSTEM): meio peso, não peso cheio.
+        var pesoLocal = info.TemAssinatura ? 0.25 : info.Assinatura == "desconhecida" ? 0.5 : 1.0;
         if (Regex.IsMatch(caminho, @"\\(AppData\\Local\\Temp|Windows\\Temp|Temp)\\", RegexOptions.IgnoreCase)) Somar((int)(30 * pesoLocal), "fica em pasta temporária");
         else if (caminho.Contains(@"\$Recycle.Bin\", StringComparison.OrdinalIgnoreCase)) Somar(45, "fica na lixeira");
         else if (Regex.IsMatch(caminho, @"\\Users\\Public\\", RegexOptions.IgnoreCase)) Somar((int)(15 * pesoLocal), "fica na pasta pública de usuários");
@@ -379,7 +380,7 @@ public static class AnaliseExecutavel
         else if (Regex.IsMatch(caminho, @"\\AppData\\(Roaming|Local)\\", RegexOptions.IgnoreCase)
                  && !Regex.IsMatch(caminho, @"\\AppData\\Local\\Programs\\", RegexOptions.IgnoreCase) && !info.Assinado) Somar(10, "fica no perfil do usuário (AppData)");
 
-        if (naPastaDoWindows && !info.Assinado
+        if (naPastaDoWindows && !info.Assinado && info.Assinatura != "desconhecida"
             && !Regex.IsMatch(caminho, @"\\(Microsoft\.NET|assembly|WinSxS|servicing|SoftwareDistribution|Installer)\\", RegexOptions.IgnoreCase))
         {
             Somar(15, "dentro da pasta do Windows sem assinatura");
@@ -531,6 +532,15 @@ public static class AnaliseExecutavel
             // emissor que o Windows não conhece (MeshAgent usa o certificado do
             // próprio MeshCentral) -- bem diferente de arquivo ADULTERADO.
             // Raiz desconhecida mas o arquivo confere com a assinatura: se o certificado é da RD, vale como assinado.
+            // Erro ao LER o arquivo (CRYPT_E_FILE_ERROR -- é o que vem com acesso negado --, ou 0x8007xxxx: em
+            // uso, sumiu) não é assinatura ruim. Visto na DM-PC-000002: o ícone (conta do usuário) não lê
+            // C:\Windows\Temp\{GUID} do MpSigStub.exe que o Windows Update extrai, e isso virava "assinatura
+            // adulterada" (crítico).
+            if (resultado == CryptEFileError || (resultado & unchecked((int)0xFFFF0000)) == unchecked((int)0x80070000))
+            {
+                return ("desconhecida", null);
+            }
+
             if (resultado is CertERaizNaoConfiavel or CertEEncadeamento or CertERaizDeTeste && AssinanteDaRd(caminho) is { } daRd)
             {
                 return ("valida", daRd);
@@ -585,6 +595,7 @@ public static class AnaliseExecutavel
     private const int CertERaizNaoConfiavel = unchecked((int)0x800B0109);
     private const int CertEEncadeamento = unchecked((int)0x800B010A);
     private const int CertERaizDeTeste = unchecked((int)0x800B010D);
+    private const int CryptEFileError = unchecked((int)0x80092003);
 
     private static readonly Guid AcaoVerificar = new("00AAC56B-CD44-11d0-8CC2-00C04FC295EE");
 

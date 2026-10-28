@@ -145,7 +145,8 @@ public static class AtualizacaoServico
 
         // CreateFromSignedFile só lê o certificado -- não confere se o arquivo foi mexido depois
         // de assinado. WinVerifyTrust (AnaliseExecutavel) confere: "invalida" = hash não bate.
-        if (AnaliseExecutavel.Analisar(exeNovo).Assinatura is "invalida" or "ausente")
+        // "desconhecida" (não deu para ler o arquivo) também barra: aqui só passa o que foi conferido.
+        if (AnaliseExecutavel.Analisar(exeNovo).Assinatura is "invalida" or "ausente" or "desconhecida")
         {
             return "a assinatura do executável novo não confere (arquivo alterado depois de assinado).";
         }
