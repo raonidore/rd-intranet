@@ -982,9 +982,11 @@ class AtivoService
             }
 
             $rotulo = self::ROTULO_PERIFERICO[$p['tipo']] ?? 'Periférico';
+            // "Monitor LG HD", não "Monitor LG LG HD": a marca só entra se o modelo ainda não tiver.
+            $fabricante = $p['fabricante'] && stripos((string)$p['modelo'], $p['fabricante']) === false ? $p['fabricante'] : '';
             $nomeSugerido = $p['tipo'] === 'impressora'
                 ? ($p['modelo'] ?: $rotulo)
-                : trim($rotulo . ' ' . ($p['fabricante'] ?? '') . ' ' . ($p['modelo'] ?? ''));
+                : preg_replace('/\s+/', ' ', trim("{$rotulo} {$fabricante} " . ($p['modelo'] ?? '')));
 
             $p['url_cadastro'] = url('/ativos/novo?' . http_build_query(array_filter([
                 'tipo_id' => $tipos[self::TIPO_ATIVO_PERIFERICO[$p['tipo']]] ?? null,
