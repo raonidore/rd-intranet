@@ -281,6 +281,7 @@ public static class CollectorService
         payload.Ip = payload.Redes.Count > 0 ? payload.Redes[0].Ip : null;
         payload.Volumes = ObterVolumes();
         payload.Portas = ObterPortas();
+        payload.Perifericos = PerifericosColetor.Coletar();
         payload.PortasRede = ObterPortasRede();
         payload.MemoriaModulos = ObterModulosMemoria();
         payload.Controladoras = ObterControladoras();

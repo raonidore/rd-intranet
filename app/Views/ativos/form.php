@@ -9,6 +9,8 @@ $detalhes = $ativo['detalhes'] ?? [];
 $tipoIdAtual = (int)($ativo['tipo_id'] ?? $tipoIdSelecionado);
 $tipoAtualNome = $ativo['tipo_nome'] ?? '';
 $tipoAtualSlug = $ativo['tipo_slug'] ?? '';
+$prefill = $prefill ?? [];
+$computadores = $computadores ?? [];
 $idsTiposComSnmp = array_column(array_filter($tipos, fn (array $t) => (bool)$t['snmp_elegivel']), 'id');
 ?>
 
@@ -55,7 +57,7 @@ $idsTiposComSnmp = array_column(array_filter($tipos, fn (array $t) => (bool)$t['
                     <label class="form-label">Unidade</label>
                     <select name="unidade_id" class="form-select" required>
                         <?php foreach ($unidades as $u): ?>
-                            <option value="<?= (int)$u['id'] ?>" <?= (int)($ativo['unidade_id'] ?? 0) === (int)$u['id'] ? 'selected' : '' ?>><?= htmlspecialchars($u['nome']) ?></option>
+                            <option value="<?= (int)$u['id'] ?>" <?= (int)($ativo['unidade_id'] ?? $prefill['unidade_id'] ?? 0) === (int)$u['id'] ? 'selected' : '' ?>><?= htmlspecialchars($u['nome']) ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
@@ -103,15 +105,15 @@ $idsTiposComSnmp = array_column(array_filter($tipos, fn (array $t) => (bool)$t['
             <div class="row g-3 mb-3">
                 <div class="col-md-3">
                     <label class="form-label">Marca / Fabricante</label>
-                    <input type="text" name="marca" class="form-control" value="<?= htmlspecialchars($ativo['marca'] ?? '') ?>">
+                    <input type="text" name="marca" class="form-control" value="<?= htmlspecialchars($ativo['marca'] ?? $prefill['marca'] ?? '') ?>">
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">Modelo</label>
-                    <input type="text" name="modelo" class="form-control" value="<?= htmlspecialchars($ativo['modelo'] ?? '') ?>">
+                    <input type="text" name="modelo" class="form-control" value="<?= htmlspecialchars($ativo['modelo'] ?? $prefill['modelo'] ?? '') ?>">
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">Nº de série</label>
-                    <input type="text" name="numero_serie" class="form-control" value="<?= htmlspecialchars($ativo['numero_serie'] ?? '') ?>">
+                    <input type="text" name="numero_serie" class="form-control" value="<?= htmlspecialchars($ativo['numero_serie'] ?? $prefill['numero_serie'] ?? '') ?>">
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">IP</label>
@@ -143,7 +145,7 @@ $idsTiposComSnmp = array_column(array_filter($tipos, fn (array $t) => (bool)$t['
                     <select name="setor_id" class="form-select">
                         <option value="">— Nenhum —</option>
                         <?php foreach ($setores as $s): ?>
-                            <option value="<?= (int)$s['id'] ?>" <?= (int)($ativo['setor_id'] ?? 0) === (int)$s['id'] ? 'selected' : '' ?>><?= htmlspecialchars($s['nome']) ?></option>
+                            <option value="<?= (int)$s['id'] ?>" <?= (int)($ativo['setor_id'] ?? $prefill['setor_id'] ?? 0) === (int)$s['id'] ? 'selected' : '' ?>><?= htmlspecialchars($s['nome']) ?></option>
                         <?php endforeach; ?>
                     </select>
                     <div class="form-text">Não achou? <a href="<?= url('/ativos/cadastros') ?>" target="_blank">Cadastre um novo setor</a>.</div>
@@ -153,16 +155,32 @@ $idsTiposComSnmp = array_column(array_filter($tipos, fn (array $t) => (bool)$t['
                     <select name="localizacao_id" class="form-select">
                         <option value="">— Nenhuma —</option>
                         <?php foreach ($localizacoes as $l): ?>
-                            <option value="<?= (int)$l['id'] ?>" <?= (int)($ativo['localizacao_id'] ?? 0) === (int)$l['id'] ? 'selected' : '' ?>><?= htmlspecialchars($l['nome']) ?></option>
+                            <option value="<?= (int)$l['id'] ?>" <?= (int)($ativo['localizacao_id'] ?? $prefill['localizacao_id'] ?? 0) === (int)$l['id'] ? 'selected' : '' ?>><?= htmlspecialchars($l['nome']) ?></option>
                         <?php endforeach; ?>
                     </select>
                     <div class="form-text">Não achou? <a href="<?= url('/ativos/cadastros') ?>" target="_blank">Cadastre uma nova localização</a>.</div>
                 </div>
                 <div class="col-md-4">
                     <label class="form-label">Responsável</label>
-                    <input type="text" name="responsavel" class="form-control" value="<?= htmlspecialchars($ativo['responsavel'] ?? '') ?>">
+                    <input type="text" name="responsavel" class="form-control" value="<?= htmlspecialchars($ativo['responsavel'] ?? $prefill['responsavel'] ?? '') ?>">
                 </div>
             </div>
+
+            <?php if (!in_array($tipoAtualSlug, ['computador', 'servidor'], true)): ?>
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <label class="form-label">Conectado a</label>
+                    <?php $conectadoAtual = (int)($ativo['conectado_a_id'] ?? $prefill['conectado_a_id'] ?? 0); ?>
+                    <select name="conectado_a_id" class="form-select">
+                        <option value="">— Nenhum computador —</option>
+                        <?php foreach ($computadores as $c): ?>
+                            <option value="<?= (int)$c['id'] ?>" <?= $conectadoAtual === (int)$c['id'] ? 'selected' : '' ?>><?= htmlspecialchars($c['nome'] . ($c['apelido'] ? ' (' . $c['apelido'] . ')' : '') . ' -- ' . $c['codigo_patrimonio']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <div class="form-text">Pra monitor, impressora USB, teclado... -- aparece na ficha do computador. Com nº de série, o agente atualiza sozinho se o periférico mudar de máquina.</div>
+                </div>
+            </div>
+            <?php endif; ?>
 
             <div class="mb-0">
                 <label class="form-label">Observações</label>

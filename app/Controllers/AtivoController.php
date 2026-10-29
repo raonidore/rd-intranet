@@ -221,6 +221,9 @@ class AtivoController extends Controller
             'redes' => $this->service->listarRedes($id),
             'volumes' => $this->service->listarVolumes($id),
             'portas' => $this->service->listarPortas($id),
+            'perifericosDetectados' => $this->service->listarPerifericosDetectados($ativo),
+            'perifericosConectados' => $this->service->listarConectados($id),
+            'conectadoA' => !empty($ativo['conectado_a_id']) ? $this->service->buscar((int)$ativo['conectado_a_id']) : null,
             'portasRede' => $this->service->listarPortasRede($id),
             'memoria' => $this->service->listarMemoria($id),
             'placasVideo' => $this->service->listarPlacasVideo($id),
@@ -272,6 +275,10 @@ class AtivoController extends Controller
             // o resto continua em branco pro admin completar.
             'prefillNome' => $_GET['nome'] ?? '',
             'prefillIp' => $_GET['ip'] ?? '',
+            // "Cadastrar como ativo" de um periférico que o agente viu (ficha do
+            // computador): marca/modelo/série, e unidade/setor/localização do computador.
+            'prefill' => $this->prefillPeriferico(),
+            'computadores' => $this->service->listarComputadores(),
         ]);
     }
 
@@ -304,7 +311,30 @@ class AtivoController extends Controller
             'unidades' => $this->unidadeService->listarAtivas(),
             'setores' => $this->catalogoService->listarSetores(),
             'localizacoes' => $this->catalogoService->listarLocalizacoes(),
+            'computadores' => $this->service->listarComputadores(),
         ]);
+    }
+
+    private function prefillPeriferico(): array
+    {
+        $prefill = array_filter([
+            'marca' => trim((string)($_GET['marca'] ?? '')),
+            'modelo' => trim((string)($_GET['modelo'] ?? '')),
+            'numero_serie' => trim((string)($_GET['numero_serie'] ?? '')),
+        ], fn ($v) => $v !== '');
+
+        $maquina = !empty($_GET['conectado_a']) ? $this->service->buscar((int)$_GET['conectado_a']) : null;
+        if ($maquina) {
+            $prefill += [
+                'conectado_a_id' => (int)$maquina['id'],
+                'unidade_id' => $maquina['unidade_id'],
+                'setor_id' => $maquina['setor_id'],
+                'localizacao_id' => $maquina['localizacao_id'],
+                'responsavel' => $maquina['responsavel'],
+            ];
+        }
+
+        return $prefill;
     }
 
     public function editar(): void

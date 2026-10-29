@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS `ativos` (
   `responsavel` varchar(150) DEFAULT NULL,
   `setor_id` int(11) DEFAULT NULL,
   `localizacao_id` int(11) DEFAULT NULL,
+  `conectado_a_id` int(11) DEFAULT NULL,
   `status` enum('ativo','manutencao','estoque','baixado') NOT NULL DEFAULT 'ativo',
   `ip` varchar(45) DEFAULT NULL,
   `snmp_habilitado` tinyint(1) NOT NULL DEFAULT 0,
@@ -117,10 +118,12 @@ CREATE TABLE IF NOT EXISTS `ativos` (
   KEY `fk_ativos_localizacao` (`localizacao_id`),
   KEY `fk_ativos_tipo` (`tipo_id`),
   KEY `fk_ativos_unidade` (`unidade_id`),
+  KEY `fk_ativos_conectado_a` (`conectado_a_id`),
   CONSTRAINT `fk_ativos_localizacao` FOREIGN KEY (`localizacao_id`) REFERENCES `ativos_catalogos` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_ativos_setor` FOREIGN KEY (`setor_id`) REFERENCES `ativos_catalogos` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_ativos_tipo` FOREIGN KEY (`tipo_id`) REFERENCES `ativos_tipos` (`id`),
-  CONSTRAINT `fk_ativos_unidade` FOREIGN KEY (`unidade_id`) REFERENCES `unidades` (`id`)
+  CONSTRAINT `fk_ativos_unidade` FOREIGN KEY (`unidade_id`) REFERENCES `unidades` (`id`),
+  CONSTRAINT `fk_ativos_conectado_a` FOREIGN KEY (`conectado_a_id`) REFERENCES `ativos` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ----------------------------------------------------------------
@@ -348,6 +351,25 @@ CREATE TABLE IF NOT EXISTS `ativos_politicas_estado` (
   KEY `idx_ativos_politicas_solicitacao` (`solicitacao_id`),
   CONSTRAINT `fk_ativos_politicas_ativo` FOREIGN KEY (`ativo_id`) REFERENCES `ativos` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_ativos_politicas_solicitacao` FOREIGN KEY (`solicitacao_id`) REFERENCES `ativos_solicitacoes` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ----------------------------------------------------------------
+-- ativos_perifericos
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `ativos_perifericos` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `ativo_id` int(11) NOT NULL,
+  `tipo` varchar(20) NOT NULL,
+  `fabricante` varchar(100) DEFAULT NULL,
+  `modelo` varchar(150) DEFAULT NULL,
+  `numero_serie` varchar(100) DEFAULT NULL,
+  `conexao` varchar(60) DEFAULT NULL,
+  `ip` varchar(45) DEFAULT NULL,
+  `detalhe` varchar(255) DEFAULT NULL,
+  `coletado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_ativos_perifericos_ativo` (`ativo_id`),
+  CONSTRAINT `fk_ativos_perifericos_ativo` FOREIGN KEY (`ativo_id`) REFERENCES `ativos` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ----------------------------------------------------------------

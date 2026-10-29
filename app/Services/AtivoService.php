@@ -535,6 +535,10 @@ class AtivoService
 
         $id = $this->repository->criar($dados);
 
+        if ($conectadoA = $this->conectadoAValido($post['conectado_a_id'] ?? null)) {
+            $this->repository->definirConectadoA($id, $conectadoA);
+        }
+
         AuditService::registrar('Ativos', 'Criar Ativo', 'Ativo ' . $dados['codigo_patrimonio'] . ' (' . $dados['nome'] . ') cadastrado.');
 
         NotificationService::success('Ativo cadastrado com sucesso. Código: ' . $dados['codigo_patrimonio']);
@@ -608,6 +612,11 @@ class AtivoService
         }
 
         $this->repository->atualizar($id, $dados);
+
+        // Campo só existe no formulário de periférico (não em computador/servidor).
+        if (array_key_exists('conectado_a_id', $post)) {
+            $this->repository->definirConectadoA($id, $this->conectadoAValido($post['conectado_a_id'], $id));
+        }
 
         AuditService::registrar('Ativos', 'Editar Ativo', 'Ativo ' . $ativo['codigo_patrimonio'] . ' atualizado.');
 
@@ -859,6 +868,159 @@ class AtivoService
     public function listarPortas(int $ativoId): array
     {
         return $this->repository->listarPortas($ativoId);
+    }
+
+    /** Tipo de ativo usado ao cadastrar o periférico detectado (teclado/mouse caem em "Periféricos"). */
+    private const TIPO_ATIVO_PERIFERICO = [
+        'monitor' => 'monitor',
+        'impressora' => 'impressora',
+        'teclado' => 'periferico',
+        'mouse' => 'periferico',
+        'teclado_mouse' => 'periferico',
+    ];
+
+    public const ROTULO_PERIFERICO = [
+        'monitor' => 'Monitor',
+        'impressora' => 'Impressora',
+        'teclado' => 'Teclado',
+        'mouse' => 'Mouse',
+        'teclado_mouse' => 'Teclado e mouse',
+    ];
+
+    /**
+     * Periféricos que o agente (1.0.94+) viu ligados na máquina: grava a
+     * lista e, pros que já são ativos (mesmo nº de série; impressora de rede
+     * pelo IP), aponta "conectado a" pra esta máquina -- o monitor que foi
+     * pra outra mesa acompanha sozinho, com o registro na auditoria.
+     */
+    private function registrarPerifericos(int $ativoId, array $recebidos, string $nomeMaquina): void
+    {
+        $texto = fn ($v, int $max) => ($t = trim((string)$v)) === '' ? null : mb_substr($t, 0, $max);
+        $lista = [];
+
+        foreach (array_slice($recebidos, 0, 40) as $p) {
+            if (!is_array($p) || !isset(self::TIPO_ATIVO_PERIFERICO[$p['tipo'] ?? ''])) {
+                continue;
+            }
+
+            $ip = trim((string)($p['ip'] ?? ''));
+            $lista[] = [
+                'tipo' => $p['tipo'],
+                'fabricante' => $texto($p['fabricante'] ?? '', 100),
+                'modelo' => $texto($p['modelo'] ?? '', 150),
+                'numero_serie' => self::seriePerifericoValida((string)($p['numero_serie'] ?? '')) ? $texto($p['numero_serie'], 100) : null,
+                'conexao' => $texto($p['conexao'] ?? '', 60),
+                'ip' => filter_var($ip, FILTER_VALIDATE_IP) ? $ip : null,
+                'detalhe' => $texto($p['detalhe'] ?? '', 255),
+            ];
+        }
+
+        $this->repository->substituirPerifericos($ativoId, $lista);
+
+        foreach ($lista as $p) {
+            $cadastrado = $this->perifericoCadastrado($p);
+            if ($cadastrado === null || (int)($cadastrado['conectado_a_id'] ?? 0) === $ativoId) {
+                continue;
+            }
+
+            $this->repository->definirConectadoA((int)$cadastrado['id'], $ativoId);
+
+            $anterior = !empty($cadastrado['conectado_a_id']) ? $this->repository->buscarPorId((int)$cadastrado['conectado_a_id']) : null;
+            AuditService::registrar('Ativos', 'Periférico vinculado pelo agente',
+                "{$cadastrado['codigo_patrimonio']} ({$cadastrado['nome']}) agora está em {$nomeMaquina}"
+                . ($anterior ? " -- antes em {$anterior['codigo_patrimonio']} ({$anterior['nome']})." : '.'));
+        }
+    }
+
+    /** Série curta, "0000000" ou "01010101" (valor de fábrica genérico) não identifica nada. */
+    public static function seriePerifericoValida(string $serie): bool
+    {
+        $serie = trim($serie);
+
+        return strlen($serie) >= 4 && !preg_match('/^(.)\1*$/', $serie) && !preg_match('/^(..)\1+$/', $serie);
+    }
+
+    private function perifericoCadastrado(array $p): ?array
+    {
+        if (!empty($p['numero_serie'])) {
+            $porSerie = $this->repository->buscarPerifericoPorSerie($p['numero_serie']);
+            if ($porSerie) {
+                return $porSerie;
+            }
+        }
+
+        return $p['tipo'] === 'impressora' && !empty($p['ip']) ? $this->repository->buscarImpressoraPorIp($p['ip']) : null;
+    }
+
+    /**
+     * Pra ficha do computador: o que o agente viu, cada um com o ativo já
+     * cadastrado (se houver) ou o link "Cadastrar como ativo" pré-preenchido.
+     */
+    public function listarPerifericosDetectados(array $maquina): array
+    {
+        $tipos = [];
+        foreach ((new AtivoTipoService())->listarAtivos() as $t) {
+            $tipos[$t['slug']] = (int)$t['id'];
+        }
+
+        // Sem série (impressora USB, teclado...): vale o ativo já vinculado a esta máquina com o mesmo tipo e modelo.
+        $vinculados = $this->repository->listarConectados((int)$maquina['id']);
+        $normalizar = fn (?string $t) => preg_replace('/[^a-z0-9]/', '', mb_strtolower((string)$t));
+
+        $itens = [];
+        foreach ($this->repository->listarPerifericos((int)$maquina['id']) as $p) {
+            $p['cadastrado'] = $this->perifericoCadastrado($p);
+
+            $modelo = $normalizar($p['modelo']);
+            foreach ($p['cadastrado'] ? [] : $vinculados as $v) {
+                $modeloVinculado = $normalizar($v['modelo'] ?: $v['nome']);
+                if ($v['tipo_slug'] === self::TIPO_ATIVO_PERIFERICO[$p['tipo']] && $modelo !== '' && $modeloVinculado !== ''
+                    && (str_contains($modelo, $modeloVinculado) || str_contains($modeloVinculado, $modelo))) {
+                    $p['cadastrado'] = $v;
+                    break;
+                }
+            }
+
+            $rotulo = self::ROTULO_PERIFERICO[$p['tipo']] ?? 'Periférico';
+            $nomeSugerido = $p['tipo'] === 'impressora'
+                ? ($p['modelo'] ?: $rotulo)
+                : trim($rotulo . ' ' . ($p['fabricante'] ?? '') . ' ' . ($p['modelo'] ?? ''));
+
+            $p['url_cadastro'] = url('/ativos/novo?' . http_build_query(array_filter([
+                'tipo_id' => $tipos[self::TIPO_ATIVO_PERIFERICO[$p['tipo']]] ?? null,
+                'nome' => $nomeSugerido,
+                'marca' => $p['fabricante'],
+                'modelo' => $p['modelo'],
+                'numero_serie' => $p['numero_serie'],
+                'ip' => $p['ip'],
+                'conectado_a' => (int)$maquina['id'],
+            ])));
+
+            $itens[] = $p;
+        }
+
+        return $itens;
+    }
+
+    public function listarConectados(int $ativoId): array
+    {
+        return $this->repository->listarConectados($ativoId);
+    }
+
+    public function listarComputadores(): array
+    {
+        return $this->repository->listarComputadores();
+    }
+
+    /** Valor do campo "Conectado a": só computador/servidor existente e nunca o próprio ativo. */
+    private function conectadoAValido(mixed $valor, ?int $proprioId = null): ?int
+    {
+        $id = (int)$valor;
+        if ($id <= 0 || $id === $proprioId) {
+            return null;
+        }
+
+        return in_array($id, array_map('intval', array_column($this->repository->listarComputadores(), 'id')), true) ? $id : null;
     }
 
     public function listarPortasRede(int $ativoId): array
@@ -5844,6 +6006,10 @@ class AtivoService
         $this->repository->substituirRedes($id, array_slice($payload['redes'] ?? [], 0, 20));
         $this->repository->substituirVolumes($id, array_slice($payload['volumes'] ?? [], 0, 20));
         $this->repository->substituirPortas($id, array_slice($payload['portas'] ?? [], 0, 100));
+        // Agente antigo não manda a chave: mantém o que já estava (não apaga a lista).
+        if (is_array($payload['perifericos'] ?? null)) {
+            $this->registrarPerifericos($id, $payload['perifericos'], $camposBase['nome']);
+        }
         $this->repository->substituirPortasRede($id, array_slice($payload['portas_rede'] ?? [], 0, 300));
         $this->repository->substituirMemoria($id, array_slice($payload['memoria_modulos'] ?? [], 0, 32));
         $this->repository->substituirAtualizacoesWindows($id, array_slice($payload['atualizacoes_windows'] ?? [], 0, 500));

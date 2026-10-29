@@ -388,6 +388,16 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
     <li class="nav-item" role="presentation">
         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaPortas" type="button">Portas <?= !empty($portas) ? '<span class="badge text-bg-secondary ms-1">' . count($portas) . '</span>' : '' ?></button>
     </li>
+    <?php $perifericosSemCadastro = count(array_filter($perifericosDetectados, fn ($p) => !$p['cadastrado'] && in_array($p['tipo'], ['monitor', 'impressora'], true))); ?>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaPerifericos" type="button">Periféricos
+            <?php if ($perifericosSemCadastro): ?>
+                <span class="badge text-bg-warning ms-1" title="Monitor/impressora ainda sem cadastro"><?= $perifericosSemCadastro ?></span>
+            <?php elseif ($perifericosDetectados || $perifericosConectados): ?>
+                <span class="badge text-bg-secondary ms-1"><?= count($perifericosDetectados) ?: count($perifericosConectados) ?></span>
+            <?php endif; ?>
+        </button>
+    </li>
     <li class="nav-item" role="presentation">
         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#abaProgramas" type="button">Programas <?= !empty($programas) ? '<span class="badge text-bg-secondary ms-1">' . count($programas) . '</span>' : '' ?></button>
     </li>
@@ -565,9 +575,15 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                         <div class="d-flex justify-content-between py-2 border-bottom">
                             <span class="text-muted">Localização</span><span><?= htmlspecialchars($ativo['localizacao_nome'] ?? '—') ?></span>
                         </div>
-                        <div class="d-flex justify-content-between py-2">
+                        <div class="d-flex justify-content-between py-2<?= $conectadoA ? ' border-bottom' : '' ?>">
                             <span class="text-muted">Responsável</span><span><?= htmlspecialchars($ativo['responsavel'] ?? '—') ?></span>
                         </div>
+                        <?php if ($conectadoA): ?>
+                            <div class="d-flex justify-content-between py-2">
+                                <span class="text-muted">Conectado a</span>
+                                <span><a href="<?= url('/ativos/ver?id=' . (int)$conectadoA['id']) ?>"><i class="bi <?= htmlspecialchars($conectadoA['tipo_icone'] ?? 'bi-pc-display') ?>"></i> <?= htmlspecialchars($conectadoA['nome']) ?></a> <small class="text-muted"><?= htmlspecialchars($conectadoA['codigo_patrimonio']) ?></small></span>
+                            </div>
+                        <?php endif; ?>
                         <?php if (!empty($camposVisaoGeral)): ?>
                             <hr>
                             <?php foreach ($camposVisaoGeral as $campo => $label): ?>
@@ -1228,6 +1244,71 @@ if ($volumePrincipal && (float)$volumePrincipal['total_gb'] > 0) {
                 <?php endif; ?>
             </div>
         </div>
+    </div>
+
+    <!-- Periféricos (agente 1.0.94+) -->
+    <div class="tab-pane fade" id="abaPerifericos">
+        <?php
+            $iconePeriferico = ['monitor' => 'bi-display', 'impressora' => 'bi-printer', 'teclado' => 'bi-keyboard', 'mouse' => 'bi-mouse', 'teclado_mouse' => 'bi-keyboard'];
+            $idsDetectados = array_filter(array_map(fn ($p) => $p['cadastrado']['id'] ?? null, $perifericosDetectados));
+            $soVinculados = array_filter($perifericosConectados, fn ($c) => !in_array($c['id'], $idsDetectados));
+        ?>
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white"><strong>Detectados pelo agente</strong> <small class="text-muted">no último check-in</small></div>
+            <div class="card-body p-0">
+                <?php if (empty($perifericosDetectados)): ?>
+                    <p class="text-muted small p-3 mb-0">Nada detectado ainda -- precisa do agente 1.0.94 ou mais novo (atualiza sozinho). Tela do notebook, teclado e touchpad embutidos não entram.</p>
+                <?php else: ?>
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead><tr><th class="ps-3">Tipo</th><th>Fabricante / modelo</th><th>Nº de série</th><th>Conexão</th><th class="text-end pe-3">Inventário</th></tr></thead>
+                            <tbody>
+                            <?php foreach ($perifericosDetectados as $p): ?>
+                                <tr>
+                                    <td class="ps-3 text-nowrap"><i class="bi <?= $iconePeriferico[$p['tipo']] ?? 'bi-usb-plug' ?> me-1"></i><?= htmlspecialchars(AtivoService::ROTULO_PERIFERICO[$p['tipo']] ?? $p['tipo']) ?></td>
+                                    <td>
+                                        <?= htmlspecialchars(trim(($p['fabricante'] ?? '') . ' ' . ($p['modelo'] ?? '')) ?: '—') ?>
+                                        <?php if (!empty($p['detalhe'])): ?><div class="small text-muted"><?= htmlspecialchars($p['detalhe']) ?></div><?php endif; ?>
+                                    </td>
+                                    <td class="font-monospace small"><?= htmlspecialchars($p['numero_serie'] ?? '—') ?></td>
+                                    <td class="small"><?= htmlspecialchars(trim(($p['conexao'] ?? '') . ($p['ip'] ? ' · ' . $p['ip'] : '')) ?: '—') ?></td>
+                                    <td class="text-end pe-3 text-nowrap">
+                                        <?php if ($p['cadastrado']): ?>
+                                            <a href="<?= url('/ativos/ver?id=' . (int)$p['cadastrado']['id']) ?>" class="badge text-bg-success text-decoration-none"><i class="bi bi-check-lg"></i> <?= htmlspecialchars($p['cadastrado']['codigo_patrimonio']) ?></a>
+                                        <?php elseif ($podeEditarAtivo): ?>
+                                            <a href="<?= htmlspecialchars($p['url_cadastro']) ?>" class="btn btn-sm btn-outline-primary py-0"><i class="bi bi-plus-lg"></i> Cadastrar como ativo</a>
+                                        <?php else: ?>
+                                            <span class="text-muted small">sem cadastro</span>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="text-muted small px-3 py-2 mb-0 border-top">
+                        "Cadastrar como ativo" abre o cadastro já preenchido (marca, modelo, série, unidade/setor deste computador) e vinculado a ele.
+                        Com nº de série, o periférico já cadastrado é reconhecido sozinho -- se for pra outra máquina, o vínculo acompanha.
+                        Alguns monitores não informam a série; aí o reconhecimento automático não funciona e o vínculo fica manual.
+                    </p>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <?php if ($soVinculados): ?>
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white"><strong>Outros vinculados a esta máquina</strong> <small class="text-muted">cadastrados com "Conectado a", sem aparecer na detecção</small></div>
+                <ul class="list-group list-group-flush">
+                    <?php foreach ($soVinculados as $c): ?>
+                        <li class="list-group-item small">
+                            <i class="bi <?= htmlspecialchars($c['tipo_icone'] ?? 'bi-box') ?> me-1"></i>
+                            <a href="<?= url('/ativos/ver?id=' . (int)$c['id']) ?>"><?= htmlspecialchars($c['codigo_patrimonio']) ?></a> -- <?= htmlspecialchars($c['nome']) ?>
+                            <span class="text-muted"><?= htmlspecialchars(trim(($c['marca'] ?? '') . ' ' . ($c['modelo'] ?? ''))) ?></span>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+        <?php endif; ?>
     </div>
 
     <?php if (($ativo['tipo_slug'] ?? '') === 'ponto_acesso'): ?>

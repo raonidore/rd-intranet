@@ -150,6 +150,10 @@ public class CheckinPayload
     [JsonPropertyName("portas")]
     public List<PortaItem> Portas { get; set; } = new();
 
+    /// <summary>Monitores, impressoras, teclados e mouses (1.0.94+); null = coleta falhou, o portal mantém a lista anterior.</summary>
+    [JsonPropertyName("perifericos")]
+    public List<PerifericoItem>? Perifericos { get; set; }
+
     [JsonPropertyName("portas_rede")]
     public List<PortaRedeItem> PortasRede { get; set; } = new();
 
@@ -332,6 +336,18 @@ public class PortaItem
 
     [JsonPropertyName("descricao")]
     public string Descricao { get; set; } = "";
+}
+
+public class PerifericoItem
+{
+    /// <summary>monitor, impressora, teclado, mouse ou teclado_mouse (receptor de kit sem fio).</summary>
+    [JsonPropertyName("tipo")] public string Tipo { get; set; } = "";
+    [JsonPropertyName("fabricante")] public string? Fabricante { get; set; }
+    [JsonPropertyName("modelo")] public string? Modelo { get; set; }
+    [JsonPropertyName("numero_serie")] public string? NumeroSerie { get; set; }
+    [JsonPropertyName("conexao")] public string? Conexao { get; set; }
+    [JsonPropertyName("ip")] public string? Ip { get; set; }
+    [JsonPropertyName("detalhe")] public string? Detalhe { get; set; }
 }
 
 public class PortaRedeItem

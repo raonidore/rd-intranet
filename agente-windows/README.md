@@ -346,6 +346,28 @@ preferências da impressora, caso o driver ignore o tamanho de página
 que o agente pede. Testado com "Microsoft Print to PDF" (layout, acentos
 e QR lido a 203 dpi); falta confirmar numa Argox de verdade.
 
+## Periféricos (monitor, impressora, teclado, mouse) -- 1.0.94+
+
+A cada check-in o agente manda o que está ligado na máquina
+(`PerifericosColetor.cs`), e o portal mostra na aba **Periféricos** da
+ficha do computador, com "Cadastrar como ativo" já preenchido e
+vinculado ("Conectado a").
+
+- **Monitor**: EDID (`root\wmi WmiMonitorID`) -- fabricante, modelo,
+  série (texto; sem ela, a série binária do EDID no registro), tamanho
+  e ano. Tela do notebook (saída LVDS/eDP/interna) fica de fora.
+- **Impressora**: `Win32_Printer`, sem as virtuais (PDF, XPS, OneNote,
+  Fax, RustDesk...); a de rede leva o IP da porta TCP/IP.
+- **Teclado/mouse**: agrupados pelo container do Windows (= aparelho
+  físico; kit sem fio vira um item só). Integrado ao PC (container
+  `{00000000-0000-0000-FFFF-FFFFFFFFFFFF}`) fica de fora. Nome vem do
+  próprio aparelho (USB) ou do pareamento (Bluetooth); série quase nunca.
+
+Periférico já cadastrado com a mesma série (ou impressora com o mesmo
+IP) é reconhecido sozinho; se aparecer noutra máquina, o "Conectado a"
+muda e fica registrado na auditoria. Teste local, sem enviar:
+`RdIntranetAgente.exe --teste-perifericos C:\Temp\perifericos.json`.
+
 ## Distribuição em massa (opcional)
 
 Pra não precisar configurar servidor/chave manualmente em cada máquina,

@@ -73,6 +73,16 @@ internal static class Program
             return;
         }
 
+        // Periféricos que iriam no check-in, sem enviar.
+        // Uso: RdIntranetAgente.exe --teste-perifericos C:\Temp\perifericos.json
+        var indicePerifericos = Array.FindIndex(args, a => a.Equals("--teste-perifericos", StringComparison.OrdinalIgnoreCase));
+        if (indicePerifericos >= 0)
+        {
+            var saida = args.Length > indicePerifericos + 1 ? args[indicePerifericos + 1] : Path.Combine(Path.GetTempPath(), "rd-teste-perifericos.json");
+            File.WriteAllText(saida, System.Text.Json.JsonSerializer.Serialize(PerifericosColetor.Coletar(), new System.Text.Json.JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }), System.Text.Encoding.UTF8);
+            return;
+        }
+
         // Uma conferência do Ambiente padrão e sai (o resultado vai para o portal e para a tela Atividade).
         // Uso: RdIntranetAgente.exe --teste-ambiente <url do portal> <chave> <machine_guid> maquina|usuario|maquina-no-usuario
         var indiceAmbiente = Array.FindIndex(args, a => a.Equals("--teste-ambiente", StringComparison.OrdinalIgnoreCase));

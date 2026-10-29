@@ -869,6 +869,75 @@ class AtivoRepository
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public function substituirPerifericos(int $ativoId, array $perifericos): void
+    {
+        $this->pdo->prepare("DELETE FROM ativos_perifericos WHERE ativo_id = ?")->execute([$ativoId]);
+
+        $stmt = $this->pdo->prepare("
+            INSERT INTO ativos_perifericos (ativo_id, tipo, fabricante, modelo, numero_serie, conexao, ip, detalhe)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ");
+
+        foreach ($perifericos as $p) {
+            $stmt->execute([$ativoId, $p['tipo'], $p['fabricante'], $p['modelo'], $p['numero_serie'], $p['conexao'], $p['ip'], $p['detalhe']]);
+        }
+    }
+
+    public function listarPerifericos(int $ativoId): array
+    {
+        $stmt = $this->pdo->prepare("SELECT * FROM ativos_perifericos WHERE ativo_id = ? ORDER BY FIELD(tipo, 'monitor', 'impressora', 'teclado_mouse', 'teclado', 'mouse'), modelo");
+        $stmt->execute([$ativoId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Ativos ligados a este (monitor, impressora... com conectado_a_id = $ativoId). */
+    public function listarConectados(int $ativoId): array
+    {
+        $stmt = $this->pdo->prepare(self::SELECT_COM_CATALOGOS . " WHERE a.conectado_a_id = ? ORDER BY t.nome, a.nome");
+        $stmt->execute([$ativoId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Periférico já cadastrado com este nº de série (ignora computadores do agente, que têm machine_guid). */
+    public function buscarPerifericoPorSerie(string $serie): ?array
+    {
+        $stmt = $this->pdo->prepare("SELECT id, codigo_patrimonio, nome, conectado_a_id FROM ativos WHERE numero_serie = ? AND machine_guid IS NULL ORDER BY id LIMIT 1");
+        $stmt->execute([$serie]);
+
+        return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    public function buscarImpressoraPorIp(string $ip): ?array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT a.id, a.codigo_patrimonio, a.nome, a.conectado_a_id
+              FROM ativos a JOIN ativos_tipos t ON t.id = a.tipo_id
+             WHERE a.ip = ? AND t.slug = 'impressora'
+             ORDER BY a.id LIMIT 1
+        ");
+        $stmt->execute([$ip]);
+
+        return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    public function definirConectadoA(int $id, ?int $conectadoA): void
+    {
+        $this->pdo->prepare("UPDATE ativos SET conectado_a_id = ? WHERE id = ?")->execute([$conectadoA, $id]);
+    }
+
+    /** Computadores/servidores, pro campo "Conectado a" do formulário. */
+    public function listarComputadores(): array
+    {
+        return $this->pdo->query("
+            SELECT a.id, a.codigo_patrimonio, a.nome, a.apelido
+              FROM ativos a JOIN ativos_tipos t ON t.id = a.tipo_id
+             WHERE t.slug IN ('computador', 'servidor') AND a.status <> 'baixado'
+             ORDER BY a.nome
+        ")->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function substituirPortasRede(int $ativoId, array $portas): void
     {
         $this->pdo->prepare("DELETE FROM ativos_portas_rede WHERE ativo_id = ?")->execute([$ativoId]);
