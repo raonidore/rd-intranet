@@ -12,6 +12,12 @@ public class Config
     public string ImpressoraEtiqueta { get; set; } = "";
 
     /// <summary>
+    /// Como mandar a etiqueta: "zpl" (texto cru, Zebra), "driver" (desenha pelo driver do Windows --
+    /// Argox OS-214 plus e outras que não falam ZPL) ou "auto" (decide pelo nome/driver da impressora).
+    /// </summary>
+    public string ModoEtiqueta { get; set; } = "auto";
+
+    /// <summary>
     /// Escape manual pra reformatação: o identificador automático da
     /// máquina (BIOS/SMBIOS/registro -- ver CollectorService) muda quando
     /// o Windows é reinstalado numa máquina sem serial de BIOS confiável,

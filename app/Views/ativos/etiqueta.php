@@ -69,7 +69,7 @@
 <div class="barra-acoes bg-white border-bottom p-3 d-flex justify-content-between align-items-center">
     <strong><i class="bi bi-qr-code"></i> <?= count($blocosHtml) ?> etiqueta<?= count($blocosHtml) === 1 ? '' : 's' ?></strong>
     <div class="d-flex gap-2">
-        <button class="btn btn-outline-secondary" id="botaoImprimirZebra"><i class="bi bi-printer"></i> Imprimir na Zebra</button>
+        <button class="btn btn-outline-secondary" id="botaoImprimirZebra"><i class="bi bi-printer"></i> Imprimir na etiquetadora</button>
         <button class="btn btn-primary" onclick="window.print()"><i class="bi bi-printer"></i> Imprimir (navegador)</button>
         <a href="javascript:window.close()" class="btn btn-outline-secondary">Fechar</a>
     </div>
@@ -104,11 +104,11 @@
 
                 // Chama o agente Windows rodando NESTA maquina (o
                 // navegador), nao o servidor -- precisa da impressora
-                // Zebra ligada aqui, com o agente configurado.
+                // de etiquetas (Zebra, Argox...) ligada aqui, com o agente configurado.
                 const resImpressao = await fetch('http://127.0.0.1:' + PORTA_AGENTE_LOCAL + '/imprimir', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ zpl: dadosZpl.zpl })
+                    body: JSON.stringify({ zpl: dadosZpl.zpl, layout: dadosZpl.layout })
                 });
                 const resultado = await resImpressao.json();
                 if (resultado.success) sucesso++; else falhas++;
@@ -122,7 +122,7 @@
 
         let mensagem = sucesso + ' etiqueta(s) enviada(s) com sucesso.';
         if (falhas > 0) {
-            mensagem += ' ' + falhas + ' falharam -- confirme que o agente RD Intranet está rodando nesta máquina (ícone na bandeja) e com a impressora Zebra configurada.';
+            mensagem += ' ' + falhas + ' falharam -- confirme que o agente RD Intranet está rodando nesta máquina (ícone na bandeja) e com a impressora de etiquetas (Zebra, Argox...) configurada.';
         }
         alert(mensagem);
     });

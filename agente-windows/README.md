@@ -298,7 +298,7 @@ Exclusivo do agente de bandeja (.exe) -- depende do heartbeat, que o
 `.ps1` não tem (ver seção acima). A tela avisa isso quando o ativo
 estiver rodando o script em vez do `.exe`.
 
-## Impressão de etiquetas Zebra (TLP2844, GC420t, ZD420t)
+## Impressão de etiquetas (Zebra TLP2844/GC420t/ZD420t, Argox OS-214 plus e outras)
 
 O agente também funciona como "ponte" entre o navegador e uma impressora
 Zebra ligada por USB nesta máquina -- mesmo princípio do Zebra Browser
@@ -308,7 +308,7 @@ Print oficial, só que nosso:
    impressora Zebra na lista (aparecem as mesmas instaladas no Windows).
 2. O agente sobe um servidor local, só em `127.0.0.1:8734`, nunca
    acessível pela rede.
-3. Na ficha do ativo no RD Intranet, o botão "Imprimir etiqueta (Zebra)"
+3. Na ficha do ativo no RD Intranet, o botão "Imprimir etiqueta"
    busca o ZPL pronto (gerado conforme **Ativos > Configurações de
    Etiqueta**) e manda direto pro `127.0.0.1:8734/imprimir` -- o agente
    grava esse ZPL cru (RAW, sem passar pelo driver "desenhar página")
@@ -327,6 +327,24 @@ neste ambiente) -- o ZPL gerado pelo servidor foi validado
 visualmente via [Labelary](http://labelary.com/) (renderizador ZPL
 público), mas o envio via `winspool.drv`/`HttpListener` em si só vai
 ser confirmado quando alguém testar numa máquina de verdade.
+
+### Impressoras que não falam ZPL (Argox e outras) -- 1.0.93+
+
+A Argox OS-214 plus fala PPLA/PPLB, não ZPL. Pra ela (e Elgin, TSC,
+Datamax...) o agente **desenha a etiqueta pelo driver do Windows**
+(`EtiquetaDriver.cs`): o portal manda, junto com o ZPL, o layout em mm
+(`EtiquetaService::gerarLayout`, mesmo cálculo do ZPL e da
+pré-visualização, com o QR em PNG) e o driver do fabricante converte
+a página pra linguagem da impressora. Em **Configurações... > Como
+imprimir**: "Automático" (Zebra/ZDesigner = ZPL; Argox, Elgin, TSC,
+Datamax, Godex, Bematech, Brother, Dymo, Sato = driver; o resto = ZPL,
+como sempre foi), "ZPL direto" ou "Pelo driver do Windows".
+
+Precisa do driver do fabricante instalado (o da Argox é o Seagull
+"Argox ... PPLA"/"PPLB") com o tamanho da etiqueta definido nas
+preferências da impressora, caso o driver ignore o tamanho de página
+que o agente pede. Testado com "Microsoft Print to PDF" (layout, acentos
+e QR lido a 203 dpi); falta confirmar numa Argox de verdade.
 
 ## Distribuição em massa (opcional)
 

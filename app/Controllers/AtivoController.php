@@ -426,7 +426,10 @@ class AtivoController extends Controller
         $this->renderEtiquetas([$ativo]);
     }
 
-    /** ZPL pronto pra este ativo, buscado pelo navegador e mandado direto pro agente Windows local (impressora Zebra). */
+    /**
+     * Etiqueta pronta pra este ativo, buscada pelo navegador e mandada pro agente Windows local:
+     * ZPL (Zebra, direto) + layout em mm (Argox e outras, pelo driver do Windows). O agente escolhe qual usar.
+     */
     public function etiquetaZpl(): void
     {
         AuthMiddleware::checkModulo('ativos_lista');
@@ -444,7 +447,15 @@ class AtivoController extends Controller
         $etiquetaService = new EtiquetaService();
         $config = $etiquetaService->configuracao();
 
-        echo json_encode(['success' => true, 'zpl' => $etiquetaService->gerarZpl($config, $ativo)]);
+        $qrBase64 = in_array('qrcode', $config['campos'], true)
+            ? $this->service->gerarEtiquetaQrCodeBase64((int)$ativo['id'])
+            : null;
+
+        echo json_encode([
+            'success' => true,
+            'zpl' => $etiquetaService->gerarZpl($config, $ativo),
+            'layout' => $etiquetaService->gerarLayout($config, $ativo, $qrBase64),
+        ]);
     }
 
     public function etiquetasLote(): void

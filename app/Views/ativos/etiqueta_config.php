@@ -52,8 +52,8 @@ use App\Components\Alert;
     <h4 class="mb-1"><i class="bi bi-qr-code me-1"></i> Configurações de Etiqueta</h4>
     <small class="text-muted">
         <a href="<?= url('/ativos') ?>"><i class="bi bi-arrow-left"></i> Dashboard</a> ·
-        Define tamanho, DPI e campos usados na impressão em impressoras térmicas Zebra
-        (TLP2844, GC420t, ZD420t) via o agente Windows.
+        Define tamanho, DPI e campos usados na impressão em impressoras térmicas (Zebra
+        TLP2844/GC420t/ZD420t direto em ZPL; Argox e outras pelo driver do Windows) via o agente Windows.
     </small>
 </div>
 
@@ -164,10 +164,10 @@ use App\Components\Alert;
 
         <div class="alert alert-light border small mt-3 mb-0">
             <i class="bi bi-info-circle"></i>
-            Esta tela só define e mostra como a etiqueta vai ficar. Pra imprimir de verdade numa
-            Zebra, use o botão <strong>"Imprimir etiqueta (Zebra)"</strong> na ficha do ativo (ou
-            "Imprimir na Zebra" na tela de etiqueta) -- precisa do agente Windows atualizado e
-            com a impressora selecionada em Configurações.
+            Esta tela só define e mostra como a etiqueta vai ficar. Pra imprimir de verdade na
+            etiquetadora (Zebra, Argox...), use o botão <strong>"Imprimir etiqueta"</strong> na ficha do ativo (ou
+            "Imprimir na etiquetadora" na tela de etiqueta) -- precisa do agente Windows atualizado e
+            com a impressora selecionada em Configurações (Argox: agente 1.0.93 ou mais novo).
         </div>
     </div>
 </div>

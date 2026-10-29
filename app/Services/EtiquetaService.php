@@ -9,6 +9,8 @@ namespace App\Services;
  *  - ZPL (Zebra Programming Language): enviado direto pra impressora
  *    térmica (TLP2844/GC420t/ZD420t) via o agente Windows, sem passar
  *    por driver -- funciona igual nos 3 modelos, todos falam ZPL.
+ *  - Layout em mm (gerarLayout): o agente desenha pelo driver do Windows
+ *    nas impressoras que não falam ZPL (Argox e outras).
  *  - HTML/CSS (unidades em mm, o navegador entende nativamente): usado
  *    só pra pré-visualização na tela de configuração, sem depender de
  *    nenhum serviço externo.
@@ -252,6 +254,59 @@ class EtiquetaService
         $zpl .= "^XZ\n";
 
         return $zpl;
+    }
+
+    /**
+     * Mesmo conteúdo/posicionamento do ZPL, em mm, pro agente desenhar
+     * a etiqueta pelo DRIVER do Windows -- impressoras que não falam ZPL
+     * (Argox OS-214 plus fala PPLA/PPLB; Elgin, TSC...) imprimem pelo
+     * driver delas, que converte a página pra linguagem certa. Posições
+     * já com o ajuste de calibração (offset) somado.
+     */
+    public function gerarLayout(array $config, array $ativo, ?string $qrCodeBase64 = null): array
+    {
+        $conteudo = $this->montarConteudo($config, $ativo);
+        $margem = self::MARGEM_MM;
+        $offsetX = (float)($config['offset_x_mm'] ?? 0);
+        $offsetY = (float)($config['offset_y_mm'] ?? 0);
+
+        $layout = [
+            'largura_mm' => (float)$config['largura_mm'],
+            'altura_mm' => (float)$config['altura_mm'],
+            'qr' => null,
+            'textos' => [],
+        ];
+
+        $textoX = $margem;
+        if ($conteudo['qrcode'] !== null && $qrCodeBase64 !== null) {
+            $ladoQr = min($config['altura_mm'] - 2 * $margem, 20);
+            $layout['qr'] = ['x_mm' => round($margem + $offsetX, 2), 'y_mm' => round($margem + $offsetY, 2), 'lado_mm' => $ladoQr, 'png_base64' => $qrCodeBase64];
+            $textoX = $margem + $ladoQr + self::ESPACO_QR_TEXTO_MM;
+        }
+
+        $larguraTexto = max(10, $config['largura_mm'] - $textoX - $margem);
+        $y = $margem;
+
+        foreach ($conteudo['linhas'] as $linha) {
+            if ($linha['campo'] === 'empresa') {
+                $y += self::ESPACO_EXTRA_EMPRESA_MM;
+            }
+
+            $layout['textos'][] = [
+                'campo' => $linha['campo'],
+                'texto' => $linha['texto'],
+                'x_mm' => round($textoX + $offsetX, 2),
+                'y_mm' => round($y + $offsetY, 2),
+                'largura_mm' => round($larguraTexto, 2),
+                'fonte_mm' => $linha['fonte_mm'],
+                'linhas' => $linha['linhas'],
+                'espaco_linha_mm' => self::ESPACO_LINHA_MM,
+            ];
+
+            $y += ($linha['fonte_mm'] + self::ESPACO_LINHA_MM) * $linha['linhas'];
+        }
+
+        return $layout;
     }
 
     /**

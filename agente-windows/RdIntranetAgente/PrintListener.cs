@@ -124,7 +124,27 @@ public class PrintListener : IDisposable
                 return;
             }
 
-            if (dados == null || string.IsNullOrWhiteSpace(dados.Zpl))
+            if (dados == null)
+            {
+                Responder(res, 400, false, "Conteúdo da etiqueta não informado.");
+                return;
+            }
+
+            // Argox e outras que não falam ZPL: desenha pelo driver do Windows (ver EtiquetaDriver).
+            if (EtiquetaDriver.ModoEfetivo(config) == EtiquetaDriver.ModoDriver)
+            {
+                if (dados.Layout == null)
+                {
+                    Responder(res, 400, false, "Esta impressora imprime pelo driver do Windows, mas o portal não mandou o layout da etiqueta -- atualize o RD Intranet.");
+                    return;
+                }
+
+                var (ok, mensagem) = EtiquetaDriver.Imprimir(config.ImpressoraEtiqueta, dados.Layout);
+                Responder(res, ok ? 200 : 500, ok, mensagem);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(dados.Zpl))
             {
                 Responder(res, 400, false, "Conteúdo da etiqueta (ZPL) não informado.");
                 return;
@@ -182,4 +202,8 @@ public class PedidoImpressao
 {
     [JsonPropertyName("zpl")]
     public string? Zpl { get; set; }
+
+    /// <summary>Posições em mm pro modo driver (portais antigos não mandam).</summary>
+    [JsonPropertyName("layout")]
+    public LayoutEtiqueta? Layout { get; set; }
 }

@@ -26,6 +26,7 @@ public class ConfigForm : Form
     private readonly CampoNumerico _campoIntervalo;
     private readonly CampoNumerico _campoHeartbeat;
     private readonly SeletorModerno _campoImpressora;
+    private readonly SeletorModerno _campoModoEtiqueta;
     private readonly CaixaTexto _campoMachineGuidOverride;
     private readonly Label _statusSalvar;
     private readonly Panel _rolagem;
@@ -130,9 +131,18 @@ public class ConfigForm : Form
             // sem impressoras instaladas ou erro ao enumerar -- só fica com "Nenhuma"
         }
         _campoImpressora.DefinirItens(impressoras, Math.Max(0, impressoras.IndexOf(configAtual.ImpressoraEtiqueta)));
+        _campoModoEtiqueta = new SeletorModerno();
+        var modos = new List<object>
+        {
+            new OpcaoModoEtiqueta(EtiquetaDriver.ModoAuto, "Automático (pela marca da impressora)"),
+            new OpcaoModoEtiqueta(EtiquetaDriver.ModoZpl, "ZPL direto (Zebra)"),
+            new OpcaoModoEtiqueta(EtiquetaDriver.ModoDriver, "Pelo driver do Windows (Argox e outras)")
+        };
+        _campoModoEtiqueta.DefinirItens(modos, Math.Max(0, modos.FindIndex(m => ((OpcaoModoEtiqueta)m).Valor == configAtual.ModoEtiqueta)));
         var gradeEtiquetas = Grade(1);
-        AdicionarLinha(gradeEtiquetas, LinhaCampo, Campo("Impressora de etiquetas (Zebra)  ·  opcional", _campoImpressora));
-        var cartaoEtiquetas = Cartao(new CabecalhoSecao("4", "Etiquetas", "Só se esta máquina for imprimir etiquetas de patrimônio."), gradeEtiquetas, 30 + 50 + LinhaCampo);
+        AdicionarLinha(gradeEtiquetas, LinhaCampo, Campo("Impressora de etiquetas (Zebra, Argox...)  ·  opcional", _campoImpressora));
+        AdicionarLinha(gradeEtiquetas, LinhaCampo, Campo("Como imprimir", _campoModoEtiqueta));
+        var cartaoEtiquetas = Cartao(new CabecalhoSecao("4", "Etiquetas", "Só se esta máquina for imprimir etiquetas de patrimônio."), gradeEtiquetas, 30 + 50 + LinhaCampo * 2);
 
         // ---------------------------------------------------------- 5. avançado
         _campoMachineGuidOverride = new CaixaTexto(icone: Icones.Computador) { Text = configAtual.MachineGuidOverride, PlaceholderText = "Deixe em branco no dia a dia" };
@@ -249,6 +259,7 @@ public class ConfigForm : Form
             IntervaloMinutos = _campoIntervalo.Valor,
             HeartbeatSegundos = _campoHeartbeat.Valor,
             ImpressoraEtiqueta = impressoraSelecionada == null || impressoraSelecionada == SemImpressora ? "" : impressoraSelecionada,
+            ModoEtiqueta = (_campoModoEtiqueta.ItemSelecionado as OpcaoModoEtiqueta)?.Valor ?? EtiquetaDriver.ModoAuto,
             MachineGuidOverride = _campoMachineGuidOverride.Text.Trim(),
             // Mantém a escolha anterior se o operador não buscou de novo
             // (reconfiguração de um agente já em uso -- ver comentário no construtor).
@@ -559,4 +570,9 @@ public class ConfigForm : Form
             return ("Serviço não instalado", Tema.TextoSecundario);
         }
     }
+}
+
+internal sealed record OpcaoModoEtiqueta(string Valor, string Texto)
+{
+    public override string ToString() => Texto;
 }
