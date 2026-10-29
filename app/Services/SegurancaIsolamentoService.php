@@ -306,7 +306,9 @@ foreach (\$programa in \$liberados) {
 New-NetFirewallRule -DisplayName '{$grupo} (DNS)' -Group '{$grupo}' -Direction Outbound -Action Allow -Protocol UDP -RemotePort 53 -Profile Any | Out-Null
 New-NetFirewallRule -DisplayName '{$grupo} (DHCP)' -Group '{$grupo}' -Direction Outbound -Action Allow -Protocol UDP -LocalPort 68 -RemotePort 67 -Profile Any | Out-Null
 \$regras = @(\$estado.regras_desativadas | Where-Object { \$_ })
-if (\$regras.Count -gt 0) { Disable-NetFirewallRule -Name \$regras -ErrorAction SilentlyContinue }
+# Uma busca só e o objeto pelo pipe: -Name com a lista refaz a busca por nome e levava >120s
+# para ~100 regras (FATURAMENTO1, Patrimonial, 29/10/2026 -- remoção encerrada no meio).
+if (\$regras.Count -gt 0) { \$nomes = @{}; \$regras | ForEach-Object { \$nomes[\$_] = 1 }; Get-NetFirewallRule -Enabled True -ErrorAction SilentlyContinue | Where-Object { \$nomes.ContainsKey(\$_.Name) } | Disable-NetFirewallRule -ErrorAction SilentlyContinue }
 Set-NetFirewallProfile -All -Enabled True -DefaultInboundAction Block -DefaultOutboundAction Block -AllowInboundRules False
 "Rede isolada. Liberados: agente (\$agente), DNS, DHCP" + ((\$liberados | ForEach-Object { ', ' + \$_ }) -join '') + ". Regras de saida desativadas: " + @(\$estado.regras_desativadas).Count
 PS;
@@ -327,7 +329,8 @@ if (Test-Path \$arq) {
         Set-NetFirewallProfile -Name \$p.Name -Enabled \$p.Enabled -DefaultInboundAction \$p.DefaultInboundAction -DefaultOutboundAction \$p.DefaultOutboundAction -AllowInboundRules \$p.AllowInboundRules
     }
     \$regras = @(\$estado.regras_desativadas | Where-Object { \$_ })
-    if (\$regras.Count -gt 0) { Enable-NetFirewallRule -Name \$regras -ErrorAction SilentlyContinue }
+    # Mesma busca única da aplicação (-Name com a lista estourava os 120s da tarefa elevada).
+    if (\$regras.Count -gt 0) { \$nomes = @{}; \$regras | ForEach-Object { \$nomes[\$_] = 1 }; Get-NetFirewallRule -Enabled False -ErrorAction SilentlyContinue | Where-Object { \$nomes.ContainsKey(\$_.Name) } | Enable-NetFirewallRule -ErrorAction SilentlyContinue }
     Remove-Item -Path \$arq -Force
     "Isolamento removido. Firewall restaurado ao estado de " + \$estado.aplicado_em
 } else {
