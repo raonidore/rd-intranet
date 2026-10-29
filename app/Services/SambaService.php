@@ -57,9 +57,12 @@ class SambaService
             return;
         }
 
-        $resultado = $this->linux->executarScript(
+        // Senha pela entrada padrão: como argumento ela ficava no log do sudo (journal/auth.log)
+        $resultado = $this->linux->executarScriptComEntrada(
             '/opt/rdtecnologia/scripts/altera_senha_samba_web.sh',
-            [$usuario['login'], $senha]
+            [$usuario['login']],
+            $senha . "
+"
         );
 
         if ($resultado['success']) {
@@ -128,9 +131,11 @@ class SambaService
             return false;
         }
 
-        $resultado = $this->linux->executarScript(
+        $resultado = $this->linux->executarScriptComEntrada(
             '/opt/rdtecnologia/scripts/cria_usuario_web.sh',
-            [$nome, $login, $grupo, $ssh ? 'sim' : 'nao', $senha]
+            [$nome, $login, $grupo, $ssh ? 'sim' : 'nao'],
+            $senha . "
+"
         );
 
         if (!$resultado['success']) {

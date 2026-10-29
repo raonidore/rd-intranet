@@ -4,7 +4,9 @@ NOME="$1"
 LOGIN="$2"
 GRUPO="$3"
 SSH="$4"
-SENHA="$5"
+# Senha pela entrada padrão (uma linha), nunca por argumento: argumento aparece no
+# log do sudo/journal e no "ps" de qualquer usuário.
+IFS= read -r SENHA
 
 # Para no primeiro erro: antes cada passo falhava em silêncio e o script
 # terminava com "OK" (mda-dc, 29/10/2026: usuário só no portal, UID 0).
@@ -15,6 +17,11 @@ falhou() {
 
 if [[ ! "$LOGIN" =~ ^[a-z0-9]+$ ]]; then
   echo "Login inválido"
+  exit 1
+fi
+
+if [ -z "$SENHA" ]; then
+  echo "Senha não informada"
   exit 1
 fi
 
