@@ -6,6 +6,13 @@ GRUPO="$3"
 SSH="$4"
 SENHA="$5"
 
+# Para no primeiro erro: antes cada passo falhava em silêncio e o script
+# terminava com "OK" (mda-dc, 29/10/2026: usuário só no portal, UID 0).
+falhou() {
+  echo "Falha: $1"
+  exit 1
+}
+
 if [[ ! "$LOGIN" =~ ^[a-z0-9]+$ ]]; then
   echo "Login inválido"
   exit 1
@@ -22,8 +29,10 @@ if id "$LOGIN" >/dev/null 2>&1; then
 fi
 
 if ! getent group "$GRUPO" >/dev/null; then
-  groupadd "$GRUPO"
+  groupadd "$GRUPO" || falhou "não foi possível criar o grupo $GRUPO"
 fi
+
+getent group smbusers >/dev/null || groupadd smbusers || falhou "não foi possível criar o grupo smbusers"
 
 if [ "$SSH" = "sim" ]; then
   SHELL="/bin/bash"
@@ -31,14 +40,22 @@ else
   SHELL="/usr/sbin/nologin"
 fi
 
-adduser --disabled-password --shell "$SHELL" --gecos "$NOME,,," "$LOGIN"
+# Grupo com o mesmo nome do login (ex.: login "arlab" no grupo "arlab"): o adduser
+# recusa criar o grupo pessoal se ele já existe -- usa o existente como primário.
+if getent group "$LOGIN" >/dev/null; then
+  adduser --disabled-password --shell "$SHELL" --gecos "$NOME,,," --ingroup "$LOGIN" "$LOGIN" \
+    || falhou "adduser não criou o usuário $LOGIN"
+else
+  adduser --disabled-password --shell "$SHELL" --gecos "$NOME,,," "$LOGIN" \
+    || falhou "adduser não criou o usuário $LOGIN"
+fi
 
-echo "$LOGIN:$SENHA" | chpasswd
+echo "$LOGIN:$SENHA" | chpasswd || falhou "não foi possível definir a senha Linux"
 
-usermod -aG smbusers "$LOGIN"
-usermod -aG "$GRUPO" "$LOGIN"
+usermod -aG smbusers "$LOGIN" || falhou "não foi possível incluir no grupo smbusers"
+usermod -aG "$GRUPO" "$LOGIN" || falhou "não foi possível incluir no grupo $GRUPO"
 
-printf "%s\n%s\n" "$SENHA" "$SENHA" | smbpasswd -a "$LOGIN"
-smbpasswd -e "$LOGIN"
+printf "%s\n%s\n" "$SENHA" "$SENHA" | smbpasswd -s -a "$LOGIN" || falhou "smbpasswd não cadastrou o usuário no Samba"
+smbpasswd -e "$LOGIN" || falhou "smbpasswd não habilitou o usuário"
 
 echo "OK"

@@ -140,7 +140,8 @@ class SambaService
 
         $uid = trim($this->linux->executar("id -u " . escapeshellarg($login))['output']);
 
-        $this->repository->criar($nome, $login, $grupo, $ssh, $uid !== '' ? (int)$uid : null);
+        // "id: no such user" virava UID 0 (= root) no cadastro
+        $this->repository->criar($nome, $login, $grupo, $ssh, ctype_digit($uid) ? (int)$uid : null);
 
         AuditService::registrar('Samba', 'Criação', 'Usuário '.$login.' criado.');
         NotificationService::success('Usuário criado com sucesso.', $resultado['output']);
