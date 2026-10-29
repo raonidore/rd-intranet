@@ -931,7 +931,7 @@ public sealed class SegurancaService : IDisposable
         var atuais = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
         try
         {
-            using var busca = new ManagementObjectSearcher(@"root\cimv2", "SELECT ID, InstallDate FROM Win32_ShadowCopy");
+            using var busca = new ManagementObjectSearcher(@"root\cimv2", "SELECT ID, InstallDate, VolumeName FROM Win32_ShadowCopy");
             using var resultados = busca.Get();
             foreach (ManagementObject copia in resultados)
             {
@@ -941,7 +941,8 @@ public sealed class SegurancaService : IDisposable
                     if (string.IsNullOrEmpty(id)) continue;
                     var criada = DateTime.MinValue;
                     try { criada = ManagementDateTimeConverter.ToDateTime(copia["InstallDate"]?.ToString() ?? ""); } catch { }
-                    atuais[id] = criada;
+                    // Chave "volume|id": a ordem das cópias só faz sentido dentro do mesmo volume.
+                    atuais[$"{copia["VolumeName"]}|{id}"] = criada;
                 }
             }
         }
@@ -1036,6 +1037,21 @@ public sealed class SegurancaService : IDisposable
             }
         }
 
+        // Limpeza de pontos de restauração (FATURAMENTO1, Patrimonial, 29/10/2026): a tarefa
+        // agendada SystemRestore\SR (srtasks.exe, SYSTEM) rodou às 13:15:15 e 3 cópias do C:
+        // saíram (7 -> 4) sem evento do volsnap e sem cópia nova -- virou "ataque" e isolou a rede.
+        // Ransomware zera as cópias; aqui ainda sobram cópias e o Windows estava mexendo nelas.
+        if (classificacao == "ataque" && atuais.Count > 0)
+        {
+            var execucaoSr = UltimaExecucaoTarefaRestauracao();
+            var desde = (verificadoAntes ?? agora.AddMinutes(-2)).AddMinutes(-2);
+            if (execucaoSr.HasValue && execucaoSr.Value >= desde && execucaoSr.Value <= agora.AddMinutes(1))
+            {
+                motivoRodizioEspaco = $"tarefa de pontos de restauração do Windows (SystemRestore\\SR) rodou às {execucaoSr.Value:HH:mm:ss} e descartou pontos antigos; ainda restam {atuais.Count} cópia(s)";
+                classificacao = "parcial";
+            }
+        }
+
         var parcialDasAntigas = classificacao == "parcial";
 
         Registrar(new EventoSeguranca
@@ -1045,7 +1061,7 @@ public sealed class SegurancaService : IDisposable
             Resumo = houveIntervalo
                 ? $"{removidas.Count} shadow copies saíram ({anteriores.Count} → {atuais.Count}) entre {verificadoAntes:dd/MM HH:mm} e {agora:dd/MM HH:mm} -- a máquina ficou suspensa ou desligada no meio, {semExplicacao} sem explicação no log"
                 : $"{removidas.Count} shadow copies removidas de uma vez ({anteriores.Count} → {atuais.Count}), {semExplicacao} sem explicação"
-                    + (parcialDasAntigas ? " -- só as mais antigas, ainda restam cópias" : ""),
+                    + (motivoRodizioEspaco != "" ? $" -- {motivoRodizioEspaco}" : parcialDasAntigas ? " -- só as mais antigas, ainda restam cópias" : ""),
             Detalhes = new Dictionary<string, object?>
             {
                 ["linha_comando"] = houveIntervalo
@@ -1061,9 +1077,73 @@ public sealed class SegurancaService : IDisposable
                 ["removidas"] = removidas.Count,
                 ["novas"] = novasCount,
                 ["mais_antigas_primeiro"] = maisAntigasPrimeiro,
-                ["rodizio_por_espaco"] = motivoRodizioEspaco == "" ? null : motivoRodizioEspaco
+                ["rodizio_por_espaco"] = motivoRodizioEspaco == "" ? null : motivoRodizioEspaco,
+                ["copias_removidas"] = DescreverCopias(anteriores.Where(a => !atuais.ContainsKey(a.Key))),
+                ["copias_restantes"] = DescreverCopias(atuais)
             }
         });
+    }
+
+    /// <summary>"C: 15/10/2026 08:21" por cópia (chave "volume|id"), para a análise dizer quais saíram.</summary>
+    private static List<string> DescreverCopias(IEnumerable<KeyValuePair<string, DateTime>> copias)
+    {
+        var letras = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            using var busca = new ManagementObjectSearcher(@"root\cimv2", "SELECT DeviceID, DriveLetter FROM Win32_Volume");
+            using var resultados = busca.Get();
+            foreach (ManagementObject volume in resultados)
+            {
+                using (volume)
+                {
+                    var id = volume["DeviceID"]?.ToString();
+                    var letra = volume["DriveLetter"]?.ToString();
+                    if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(letra)) letras[id] = letra;
+                }
+            }
+        }
+        catch { }
+
+        return copias
+            .OrderBy(c => c.Value)
+            .Select(c =>
+            {
+                var volume = c.Key.Split('|')[0];
+                return $"{(letras.TryGetValue(volume, out var l) ? l : volume)} {(c.Value == DateTime.MinValue ? "?" : c.Value.ToString("dd/MM/yyyy HH:mm"))}";
+            })
+            .Take(30)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Última execução da tarefa agendada \Microsoft\Windows\SystemRestore\SR (srtasks.exe,
+    /// cria o ponto agendado e descarta os antigos). null se não existir ou não der pra ler.
+    /// </summary>
+    private static DateTime? UltimaExecucaoTarefaRestauracao()
+    {
+        object? servico = null;
+        try
+        {
+            var tipo = Type.GetTypeFromProgID("Schedule.Service");
+            if (tipo == null) return null;
+            servico = Activator.CreateInstance(tipo);
+            if (servico == null) return null;
+            var flags = System.Reflection.BindingFlags.InvokeMethod;
+            tipo.InvokeMember("Connect", flags, null, servico, Array.Empty<object>());
+            var pasta = tipo.InvokeMember("GetFolder", flags, null, servico, new object[] { @"\Microsoft\Windows\SystemRestore" });
+            var tarefa = pasta!.GetType().InvokeMember("GetTask", flags, null, pasta, new object[] { "SR" });
+            var ultima = (DateTime)tarefa!.GetType().InvokeMember("LastRunTime", System.Reflection.BindingFlags.GetProperty, null, tarefa, null)!;
+            return ultima.Year < 2000 ? null : ultima;
+        }
+        catch
+        {
+            return null;
+        }
+        finally
+        {
+            if (servico != null && System.Runtime.InteropServices.Marshal.IsComObject(servico))
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(servico);
+        }
     }
 
     /// <summary>
@@ -1140,12 +1220,20 @@ public sealed class SegurancaService : IDisposable
     internal static (string classificacao, int novas, bool maisAntigasPrimeiro) ClassificarRemocaoShadow(
         IReadOnlyDictionary<string, DateTime> anteriores, IReadOnlyDictionary<string, DateTime> atuais, double fracaoMinimaRestante = 0.5)
     {
-        var removidas = anteriores.Where(a => !atuais.ContainsKey(a.Key)).Select(a => a.Value).ToList();
+        var removidas = anteriores.Where(a => !atuais.ContainsKey(a.Key)).ToList();
         var novas = atuais.Count(a => !anteriores.ContainsKey(a.Key));
-        var antigasQueFicaram = atuais.Where(a => anteriores.ContainsKey(a.Key) && a.Value != DateTime.MinValue).Select(a => a.Value).ToList();
-        var datasRemovidas = removidas.Where(r => r != DateTime.MinValue).ToList();
-        var maisAntigasPrimeiro = removidas.Count > 0 && datasRemovidas.Count == removidas.Count
-            && (antigasQueFicaram.Count == 0 || datasRemovidas.Max() <= antigasQueFicaram.Min());
+
+        // "Mais antigas primeiro" vale por volume (chave "volume|id"): a FATURAMENTO1 (Patrimonial,
+        // 29/10/2026) tem cópias de 2022 no E: -- comparando tudo junto, qualquer limpeza do C:
+        // parecia "apagou as do meio" e isolava a rede.
+        static string Volume(string chave) => chave.Contains('|') ? chave[..chave.IndexOf('|')] : "";
+        var maisAntigasPrimeiro = removidas.Count > 0 && removidas.All(r => r.Value != DateTime.MinValue)
+            && removidas.GroupBy(r => Volume(r.Key)).All(g =>
+            {
+                var ficaram = atuais.Where(a => anteriores.ContainsKey(a.Key) && a.Value != DateTime.MinValue && Volume(a.Key) == g.Key)
+                    .Select(a => a.Value).ToList();
+                return ficaram.Count == 0 || g.Max(r => r.Value) <= ficaram.Min();
+            });
 
         // Rodízio descarta só o excedente: pelo menos metade das cópias antigas continua lá.
         // Sem isso, "apagar tudo e criar uma de fachada" passaria como rodízio.
