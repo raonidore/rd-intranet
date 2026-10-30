@@ -287,6 +287,43 @@ class SambaCompartilhamentoService
         return true;
     }
 
+    /** @param string[] $extensoes */
+    public function editarExcecao(int $excecaoId, array $extensoes): void
+    {
+        $excecoes = new SambaCompartilhamentoExcecaoRepository();
+        $excecao = $excecoes->buscarPorId($excecaoId);
+
+        if (!$excecao) {
+            NotificationService::error('Exceção não encontrada.');
+            return;
+        }
+
+        $extensoes = array_values(array_intersect(ExtensaoPerigosaService::listarAtivas(), array_map('strtolower', $extensoes)));
+        if (empty($extensoes)) {
+            NotificationService::error('Marque ao menos uma extensão. Para tirar a exceção inteira, use o botão de remover.');
+            return;
+        }
+
+        $excecoes->atualizarExtensoes($excecaoId, implode(',', $extensoes));
+
+        $compartilhamento = $this->buscar((int)$excecao['compartilhamento_id']);
+
+        (new DeployCenterService())->marcarPendente(
+            'samba',
+            'Segurança',
+            $compartilhamento['nome'] ?? $excecao['nome_compartilhamento'],
+            "Exceção {$excecao['nome_compartilhamento']} ({$excecao['pasta']}) agora libera: " . implode(', ', $extensoes) . '.'
+        );
+
+        AuditService::registrar(
+            'Samba',
+            'Exceção de extensões',
+            "Exceção {$excecao['nome_compartilhamento']} (pasta {$excecao['pasta']}): de {$excecao['extensoes']} para " . implode(',', $extensoes) . '.'
+        );
+
+        NotificationService::success('Exceção atualizada. Alterações pendentes para deploy.');
+    }
+
     public function excluirExcecao(int $excecaoId): void
     {
         $excecoes = new SambaCompartilhamentoExcecaoRepository();

@@ -61,6 +61,13 @@ class SambaCompartilhamentoExcecaoRepository
         return (int)$this->pdo->lastInsertId();
     }
 
+    public function atualizarExtensoes(int $id, string $extensoes): bool
+    {
+        $stmt = $this->pdo->prepare("UPDATE samba_compartilhamento_excecoes SET extensoes = ? WHERE id = ?");
+
+        return $stmt->execute([$extensoes, $id]);
+    }
+
     public function excluir(int $id): bool
     {
         $stmt = $this->pdo->prepare("DELETE FROM samba_compartilhamento_excecoes WHERE id = ?");

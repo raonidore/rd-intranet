@@ -57,12 +57,37 @@
                             <span class="badge bg-success">.<?= htmlspecialchars($ext) ?></span>
                         <?php endforeach; ?>
                     </td>
-                    <td class="text-end">
-                        <form method="post" action="<?= url('/samba/compartilhamentos/excecoes/excluir') ?>"
-                              onsubmit="return confirm('Remover a exceção da pasta <?= htmlspecialchars(addslashes($e['pasta']), ENT_QUOTES) ?>?')">
+                    <td class="text-end text-nowrap">
+                        <button type="button" class="btn btn-sm btn-outline-primary" title="Alterar extensões liberadas"
+                                data-bs-toggle="collapse" data-bs-target="#editar-excecao-<?= (int)$e['id'] ?>">
+                            <i class="bi bi-pencil"></i> Editar
+                        </button>
+                        <form method="post" action="<?= url('/samba/compartilhamentos/excecoes/excluir') ?>" class="d-inline"
+                              onsubmit="return confirm('Remover a exceção da pasta <?= htmlspecialchars(addslashes($e['pasta']), ENT_QUOTES) ?>? As extensões voltam a ser bloqueadas e o compartilhamento <?= htmlspecialchars($e['nome_compartilhamento'], ENT_QUOTES) ?> deixa de existir.')">
                             <input type="hidden" name="id" value="<?= (int)$compartilhamento['id'] ?>">
                             <input type="hidden" name="excecao_id" value="<?= (int)$e['id'] ?>">
-                            <button class="btn btn-sm btn-outline-danger" title="Remover exceção"><i class="bi bi-trash"></i></button>
+                            <button class="btn btn-sm btn-outline-danger" title="Remover exceção"><i class="bi bi-trash"></i> Remover</button>
+                        </form>
+                    </td>
+                </tr>
+                <tr class="collapse" id="editar-excecao-<?= (int)$e['id'] ?>">
+                    <td colspan="4" class="bg-light">
+                        <form method="post" action="<?= url('/samba/compartilhamentos/excecoes/editar') ?>" class="p-2">
+                            <input type="hidden" name="id" value="<?= (int)$compartilhamento['id'] ?>">
+                            <input type="hidden" name="excecao_id" value="<?= (int)$e['id'] ?>">
+                            <div class="small fw-semibold mb-2">Extensões liberadas em <?= htmlspecialchars($e['pasta']) ?> — desmarque para voltar a bloquear:</div>
+                            <?php $liberadas = explode(',', $e['extensoes']); ?>
+                            <div class="d-flex flex-wrap gap-2">
+                                <?php foreach ($extensoesPerigosas as $ext): ?>
+                                <div class="form-check form-check-inline m-0">
+                                    <input class="form-check-input" type="checkbox" name="extensoes[]" value="<?= htmlspecialchars($ext) ?>"
+                                           id="ext-<?= (int)$e['id'] ?>-<?= htmlspecialchars($ext) ?>" <?= in_array($ext, $liberadas, true) ? 'checked' : '' ?>>
+                                    <label class="form-check-label" for="ext-<?= (int)$e['id'] ?>-<?= htmlspecialchars($ext) ?>">.<?= htmlspecialchars($ext) ?></label>
+                                </div>
+                                <?php endforeach; ?>
+                            </div>
+                            <button class="btn btn-sm btn-primary mt-2"><i class="bi bi-save"></i> Salvar extensões</button>
+                            <button type="button" class="btn btn-sm btn-secondary mt-2" data-bs-toggle="collapse" data-bs-target="#editar-excecao-<?= (int)$e['id'] ?>">Cancelar</button>
                         </form>
                     </td>
                 </tr>
@@ -77,8 +102,10 @@
             </div>
         <?php endif; ?>
 
-        <form method="post" action="<?= url('/samba/compartilhamentos/excecoes/criar') ?>">
+        <form method="post" action="<?= url('/samba/compartilhamentos/excecoes/criar') ?>" class="border rounded p-3">
             <input type="hidden" name="id" value="<?= (int)$compartilhamento['id'] ?>">
+
+            <h6 class="mb-3"><i class="bi bi-plus-circle text-success"></i> Nova exceção (outra pasta)</h6>
 
             <div class="row g-3">
                 <div class="col-md-6">
@@ -96,7 +123,7 @@
                 </div>
             </div>
 
-            <label class="form-label mt-3">Extensões liberadas nesta pasta</label>
+            <label class="form-label mt-3">Extensões a liberar na nova pasta</label>
             <div class="d-flex flex-wrap gap-2 p-2 border rounded">
                 <?php foreach ($extensoesPerigosas as $ext): ?>
                 <div class="form-check form-check-inline m-0">

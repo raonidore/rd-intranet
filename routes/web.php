@@ -150,6 +150,7 @@ $router->get('/samba/compartilhamentos/usuarios/status', [SambaCompartilhamentoC
 $router->get('/samba/compartilhamentos/seguranca', [SambaCompartilhamentoController::class, 'segurancaForm']);
 $router->post('/samba/compartilhamentos/seguranca', [SambaCompartilhamentoController::class, 'segurancaSalvar']);
 $router->post('/samba/compartilhamentos/excecoes/criar', [SambaCompartilhamentoController::class, 'excecaoCriar']);
+$router->post('/samba/compartilhamentos/excecoes/editar', [SambaCompartilhamentoController::class, 'excecaoEditar']);
 $router->post('/samba/compartilhamentos/excecoes/excluir', [SambaCompartilhamentoController::class, 'excecaoExcluir']);
 $router->get('/samba/compartilhamentos/excluir', [SambaCompartilhamentoController::class, 'excluirForm']);
 $router->post('/samba/compartilhamentos/excluir', [SambaCompartilhamentoController::class, 'excluir']);

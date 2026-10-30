@@ -235,6 +235,19 @@ class SambaCompartilhamentoController extends Controller
         exit;
     }
 
+    public function excecaoEditar(): void
+    {
+        AuthMiddleware::checkModulo('samba_compartilhamentos');
+
+        $this->service->editarExcecao(
+            (int)($_POST['excecao_id'] ?? 0),
+            array_map('strval', (array)($_POST['extensoes'] ?? []))
+        );
+
+        header('Location: ' . url('/samba/compartilhamentos/seguranca?id=' . (int)($_POST['id'] ?? 0)));
+        exit;
+    }
+
     public function excecaoExcluir(): void
     {
         AuthMiddleware::checkModulo('samba_compartilhamentos');
