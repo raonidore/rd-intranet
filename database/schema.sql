@@ -2146,6 +2146,22 @@ CREATE TABLE IF NOT EXISTS `samba_compartilhamento_portal_usuarios` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------
+-- samba_compartilhamento_excecoes
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `samba_compartilhamento_excecoes` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `compartilhamento_id` int(11) NOT NULL,
+  `pasta` varchar(255) NOT NULL,
+  `nome_compartilhamento` varchar(80) NOT NULL,
+  `extensoes` varchar(1000) NOT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_samba_excecao_nome` (`nome_compartilhamento`),
+  KEY `idx_samba_excecao_compartilhamento` (`compartilhamento_id`),
+  CONSTRAINT `fk_samba_excecao_compartilhamento` FOREIGN KEY (`compartilhamento_id`) REFERENCES `samba_compartilhamentos` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
 -- samba_compartilhamento_usuarios
 -- ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `samba_compartilhamento_usuarios` (

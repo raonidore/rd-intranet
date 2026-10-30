@@ -2,6 +2,7 @@
 
 namespace App\Core\Samba;
 
+use App\Repositories\SambaCompartilhamentoExcecaoRepository;
 use App\Repositories\SambaCompartilhamentoRepository;
 use App\Services\LinuxService;
 
@@ -9,11 +10,13 @@ class SambaConfigGenerator
 {
     private LinuxService $linux;
     private SambaCompartilhamentoRepository $repository;
+    private SambaCompartilhamentoExcecaoRepository $excecoes;
 
     public function __construct(?LinuxService $linux = null, ?SambaCompartilhamentoRepository $repository = null)
     {
         $this->linux = $linux ?? new LinuxService();
         $this->repository = $repository ?? new SambaCompartilhamentoRepository();
+        $this->excecoes = new SambaCompartilhamentoExcecaoRepository();
     }
 
     /**
@@ -47,6 +50,20 @@ class SambaConfigGenerator
             );
 
             $config .= SambaTemplate::share($share, $autorizados);
+
+            // Exceção por pasta: mesmo compartilhamento (permissões, lixeira,
+            // somente leitura), só que na subpasta e sem as extensões liberadas
+            // no veto -- o Samba não aceita veto diferente por subpasta.
+            foreach ($this->excecoes->listarPorCompartilhamento((int)$share['id']) as $excecao) {
+                $config .= SambaTemplate::share(
+                    array_merge($share, [
+                        'nome' => $excecao['nome_compartilhamento'],
+                        'caminho' => rtrim($share['caminho'], '/') . '/' . $excecao['pasta'],
+                    ]),
+                    $autorizados,
+                    array_filter(explode(',', $excecao['extensoes']))
+                );
+            }
         }
 
         return [

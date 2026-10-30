@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use App\Core\Controller;
 use App\Middleware\AuthMiddleware;
+use App\Services\ExtensaoPerigosaService;
 use App\Services\SambaAnexoService;
 use App\Services\SambaCompartilhamentoService;
 use App\Services\SambaGrupoService;
@@ -211,8 +212,37 @@ class SambaCompartilhamentoController extends Controller
         }
 
         $this->view('samba/compartilhamento_seguranca', [
-            'compartilhamento' => $compartilhamento
+            'compartilhamento' => $compartilhamento,
+            'excecoes' => $this->service->listarExcecoes($id),
+            'extensoesPerigosas' => ExtensaoPerigosaService::listarAtivas(),
         ]);
+    }
+
+    public function excecaoCriar(): void
+    {
+        AuthMiddleware::checkModulo('samba_compartilhamentos');
+
+        $id = (int)($_POST['id'] ?? 0);
+
+        $this->service->criarExcecao(
+            $id,
+            (string)($_POST['pasta'] ?? ''),
+            trim((string)($_POST['nome_compartilhamento'] ?? '')),
+            array_map('strval', (array)($_POST['extensoes'] ?? []))
+        );
+
+        header('Location: ' . url('/samba/compartilhamentos/seguranca?id=' . $id));
+        exit;
+    }
+
+    public function excecaoExcluir(): void
+    {
+        AuthMiddleware::checkModulo('samba_compartilhamentos');
+
+        $this->service->excluirExcecao((int)($_POST['excecao_id'] ?? 0));
+
+        header('Location: ' . url('/samba/compartilhamentos/seguranca?id=' . (int)($_POST['id'] ?? 0)));
+        exit;
     }
 
     public function segurancaSalvar(): void

@@ -50,7 +50,12 @@ class SambaTemplate
 CONF;
     }
 
-    public static function share(array $share, array $usuariosAutorizados = []): string
+    /**
+     * @param string[] $extensoesLiberadas tiradas do "veto files" -- usado pelas
+     *        exceções por pasta (samba_compartilhamento_excecoes), que geram um
+     *        compartilhamento a mais apontando pra subpasta.
+     */
+    public static function share(array $share, array $usuariosAutorizados = [], array $extensoesLiberadas = []): string
     {
         $nome = $share['nome'];
         $path = $share['caminho'];
@@ -89,7 +94,7 @@ CONF;
             // salvar (ExtensaoPerigosaService::salvar()), entao e seguro
             // interpolar direto na linha "veto files" (formato do Samba:
             // padroes separados e delimitados por "/").
-            $extensoesAtivas = ExtensaoPerigosaService::listarAtivas();
+            $extensoesAtivas = array_diff(ExtensaoPerigosaService::listarAtivas(), $extensoesLiberadas);
 
             if (!empty($extensoesAtivas)) {
                 $vetoFiles = '/' . implode('/', array_map(fn(string $ext) => "*.{$ext}", $extensoesAtivas)) . '/';
